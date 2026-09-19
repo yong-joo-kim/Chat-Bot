@@ -1,0 +1,21 @@
+{
+  "name": "chat-bot",
+  "private": true,
+  "version": "0.0.0",
+  "description": "RoCHA.AI 벤치마킹 기반 챗봇 시스템 모노레포",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel -r --filter=./apps/* dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "eslint ."
+  },
+  "packageManager": "pnpm@12.3.4",
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "typescript-eslint": "^8.70.0"
+  }
+}

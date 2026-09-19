@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal
+*.tsbuildinfo
+/apps/*/node_modules
+/packages/*/node_modules
+.turbo/
+.pnpm-store/
+
+# 원본 참고 문서(대용량 PDF/xlsx, 사내 자료) — docs/README.md 안내에 따라 로컬에만 보관
+/docs/00-source/*.pdf
+/docs/00-source/*.xlsx
+~$*.xlsx
+~$*.docx

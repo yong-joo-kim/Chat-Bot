@@ -1,0 +1,202 @@
+// Chat Bot — Phase 1 Prisma 스키마 (기본기능 15개, docs/01-requirements/기능요구사항.md §2)
+//
+// NOTE: SQLite(prisma 5.x)는 네이티브 Json/String[] 컬럼을 지원하지 않으므로,
+// 배열/객체 값(examples/synonyms/outputs/skin 등)은 String에 JSON 직렬화하여 저장하고
+// 애플리케이션 레이어에서 JSON.stringify/JSON.parse로 변환한다(Auto QA 컨벤션과 동일).
+// 확장기능(No.16~) 착수 시 Postgres+pgvector로 전환하며, 그때 네이티브 Json/배열 타입으로 정리한다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ChatbotGroup {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  chatbots    Chatbot[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("chatbot_groups")
+}
+
+model Chatbot {
+  id          String   @id @default(uuid())
+  groupId     String
+  group       ChatbotGroup @relation(fields: [groupId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name        String
+  avatarUrl   String?
+  description String?
+  slug        String   @unique
+  status      String   @default("DRAFT")
+  // JSON 직렬화된 ChatbotSkin(shared-types)
+  skin        String   @default("{\"primaryColor\":\"#4F46E5\",\"headerTitle\":\"챗봇 상담\"}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  intents              Intent[]
+  keywords              Keyword[]
+  homonyms              HomonymDictionary[]
+  dialogNodes           DialogNode[]
+  contextVariables      ContextVariable[]
+  faqs                  FaqEntry[]
+  channels              Channel[]
+  conversationLogs      ConversationLog[]
+  unansweredQuestions   UnansweredQuestion[]
+
+  @@index([groupId, status])
+  @@index([updatedAt])
+  @@map("chatbots")
+}
+
+model Intent {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name      String
+  // JSON 직렬화된 string[]
+  examples  String   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("intents")
+}
+
+model Keyword {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name      String
+  // JSON 직렬화된 string[]
+  synonyms  String   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("keywords")
+}
+
+model HomonymDictionary {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  word      String
+  // JSON 직렬화된 HomonymMeaning[]
+  meanings  String
+  createdAt DateTime @default(now())
+
+  @@map("homonym_dictionaries")
+}
+
+model DialogNode {
+  id                String   @id @default(uuid())
+  chatbotId         String
+  chatbot           Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name              String
+  // JSON 직렬화된 string[](Intent id) / string[](Keyword id)
+  intentIds         String   @default("[]")
+  keywordIds        String   @default("[]")
+  contextVariableId String?
+  // JSON 직렬화된 DialogOutput[]
+  outputs           String   @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("dialog_nodes")
+}
+
+model ContextVariable {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name      String
+  // JSON 직렬화된 ContextSlot[]
+  slots     String
+  createdAt DateTime @default(now())
+
+  @@map("context_variables")
+}
+
+model FaqEntry {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  category  String
+  question  String
+  answer    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faq_entries")
+}
+
+model Channel {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  type      String
+  enabled   Boolean  @default(true)
+  // JSON 직렬화된 설정 객체
+  config    String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@map("channels")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   @default("VIEWER")
+  createdAt DateTime @default(now())
+
+  @@map("users")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  action      String
+  targetType  String
+  targetId    String
+  beforeValue String?
+  afterValue  String?
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model ConversationLog {
+  id              String   @id @default(uuid())
+  chatbotId       String
+  chatbot         Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  channelType     String
+  /// 대화 세션 식별자(No.2 대시보드 visitCount 산정 근거, ADR-0001).
+  /// 대화 처리 Phase에서 채워진다. Phase 1에는 seed 데이터만 값을 가진다.
+  sessionId       String?
+  userMessage     String
+  botResponse     String
+  matchedIntentId String?
+  isAnswered      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([chatbotId, createdAt])
+  @@map("conversation_logs")
+}
+
+model UnansweredQuestion {
+  id                  String   @id @default(uuid())
+  chatbotId           String
+  chatbot             Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questionText        String
+  occurredCount       Int      @default(1)
+  suggestedIntentName String?
+  status              String   @default("PENDING")
+  createdAt           DateTime @default(now())
+
+  @@map("unanswered_questions")
+}

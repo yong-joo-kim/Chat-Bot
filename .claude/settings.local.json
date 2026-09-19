@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(mkdir -p \"C:/Users/imsrx/AppData/Local/Temp/claude/D--2--Team-Source-Chat-Bot/600d0fdd-7328-46b0-95a6-2c874f6d4cbe/scratchpad/pdf_text\")"
+    ]
+  }
+}
