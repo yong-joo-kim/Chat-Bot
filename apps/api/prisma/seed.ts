@@ -3,6 +3,7 @@
 // 멱등: 그룹/챗봇은 name·slug 기준 upsert, 대화로그는 매 실행마다 deleteMany 후 재생성한다.
 // 자동 테스트(test-automation)는 이 시드가 아니라 자체 fixture를 쓰되 수치는 아래 표와 정렬한다.
 import { PrismaClient } from '@prisma/client';
+import { normalizeText } from '@chat-bot/shared-types';
 
 const prisma = new PrismaClient();
 
@@ -138,34 +139,221 @@ async function main(): Promise<void> {
   });
   await replaceConversationLogs(supportBot.id, buildTrackALogs(now));
 
+  // 대화 설계 재시딩 전, 조인/노드를 먼저 비운다 — intents/keywords/contexts가 onDelete:Restrict로
+  // 참조되므로 삭제 순서를 지키지 않으면 재실행 시 P2003(FK 위반)으로 실패한다.
+  await prisma.dialogNodeIntent.deleteMany({ where: { node: { chatbotId: supportBot.id } } });
+  await prisma.dialogNodeKeyword.deleteMany({ where: { node: { chatbotId: supportBot.id } } });
+  await prisma.dialogNode.deleteMany({ where: { chatbotId: supportBot.id } });
+
   await prisma.intent.deleteMany({ where: { chatbotId: supportBot.id } });
-  await prisma.intent.create({
+  const intentDefs = [
+    {
+      name: '배송조회',
+      examples: ['제 주문 어디까지 왔어요?', '배송 조회하고 싶어요', '택배 언제 도착하나요', '주문번호 12345 배송상태 알려줘'],
+    },
+    { name: '환불문의', examples: ['환불 하고 싶어요', '환불 절차 알려주세요', '취소하고 환불 받을 수 있나요'] },
+    { name: '영업시간문의', examples: ['영업시간이 궁금해요', '몇시까지 운영하나요'] },
+    { name: '커피주문', examples: ['커피 주문할게요', '아메리카노 주문할래요'] },
+    { name: '빈예문의도', examples: [] as string[] }, // EX-D-5: 예문 0개 — 설계 점검 WARNING 검증용
+  ];
+  const intents: Record<string, { id: string }> = {};
+  for (const def of intentDefs) {
+    const row = await prisma.intent.create({
+      data: {
+        chatbotId: supportBot.id,
+        name: def.name,
+        nameNormalized: normalizeText(def.name),
+        examples: JSON.stringify(def.examples),
+      },
+    });
+    intents[def.name] = row;
+  }
+
+  await prisma.keyword.deleteMany({ where: { chatbotId: supportBot.id } });
+  const keywordDefs = [
+    { name: '택배사', synonyms: ['우체국', 'CJ대한통운', '한진', '롯데'] },
+    { name: '메뉴', synonyms: ['아메리카노', '라떼'] },
+    { name: '사이즈', synonyms: ['톨', '그란데'] },
+  ];
+  const keywords: Record<string, { id: string }> = {};
+  for (const def of keywordDefs) {
+    const row = await prisma.keyword.create({
+      data: {
+        chatbotId: supportBot.id,
+        name: def.name,
+        nameNormalized: normalizeText(def.name),
+        synonyms: JSON.stringify(def.synonyms),
+      },
+    });
+    keywords[def.name] = row;
+  }
+
+  await prisma.homonymDictionary.deleteMany({ where: { chatbotId: supportBot.id } });
+  await prisma.homonymDictionary.create({
     data: {
       chatbotId: supportBot.id,
-      name: '배송조회',
-      examples: JSON.stringify([
-        '제 주문 어디까지 왔어요?',
-        '배송 조회하고 싶어요',
-        '택배 언제 도착하나요',
-        '주문번호 12345 배송상태 알려줘',
+      word: '배',
+      wordNormalized: normalizeText('배'),
+      meanings: JSON.stringify([
+        { label: '과일', contextHints: ['사과', '포도'] },
+        { label: '신체', contextHints: ['아프다', '통증'] },
+        { label: '선박', contextHints: ['항구', '운항'] },
+      ]),
+      policy: 'ASK',
+      clarifyPrompt: "어떤 '배'를 말씀하시는 건가요?",
+    },
+  });
+
+  await prisma.contextVariable.deleteMany({ where: { chatbotId: supportBot.id } });
+  const coffeeContext = await prisma.contextVariable.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '커피주문',
+      nameNormalized: normalizeText('커피주문'),
+      slots: JSON.stringify([
+        {
+          name: '메뉴',
+          label: '메뉴',
+          prompt: '메뉴를 선택해 주세요 (아메리카노/라떼).',
+          type: 'CHOICE',
+          required: true,
+          choices: ['아메리카노', '라떼'],
+          maxRetry: 2,
+        },
+        {
+          name: '사이즈',
+          label: '사이즈',
+          prompt: '사이즈를 선택해 주세요 (톨/그란데).',
+          type: 'CHOICE',
+          required: true,
+          choices: ['톨', '그란데'],
+          maxRetry: 2,
+        },
+        {
+          name: '수량',
+          label: '수량',
+          prompt: '수량을 입력해 주세요 (1~10).',
+          type: 'NUMBER',
+          required: true,
+          validation: { min: 1, max: 10 },
+          maxRetry: 2,
+        },
+      ]),
+      completionMessage: '{메뉴} {사이즈} {수량}잔 주문을 확인했습니다!',
+      sessionTimeoutMinutes: 30,
+    },
+  });
+
+  const startNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '시작노드',
+      nameNormalized: normalizeText('시작노드'),
+      nodeType: 'START',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '안녕하세요! 무엇을 도와드릴까요?' } }]),
+    },
+  });
+
+  const shippingNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '배송조회_응답',
+      nameNormalized: normalizeText('배송조회_응답'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([
+        { type: 'TEXT', payload: { text: '운송장 번호를 확인해 드릴게요.' } },
+        {
+          type: 'BUTTON',
+          payload: { buttons: [{ label: '배송 조회', action: 'MESSAGE', value: '배송 조회' }, { label: '상담원 연결', action: 'MESSAGE', value: '상담원 연결' }] },
+        },
+        // 실행 미지원 아웃풋(SCENARIO/SURVEY/API_CONDITION) 배지 검증용(AC-5-7, EX-D-6)
+        { type: 'SURVEY', payload: { surveyId: 'post-shipping-satisfaction' } },
       ]),
     },
   });
+  await prisma.dialogNodeIntent.create({ data: { nodeId: shippingNode.id, intentId: intents['배송조회'].id } });
+
+  const coffeeNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '커피주문_시작',
+      nameNormalized: normalizeText('커피주문_시작'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'CONTEXT_FORM', payload: { contextVariableId: coffeeContext.id } }]),
+    },
+  });
+  await prisma.dialogNodeIntent.create({ data: { nodeId: coffeeNode.id, intentId: intents['커피주문'].id } });
+
+  const fallbackNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '폴백노드',
+      nameNormalized: normalizeText('폴백노드'),
+      nodeType: 'FALLBACK',
+      priority: 100,
+      outputs: JSON.stringify([
+        { type: 'TEXT', payload: { text: '죄송해요, 잘 이해하지 못했어요. 상담원 연결을 도와드릴까요?' } },
+      ]),
+    },
+  });
+
+  // AC-5-9: DIALOG_MOVE 순환(shippingNode ↔ coffeeNode) — 설계 점검 WARNING 재현용 추가 아웃풋
+  await prisma.dialogNode.update({
+    where: { id: shippingNode.id },
+    data: {
+      outputs: JSON.stringify([
+        ...(JSON.parse(shippingNode.outputs) as unknown[]),
+        { type: 'DIALOG_MOVE', payload: { targetNodeId: coffeeNode.id } },
+      ]),
+    },
+  });
+  await prisma.dialogNode.update({
+    where: { id: coffeeNode.id },
+    data: {
+      outputs: JSON.stringify([
+        ...(JSON.parse(coffeeNode.outputs) as unknown[]),
+        { type: 'DIALOG_MOVE', payload: { targetNodeId: shippingNode.id } },
+      ]),
+    },
+  });
+  void startNode;
+  void fallbackNode;
 
   await prisma.faqEntry.deleteMany({ where: { chatbotId: supportBot.id } });
   await prisma.faqEntry.createMany({
     data: [
       {
         chatbotId: supportBot.id,
-        category: 'SELF_SERVICE',
+        category: 'FAQ',
         question: '영업시간이 어떻게 되나요?',
+        questionNormalized: normalizeText('영업시간이 어떻게 되나요?'),
         answer: '평일 09:00~18:00 운영합니다.',
+        altQuestions: JSON.stringify(['영업시간 알려주세요']),
       },
       {
         chatbotId: supportBot.id,
         category: 'SMALL_TALK',
         question: '안녕',
+        questionNormalized: normalizeText('안녕'),
         answer: '안녕하세요! 무엇을 도와드릴까요?',
+      },
+      {
+        chatbotId: supportBot.id,
+        category: 'SELF_SERVICE',
+        question: '비밀번호를 잊어버렸어요',
+        questionNormalized: normalizeText('비밀번호를 잊어버렸어요'),
+        answer: "로그인 화면의 '비밀번호 찾기'를 이용해 주세요.",
+        enabled: false, // AC-9-5: 비활성 배지 검증용
+      },
+      {
+        chatbotId: supportBot.id,
+        category: 'ERROR_RESPONSE',
+        question: '이해하지 못했어요',
+        questionNormalized: normalizeText('이해하지 못했어요'),
+        answer: '죄송해요, 다시 한 번 다른 표현으로 말씀해 주시겠어요?',
       },
     ],
   });

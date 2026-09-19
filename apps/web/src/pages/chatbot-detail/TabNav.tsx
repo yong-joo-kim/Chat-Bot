@@ -22,6 +22,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
       <NavLink to={`/chatbots/${chatbotId}/skin`} className={tabClassName} onClick={handleClick}>
         {MESSAGES.detail.tabSkin}
       </NavLink>
+      <NavLink to={`/chatbots/${chatbotId}/dialogue`} className={tabClassName} onClick={handleClick}>
+        {MESSAGES.dialogue.tabLabel}
+      </NavLink>
     </nav>
   );
 }

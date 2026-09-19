@@ -1,0 +1,202 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { Chatbot, DialogNodeListItem, FlowTree, DesignValidationReport } from '@chat-bot/shared-types';
+import { ToastProvider } from '../../components/Toast';
+import { ApiError } from '../../api/client';
+import { makeChatbot } from '../../test/fixtures';
+import type { ChatbotDetailContext } from '../ChatbotDetailLayout';
+import { NodesListPage } from './NodesListPage';
+
+const mockList = vi.fn();
+const mockFlow = vi.fn();
+const mockValidate = vi.fn();
+const mockRemove = vi.fn();
+const mockCopy = vi.fn();
+const mockIntentsList = vi.fn();
+
+vi.mock('../../api/dialogue', () => ({
+  dialogNodesApi: {
+    list: (...args: unknown[]) => mockList(...args),
+    flow: (...args: unknown[]) => mockFlow(...args),
+    validate: (...args: unknown[]) => mockValidate(...args),
+    remove: (...args: unknown[]) => mockRemove(...args),
+    copy: (...args: unknown[]) => mockCopy(...args),
+  },
+  intentsApi: {
+    list: (...args: unknown[]) => mockIntentsList(...args),
+  },
+}));
+
+const chatbot: Chatbot = makeChatbot({ id: 'bot-1', status: 'ACTIVE' });
+
+const mockContext: ChatbotDetailContext = {
+  chatbot,
+  reload: vi.fn().mockResolvedValue(undefined),
+  setUnsavedGuard: vi.fn(),
+};
+
+vi.mock('../ChatbotDetailLayout', () => ({
+  useChatbotDetailContext: () => mockContext,
+}));
+
+function makeNodeItem(overrides: Partial<DialogNodeListItem> = {}): DialogNodeListItem {
+  return {
+    id: 'node-1',
+    chatbotId: 'bot-1',
+    name: '배송조회_응답',
+    nodeType: 'NORMAL',
+    matchMode: 'ANY',
+    enabled: true,
+    priority: 100,
+    intentIds: ['intent-1'],
+    keywordIds: [],
+    outputs: [{ type: 'TEXT', payload: { text: '안내드립니다.' } }],
+    createdAt: new Date('2026-09-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-09-18T00:00:00.000Z'),
+    conditionSummary: { intents: [{ id: 'intent-1', name: '배송조회' }], keywords: [] },
+    outputTypes: ['TEXT'],
+    incomingCount: 0,
+    ...overrides,
+  };
+}
+
+function renderPage(): ReturnType<typeof render> {
+  return render(
+    <MemoryRouter initialEntries={['/chatbots/bot-1/dialogue/nodes']}>
+      <ToastProvider>
+        <Routes>
+          <Route path="/chatbots/:chatbotId/dialogue/nodes" element={<NodesListPage />} />
+          <Route path="/chatbots/:chatbotId/dialogue/nodes/:id" element={<p>노드 편집 화면</p>} />
+        </Routes>
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
+
+/**
+ * 대화 노드 목록 화면 회귀 시험 — H3(다중유형 필터 서버위임) 핵심 검증 + 흐름미리보기/설계점검
+ * 패널 렌더링 + 노드 삭제차단 배너(kind='node').
+ */
+describe('NodesListPage', () => {
+  beforeEach(() => {
+    mockList.mockReset();
+    mockFlow.mockReset();
+    mockValidate.mockReset();
+    mockRemove.mockReset();
+    mockCopy.mockReset();
+    mockIntentsList.mockReset();
+    mockList.mockResolvedValue({ items: [makeNodeItem()], total: 1, page: 1, pageSize: 20 });
+    mockIntentsList.mockResolvedValue({ items: [{ id: 'intent-1' }], total: 1, page: 1, pageSize: 1 });
+  });
+
+  it('초기 로드 시 3개 유형(NORMAL/START/FALLBACK)이 모두 체크된 채로 목록을 조회한다', async () => {
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    expect(mockList).toHaveBeenCalledWith(
+      'bot-1',
+      expect.objectContaining({ nodeType: ['NORMAL', 'START', 'FALLBACK'] }),
+    );
+  });
+
+  it('H3: 유형 체크박스를 해제하면 클라이언트가 직접 필터링하지 않고 좁혀진 배열을 서버(dialogNodesApi.list)에 그대로 위임한다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('배송조회_응답');
+    mockList.mockClear();
+    mockList.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
+
+    await user.click(screen.getByRole('checkbox', { name: '시작' }));
+    await user.click(screen.getByRole('checkbox', { name: '폴백' }));
+
+    await waitFor(() =>
+      expect(mockList).toHaveBeenLastCalledWith('bot-1', expect.objectContaining({ nodeType: ['NORMAL'] })),
+    );
+
+    // 두 번 체크 해제했으니 서버 호출도 상태 변경마다 각각 발생한다(클라이언트 로컬 필터링이 아니라 매번 재조회).
+    expect(mockList).toHaveBeenCalledTimes(2);
+  });
+
+  it('"설계 점검"을 누르면 dialogNodesApi.validate가 호출되고 결과 패널이 심각도별 건수와 함께 렌더링된다', async () => {
+    const user = userEvent.setup();
+    const report: DesignValidationReport = {
+      issues: [
+        {
+          code: 'EMPTY_OUTPUT',
+          severity: 'WARNING',
+          resourceType: 'NODE',
+          resourceId: 'node-2',
+          resourceName: '빈아웃풋노드',
+          message: '아웃풋이 비어 있는 노드입니다.',
+        },
+      ],
+      summary: { error: 0, warning: 1, info: 0 },
+      checkedAt: new Date('2026-09-19T00:00:00.000Z'),
+    };
+    mockValidate.mockResolvedValue(report);
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '설계 점검' }));
+
+    expect(mockValidate).toHaveBeenCalledWith('bot-1');
+    expect(await screen.findByText('아웃풋이 비어 있는 노드입니다.')).toBeInTheDocument();
+    expect(screen.getByText('주의 1건')).toBeInTheDocument();
+    expect(screen.getByText('오류 0건')).toBeInTheDocument();
+    // 각 항목에서 편집 화면으로 이동하는 링크(NFR-A4)
+    expect(screen.getByRole('link', { name: /빈아웃풋노드/ })).toHaveAttribute(
+      'href',
+      '/chatbots/bot-1/dialogue/nodes/node-2',
+    );
+  });
+
+  it('"흐름 미리보기"를 누르면 dialogNodesApi.flow가 호출되고 트리가 렌더링된다', async () => {
+    const user = userEvent.setup();
+    const tree: FlowTree = {
+      roots: [
+        {
+          nodeId: 'node-1',
+          name: '배송조회_응답',
+          nodeType: 'NORMAL',
+          via: 'ROOT',
+          repeated: false,
+          children: [],
+        },
+      ],
+      orphanNodes: [],
+    };
+    mockFlow.mockResolvedValue(tree);
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '흐름 미리보기' }));
+
+    expect(mockFlow).toHaveBeenCalledWith('bot-1');
+    // 목록의 "배송조회_응답"(버튼)과 트리 내부 링크(같은 이름)가 모두 존재해야 한다.
+    expect(await screen.findAllByText('배송조회_응답')).toHaveLength(2);
+  });
+
+  it('노드 삭제가 409로 거부되면 kind=node 삭제차단 배너가 표시되고 참조 노드 링크가 제공된다', async () => {
+    const user = userEvent.setup();
+    mockRemove.mockRejectedValue(
+      new ApiError(409, '이 노드로 이동하도록 설정된 노드가 1건 있습니다.', 'NODE_IN_USE', [
+        { field: 'node-9', message: '이동출발노드' },
+      ]),
+    );
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '배송조회_응답 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+    const dialog = await screen.findByRole('dialog', { name: '노드 삭제' });
+    await user.click(screen.getByRole('button', { name: '삭제', exact: true }));
+
+    expect(await screen.findByText('이 노드로 이동하도록 설정된 노드가 1건 있습니다.')).toBeInTheDocument();
+    const link = screen.getByRole('button', { name: '이동출발노드' });
+    await user.click(link);
+    expect(await screen.findByText('노드 편집 화면')).toBeInTheDocument();
+    void dialog;
+  });
+});

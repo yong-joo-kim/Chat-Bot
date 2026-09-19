@@ -50,18 +50,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {
-        return {
-          statusCode: HttpStatus.CONFLICT,
-          code: 'DUPLICATE_SLUG',
-          message: '이미 사용 중인 고유 URL입니다. 다른 값을 입력해 주세요.',
-        };
+        return this.mapUniqueConflict(exception);
       }
       if (exception.code === 'P2003') {
-        return {
-          statusCode: HttpStatus.CONFLICT,
-          code: 'CHATBOT_HAS_CHILDREN',
-          message: '연결된 데이터가 있어 삭제할 수 없습니다.',
-        };
+        return this.mapForeignKeyConflict(exception);
       }
       if (exception.code === 'P2025') {
         return {
@@ -89,6 +81,54 @@ export class AllExceptionsFilter implements ExceptionFilter {
       code: 'INTERNAL_ERROR',
       message: '처리 중 오류가 발생했습니다.',
     };
+  }
+
+  /**
+   * `P2002`(유일성 위반)를 대상 인덱스명으로 구분해 매핑한다(ADR-0006 §결과).
+   * 사전 검사(UX)를 통과했지만 경합으로 DB 제약에 걸린 경우의 최종 방어선이다(EX-R-7과 대칭).
+   */
+  private mapUniqueConflict(exception: Prisma.PrismaClientKnownRequestError): ApiError {
+    const target = this.extractMetaText(exception, 'target');
+    if (target.includes('questionNormalized')) {
+      return { statusCode: HttpStatus.CONFLICT, code: 'DUPLICATE_FAQ', message: '이미 같은 질문이 등록되어 있습니다.' };
+    }
+    if (target.includes('nameNormalized') || target.includes('wordNormalized')) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        code: 'DUPLICATE_NAME',
+        message: '이미 같은 이름이 있습니다. 다른 이름을 입력해 주세요.',
+      };
+    }
+    return {
+      statusCode: HttpStatus.CONFLICT,
+      code: 'DUPLICATE_SLUG',
+      message: '이미 사용 중인 고유 URL입니다. 다른 값을 입력해 주세요.',
+    };
+  }
+
+  /** `P2003`(참조 무결성 위반)을 FK 컬럼명으로 구분해 매핑한다(ADR-0005 §근거, EX-R-7). */
+  private mapForeignKeyConflict(exception: Prisma.PrismaClientKnownRequestError): ApiError {
+    const field = this.extractMetaText(exception, 'field_name');
+    const mapping: Array<[string, ApiErrorCode, string]> = [
+      ['intentId', 'INTENT_IN_USE', '이 의도를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
+      ['keywordId', 'KEYWORD_IN_USE', '이 키워드를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
+      ['contextVariableId', 'CONTEXT_IN_USE', '이 컨텍스트를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
+    ];
+    for (const [needle, code, message] of mapping) {
+      if (field.includes(needle)) return { statusCode: HttpStatus.CONFLICT, code, message };
+    }
+    return {
+      statusCode: HttpStatus.CONFLICT,
+      code: 'CHATBOT_HAS_CHILDREN',
+      message: '연결된 데이터가 있어 삭제할 수 없습니다.',
+    };
+  }
+
+  private extractMetaText(exception: Prisma.PrismaClientKnownRequestError, key: string): string {
+    const meta = exception.meta as Record<string, unknown> | undefined;
+    const value = meta?.[key];
+    if (Array.isArray(value)) return value.join(',');
+    return typeof value === 'string' ? value : '';
   }
 
   private inferCodeFromStatus(status: number): ApiErrorCode {

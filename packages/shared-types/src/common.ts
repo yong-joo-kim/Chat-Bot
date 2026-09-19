@@ -48,6 +48,23 @@ export const ApiErrorCode = z.enum([
   'CONFIG_ERROR',
   'AGGREGATION_TIMEOUT',
   'INTERNAL_ERROR',
+  // 대화 설계(No.5~9) 그룹 추가(dialogue-design-설계.md §4.1)
+  'DUPLICATE_NAME',
+  'DUPLICATE_FAQ',
+  'SYNONYM_CONFLICT',
+  'INVALID_REFERENCE',
+  'INTENT_IN_USE',
+  'KEYWORD_IN_USE',
+  'CONTEXT_IN_USE',
+  'NODE_IN_USE',
+  'START_NODE_EXISTS',
+  'FALLBACK_NODE_EXISTS',
+  'OUTPUT_PAYLOAD_INVALID',
+  'LIMIT_EXCEEDED',
+  'IMPORT_TOO_LARGE',
+  'IMPORT_FILE_INVALID',
+  'IMPORT_TOKEN_EXPIRED',
+  'IMPORT_ABORTED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 
@@ -81,6 +98,15 @@ export const SafeUrlSchema = z
  * `?status=DRAFT,ACTIVE` 형태의 콤마 구분 단일 쿼리 파라미터를 enum 배열로 변환한다.
  * 값이 없으면 undefined(필터 미적용)를 반환한다.
  */
+/**
+ * 텍스트 비교·중복 판정·매칭의 유일한 정규화 규칙(FR-0-12, ADR-0006).
+ * `NFKC`(전각/반각 통일) → `trim` → 소문자 → 연속 공백 1칸 축약.
+ * ⚠ 변경 시 전 도메인(의도/키워드/컨텍스트/노드/동음이의어/FAQ)의 유일성 의미가 바뀐다.
+ */
+export function normalizeText(text: string): string {
+  return text.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 export function csvEnumArray<T extends [string, ...string[]]>(enumSchema: z.ZodEnum<T>) {
   return z.preprocess((val) => {
     if (val === undefined || val === null || val === '') return undefined;

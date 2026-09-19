@@ -19,6 +19,8 @@ const faqs: FaqEntry[] = [
     category: 'SELF_SERVICE',
     question: '영업시간이 어떻게 되나요?',
     answer: '평일 09:00~18:00 운영합니다.',
+    altQuestions: [],
+    enabled: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   },
