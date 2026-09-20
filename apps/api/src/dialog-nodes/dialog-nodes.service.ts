@@ -136,6 +136,7 @@ export class DialogNodesService {
       if (keywordIds.length > 0) await tx.dialogNodeKeyword.createMany({ data: keywordIds.map((keywordId) => ({ nodeId: created.id, keywordId })) });
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
     });
+    this.bundleService.invalidate(chatbotId);
 
     return toDialogNodeEntity(row);
   }
@@ -253,6 +254,7 @@ export class DialogNodesService {
       }
       return tx.dialogNode.findUniqueOrThrow({ where: { id }, include: { intentLinks: true, keywordLinks: true } });
     });
+    this.bundleService.invalidate(chatbotId);
 
     return toDialogNodeEntity(row);
   }
@@ -289,6 +291,7 @@ export class DialogNodesService {
       if (keywordIds.length > 0) await tx.dialogNodeKeyword.createMany({ data: keywordIds.map((keywordId) => ({ nodeId: created.id, keywordId })) });
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
     });
+    this.bundleService.invalidate(chatbotId);
 
     return toDialogNodeEntity(row);
   }
@@ -302,6 +305,7 @@ export class DialogNodesService {
       await tx.dialogNodeKeyword.deleteMany({ where: { nodeId: id } });
       await tx.dialogNode.delete({ where: { id } });
     });
+    this.bundleService.invalidate(chatbotId);
   }
 
   async validate(chatbotId: string): Promise<DesignValidationReport> {

@@ -232,12 +232,18 @@ model Channel {
   id        String   @id @default(uuid())
   chatbotId String
   chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// ChannelType(shared-types zod enum)이 값 제약의 단일 소스다.
   type      String
-  enabled   Boolean  @default(true)
-  // JSON 직렬화된 설정 객체
+  /// [변경] 기본값 true → false. 레코드 생성이 곧 "배포"가 되면 안 된다(quality-channel-설계.md §3.2).
+  enabled   Boolean  @default(false)
+  // JSON 직렬화된 ChannelConfig(type 기준 판별 유니온). 자격증명 필드는 스키마에 존재하지 않는다(NFR-S7).
   config    String   @default("{}")
   createdAt DateTime @default(now())
+  /// [신규] 목록 정렬·감사(FR-0-14, FR-11-13)
+  updatedAt DateTime @updatedAt
 
+  /// [신규] 챗봇당 타입별 최대 1건(FR-11-1). 동시 요청 경합의 최종 방어선이다.
+  @@unique([chatbotId, type])
   @@map("channels")
 }
 
@@ -272,9 +278,15 @@ model ConversationLog {
   /// 대화 세션 식별자(No.2 대시보드 visitCount 산정 근거, ADR-0001).
   /// 대화 처리 Phase에서 채워진다. Phase 1에는 seed 데이터만 값을 가진다.
   sessionId       String?
+  /// ⚠ PII 마스킹 후의 값만 저장된다. 원문은 어디에도 남기지 않는다(NFR-S4, ADR-0013).
   userMessage     String
+  /// ⚠ 동일. completionMessage의 {슬롯} 치환으로 사용자 입력이 섞일 수 있어 마스킹 대상이다.
   botResponse     String
   matchedIntentId String?
+  /// [신규] 어떤 노드가 답했는지(DD-20). No.15/No.24/오류분석의 직접 소비 대상.
+  matchedNodeId   String?
+  /// [신규] 어떤 FAQ가 답했는지(DD-20 보강). 없으면 "FAQ 응답"과 "폴백"을 구분할 수 없다.
+  matchedFaqId    String?
   isAnswered      Boolean  @default(true)
   createdAt       DateTime @default(now())
 

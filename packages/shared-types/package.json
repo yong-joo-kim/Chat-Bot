@@ -4,6 +4,11 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./output-view": { "types": "./dist/output-view.d.ts", "default": "./dist/output-view.js" },
+    "./contrast": { "types": "./dist/contrast.d.ts", "default": "./dist/contrast.js" }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist"

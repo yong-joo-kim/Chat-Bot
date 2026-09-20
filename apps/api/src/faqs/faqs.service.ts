@@ -23,6 +23,7 @@ import { suggestSimilarFaqs } from '@chat-bot/dialogue-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
+import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
 import { CsvSheetReader } from '../dialogue-common/import/csv-sheet-reader';
 import { XlsxSheetReader } from '../dialogue-common/import/xlsx-sheet-reader';
@@ -50,6 +51,7 @@ export class FaqsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
+    private readonly bundleService: DialogueBundleService,
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
@@ -97,6 +99,7 @@ export class FaqsService {
         enabled: dto.enabled ?? true,
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toFaqEntity(row);
   }
 
@@ -171,6 +174,7 @@ export class FaqsService {
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toFaqEntity(row);
   }
 
@@ -179,6 +183,7 @@ export class FaqsService {
     await this.scope.assertWritable(chatbotId);
     await this.findRowOrThrow(chatbotId, id);
     await this.prisma.faqEntry.delete({ where: { id } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -186,6 +191,7 @@ export class FaqsService {
     const rows = await this.prisma.faqEntry.findMany({ where: { chatbotId, id: { in: dto.ids } } });
     if (rows.length !== dto.ids.length) throw new ApiException('NOT_FOUND', 404, '일부 FAQ를 찾을 수 없습니다.');
     await this.prisma.faqEntry.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -319,6 +325,7 @@ export class FaqsService {
         }
       }
     });
+    this.bundleService.invalidate(chatbotId);
 
     return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors };
   }

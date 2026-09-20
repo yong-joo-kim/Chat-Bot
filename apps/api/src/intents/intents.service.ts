@@ -123,6 +123,7 @@ export class IntentsService {
         examples: JSON.stringify(examples),
       },
     });
+    this.bundleService.invalidate(chatbotId);
 
     return { intent: toIntentDetail(row, []), meta: { deduplicatedCount, conflicts } };
   }
@@ -205,6 +206,7 @@ export class IntentsService {
       where: { intentId: id },
       include: { node: { select: { id: true, name: true } } },
     });
+    this.bundleService.invalidate(chatbotId);
     return { intent: toIntentDetail(row, links.map((l) => l.node)), meta: { deduplicatedCount, conflicts } };
   }
 
@@ -224,6 +226,7 @@ export class IntentsService {
       where: { intentId: id },
       include: { node: { select: { id: true, name: true } } },
     });
+    this.bundleService.invalidate(chatbotId);
     return { intent: toIntentDetail(row, links.map((l) => l.node)), meta: { deduplicatedCount, conflicts } };
   }
 
@@ -232,6 +235,7 @@ export class IntentsService {
     await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertIntentDeletable(chatbotId, id);
     await this.prisma.intent.delete({ where: { id } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -260,6 +264,7 @@ export class IntentsService {
     }
 
     await this.prisma.intent.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -400,6 +405,7 @@ export class IntentsService {
         }
       }
     });
+    this.bundleService.invalidate(chatbotId);
 
     return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors };
   }

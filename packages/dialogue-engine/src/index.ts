@@ -1,8 +1,17 @@
 export { matchIntent, matchFaq, simulate } from './matcher';
 export type { IntentMatch, FaqMatch, MatchIntentOptions } from './matcher';
 
-export { resolveResponse } from './resolver';
+export { resolveResponse, resolveByNodeId } from './resolver';
 export type { ResolveOptions } from './resolver';
+
+export { resolveTurn } from './turn';
+export type { DialogueTurnInput, DialogueTurnResult } from './turn';
+
+export { sanitizeConversationState } from './conversation-state';
+export type { SanitizeConversationStateOptions, SanitizeConversationStateResult } from './conversation-state';
+
+export { mergeOverlay } from './overlay';
+export type { BundleOverlayPatch, OverlayDeletedIds } from './overlay';
 
 export { resolveHomonym, buildClarifyOutput } from './homonym';
 export type { HomonymEvaluation, HomonymResolutionResult } from './homonym';

@@ -7,6 +7,8 @@ import { ChatbotDetailLayout } from './pages/ChatbotDetailLayout';
 import { DashboardTab } from './pages/chatbot-detail/DashboardTab';
 import { SettingsTab } from './pages/chatbot-detail/SettingsTab';
 import { SkinEmbedTab } from './pages/chatbot-detail/SkinEmbedTab';
+import { SimulatorTab } from './pages/chatbot-detail/SimulatorTab';
+import { ChannelsTab } from './pages/chatbot-detail/ChannelsTab';
 import { DialogueShell } from './pages/dialogue/DialogueShell';
 import { NodesListPage } from './pages/dialogue/NodesListPage';
 import { NodeFormPage } from './pages/dialogue/NodeFormPage';
@@ -29,6 +31,8 @@ export function App(): JSX.Element {
             <Route path="dashboard" element={<DashboardTab />} />
             <Route path="settings" element={<SettingsTab />} />
             <Route path="skin" element={<SkinEmbedTab />} />
+            <Route path="simulator" element={<SimulatorTab />} />
+            <Route path="channels" element={<ChannelsTab />} />
             <Route path="dialogue" element={<DialogueShell />}>
               <Route index element={<Navigate to="nodes" replace />} />
               <Route path="nodes" element={<NodesListPage />} />

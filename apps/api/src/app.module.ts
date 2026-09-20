@@ -12,6 +12,9 @@ import { HomonymsModule } from './homonyms/homonyms.module';
 import { ContextsModule } from './contexts/contexts.module';
 import { DialogNodesModule } from './dialog-nodes/dialog-nodes.module';
 import { FaqsModule } from './faqs/faqs.module';
+import { ChannelsModule } from './channels/channels.module';
+import { SimulationModule } from './simulation/simulation.module';
+import { ConversationModule } from './conversation/conversation.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 챗봇 운영관리(No.1~4) + 대화 설계(No.5~9) 모듈 등록 완료.
@@ -32,6 +35,9 @@ import { validate } from './config/env.validation';
     ContextsModule,
     DialogNodesModule,
     FaqsModule,
+    ChannelsModule,
+    SimulationModule,
+    ConversationModule,
   ],
 })
 export class AppModule {}

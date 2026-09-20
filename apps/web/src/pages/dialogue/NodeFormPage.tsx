@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CreateDialogNodeSchema, type DialogMatchMode, type DialogNodeType, type DialogOutput } from '@chat-bot/shared-types';
+import {
+  CreateDialogNodeSchema,
+  type DialogMatchMode,
+  type DialogNodeType,
+  type DialogOutput,
+  type DialogueOverlay,
+} from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { dialogNodesApi } from '../../api/dialogue';
 import { ApiError } from '../../api/client';
@@ -12,6 +18,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { DialogOutputEditor } from './components/DialogOutputEditor';
+import { SimulatorDrawer } from '../chatbot-detail/simulator/SimulatorDrawer';
 
 interface OutputRow {
   key: string;
@@ -51,6 +58,7 @@ export function NodeFormPage(): JSX.Element {
   const [dirty, setDirty] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formBanner, setFormBanner] = useState<string | undefined>(undefined);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (isNew || !nodeId) return;
@@ -166,6 +174,30 @@ export function NodeFormPage(): JSX.Element {
     navigate(`/chatbots/${chatbot.id}/dialogue/nodes`);
   }
 
+  /**
+   * SIM1-D(FR-10-23) — 현재 폼 상태를 오버레이로 직렬화한다. 신규 노드는 `draft-1` 임시 id를 쓴다
+   * (FR-10-19 ②). 드로어가 열려 있는 동안 폼을 더 고치면 이 값이 매 렌더 갱신되어 재직렬화된다(ui-spec §4.2-3).
+   */
+  function buildOverlay(): DialogueOverlay {
+    return {
+      dialogNodes: [
+        {
+          id: nodeId ?? 'draft-1',
+          name,
+          description: description || undefined,
+          nodeType,
+          matchMode,
+          enabled,
+          priority,
+          intentIds,
+          keywordIds,
+          contextVariableId: contextVariableId ?? undefined,
+          outputs: outputs.map((o) => o.output),
+        },
+      ],
+    };
+  }
+
   if (loading) return <p role="status">{MESSAGES.common.loading}</p>;
   if (notFound) return <ErrorState title={msg.notFound} />;
 
@@ -176,7 +208,12 @@ export function NodeFormPage(): JSX.Element {
       <Link to={`/chatbots/${chatbot.id}/dialogue/nodes`} className="detail-back-link">
         {msg.backToList}
       </Link>
-      <h2>{isNew ? msg.titleNew : msg.titleEdit(name)}</h2>
+      <div className="node-form-header">
+        <h2>{isNew ? msg.titleNew : msg.titleEdit(name)}</h2>
+        <button type="button" className="btn btn-secondary" onClick={() => setSimulatorOpen(true)}>
+          {MESSAGES.simulator.openInDrawer}
+        </button>
+      </div>
 
       {formBanner && (
         <div className="form-banner form-banner--error" role="alert">
@@ -358,6 +395,14 @@ export function NodeFormPage(): JSX.Element {
           </div>
         )}
       </form>
+
+      <SimulatorDrawer
+        isOpen={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+        chatbotId={chatbot.id}
+        isArchived={isArchived}
+        overlay={buildOverlay()}
+      />
     </div>
   );
 }

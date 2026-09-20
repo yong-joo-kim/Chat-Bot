@@ -1,17 +1,46 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { buildDialogueIndex } from '@chat-bot/dialogue-engine';
+import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import type { ContextSlot, DialogOutput, DialogueBundle, HomonymMeaning } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
+import type { DialogueBundleCache } from './dialogue-bundle.cache';
+
+export interface CachedDialogueBundle {
+  bundle: DialogueBundle;
+  index: DialogueIndex;
+}
 
 /**
  * 챗봇 1건의 대화 자산을 엔진 입력 번들(`DialogueBundle`)로 조립한다(FR-E-1).
- * `POST /homonyms/test`, `POST /dialog-nodes/validate`, `GET /dialog-nodes/flow`가 사용한다.
+ * `POST /homonyms/test`, `POST /dialog-nodes/validate`, `GET /dialog-nodes/flow`,
+ * 시뮬레이션·공개 대화 API가 사용한다.
  * JSON 파싱 실패는 기본값 폴백 + 경고 로그로 처리한다(NFR-M4) — 엔진 쪽 예외 없음 원칙과 대칭.
+ * 번들+인덱스 캐시는 DD-22 — TTL 60초 + LRU. 대화 자산 6개 모듈은 쓰기 성공 직후 `invalidate()`를 호출한다(§8.1).
  */
 @Injectable()
 export class DialogueBundleService {
   private readonly logger = new Logger('DialogueBundleService');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject('DialogueBundleCache') private readonly cache?: DialogueBundleCache,
+  ) {}
+
+  /** 캐시 우선 조회 — 적중 시 DB 접근 없이 번들+인덱스를 반환한다(NFR-P1/P2). */
+  async getCached(chatbotId: string): Promise<CachedDialogueBundle> {
+    const cached = this.cache?.get(chatbotId);
+    if (cached) return { bundle: cached.bundle, index: cached.index };
+
+    const bundle = await this.build(chatbotId);
+    const index = buildDialogueIndex(bundle);
+    this.cache?.set(chatbotId, { bundle, index, cachedAt: Date.now() });
+    return { bundle, index };
+  }
+
+  /** 대화 자산 쓰기 성공 직후 호출한다(EX-10-6). 누락 시 최대 피해는 TTL(60초) 지연이다. */
+  invalidate(chatbotId: string): void {
+    this.cache?.invalidate(chatbotId);
+  }
 
   private safeParseArray<T>(json: string, context: string): T[] {
     try {

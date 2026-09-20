@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { ContextSlot } from '@chat-bot/shared-types';
+import type { ContextSlot, DialogueOverlay } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { contextsApi } from '../../api/dialogue';
 import { ApiError } from '../../api/client';
@@ -13,6 +13,7 @@ import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { ContextSlotEditor } from './components/ContextSlotEditor';
 import { ContextPreviewPanel } from './components/ContextPreviewPanel';
+import { SimulatorDrawer } from '../chatbot-detail/simulator/SimulatorDrawer';
 
 interface SlotRow extends ContextSlot {
   key: string;
@@ -50,6 +51,7 @@ export function ContextFormPage(): JSX.Element {
   const [dirty, setDirty] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formBanner, setFormBanner] = useState<string | undefined>(undefined);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (isNew || !contextId) return;
@@ -136,6 +138,26 @@ export function ContextFormPage(): JSX.Element {
 
   const placeholderNames = slots.map((s) => s.name).filter(Boolean);
 
+  /**
+   * SIM1-D(FR-10-23) — 현재 편집 중인 슬롯 초안을 오버레이로 직렬화한다. 신규 컨텍스트는
+   * `draft-1` 임시 id를 쓴다(FR-10-19 ②).
+   */
+  function buildOverlay(): DialogueOverlay {
+    return {
+      contexts: [
+        {
+          id: contextId ?? 'draft-1',
+          name,
+          description: description || undefined,
+          slots: slots.map(({ key: _key, ...rest }) => rest),
+          completionMessage: completionMessage || undefined,
+          cancelKeywords,
+          sessionTimeoutMinutes,
+        },
+      ],
+    };
+  }
+
   if (loading) return <p role="status">{MESSAGES.common.loading}</p>;
   if (notFound) return <ErrorState title={MESSAGES.dialogue.contexts.loadFailed} />;
 
@@ -145,7 +167,12 @@ export function ContextFormPage(): JSX.Element {
         <Link to={`/chatbots/${chatbot.id}/dialogue/contexts`} className="detail-back-link">
           {msg.backToList}
         </Link>
-        <h2>{isNew ? msg.titleNew : msg.titleEdit(name)}</h2>
+        <div className="node-form-header">
+          <h2>{isNew ? msg.titleNew : msg.titleEdit(name)}</h2>
+          <button type="button" className="btn btn-secondary" onClick={() => setSimulatorOpen(true)}>
+            {MESSAGES.simulator.openInDrawer}
+          </button>
+        </div>
         {formBanner && (
           <div className="form-banner form-banner--error" role="alert">
             {formBanner}
@@ -269,6 +296,13 @@ export function ContextFormPage(): JSX.Element {
         </form>
       </div>
       <ContextPreviewPanel slots={slots} completionMessage={completionMessage} />
+      <SimulatorDrawer
+        isOpen={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
+        chatbotId={chatbot.id}
+        isArchived={isArchived}
+        overlay={buildOverlay()}
+      />
     </div>
   );
 }

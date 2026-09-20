@@ -14,6 +14,7 @@ import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
+import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { toContextEntity, toContextListItem } from './context.mapper';
 import { findInvalidKeywordIds } from './lib/slot-definition';
 
@@ -25,6 +26,7 @@ export class ContextsService {
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
+    private readonly bundleService: DialogueBundleService,
   ) {}
 
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
@@ -69,6 +71,7 @@ export class ContextsService {
         sessionTimeoutMinutes: dto.sessionTimeoutMinutes ?? 30,
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toContextEntity(row);
   }
 
@@ -123,6 +126,7 @@ export class ContextsService {
         ...(dto.sessionTimeoutMinutes !== undefined ? { sessionTimeoutMinutes: dto.sessionTimeoutMinutes } : {}),
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toContextEntity(row);
   }
 
@@ -131,5 +135,6 @@ export class ContextsService {
     await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertContextDeletable(chatbotId, id);
     await this.prisma.contextVariable.delete({ where: { id } });
+    this.bundleService.invalidate(chatbotId);
   }
 }

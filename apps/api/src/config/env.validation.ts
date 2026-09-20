@@ -16,6 +16,11 @@ const EnvSchema = z.object({
     .string()
     .min(1, 'PUBLIC_API_BASE_URL이 설정되지 않았습니다.')
     .refine((v) => /^https?:\/\//i.test(v), 'PUBLIC_API_BASE_URL은 http 또는 https로 시작해야 합니다.'),
+  // 품질/채널(No.10~11) 그룹 추가 — 전부 선택(기본값 있음), 기동 실패 조건을 늘리지 않는다(NFR-M6).
+  PUBLIC_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(30),
+  PUBLIC_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(120),
+  TRUST_PROXY: z.coerce.boolean().default(false),
+  DIALOGUE_BUNDLE_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

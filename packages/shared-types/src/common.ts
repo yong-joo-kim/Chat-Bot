@@ -65,6 +65,14 @@ export const ApiErrorCode = z.enum([
   'IMPORT_FILE_INVALID',
   'IMPORT_TOKEN_EXPIRED',
   'IMPORT_ABORTED',
+  // 품질/채널(No.10~11) 그룹 추가(quality-channel-설계.md §5.5)
+  'CHANNEL_NOT_IMPLEMENTED',
+  'CHANNEL_DISABLED',
+  'CHATBOT_NOT_PUBLISHED',
+  'ORIGIN_NOT_ALLOWED',
+  'RATE_LIMITED',
+  'OVERLAY_INVALID',
+  'NO_CHANGES_TO_COMPARE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

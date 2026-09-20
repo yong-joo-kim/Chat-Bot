@@ -319,6 +319,7 @@ export function FaqsPage(): JSX.Element {
         onClose={closeEditModal}
         onSaved={load}
         readOnly={isArchived}
+        isArchived={isArchived}
         onJumpToFaq={handleJumpToFaq}
       />
       <BulkImportModal resourceType="FAQ" chatbotId={chatbot.id} isOpen={importOpen} onClose={() => setImportOpen(false)} onCommitted={load} />

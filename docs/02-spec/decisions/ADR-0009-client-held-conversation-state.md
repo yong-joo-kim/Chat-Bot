@@ -1,0 +1,89 @@
+# ADR-0009 — 대화 상태를 서버에 저장하지 않고 클라이언트 보관 봉투로 왕복시킨다
+
+- **상태**: 채택 (Accepted)
+- **일자**: 2026-09-20
+- **결정자**: system-architect
+- **관련**: `docs/requirements/quality-channel.md` DD-18, FR-10-3, FR-10-4, FR-11-26, NFR-S5, AC-10-6 ~ AC-10-9, EX-10-3 ~ EX-10-5, EX-P-7, EX-P-13
+- **영향 범위**: `packages/shared-types/src/dialogue-engine.ts`, `packages/dialogue-engine/src/{conversation-state.ts, turn.ts}`, `apps/api/src/{simulation, conversation}`, `apps/widget/src/core/session.ts`
+- **관계**: `ADR-0008`의 stateless 엔진 계약을 전제로 한다. `dialogue-design-설계.md` DD-10("세션 테이블 만들지 않음")을 **재확인·확장**한다.
+
+## 맥락
+
+DD-10은 "컨텍스트 세션 영속화 테이블을 만들지 않는다"를 **"No.10 시뮬레이터가 요청-응답 왕복으로 상태를 주고받는다"** 는 전제 위에서 결정했다. 관리자 1명이 자기 브라우저에서 테스트하는 상황이라면 상태를 클라이언트가 들고 있어도 위험이 없다.
+
+이번 Phase에 전제가 바뀌었다. **공개 대화 API와 임베드 위젯**이라는, 불특정 최종 사용자가 쓰는 소비자가 생긴다. "클라이언트가 상태를 보관한다"는 말은 이제 **"신뢰할 수 없는 클라이언트가 서버 로직의 입력을 보관한다"** 는 뜻이 된다. 따라서 DD-10을 그대로 승계할지, 세션 테이블(또는 Redis)을 도입할지 다시 판단해야 한다.
+
+동시에 이번 Phase는 엔진 보강(ADR-0010)으로 상태에 담을 항목이 하나 늘어난다(`pendingClarify`). 즉 "상태"가 `ContextSessionState` 단일 객체가 아니라 **여러 항목을 담는 봉투**가 되므로, 어떤 형태로든 계약을 새로 정의해야 하는 시점이기도 하다.
+
+## 결정
+
+### 1. 세션 테이블/Redis를 도입하지 않는다 (DD-10 유지)
+
+대신 **버전이 붙은 대화 상태 봉투**를 정의하고, 클라이언트가 보관해 매 요청에 실어 보낸다.
+
+```ts
+export const CONVERSATION_STATE_VERSION = 1;
+export const ConversationStateSchema = z.object({
+  version: z.literal(CONVERSATION_STATE_VERSION),
+  contextSession: ContextSessionStateSchema.nullable(),
+  pendingClarify: PendingClarifySchema.nullable().optional(),
+});
+```
+
+- `ContextSessionState`(ADR-0008/DD-10의 기존 계약)는 **변경하지 않고 봉투가 감싼다**. 하위호환이 유지되고, 이후 확장은 봉투에 필드를 더하는 것으로 흡수된다.
+- `version`은 **봉투 진화용 탈출구**다. 구조를 바꿔야 할 때 값을 올리면, 구버전 봉투를 들고 있는 브라우저는 자동으로 "새 대화"로 떨어진다(사용자가 보는 것은 대화 초기화 안내 1줄이며, 서버 오류가 아니다).
+
+### 2. 서버는 봉투를 신뢰하지 않는다 — 매 턴 재검증이 **구조적으로 강제**된다
+
+`resolveTurn(turn, state: unknown, bundle, now, options)`의 두 번째 인자를 **`unknown`으로 선언**하고, 엔진이 첫 줄에서 `sanitizeConversationState()`를 호출한다.
+
+검증 항목: 스키마 · `version` 일치 · 봉투 크기 상한(16KB, `filledValues` 키 20 / 값 1,000자) · `contextVariableId`가 **이 챗봇 번들에 존재** · `startedAt` 24시간 상한 및 미래 시각 차단 · `pendingClarify` 10분 TTL 및 사전 존재.
+
+모든 실패는 **"해당 항목 폐기 + 새 대화"** 이며 `400`도 `500`도 아니다(FR-10-4, AC-10-7).
+
+### 3. 봉투에 담지 않는 것
+
+**권한·신원·과금·가격·상태전이 결정에 쓰이는 값은 봉투에 담지 않는다.** 봉투의 내용은 전부 "사용자가 직접 입력해도 같은 결과가 되는 값"(자기 슬롯 값, 직전에 받은 되묻기 대기)뿐이다. 이 불변식이 "신뢰하지 않아도 되는" 근거다.
+
+### 4. 재검토 트리거를 명시한다
+
+- **No.24 하이브리드 CS**(상담원이 진행 중 대화를 들여다보고 개입)
+- **No.42 옴니채널 통합 인박스**
+- "새로고침 후 대화 이어가기"(대화 이력 복원) 요구 확정
+
+셋 중 하나라도 착수되면 이 ADR을 **Supersedes**하는 새 ADR로 대체한다.
+
+## 근거
+
+- **상태의 성격이 "서버가 지켜야 할 진실"이 아니다.** 봉투에는 슬롯 값과 인덱스뿐이고, 사용자가 이를 조작해 얻을 수 있는 최대 이득은 "자기가 방금 말한 값을 다르게 말하는 것"이다. 조작 이득이 0인 데이터를 지키기 위해 테이블·인덱스·만료 배치를 도입하는 것은 비용이 이익을 초과한다.
+- **교차 챗봇 방어가 공짜로 된다.** 번들은 항상 요청 챗봇의 것이므로, 다른 챗봇의 `contextVariableId`는 자동으로 "없는 ID"가 되어 폐기된다(AC-10-9, EX-10-4). **타 챗봇 자산을 조회하는 코드 자체가 없어서** 정보가 샐 경로가 존재하지 않는다 — 접근 통제 코드로 막는 것보다 강한 보장이다.
+- **테이블을 만들면 부수 인프라가 따라온다.** 만료 정리 배치(스케줄러·중복 실행 방지·실패 재시도)는 이번 Phase에 없는 관심사이고, 요구사항 §9.3이 명시적으로 제외한 범위다. 테이블 1개가 아니라 **운영 표면 1개**가 늘어난다.
+- **영속화가 진짜 필요해지는 시점에는 "세션 테이블"이 정답이 아니다.** 상담원 인계·통합 인박스가 필요로 하는 것은 순간 상태가 아니라 **대화 스레드**(메시지 시퀀스 + 담당자 + 상태)다. 지금 세션 테이블을 만들면 그때 버려진다.
+- **`unknown` 시그니처가 규약보다 강하다.** "API는 상태를 검증해야 한다"를 문서 규약으로 두면 3개 소비자(시뮬레이션·비교·공개 대화) 중 하나는 반드시 빠뜨린다. 타입으로 강제하면 빠뜨릴 수 없다.
+
+## 대안과 트레이드오프
+
+| 대안 | 기각 사유 |
+|---|---|
+| `ConversationSession` 테이블 + `sessionId` FK | 만료 정리 배치가 동반된다. 조작 이득이 0인 데이터를 위한 인프라 확장이며, 진짜 필요 시점(No.24/42)에는 다른 모델이 필요하다 |
+| Redis 세션 스토어 | 신규 런타임 인프라 1개 추가. 개발명세서 §6-4는 Redis 도입을 "확장기능(16번~) 착수 시점"으로 못박았다 |
+| 서명된 봉투(JWT/HMAC) | 서명은 "조작되지 않았음"을 보장할 뿐 **"내용이 유효함"을 보장하지 않는다**. 어차피 번들 기준 재검증(④)이 필요하므로 서명은 순수 추가 비용이다. 게다가 서명 키 관리(구축형/구독형 양쪽)가 새 문제로 들어온다 |
+| 봉투 대신 서버가 `sessionId`로 메모리 Map 보관 | 다중 인스턴스에서 즉시 깨진다. "지금은 단일 인스턴스"를 전제로 코드를 쓰면 수평 확장 시점에 대화 기능 전체가 재작성 대상이 된다 |
+| `ContextSessionState`를 그대로 주고받고 `pendingClarify`를 별도 필드로 | 확장할 때마다 API 시그니처가 1개씩 늘어난다. 봉투는 **다음 확장의 비용을 0으로** 만든다 |
+| 검증을 API 계층(`apps/api`)에 둔다 | 3개 소비자가 각자 호출해야 하고, 위젯/채널이 늘면 누락 확률이 올라간다. 엔진에 두면 호출 경로가 1개다 |
+
+**감수하는 비용**
+① 요청/응답 본문이 커진다(슬롯 20개 기준 수 KB) — 상한 16KB로 방어하고, 대화 1턴 트래픽에서 무시 가능한 수준이다.
+② 같은 `sessionId`로 여러 탭을 열면 각 탭의 봉투가 독립 동작한다(EX-P-7) — 서버가 상태를 보관하지 않는다는 사실의 직접적 귀결이며, 로그는 같은 세션으로 집계된다는 점을 문서로 고지한다.
+③ 탭을 닫으면 대화가 사라진다(EX-P-13) — 이번 Phase의 명시적 제외 항목(대화 이력 복원)과 일치한다.
+
+## 결과
+
+- `shared-types/src/dialogue-engine.ts`: `PendingClarifySchema`, `ConversationStateSchema`, `CONVERSATION_STATE_VERSION`, `StateDiscardReason` 추가.
+- `packages/dialogue-engine/src/conversation-state.ts`(신규): `sanitizeConversationState(raw, bundle, now, options)` — 예외를 던지지 않고 `{ state, discarded[] }`를 반환한다.
+- `packages/dialogue-engine/src/turn.ts`(신규): `resolveTurn`이 유일한 상태 인식 진입점이 된다(ADR-0010 §1).
+- `apps/api`: 시뮬레이션은 `stateDiscarded`를 응답에 노출(관리자 디버깅), 공개 API는 **`stateReset: boolean`만** 노출한다(NFR-S1).
+- `apps/widget`: `sessionStorage`에 봉투를 보관하고 응답값으로 **통째 덮어쓴다**(부분 병합 금지).
+- `test-automation` 인계: AC-10-6~AC-10-9, EX-10-3~EX-10-5를 `sanitizeConversationState` 단위 테스트로 커버한다(DB·HTTP 불필요).
+- **재검토 트리거** 3건(§4)을 `quality-channel-설계.md` §14에 함께 기록했다.
+</content>

@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
+import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { toHomonymEntity, toHomonymListItem } from './homonym.mapper';
 import { findInvalidIntentIds } from './lib/meaning-validation';
 
@@ -26,6 +27,7 @@ export class HomonymsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
+    private readonly bundleService: DialogueBundleService,
   ) {}
 
   private async assertWordFree(chatbotId: string, wordNormalized: string, excludeId?: string): Promise<void> {
@@ -64,6 +66,7 @@ export class HomonymsService {
         defaultMeaningIndex: dto.defaultMeaningIndex ?? undefined,
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toHomonymEntity(row);
   }
 
@@ -118,6 +121,7 @@ export class HomonymsService {
         ...(dto.defaultMeaningIndex !== undefined ? { defaultMeaningIndex: dto.defaultMeaningIndex } : {}),
       },
     });
+    this.bundleService.invalidate(chatbotId);
     return toHomonymEntity(row);
   }
 
@@ -126,6 +130,7 @@ export class HomonymsService {
     await this.scope.assertWritable(chatbotId);
     await this.findRowOrThrow(chatbotId, id);
     await this.prisma.homonymDictionary.delete({ where: { id } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   /** 테스트 입력란(FR-7-11) — 엔진의 `resolveHomonym`만 호출한다(노드/FAQ 매칭 없음). */

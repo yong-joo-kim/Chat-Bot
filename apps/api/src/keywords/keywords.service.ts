@@ -22,6 +22,7 @@ import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
+import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
 import { CsvSheetReader } from '../dialogue-common/import/csv-sheet-reader';
 import { XlsxSheetReader } from '../dialogue-common/import/xlsx-sheet-reader';
@@ -56,6 +57,7 @@ export class KeywordsService {
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
+    private readonly bundleService: DialogueBundleService,
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
@@ -113,6 +115,7 @@ export class KeywordsService {
     const row = await this.prisma.keyword.create({
       data: { chatbotId, name: trimmedName, nameNormalized, description: dto.description, synonyms: JSON.stringify(synonyms) },
     });
+    this.bundleService.invalidate(chatbotId);
     return toKeywordDetail(row, []);
   }
 
@@ -188,6 +191,7 @@ export class KeywordsService {
       where: { keywordId: id },
       include: { node: { select: { id: true, name: true } } },
     });
+    this.bundleService.invalidate(chatbotId);
     return toKeywordDetail(row, links.map((l) => l.node));
   }
 
@@ -196,6 +200,7 @@ export class KeywordsService {
     await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertKeywordDeletable(chatbotId, id);
     await this.prisma.keyword.delete({ where: { id } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -221,6 +226,7 @@ export class KeywordsService {
       );
     }
     await this.prisma.keyword.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
+    this.bundleService.invalidate(chatbotId);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -365,6 +371,7 @@ export class KeywordsService {
         }
       }
     });
+    this.bundleService.invalidate(chatbotId);
 
     return {
       createdItems,

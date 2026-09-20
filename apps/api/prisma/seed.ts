@@ -155,6 +155,9 @@ async function main(): Promise<void> {
     { name: '영업시간문의', examples: ['영업시간이 궁금해요', '몇시까지 운영하나요'] },
     { name: '커피주문', examples: ['커피 주문할게요', '아메리카노 주문할래요'] },
     { name: '빈예문의도', examples: [] as string[] }, // EX-D-5: 예문 0개 — 설계 점검 WARNING 검증용
+    // 품질/채널(No.10~11) — 동음이의어 "배" 되묻기 종결 회귀 시나리오(AC-E2-3~5) 최우선 검증용
+    { name: '과일문의', examples: ['과일이 신선한가요?', '과일 종류가 뭐예요'] },
+    { name: '선박문의', examples: ['선박 출항 시간 알려줘', '배편 예약하고 싶어요'] },
   ];
   const intents: Record<string, { id: string }> = {};
   for (const def of intentDefs) {
@@ -194,10 +197,12 @@ async function main(): Promise<void> {
       chatbotId: supportBot.id,
       word: '배',
       wordNormalized: normalizeText('배'),
+      // AC-E2-3~5 — 의미별 intentId 연결(품질/채널-설계.md §12). "신체"는 연결 의도 없이 남겨
+      // "일부 의미만 연결"되는 실제 사례를 재현한다.
       meanings: JSON.stringify([
-        { label: '과일', contextHints: ['사과', '포도'] },
+        { label: '과일', contextHints: ['사과', '포도'], intentId: intents['과일문의'].id },
         { label: '신체', contextHints: ['아프다', '통증'] },
-        { label: '선박', contextHints: ['항구', '운항'] },
+        { label: '선박', contextHints: ['항구', '운항'], intentId: intents['선박문의'].id },
       ]),
       policy: 'ASK',
       clarifyPrompt: "어떤 '배'를 말씀하시는 건가요?",
@@ -212,7 +217,9 @@ async function main(): Promise<void> {
       nameNormalized: normalizeText('커피주문'),
       slots: JSON.stringify([
         {
-          name: '메뉴',
+          // 슬롯명은 ContextSlotSchema 정규식(영문/숫자/언더스코어)을 따라야 한다 — 화면 표시는 label로 한다
+          // (이번 품질/채널 시험 진행 중 발견된 대화설계 그룹 기존 seed 결함 수정, quality-channel-report.md 참고).
+          name: 'menu',
           label: '메뉴',
           prompt: '메뉴를 선택해 주세요 (아메리카노/라떼).',
           type: 'CHOICE',
@@ -221,7 +228,7 @@ async function main(): Promise<void> {
           maxRetry: 2,
         },
         {
-          name: '사이즈',
+          name: 'size',
           label: '사이즈',
           prompt: '사이즈를 선택해 주세요 (톨/그란데).',
           type: 'CHOICE',
@@ -230,7 +237,7 @@ async function main(): Promise<void> {
           maxRetry: 2,
         },
         {
-          name: '수량',
+          name: 'quantity',
           label: '수량',
           prompt: '수량을 입력해 주세요 (1~10).',
           type: 'NUMBER',
@@ -239,7 +246,7 @@ async function main(): Promise<void> {
           maxRetry: 2,
         },
       ]),
-      completionMessage: '{메뉴} {사이즈} {수량}잔 주문을 확인했습니다!',
+      completionMessage: '{menu} {size} {quantity}잔 주문을 확인했습니다!',
       sessionTimeoutMinutes: 30,
     },
   });
@@ -286,6 +293,53 @@ async function main(): Promise<void> {
     },
   });
   await prisma.dialogNodeIntent.create({ data: { nodeId: coffeeNode.id, intentId: intents['커피주문'].id } });
+
+  // AC-E2-3~5 — 동음이의어 "배" 되묻기 종결 회귀 시나리오. 각 의미의 intentId 조건을 갖는 노드 2건.
+  const fruitNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '과일_응답',
+      nameNormalized: normalizeText('과일_응답'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '신선한 과일 배를 안내해 드릴게요.' } }]),
+    },
+  });
+  await prisma.dialogNodeIntent.create({ data: { nodeId: fruitNode.id, intentId: intents['과일문의'].id } });
+
+  const shipNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '선박_응답',
+      nameNormalized: normalizeText('선박_응답'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '선박 출항 정보를 안내해 드릴게요.' } }]),
+    },
+  });
+  await prisma.dialogNodeIntent.create({ data: { nodeId: shipNode.id, intentId: intents['선박문의'].id } });
+
+  // AC-E2-1/AC-P-13 — 버튼 NODE 액션 진입점(resolveByNodeId) 회귀 시나리오. 이 노드의 BUTTON
+  // 아웃풋을 누르면 서버로 `buttonAction:{kind:'NODE',nodeId}`가 전송되어 shippingNode로 직접 이동한다.
+  const nodeButtonNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '바로가기_안내',
+      nameNormalized: normalizeText('바로가기_안내'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([
+        {
+          type: 'BUTTON',
+          payload: {
+            text: '배송 조회 화면으로 바로 이동할까요?',
+            buttons: [{ label: '배송 조회로 이동', action: 'NODE', value: shippingNode.id }],
+          },
+        },
+      ]),
+    },
+  });
+  await prisma.dialogNodeIntent.create({ data: { nodeId: nodeButtonNode.id, intentId: intents['빈예문의도'].id } });
 
   const fallbackNode = await prisma.dialogNode.create({
     data: {
@@ -359,7 +413,29 @@ async function main(): Promise<void> {
   });
 
   await prisma.channel.deleteMany({ where: { chatbotId: supportBot.id } });
-  await prisma.channel.create({ data: { chatbotId: supportBot.id, type: 'WEB', enabled: true } });
+  await prisma.channel.create({
+    data: {
+      chatbotId: supportBot.id,
+      type: 'WEB',
+      enabled: true,
+      config: JSON.stringify({
+        allowedOrigins: [], // 모든 출처 허용(개발 편의) — AC-P-1/AC-W 수동 검증용
+        greetingMessage: '무엇을 도와드릴까요?',
+        quickReplies: ['배송 조회', '환불 절차', '영업시간'],
+        launcherPosition: 'RIGHT',
+        showLauncher: true,
+      }),
+    },
+  });
+  // AC-11-3/AC-11-4, S-7 — CONFIG_ONLY 채널(활성화 불가) 화면 검증용
+  await prisma.channel.create({
+    data: {
+      chatbotId: supportBot.id,
+      type: 'KAKAOTALK',
+      enabled: false,
+      config: JSON.stringify({ note: '2분기 오픈빌더 심사 예정' }),
+    },
+  });
 
   // 트랙 B: 로그 0건 — 빈 상태(AC-2-5, AC-2-6) 및 DRAFT 임베드 주의문구(AC-4-10) 검증용
   const emptyBot = await upsertChatbot({
@@ -381,9 +457,20 @@ async function main(): Promise<void> {
   });
   await replaceConversationLogs(archivedBot.id, buildTrackCLogs(now));
 
+  // AC-11-1 — 채널 레코드 0건 챗봇(8종 전부 configured:false 검증용, 품질/채널-설계.md §12)
+  const emptyChannelBot = await upsertChatbot({
+    groupId: supportGroup.id,
+    name: '채널 미설정 챗봇',
+    slug: 'sample-empty-channel-bot',
+    status: 'DRAFT',
+    description: '채널 레코드 0건 — 채널 목록 빈 상태(전부 configured:false) 검증용',
+  });
+  await prisma.channel.deleteMany({ where: { chatbotId: emptyChannelBot.id } });
+  await replaceConversationLogs(emptyChannelBot.id, []);
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed 완료: support=${supportBot.id}(100 logs), empty=${emptyBot.id}(0 logs), archived=${archivedBot.id}(20 logs)`,
+    `Seed 완료: support=${supportBot.id}(100 logs), empty=${emptyBot.id}(0 logs), archived=${archivedBot.id}(20 logs), emptyChannel=${emptyChannelBot.id}(0 channels)`,
   );
 }
 

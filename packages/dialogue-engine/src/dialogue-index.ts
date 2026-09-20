@@ -27,6 +27,8 @@ export interface DialogueIndex {
   keywordTerms: KeywordTermEntry[];
   nodesRanked: DialogNode[];
   homonymWords: Map<string, HomonymDictionary>;
+  /** 노드 id → 노드 O(1) 조회(FR-E2-1, `resolveByNodeId` 전용). enabled 여부와 무관하게 전부 담는다. */
+  nodesById: Map<string, DialogNode>;
 }
 
 function pushToMap(map: Map<string, string[]>, key: string, value: string): void {
@@ -74,6 +76,11 @@ export function buildDialogueIndex(bundle: DialogueBundle): DialogueIndex {
     homonymWords.set(normalizeText(dict.word), dict);
   }
 
+  const nodesById = new Map<string, DialogNode>();
+  for (const node of bundle.dialogNodes) {
+    nodesById.set(node.id, node);
+  }
+
   return {
     exampleExact,
     examplePartial,
@@ -82,5 +89,6 @@ export function buildDialogueIndex(bundle: DialogueBundle): DialogueIndex {
     keywordTerms,
     nodesRanked: rankNodes(bundle.dialogNodes),
     homonymWords,
+    nodesById,
   };
 }

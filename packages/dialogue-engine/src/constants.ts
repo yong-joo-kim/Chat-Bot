@@ -2,6 +2,15 @@
 
 export const HOP_LIMIT = 10; // FR-5-18
 export const MAX_INPUT_LENGTH = 1000; // EX-D-8
+/** 되묻기 대기(`pendingClarify`) 기본 TTL(FR-E2-2, §7.3/§7.4). */
+export const CLARIFY_TTL_MS = 10 * 60 * 1000;
+/** 대화 상태 봉투 최대 수명(FR-10-4, §7.4). */
+export const STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** 봉투 크기 상한(FR-10-4, §7.4) — 직렬화 바이트/필드 개수/필드 값 길이. */
+export const STATE_MAX_BYTES = 16 * 1024;
+export const STATE_MAX_FILLED_VALUE_KEYS = 20;
+export const STATE_MAX_FILLED_VALUE_LENGTH = 1000;
+export const STATE_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 export const DEFAULT_FALLBACK_RESPONSE = '죄송해요, 잘 이해하지 못했어요. 다른 방식으로 질문해 주시겠어요?';
 export const EMPTY_INPUT_RESPONSE = '메시지를 입력해 주세요.';
 export const UNSUPPORTED_OUTPUT_NOTICE = '죄송해요, 이 응답은 아직 지원하지 않아요. 다른 방식으로 문의해 주세요.';

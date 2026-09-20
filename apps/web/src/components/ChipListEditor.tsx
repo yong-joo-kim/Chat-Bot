@@ -12,6 +12,8 @@ export interface ChipListEditorProps {
   limitMessage?: string;
   duplicateMessage?: string;
   disabled?: boolean;
+  /** 추가 직전 형식 검증(선택). 오류 문구를 반환하면 추가를 막고 인라인으로 표시한다. */
+  validate?: (value: string) => string | undefined;
 }
 
 /**
@@ -31,6 +33,7 @@ export const ChipListEditor = forwardRef<HTMLInputElement, ChipListEditorProps>(
     limitMessage,
     duplicateMessage = '이미 추가된 항목입니다.',
     disabled = false,
+    validate,
   },
   ref,
 ) {
@@ -42,6 +45,11 @@ export const ChipListEditor = forwardRef<HTMLInputElement, ChipListEditorProps>(
     const trimmed = draft.trim();
     if (!trimmed) return;
     if (atMax) return;
+    const validationError = validate?.(trimmed);
+    if (validationError) {
+      setWarning(validationError);
+      return;
+    }
     const exists = values.some((v) => v.trim().toLowerCase() === trimmed.toLowerCase());
     if (exists) {
       setWarning(duplicateMessage);
