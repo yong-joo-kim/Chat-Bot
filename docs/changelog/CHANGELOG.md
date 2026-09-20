@@ -21,3 +21,15 @@ feat: 대화 설계(No.5~9) 기능그룹 구현 - 대화그래프빌더/의도�
 - API 엔드포인트 50개, 관리자 콘솔 화면 구현
 - code-reviewer 발견 High 3건 수정: 삭제차단 배너 미동작, 참조종류 라벨 오류, 노드필터 데이터유실
 - 테스트 230개 추가
+
+## 2026-09-20 — dfde1c3
+
+feat: 품질/채널(No.10~11) 기능그룹 구현 - 응답테스트/시뮬레이션, 다양한 채널 제공
+
+- 대화해석엔진 3층 진입점(resolveResponse/resolveByNodeId/resolveTurn) 및 pendingClarify 동음이의어 해소 파이프라인 신설(ADR-0010)
+- 클라이언트 보관 세션상태 도입(ADR-0009)
+- 채널 CRUD: WEB 종단 구현 + 7종 설정전용(ADR-0011)
+- 공개 대화 API: Origin 가드/레이트리밋/PII 마스킹(ADR-0013)
+- 신규 apps/widget 최초 스캐폴딩(런타임 의존성 0, Shadow DOM, gzip 7.46KB, ADR-0012)
+- code-reviewer 발견 High 2건 수정: 오버레이 크기제한 버그, SIM1-D 진입점 누락
+- 테스트 369개
