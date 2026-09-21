@@ -18,7 +18,9 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@chat-bot/shared-types'],
+    // 서브패스(`/contrast`, `/output-view`)도 CommonJS 산출물이라 esbuild가 named export를
+    // 합성하도록 각각 명시해야 한다 — 루트 패키지 포함만으로는 서브패스가 사전번들링되지 않는다.
+    include: ['@chat-bot/shared-types', '@chat-bot/shared-types/contrast', '@chat-bot/shared-types/output-view'],
   },
   test: {
     environment: 'jsdom',
