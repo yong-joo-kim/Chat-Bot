@@ -56,3 +56,17 @@ feat: 기본 통계/학습현황(No.14~15) 기능그룹 구현 - 일/주/월 통
 - ADR-0017(시계열 버킷 전략)~ADR-0019(미응답 큐 수집 모델) 및 요구사항·설계·UI 명세·시험 문서 추가
 - code-reviewer 1차 Medium 2건 발견→수정, 2차 재검토 통과(Critical/High/Medium 0건)
 - 테스트 총 617개 Pass(api 356 / web 163 / dialogue-engine 72 / widget 26), 실패 0건
+
+## 2026-09-22 — 799392c
+
+feat: FAQ/의도 매칭 고도화(1단계 NLU 유사도 검색 + 2단계 외부 RAG 폴백) 기능그룹 구현
+
+- 1단계 NLU: apps/ml-worker(추론 전용 임베딩 서비스, 골든셋 스윕으로 KURE-v1 확정) 신설 + apps/api/src/embedding(provider/색인/캐시/의미매칭) + packages/dialogue-engine 의미 유사도 매칭기, 매칭 점수 주입 및 임계값 밴드(ACCEPT/CLARIFY/REJECT) 도입(ADR-0020, ADR-0024)
+- 2단계 외부 RAG: apps/api/src/rag(게이트/HTTP 클라이언트/응답 검증/allowlist 봉인) + 비동기 보류답변 폴링 배달(ADR-0022, ADR-0023)
+- 챗봇별 답변 설정(1:1, ChatbotAnswerSetting) 신설: apps/api/src/answer-settings + apps/web answer-settings 화면(임계값 밴드/폴백정책/RAG 스코프, ADR-0021)
+- packages/pii-mask 신설: apps/api/conversation/lib의 PII 마스킹을 공용 패키지로 승격
+- DB 스키마 확장(EmbeddingVector/ChatbotAnswerSetting/RagCallLog) 및 마이그레이션(20260922070337), ConversationLog.answeredByRag 추가로 No.14 응답출처에 RAG 반영
+- apps/web 시뮬레이터에 매치스코어 패널/RAG 사용 토글, apps/widget에 보류 응답 폴링(pending-poll) UI 추가
+- @Public() 핸들러 6개로 갱신(보류 답변 폴링 엔드포인트 추가, security-audit.md AC-C-4)
+- code-reviewer 1차 High 1건/Medium 2건 발견→수정, 2차 재검토 통과(Medium 1건은 잔여 리스크로 문서화)
+- 테스트 신규 46건 추가, 총 768개 Pass(api 459 / web 170 / dialogue-engine 86 / widget 45 / pii-mask 8), 실패 0건 + apps/ml-worker(pytest) 9개 별도 Pass
