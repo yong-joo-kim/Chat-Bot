@@ -154,6 +154,9 @@ importers:
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
+      garu-ko:
+        specifier: 0.9.18
+        version: 0.9.18
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -2091,6 +2094,9 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
+
+  garu-ko@0.9.18:
+    resolution: {integrity: sha512-DuKeyg805H4MY1rCkh/C5igdMMRwU1iL1QXR1xRDSYgJMTqlsAJy5aT3ycRETo2rjkRrPDOJwgcvtpTJcnNf9w==}
 
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
@@ -5528,6 +5534,8 @@ snapshots:
       rimraf: 2.7.1
 
   function-bind@1.1.2: {}
+
+  garu-ko@0.9.18: {}
 
   gensync@1.0.0-beta.2: {}
 

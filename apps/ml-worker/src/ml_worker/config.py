@@ -26,9 +26,38 @@ class Settings(BaseSettings):
     embedding_batch_max: int = 64  # 배치 상한 (설계서 §4.2)
     mock_dimension: int = 64  # embedding_model_id == "mock" 일 때만 사용
 
+    # ── No.16 증강 생성 프로파일(ADR-0026 §5, DD-101) ────────────────────────────────
+    # embed(기본) | augment | both. `/embed`·`/health` 계약은 role과 무관하게 항상 바이트
+    # 단위로 동일하다(FR-L2-37) — role은 어떤 모델이 메모리에 올라가는지만 결정한다.
+    ml_worker_role: str = "embed"
+    # "mock"이면 실제 생성모델을 로드하지 않는다(§eval/generation_candidates.py로 실측 확정 전 기본값).
+    generation_model_id: str = "mock"
+    generation_model_revision: str = "main"
+    generation_device: str = "cuda"  # ADR-0026 §5 — 생성은 GPU 권장(24GB+ VRAM 전제)
+    generation_max_new_tokens: int = 512
+    # 시드 20건 → 후보 target_count건을 1회 배치로 만든다(§5.3 "문장별 호출 금지").
+    generation_target_count_max: int = 60
+    generation_seeds_max: int = 20
+
     @property
     def is_mock(self) -> bool:
         return self.embedding_model_id.strip().lower() == "mock"
+
+    @property
+    def loads_embedding(self) -> bool:
+        return self.ml_worker_role in ("embed", "both")
+
+    @property
+    def loads_generation(self) -> bool:
+        return self.ml_worker_role in ("augment", "both")
+
+    @property
+    def is_generation_mock(self) -> bool:
+        return self.generation_model_id.strip().lower() == "mock"
+
+    @property
+    def resolved_generation_model_id(self) -> str:
+        return f"{self.generation_model_id}@{self.generation_model_revision}"
 
     @property
     def resolved_model_id(self) -> str:

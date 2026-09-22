@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type {
   BulkResult,
+  DecomposedResolveResult,
   ResolveResult,
   UnansweredQuestionDetail,
   UnansweredQuestionListItem,
@@ -27,7 +28,8 @@ import { ResolveModal, type IntentOption } from './ResolveModal';
 import { BulkResolveModal } from './BulkResolveModal';
 import { BulkResultPanel } from './BulkResultPanel';
 import { PendingLimitBanner } from './PendingLimitBanner';
-import { NodeUnlinkedWarningBanner, type NodeUnlinkedEntry } from './NodeUnlinkedWarningBanner';
+import { LearningLinkWarningBanner, type LinkWarningEntry } from './LearningLinkWarningBanner';
+import { ClassifierStatusPanel } from './ClassifierStatusPanel';
 
 const PAGE_SIZE = 20;
 type EmptyKind = 'none-ever' | 'all-processed' | null;
@@ -63,7 +65,7 @@ export function LearningQueuePage(): JSX.Element {
   const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
   const [bulkIgnoreConfirmOpen, setBulkIgnoreConfirmOpen] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
-  const [nodeUnlinkedEntries, setNodeUnlinkedEntries] = useState<NodeUnlinkedEntry[]>([]);
+  const [linkWarningEntries, setLinkWarningEntries] = useState<LinkWarningEntry[]>([]);
 
   const [highlightDetail, setHighlightDetail] = useState<UnansweredQuestionDetail | null>(null);
 
@@ -178,18 +180,28 @@ export function LearningQueuePage(): JSX.Element {
     setResolveTarget({ question, initialIntentName });
   }
 
-  function handleResolved(result: ResolveResult): void {
+  function handleResolved(result: ResolveResult | DecomposedResolveResult, resolveDecomposedKeywordNames?: string[]): void {
     const question = resolveTarget?.question;
     setResolveTarget(null);
     if (result.conflicts.length > 0) {
       showToast(MESSAGES.learning.conflictWarning(result.conflicts.map((c) => c.intentName).join(', ')));
     }
     showToast(result.appliedImmediately ? MESSAGES.learning.resolveSuccessImmediate : MESSAGES.learning.resolveSuccessQueued);
-    if (result.linkedNodeCount === 0 && question) {
-      setNodeUnlinkedEntries((prev) => [
-        ...prev,
-        { id: `${result.questionId}-${Date.now()}`, questionText: question.questionText, intentId: result.intentId, intentName: result.intentName },
-      ]);
+    if (question) {
+      const newEntries: LinkWarningEntry[] = [];
+      if (result.linkedNodeCount === 0) {
+        newEntries.push({ id: `${result.questionId}-intent-${Date.now()}`, type: 'INTENT_UNLINKED', questionText: question.questionText, targetName: result.intentName });
+      }
+      // `resolve-decomposed` 결과에만 있는 필드(§11.2) — 요소분해 통합 반영 경로에서만 등장한다.
+      if ('keywordLinkedNodeCount' in result && result.keywordLinkedNodeCount === 0 && result.keywordCount > 0) {
+        newEntries.push({
+          id: `${result.questionId}-keyword-${Date.now()}`,
+          type: 'KEYWORD_UNLINKED',
+          questionText: question.questionText,
+          targetName: (resolveDecomposedKeywordNames ?? []).join(', ') || result.intentName,
+        });
+      }
+      if (newEntries.length > 0) setLinkWarningEntries((prev) => [...prev, ...newEntries]);
     }
     if (question) refreshHighlightIfMatch(question.id);
     void load();
@@ -231,15 +243,15 @@ export function LearningQueuePage(): JSX.Element {
   function handleBulkResolveResult(result: BulkResult): void {
     setBulkResolveOpen(false);
     setBulkResult(result);
-    const newEntries: NodeUnlinkedEntry[] = result.results
+    const newEntries: LinkWarningEntry[] = result.results
       .filter((r) => r.linkedNodeCount === 0)
       .map((r) => ({
-        id: `${r.questionId}-${Date.now()}`,
+        id: `${r.questionId}-intent-${Date.now()}`,
+        type: 'INTENT_UNLINKED',
         questionText: questionTextById.get(r.questionId) ?? r.questionId,
-        intentId: r.intentId,
-        intentName: r.intentName,
+        targetName: r.intentName,
       }));
-    if (newEntries.length > 0) setNodeUnlinkedEntries((prev) => [...prev, ...newEntries]);
+    if (newEntries.length > 0) setLinkWarningEntries((prev) => [...prev, ...newEntries]);
     void load();
     refreshLearningSummary();
   }
@@ -263,12 +275,14 @@ export function LearningQueuePage(): JSX.Element {
     <div className="learning-queue-page">
       <h1>{MESSAGES.learning.pageTitle}</h1>
 
-      <NodeUnlinkedWarningBanner
+      <LearningLinkWarningBanner
         chatbotId={chatbot.id}
-        entries={nodeUnlinkedEntries}
-        onCloseOne={(id) => setNodeUnlinkedEntries((prev) => prev.filter((e) => e.id !== id))}
-        onCloseAll={() => setNodeUnlinkedEntries([])}
+        entries={linkWarningEntries}
+        onCloseOne={(id) => setLinkWarningEntries((prev) => prev.filter((e) => e.id !== id))}
+        onCloseAll={() => setLinkWarningEntries([])}
       />
+
+      <ClassifierStatusPanel chatbotId={chatbot.id} canWrite={canWrite} />
 
       {learningSummary?.limitReached && <PendingLimitBanner />}
 
@@ -391,6 +405,8 @@ export function LearningQueuePage(): JSX.Element {
         onClose={() => setResolveTarget(null)}
         onResolved={handleResolved}
         onAlreadyResolved={handleAlreadyResolved}
+        onIgnoreRequested={resolveTarget ? () => void handleIgnore(resolveTarget.question) : undefined}
+        canWrite={canWrite}
       />
 
       <BulkResolveModal

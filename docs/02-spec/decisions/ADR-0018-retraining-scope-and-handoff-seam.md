@@ -1,11 +1,11 @@
 # ADR-0018 — No.15 "재학습"의 범위 경계와 ml-worker 인계 지점(단일 메서드)
 
-- **상태**: 채택 (Accepted)
+- **상태**: 채택 (Accepted) · **2026-09-22b 보론 추가**(§보론 — 인계 지점 교체 조건의 정정)
 - **일자**: 2026-09-22
 - **결정자**: system-architect
-- **관련**: `docs/requirements/stats-learning.md` **J-1**, FR-15-20~34, NFR-P5, NFR-M4, AC-15B-4/5/9/10/11/12/17, EX-15-5/7/10/13 / `ADR-0008`(규칙 매칭 파이프라인 — "학습" 연산의 부재) / `ADR-0004`(쓰기 주체 없는 스키마 금지) / `ADR-0007`(교체 지점을 인터페이스 1곳으로) / `ADR-0016`(감사 기록은 커밋 후 별도 쓰기)
-- **영향 범위**: `apps/api/src/learning/**`(신규), `apps/api/src/intents/intents.service.ts`, `apps/api/prisma/schema.prisma`(**`TrainingJob` 미생성**), `packages/shared-types/src/learning.ts`(신규), 개발명세서 §4(`/stats/training-status` 삭제)
-- **세부 설계**: `docs/02-spec/stats-learning-설계.md` §10
+- **관련**: `docs/requirements/stats-learning.md` **J-1**, FR-15-20~34, NFR-P5, NFR-M4, AC-15B-4/5/9/10/11/12/17, EX-15-5/7/10/13 / `ADR-0008`(규칙 매칭 파이프라인 — "학습" 연산의 부재) / `ADR-0004`(쓰기 주체 없는 스키마 금지) / `ADR-0007`(교체 지점을 인터페이스 1곳으로) / `ADR-0016`(감사 기록은 커밋 후 별도 쓰기) / **`ADR-0025`·`ADR-0027`(학습 고도화 그룹 — 이 ADR의 예고를 실제로 검증하고 정정)**
+- **영향 범위**: `apps/api/src/learning/**`(신규), `apps/api/src/intents/intents.service.ts`, `apps/api/prisma/schema.prisma`(**`TrainingJob` 미생성** → **보론: 학습 고도화 그룹에서 생성됨**), `packages/shared-types/src/learning.ts`(신규), 개발명세서 §4(`/stats/training-status` 삭제)
+- **세부 설계**: `docs/02-spec/stats-learning-설계.md` §10 / **보론: `docs/02-spec/learning-augmentation-설계.md` §14**
 
 ## 맥락
 
@@ -64,6 +64,8 @@ async applyLearning(input: {
 | K-6 | **수동 트리거 API를 만들지 않는다.** 내부가 no-op인 엔드포인트는 관리자에게 "학습 중이니 기다려야 한다"는 잘못된 모델을 심는다 |
 
 No.16/No.23 착수 시 바뀌는 것은 **이 메서드의 본문과 반환값뿐**이다(`TrainingJob` 적재 후 `{ mode:'QUEUED', appliedImmediately:false, jobId }` 반환). 호출부의 분기 코드는 수정되지 않는다.
+
+> ⚠ **2026-09-22b 정정**: 위 문단의 예고(“No.16/No.23 착수 시 본문이 교체된다”)는 **실제 착수 결과 성립하지 않았다.** 교체 조건은 "학습 착수"가 아니라 **"대화 반영이 즉시가 아니게 되는 시점"**이다. 상세는 아래 **§보론**을 반드시 함께 읽을 것.
 
 ### 3. 예문 추가는 `IntentsService`의 공용 메서드를 **재사용**한다. 복제하지 않는다 (DD-62, NFR-M4)
 
@@ -130,4 +132,64 @@ No.16/No.23 착수 시 바뀌는 것은 **이 메서드의 본문과 반환값�
 - `ApiErrorCode` 추가: `ALREADY_RESOLVED`·`BULK_SIZE_EXCEEDED`. **`INTENT_LIMIT_EXCEEDED`는 만들지 않는다**(기존 `LIMIT_EXCEEDED` 재사용 — AC-15B-9).
 - 환경변수: `LEARNING_BULK_MAX_ITEMS`(50)·`INTENT_SUGGEST_MIN_SCORE`(0.25) — 선택.
 - `test-automation` 인계: ① **AC-15B-5(반영 직후 캐시 TTL을 기다리지 않고 매칭 — 이 ADR의 핵심 주장을 증명하는 테스트)** ② AC-15B-11(동시 반영 → 한쪽 409 + 예문 중복 0) ③ AC-15B-9(상한 초과 시 상태 `PENDING` 유지) ④ AC-15B-12(일괄 부분 성공 + **번들 무효화 1회**) ⑤ AC-15B-6/7(신규 생성 / 정규화 병합) ⑥ AC-15B-8(`linkedNodeCount: 0` 경고) ⑦ AC-15B-15(`reopen` 후 예문 잔존) ⑧ AC-15B-17/18(감사: `Intent`만 기록, 큐 상태 변경은 미기록) ⑨ **EX-15-6의 기대값은 `409 CHATBOT_ARCHIVED`** 로 수정(설계서 §2.2 C-1).
-- `code-reviewer` 인계: ① `learning`에 예문 상한·dedupe·충돌 검사 복제 0건 ② `bundleService.invalidate()` 호출이 `LearningApplyService` 1곳 ③ 상태 전이가 조건부 `updateMany`인지 ④ `appliedImmediately` 하드코딩 0건 ⑤ `TrainingJob`·`retrain` 문자열이 코드에 없는지 ⑥ `deferBundleInvalidate` 기본값이 `false`라 기존 호출부가 무영향인지.
+- `code-reviewer` 인계: ① `learning`에 예문 상한·dedupe·충돌 검사 복제 0건 ② `bundleService.invalidate()` 호출이 `LearningApplyService` 1곳 ③ 상태 전이가 조건부 `updateMany`인지 ④ `appliedImmediately` 하드코딩 0건 ⑤ `TrainingJob`·`retrain` 문자열이 코드에 없는지 → **보론 §3으로 갱신** ⑥ `deferBundleInvalidate` 기본값이 `false`라 기존 호출부가 무영향인지.
+
+---
+
+## 보론 (2026-09-22b) — **인계 지점을 교체하지 않는다**. 교체 조건을 정정한다
+
+> **상태**: 이 보론은 위 §1~§5의 결정을 **뒤집지 않는다.** §2가 남긴 *예고*(“No.16/23 착수 시 본문이 교체된다”)만 정정한다. 결정이 아니라 **예측이 틀렸다.** 근거: `docs/requirements/learning-augmentation.md` **J-9**, FR-L2-34, AC-L4-7 / `ADR-0025`(증강의 산출물은 데이터) · `ADR-0027`(분류기는 대화 밖).
+
+### 1. 무엇이 틀렸는가
+
+§2는 교체 조건을 **"No.16/No.23 착수"** 라는 *일정*으로 적었다. 학습 고도화 그룹이 실제로 착수해 확인한 결과, 그 일정은 교체 조건이 아니었다.
+
+| 이 그룹이 추가한 학습 연산 | 대화 반영 경로에 있는가 | 결과 |
+|---|:---:|---|
+| **증강 예문 편입**(No.16) | **있다** | 그러나 편입은 `applyLearningExample()` → 캐시 무효화라는 **기존 즉시 경로 그대로**다. 비동기인 것은 *후보 생성*이고, 생성물은 **제안**이라 대화에 영향이 없다(ADR-0025 §5) |
+| **경량 의도 분류기 학습**(No.23) | **없다** | 분류기의 소비자는 미응답 큐의 추천 의도 1곳뿐이며 `resolveTurn()`은 이 모델을 조회하지 않는다(ADR-0027 §2) |
+
+즉 **"학습 연산이 생겼다"와 "대화 반영이 지연된다"는 서로 독립**이다. §2는 둘을 같은 것으로 전제했다.
+
+### 2. 정정된 교체 조건
+
+> **`applyLearning()`이 `{ mode:'QUEUED', appliedImmediately:false, jobId }`를 반환하게 되는 시점은 "학습 착수"가 아니라 "관리자의 저장이 다음 턴에 반영되지 않게 되는 시점"이다.**
+
+그 시점은 구체적으로 **임베딩·분류기의 파인튜닝 산출물을 대화 경로에 넣을 때**다(§9 Out of scope · ADR-0025 §1 · ADR-0027 §2의 +5%p 재검토 조건). 그때는 "예문을 저장했다"와 "그 예문이 매칭에 반영됐다" 사이에 실제 시간차가 생기고, 화면이 "학습 대기열에 추가되었습니다"라고 말하는 것이 **비로소 사실**이 된다.
+
+지금 그렇게 말하면 **거짓말이다** — 증강 승인 예문은 저장 즉시 매칭에 반영된다.
+
+### 3. 이 그룹이 유지·변경하는 것
+
+| 계약 | 학습 고도화 그룹의 처리 |
+|---|---|
+| K-1(무효화 호출 1곳) | **유지.** 증강 편입·요소분해 반영도 이 1곳을 거친다. 기존 정적 검사 스펙(`learning-apply-invalidate-callsite.spec.ts`)이 계속 통과한다 |
+| K-2(요청당 1회) | **유지.** `accept` 요청 1건 = 호출 1회, `resolve-decomposed` 1건 = 호출 1회 |
+| K-3(트랜잭션 밖·커밋 후) | **유지** |
+| K-4(`appliedImmediately` 반환값 전달) | **유지. 그러나 `QUEUED` 분기는 이번에도 켜지지 않는다** — 반환값이 계속 `true`다 |
+| K-5(실패 전파) | **유지** |
+| K-6(수동 트리거 API 금지) | ⚠ **부분 변경.** `POST .../intent-classifier/train`을 신설한다. K-6의 금지 취지는 *"내부가 no-op인 API로 '기다려야 한다'는 잘못된 모델을 심지 마라"* 였고, 이 엔드포인트는 **대화 반영 트리거가 아니라 추천 품질 도구**이며 실제로 시간이 걸리고 실제로 결과가 바뀐다 → 취지에 저촉되지 않는다. **단 화면이 "대화 반영과 무관함"을 명시**해야 한다(FR-L3-8). `POST /retrain`(대화 반영용 수동 트리거)은 **여전히 만들지 않는다** |
+| `LearningApplyReason` | **유니온 값 2종 추가**(`'AUGMENTATION_ACCEPT'`, `'UNANSWERED_DECOMPOSED_RESOLVE'`). **타입 확장만이며 메서드 본문·반환값은 바뀌지 않는다** |
+| `TrainingJob` 테이블 | **생성한다**(ADR-0027 §4). 단 **이 테이블은 `applyLearning()`과 무관**하다 — 관리자 화면의 비동기 작업(생성·학습) 상태를 담을 뿐, 대화 자산 반영을 지연시키지 않는다. §1의 "만들지 않는 것" 목록에서 `TrainingJob`만 해소되고 나머지(Redis/BullMQ, 대화 반영용 수동 트리거, "학습 중" 상태 표시)는 그대로다 |
+
+### 4. K-4가 옳았음이 이번에 증명됐다
+
+`appliedImmediately`를 상수로 하드코딩했다면, 이번 그룹에서 **"증강도 학습이니 QUEUED로 바꿔야 하나"를 코드 전체에서 다시 판단**해야 했을 것이다. 반환값으로 두었기 때문에 **판단 지점이 메서드 1곳**이었고, 검토 결과 "바꾸지 않는다"로 끝났다 — 프런트·컨트롤러·문구는 **한 줄도 건드리지 않았다.**
+
+**구조는 옳았고 예고만 틀렸다. 따라서 코드는 그대로 두고 주석만 정정한다.**
+
+### 5. 함께 정정되는 문서·주석 (구현자 인계)
+
+| 대상 | 정정 내용 |
+|---|---|
+| `apps/api/src/learning/learning-apply.service.ts` JSDoc | "No.16·No.23 착수 시 이 메서드 본문 1곳이 `TrainingJob` 적재로 교체되고" → **"교체 조건은 대화 반영이 즉시가 아니게 되는 시점(파인튜닝의 대화 경로 편입)이며, No.16/23은 그 조건에 해당하지 않는다(ADR-0018 보론)"**. **본문·반환값·시그니처는 무수정** |
+| 개발명세서 §6 결정 23 | 동일 취지의 갱신 각주 |
+| 개발명세서 §3 `TrainingJob` 행 | "쓰기 주체가 없다" → **학습 고도화 그룹이 첫 쓰기 주체**로 갱신(단 `applyLearning()`과 무관함을 명시) |
+| `docs/03-design/stats-learning-ui-spec.md` §4.8 | `appliedImmediately` 분기 주석 "No.16/23 도입 시 자동 활성화" → **"도입 후에도 켜지지 않는다. 켜지는 시점은 파인튜닝의 대화 경로 편입이다"**. **코드는 그대로** |
+| `docs/04-test/시험항목.md` TC-15 | "재학습 Job 생성"을 **증강 Job / 분류기 학습 Job의 검증 항목으로 재정의**하고, "미응답 반영 = 즉시"는 별도 항목으로 고정 |
+
+### 6. 새 수용기준 (회귀 고정)
+
+- **AC-L4-7**: `LearningApplyService.applyLearning()`의 반환값이 여전히 `{ mode:'IMMEDIATE', appliedImmediately:true, jobId:null }`임을 단언한다. **이 그룹이 인계 지점을 교체하지 않았다는 사실 자체를 테스트로 고정**한다.
+- **AC-L1-7**: 증강 승인 응답의 `appliedImmediately`가 `true`이고 화면 문구가 즉시 반영 문구임을 고정한다.
+- **AC-L4-8**: `invalidate()` 호출부가 여전히 `LearningApplyService` 1곳임(기존 정적 검사 스펙이 계속 통과).

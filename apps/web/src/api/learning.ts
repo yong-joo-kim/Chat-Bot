@@ -3,6 +3,9 @@ import type {
   BulkIgnoreDto,
   BulkResolveDto,
   BulkResult,
+  DecomposedResolveRequestDto,
+  DecomposedResolveResult,
+  DecompositionResponse,
   Paginated,
   ResolveResult,
   ResolveUnansweredQuestionDto,
@@ -58,4 +61,10 @@ export const learningApi = {
     apiClient.post<BulkResult>(`/chatbots/${chatbotId}/unanswered-questions/bulk-resolve`, dto),
   bulkIgnore: (chatbotId: string, dto: BulkIgnoreDto) =>
     apiClient.post<BulkResult>(`/chatbots/${chatbotId}/unanswered-questions/bulk-ignore`, dto),
+  /** No.23(A) 요소분해 — 조회 시 계산·저장하지 않는다(learning-augmentation-설계.md §15.1 #6). */
+  decomposition: (chatbotId: string, id: string) =>
+    apiClient.get<DecompositionResponse>(`/chatbots/${chatbotId}/unanswered-questions/${id}/decomposition`),
+  /** 의도 + 엔티티 동시 반영(§15.1 #7). 엔티티 대기열이 비어있으면 `resolve`를 그대로 쓴다(무회귀). */
+  resolveDecomposed: (chatbotId: string, id: string, dto: DecomposedResolveRequestDto) =>
+    apiClient.post<DecomposedResolveResult>(`/chatbots/${chatbotId}/unanswered-questions/${id}/resolve-decomposed`, dto),
 };

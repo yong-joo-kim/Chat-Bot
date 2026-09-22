@@ -28,6 +28,8 @@ import { toUnansweredQuestionListItem, parseVariantsJson } from './unanswered-qu
 import { suggestIntents } from './lib/intent-suggest';
 import type { SuggestCandidateIntent } from './lib/intent-suggest';
 import { foldTrend, trendStartDayBucket } from './lib/occurrence-trend';
+import { ClassifierPredictService } from '../classifier/classifier-predict.service';
+import type { IntentSuggestion } from '@chat-bot/shared-types';
 
 const NOT_FOUND_MESSAGE = '요청하신 미응답 질문을 찾을 수 없습니다.';
 const ALREADY_PROCESSED_MESSAGE = '이미 처리된 항목입니다. 되돌리기(재오픈) 후 다시 시도해 주세요.';
@@ -42,6 +44,7 @@ export class UnansweredQuestionsService {
     private readonly intentsService: IntentsService,
     private readonly learningApply: LearningApplyService,
     private readonly config: ConfigService,
+    private readonly classifierPredict: ClassifierPredictService,
   ) {}
 
   private async findRowOrThrow(chatbotId: string, id: string): Promise<PrismaUnansweredQuestion> {
@@ -65,11 +68,53 @@ export class UnansweredQuestionsService {
     return intents.map((row) => ({ id: row.id, name: row.name, examples: this.parseExamplesJson(row.examples) }));
   }
 
-  private computeSuggestions(normalizedQuestion: string, candidates: SuggestCandidateIntent[]) {
+  private computeLexicalSuggestions(normalizedQuestion: string, candidates: SuggestCandidateIntent[]): IntentSuggestion[] {
     const candidateSize = candidates.reduce((sum, c) => sum + c.examples.length + 1, 0);
     if (candidateSize > SUGGESTION_CANDIDATE_LIMIT) return [];
     const minScore = this.config.get<number>('INTENT_SUGGEST_MIN_SCORE') ?? LEARNING_LIMITS.suggestMinScore;
-    return suggestIntents(normalizedQuestion, candidates, { minScore, max: LEARNING_LIMITS.suggestionsMax });
+    return suggestIntents(normalizedQuestion, candidates, { minScore, max: LEARNING_LIMITS.suggestionsMax }).map((s) => ({
+      ...s,
+      source: 'LEXICAL' as const,
+    }));
+  }
+
+  /**
+   * 추천 산출 우선순위(FR-L2-27, ADR-0027 §12.4): ① 분류기가 `READY`이고 stale이 아니면 확률
+   * (`source:'CLASSIFIER'`) ② 아니면 기존 bigram(`source:'LEXICAL'`). **둘을 섞지 않는다.**
+   * `classifierPredict.predictBatch()`가 `null`을 반환하면(비활성·미학습·`MODEL_CHANGED`·임베딩 실패)
+   * 요청 전체가 조용히 ②로 폴백한다(AC-L2-15, 오류가 아니라 폴백).
+   */
+  private async resolveSuggestions(
+    chatbotId: string,
+    rows: PrismaUnansweredQuestion[],
+    candidates: SuggestCandidateIntent[],
+  ): Promise<Map<string, IntentSuggestion[]>> {
+    const pending = rows.filter((r) => r.status === 'PENDING');
+    const result = new Map<string, IntentSuggestion[]>();
+    if (pending.length === 0) return result;
+
+    let classifierMap: Map<string, { intentId: string; intentName: string; score: number }[]> | null = null;
+    try {
+      classifierMap = await this.classifierPredict.predictBatch(
+        chatbotId,
+        pending.map((r) => ({ id: r.id, text: r.questionText })),
+      );
+    } catch {
+      classifierMap = null; // 분류기 호출 실패도 폴백으로 수렴한다(오류를 전파하지 않는다).
+    }
+
+    for (const row of pending) {
+      if (classifierMap) {
+        const predictions = classifierMap.get(row.id) ?? [];
+        result.set(
+          row.id,
+          predictions.map((p) => ({ intentId: p.intentId, intentName: p.intentName, score: p.score, matchedExample: p.intentName, source: 'CLASSIFIER' as const })),
+        );
+      } else {
+        result.set(row.id, this.computeLexicalSuggestions(row.questionNormalized, candidates));
+      }
+    }
+    return result;
   }
 
   async list(chatbotId: string, query: UnansweredQuestionListQuery): Promise<Paginated<UnansweredQuestionListItem>> {
@@ -102,12 +147,14 @@ export class UnansweredQuestionsService {
 
     const candidates = await this.loadSuggestionCandidates(chatbotId);
     const intentNameById = new Map(candidates.map((c) => [c.id, c.name]));
+    // 질의 임베딩은 목록 요청당 배치 1회(FR-L2-30, AC-L2-14) — 행별 호출을 하지 않는다.
+    const suggestionsById = await this.resolveSuggestions(chatbotId, rows, candidates);
 
     const items = rows.map((row) =>
       toUnansweredQuestionListItem(row, {
         resolvedIntentName: row.resolvedIntentId ? intentNameById.get(row.resolvedIntentId) : undefined,
         // RESOLVED/IGNORED 항목은 추천이 화면에서 쓰이지 않는다 — 계산을 건너뛰어 목록 성능을 지킨다.
-        suggestions: row.status === 'PENDING' ? this.computeSuggestions(row.questionNormalized, candidates) : [],
+        suggestions: suggestionsById.get(row.id) ?? [],
       }),
     );
 
@@ -128,7 +175,8 @@ export class UnansweredQuestionsService {
 
     const candidates = await this.loadSuggestionCandidates(chatbotId);
     const intentNameById = new Map(candidates.map((c) => [c.id, c.name]));
-    const suggestions = row.status === 'PENDING' ? this.computeSuggestions(row.questionNormalized, candidates) : [];
+    const suggestionsById = await this.resolveSuggestions(chatbotId, [row], candidates);
+    const suggestions = suggestionsById.get(row.id) ?? [];
 
     const variants = parseVariantsJson(row.variants);
     const trendDays = LEARNING_LIMITS.trendDays;

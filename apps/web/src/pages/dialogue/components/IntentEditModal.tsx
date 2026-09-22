@@ -9,6 +9,7 @@ import { MESSAGES } from '../../../constants/messages';
 import { intentsApi } from '../../../api/dialogue';
 import { ApiError } from '../../../api/client';
 import { fieldErrorsFromApiError } from '../../../lib/apiErrorHelpers';
+import { AugmentationPanel } from './AugmentationPanel';
 
 export interface IntentEditModalProps {
   isOpen: boolean;
@@ -134,6 +135,16 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
               duplicateMessage={msg.duplicateExample}
               disabled={readOnly}
             />
+
+            {intentId && (
+              <AugmentationPanel
+                chatbotId={chatbotId}
+                intentId={intentId}
+                currentExampleCount={examples.length}
+                readOnly={readOnly}
+                onExamplesAccepted={(newExampleTexts) => setExamples((prev) => [...prev, ...newExampleTexts])}
+              />
+            )}
 
             {conflicts.length > 0 && (
               <div className="form-banner form-banner--info" role="status">

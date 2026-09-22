@@ -403,6 +403,74 @@ describe('챗봇 운영관리 통합 테스트 (No.1~4)', () => {
     expect(ApiErrorSchema.parse(res.body).code).toBe('CONFIRM_NAME_MISMATCH');
   });
 
+  it('회귀: FAQ/RAG 그룹(임베딩 벡터·RAG 호출로그)과 학습 고도화 그룹(증강 제안·분류기 모델·학습 Job) 파생 데이터가 있어도 영구 삭제가 FK 제약 위반 없이 성공한다', async () => {
+    const groupId = await createGroup();
+    const created = await createChatbot(groupId, { name: '파생데이터보유챗봇' });
+    const id = (created.body as { id: string }).id;
+
+    // FAQ/의도 매칭 고도화 그룹 파생 데이터(Chatbot에 onDelete: Restrict FK).
+    await prisma.embeddingVector.create({
+      data: {
+        chatbotId: id,
+        ownerType: 'INTENT_NAME',
+        ownerId: 'fake-intent-id',
+        textHash: 'hash',
+        modelId: 'test-model',
+        dimension: 2,
+        vector: Buffer.from(new Float32Array([1, 0]).buffer).toString('base64'),
+        status: 'READY',
+      },
+    });
+    await prisma.ragCallLog.create({
+      data: { chatbotId: id, outcome: 'SUCCESS', latencyMs: 120 },
+    });
+
+    // 학습 고도화 그룹(No.16/23) 파생 데이터(Chatbot에 onDelete: Restrict FK) — 이 3종을 지우지 않으면
+    // Prisma FK 제약 위반으로 영구 삭제가 500으로 실패한다(회귀 대상 버그).
+    await prisma.augmentationSuggestion.create({
+      data: {
+        chatbotId: id,
+        intentId: 'fake-intent-id',
+        text: '증강 예문',
+        textNormalized: '증강예문',
+        similarityToSeed: 0.9,
+        providerId: 'mock',
+        modelId: 'test-model',
+      },
+    });
+    await prisma.intentClassifierModel.create({
+      data: {
+        chatbotId: id,
+        modelId: 'test-model',
+        dimension: 2,
+        classIds: JSON.stringify(['fake-intent-id']),
+        weights: Buffer.from(new Float32Array([0, 0]).buffer).toString('base64'),
+        bias: Buffer.from(new Float32Array([0]).buffer).toString('base64'),
+        classCount: 1,
+        sampleCount: 10,
+        intentCountAtTrain: 1,
+        exampleCountAtTrain: 10,
+      },
+    });
+    await prisma.trainingJob.create({
+      data: { chatbotId: id, kind: 'CLASSIFIER_TRAIN', status: 'SUCCEEDED' },
+    });
+
+    await request('PATCH', `${baseUrl}/chatbots/${id}/status`, { status: 'ARCHIVED' });
+
+    const res = await request('POST', `${baseUrl}/chatbots/${id}/permanent-delete`, { confirmName: '파생데이터보유챗봇' });
+    expect(res.status).toBe(204);
+
+    const gone = await request('GET', `${baseUrl}/chatbots/${id}`);
+    expect(gone.status).toBe(404);
+
+    expect(await prisma.embeddingVector.count({ where: { chatbotId: id } })).toBe(0);
+    expect(await prisma.ragCallLog.count({ where: { chatbotId: id } })).toBe(0);
+    expect(await prisma.augmentationSuggestion.count({ where: { chatbotId: id } })).toBe(0);
+    expect(await prisma.intentClassifierModel.count({ where: { chatbotId: id } })).toBe(0);
+    expect(await prisma.trainingJob.count({ where: { chatbotId: id } })).toBe(0);
+  });
+
   it('AC-3-1: name만 부분 수정하면 slug/skin/status는 보존된다', async () => {
     const groupId = await createGroup();
     const slug = `preserve-bot-${Date.now()}`;

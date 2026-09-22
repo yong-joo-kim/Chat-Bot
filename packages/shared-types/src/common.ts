@@ -100,6 +100,13 @@ export const ApiErrorCode = z.enum([
   'REINDEX_IN_PROGRESS',
   'PENDING_ANSWER_NOT_FOUND',
   'INVALID_THRESHOLD',
+  // 학습 고도화(No.16 증강 · No.23 요소분해/경량 분류기) 그룹 추가(learning-augmentation-설계.md §8, FR-0-57)
+  'AUGMENTATION_UNAVAILABLE',
+  'AUGMENTATION_IN_PROGRESS',
+  'SUGGESTION_EXPIRED',
+  'CLASSIFIER_INSUFFICIENT_DATA',
+  'CLASSIFIER_NOT_TRAINED',
+  'CLASSIFIER_STALE_MODEL',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

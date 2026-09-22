@@ -48,6 +48,17 @@ vi.mock('../../api/dialogue', () => ({
   intentsApi: {
     list: vi.fn().mockResolvedValue({ items: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: '배송문의' }], total: 1, page: 1, pageSize: 100 }),
   },
+  keywordsApi: {
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 }),
+  },
+}));
+
+// B1 분류기 상태 패널이 L1 상단에서 항상 조회한다 — axe 스캔에 영향 없도록 최소 응답으로 목 처리한다.
+vi.mock('../../api/classifier', () => ({
+  classifierApi: {
+    status: vi.fn().mockResolvedValue({ state: 'NONE', classCount: 0, sampleCount: 0, stale: false, staleReasons: [] }),
+    train: vi.fn(),
+  },
 }));
 
 function makeItem(overrides: Partial<UnansweredQuestionListItem> = {}): UnansweredQuestionListItem {

@@ -28,6 +28,9 @@ import { UsersModule } from './users/users.module';
 import { EmbeddingModule } from './embedding/embedding.module';
 import { RagModule } from './rag/rag.module';
 import { AnswerSettingsModule } from './answer-settings/answer-settings.module';
+import { TrainingJobsModule } from './training-jobs/training-jobs.module';
+import { AugmentationModule } from './augmentation/augmentation.module';
+import { ClassifierModule } from './classifier/classifier.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -63,6 +66,9 @@ import { validate } from './config/env.validation';
     EmbeddingModule,
     RagModule,
     AnswerSettingsModule,
+    TrainingJobsModule,
+    AugmentationModule,
+    ClassifierModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

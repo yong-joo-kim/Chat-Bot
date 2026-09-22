@@ -7,6 +7,7 @@ import { SkeletonRow } from '../../components/Skeleton';
 import { ChartFrame } from '../stats/ChartFrame';
 import { BarChartSvg, type BarDatum } from '../stats/BarChartSvg';
 import { buildTrendSummary } from '../stats/chartSummary';
+import { SuggestionSourceBadge } from './ClassifierBadges';
 
 const STATUS_ICON: Record<UnansweredQuestionStatus, string> = { PENDING: '●', RESOLVED: '✓', IGNORED: '⊘' };
 const STATUS_COLOR: Record<UnansweredQuestionStatus, { bg: string; fg: string }> = {
@@ -227,7 +228,7 @@ function UnansweredDetailPanel({
           <ul className="suggestion-list">
             {detail.suggestions.map((s) => (
               <li key={s.intentId}>
-                {s.intentName} {s.score.toFixed(2)} ({MESSAGES.learning.suggestionExample(s.matchedExample)})
+                {s.intentName} {s.score.toFixed(2)} <SuggestionSourceBadge source={s.source} /> ({MESSAGES.learning.suggestionExample(s.matchedExample)})
                 {canWrite && item.status === 'PENDING' && (
                   <button type="button" className="btn btn-secondary" onClick={() => onResolveClick(item, s.intentName)}>
                     {MESSAGES.learning.suggestionApply}

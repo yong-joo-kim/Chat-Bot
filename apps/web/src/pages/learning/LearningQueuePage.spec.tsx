@@ -50,6 +50,18 @@ vi.mock('../../api/dialogue', () => ({
   intentsApi: {
     list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 }),
   },
+  keywordsApi: {
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 }),
+  },
+}));
+
+// B1 분류기 상태 패널(learning-augmentation-ui-spec.md §5.2)이 L1 상단에서 항상 조회한다 —
+// 이 스펙은 그 기능 자체를 다루지 않으므로 최소 응답으로 목 처리해 무관한 네트워크 호출을 막는다.
+vi.mock('../../api/classifier', () => ({
+  classifierApi: {
+    status: vi.fn().mockResolvedValue({ state: 'NONE', classCount: 0, sampleCount: 0, stale: false, staleReasons: [] }),
+    train: vi.fn(),
+  },
 }));
 
 function makeItem(overrides: Partial<UnansweredQuestionListItem> = {}): UnansweredQuestionListItem {

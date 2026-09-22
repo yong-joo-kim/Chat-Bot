@@ -58,6 +58,29 @@ const EnvSchema = z.object({
   RAG_CIRCUIT_OPEN_MS: z.coerce.number().int().positive().default(60000),
   RAG_STATUS_CACHE_MS: z.coerce.number().int().positive().default(60000),
   PENDING_ANSWER_TTL_MS: z.coerce.number().int().positive().default(300000),
+  // 학습 고도화(No.16 증강 · No.23 요소분해/경량 분류기) 그룹 추가 — 전부 선택(기본값 있음, FR-0-55).
+  // 하나도 설정하지 않으면 G1 규칙 증강 + 분류기 비활성 + 형태소 분석기 휴리스틱 폴백으로 정상 기동한다.
+  AUGMENTATION_PROVIDER: z.enum(['rule', 'gemini', 'local', 'mock']).default('rule'),
+  AUGMENTATION_GEMINI_API_KEY: z.string().optional(),
+  AUGMENTATION_GEMINI_MODEL: z.string().optional(),
+  AUGMENTATION_GEMINI_BASE_URL: z.string().optional(),
+  AUGMENTATION_LOCAL_BASE_URL: z.string().optional(),
+  AUGMENTATION_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  AUGMENTATION_MAX_SUGGESTIONS: z.coerce.number().int().positive().default(20),
+  AUGMENTATION_MAX_PENDING: z.coerce.number().int().positive().default(500),
+  AUGMENTATION_SUFFICIENT_EXAMPLES: z.coerce.number().int().positive().default(10),
+  AUGMENTATION_KEEP_MIN: z.coerce.number().min(0).max(1).default(0.75),
+  AUGMENTATION_KEEP_MAX: z.coerce.number().min(0).max(1).default(0.97),
+  AUGMENTATION_NOVELTY_MAX: z.coerce.number().min(0).max(1).default(0.95),
+  AUGMENTATION_SUGGESTION_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  CLASSIFIER_ENABLED: z.coerce.boolean().default(false),
+  CLASSIFIER_MIN_SAMPLES: z.coerce.number().int().positive().default(20),
+  CLASSIFIER_MIN_PER_CLASS: z.coerce.number().int().positive().default(3),
+  CLASSIFIER_MIN_CLASSES: z.coerce.number().int().positive().default(2),
+  CLASSIFIER_MAX_MODEL_BYTES: z.coerce.number().int().positive().default(8388608),
+  CLASSIFIER_MIN_PROBABILITY: z.coerce.number().min(0).max(1).default(0.15),
+  MORPH_ANALYZER: z.string().default('auto'),
+  MORPH_DICT_PATH: z.string().optional(),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

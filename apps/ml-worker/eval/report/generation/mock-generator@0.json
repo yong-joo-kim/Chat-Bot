@@ -1,0 +1,49 @@
+{
+  "model_id": "mock-generator@0",
+  "device": "cuda",
+  "target_count": 10,
+  "cases": [
+    {
+      "case_id": "refund-policy",
+      "generated": 10,
+      "semantic_kept": 8,
+      "novel": 10,
+      "conflicts": 0,
+      "semantic_pass_rate": 0.8,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    },
+    {
+      "case_id": "delivery-eta",
+      "generated": 10,
+      "semantic_kept": 9,
+      "novel": 10,
+      "conflicts": 0,
+      "semantic_pass_rate": 0.9,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    },
+    {
+      "case_id": "agent-connect",
+      "generated": 10,
+      "semantic_kept": 0,
+      "novel": 10,
+      "conflicts": 0,
+      "semantic_pass_rate": 0.0,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    }
+  ],
+  "aggregate": {
+    "semantic_pass_rate": 0.5667,
+    "novelty_pass_rate": 1.0,
+    "conflict_rate": 0.0
+  },
+  "latency": {
+    "n": 3,
+    "target_count": 10,
+    "mean_ms": 0.0,
+    "p95_ms": 0.0,
+    "max_ms": 0.0
+  }
+}

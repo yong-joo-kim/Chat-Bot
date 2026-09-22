@@ -331,11 +331,23 @@ export class ChatbotsService {
     // 아니라 파생 데이터라 **삭제 대상**이다(ADR-0002의 "하위 데이터 제거" 분류). `embeddingVector`·
     // `chatbotAnswerSetting`은 FK가 `onDelete: Restrict`라 챗봇 삭제 전에 먼저 지워야 한다.
     // `ragCallLog`는 FK가 없어 막지는 않지만 로그 규약상 함께 정리한다.
-    await this.prisma.embeddingVector.deleteMany({ where: { chatbotId: id } });
-    await this.prisma.chatbotAnswerSetting.deleteMany({ where: { chatbotId: id } });
-    await this.prisma.ragCallLog.deleteMany({ where: { chatbotId: id } });
-
-    await this.prisma.chatbot.delete({ where: { id } });
+    //
+    // 학습 고도화 그룹(learning-augmentation-설계.md) 추가 — `augmentationSuggestion`·
+    // `intentClassifierModel`·`trainingJob`도 `Chatbot`에 `onDelete: Restrict` FK가 걸려 있어
+    // 챗봇 삭제 이전에 먼저 지워야 한다(같은 이유로 위 3종과 나란히 처리한다).
+    //
+    // 아래 6개 테이블 삭제 + 챗봇 로우 삭제는 원자적으로 처리해야 한다 — 중간 단계 실패 시 앞선
+    // deleteMany가 이미 커밋된 채 챗봇만 ARCHIVED로 남는 부분 실행 상태를 막기 위해 트랜잭션으로
+    // 묶는다(이 코드베이스의 다른 다중쓰기 로직과 동일한 컨벤션, 예: intents.service.ts).
+    await this.prisma.$transaction(async (tx) => {
+      await tx.embeddingVector.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotAnswerSetting.deleteMany({ where: { chatbotId: id } });
+      await tx.ragCallLog.deleteMany({ where: { chatbotId: id } });
+      await tx.augmentationSuggestion.deleteMany({ where: { chatbotId: id } });
+      await tx.intentClassifierModel.deleteMany({ where: { chatbotId: id } });
+      await tx.trainingJob.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbot.delete({ where: { id } });
+    });
     await this.auditLogService.record({
       action: 'PURGE',
       targetType: 'Chatbot',
