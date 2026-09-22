@@ -23,3 +23,6 @@ Thumbs.db
 /docs/00-source/*.xlsx
 ~$*.xlsx
 ~$*.docx
+
+# Claude Code 런타임 세션 파일(로컬 전용, 커밋 대상 아님)
+.claude/*.lock
