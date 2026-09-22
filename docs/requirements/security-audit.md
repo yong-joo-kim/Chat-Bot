@@ -597,7 +597,17 @@ PM이 판단을 요청한 항목을 포함해, 기준 목록·선행 명세의 �
 - **AC-C-1** 모든 신규 엔드포인트 응답이 대응 zod 스키마 파싱을 통과한다(계약 테스트).
 - **AC-C-2** 기존 통합 테스트 2종이 인증 헬퍼 적용 후 **전부 통과**한다(회귀 0건).
 - **AC-C-3** 기존 단위 테스트(엔진·lib 순수함수)는 **수정 없이** 통과한다(인증은 엔진에 침투하지 않는다).
-- **AC-C-4** `@Public()`이 부착된 핸들러는 정확히 4개다(테스트로 개수 고정 — 우회 경로 회귀 방지).
+- **AC-C-4** `@Public()`이 부착된 핸들러는 정확히 **5개**다(테스트로 개수 고정 — 우회 경로 회귀 방지). 대상은 아래 5곳이며, 5번 `POST /auth/logout`은 설계서 `security-audit-설계.md` **DD-45**(§8.2)가 FR-12-20의 4곳에서 1곳 늘려 공개 경로로 확정한 것이다 — 근거: FR-12-8이 "이미 만료된 세션으로 호출해도 `204`(멱등)"를 요구하는데 인증을 요구하면 만료 세션 로그아웃이 `401`이 되어 요구사항을 만족할 수 없고, 로그아웃은 세션을 파괴만 하므로 인증 없이 호출해도 공격자가 얻는 것이 없다.
+
+  | # | 경로 | 핸들러 |
+  |---|---|---|
+  | 1 | `GET /api/health` | `HealthController#check` |
+  | 2 | `GET /api/v1/public/chatbots/:slug/config` | `PublicConversationController#getConfig` |
+  | 3 | `POST /api/v1/public/chatbots/:slug/messages` | `PublicConversationController#sendMessage` |
+  | 4 | `POST /api/v1/auth/login` | `AuthController#login` |
+  | **5** | **`POST /api/v1/auth/logout`** | `AuthController#logout` (DD-45로 추가) |
+
+  `@Public()`은 클래스가 아니라 **핸들러**에 부착한다(부착 단위가 섞이면 개수 고정 테스트가 의미를 잃는다).
 - **AC-C-5** 신규 환경변수를 하나도 설정하지 않아도 API가 기동한다(FR-0-30).
 - **AC-C-6** 공개 대화 API의 기존 AC(AC-P-1~15)가 전부 그대로 통과한다.
 
