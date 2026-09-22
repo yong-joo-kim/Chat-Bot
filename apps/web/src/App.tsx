@@ -17,6 +17,9 @@ import { SettingsTab } from './pages/chatbot-detail/SettingsTab';
 import { SkinEmbedTab } from './pages/chatbot-detail/SkinEmbedTab';
 import { SimulatorTab } from './pages/chatbot-detail/SimulatorTab';
 import { ChannelsTab } from './pages/chatbot-detail/ChannelsTab';
+import { StatsShell } from './pages/stats/StatsShell';
+import { StatsOverviewPage } from './pages/stats/StatsOverviewPage';
+import { LearningQueuePage } from './pages/learning/LearningQueuePage';
 import { DialogueShell } from './pages/dialogue/DialogueShell';
 import { NodesListPage } from './pages/dialogue/NodesListPage';
 import { NodeFormPage } from './pages/dialogue/NodeFormPage';
@@ -72,6 +75,11 @@ export function App(): JSX.Element {
           <Route path="/chatbots/:chatbotId" element={<ChatbotDetailLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DashboardTab />} />
+            <Route path="stats" element={<StatsShell />}>
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<StatsOverviewPage />} />
+              <Route path="learning" element={<LearningQueuePage />} />
+            </Route>
             <Route path="settings" element={<SettingsTab />} />
             <Route path="skin" element={<SkinEmbedTab />} />
             <Route path="simulator" element={<SimulatorTab />} />

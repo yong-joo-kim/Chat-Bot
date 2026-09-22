@@ -2255,3 +2255,358 @@ a:focus-visible {
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
 }
+
+/* ==================================================================================
+ * 통계/분석(No.14~15) — T0 통계 셸 / S1 기본 통계 / L1 학습현황(stats-learning-ui-spec.md)
+ * ================================================================================== */
+
+.stats-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.stats-subnav {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  border-radius: 8px 8px 0 0;
+  padding: 4px 8px 0;
+}
+.stats-subnav-link {
+  padding: 8px 12px;
+  text-decoration: none;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.stats-subnav-link--active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.stats-content {
+  min-width: 0;
+}
+.nav-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: var(--color-primary-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 기간·단위 컨트롤 */
+.granularity-period-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.stats-result-badge {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.stats-metric-row {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* 차트 공용 셸(`ChartFrame`) */
+.chart-frame {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--color-bg);
+  margin-bottom: 16px;
+}
+.chart-frame-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.chart-frame-header h3 {
+  margin: 0;
+}
+.chart-frame-summary {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+.chart-frame-data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.chart-frame-data-table th,
+.chart-frame-data-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+.stats-bar-svg {
+  color: var(--color-primary);
+  width: 100%;
+  overflow: visible;
+}
+.bar-segment--unanswered {
+  color: var(--color-text-muted);
+}
+.bar-segment--single {
+  color: var(--color-primary);
+}
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 8px 0 0;
+}
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-legend-swatch {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  border-radius: 2px;
+}
+.chart-legend-swatch--answered {
+  background: var(--color-primary);
+}
+.chart-legend-swatch--unanswered {
+  background: repeating-linear-gradient(45deg, var(--color-text-muted), var(--color-text-muted) 2px, transparent 2px, transparent 4px);
+}
+.chart-metric-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+/* 분포(응답출처/채널) 가로 막대 목록 */
+.dist-bar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dist-bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 140px;
+  align-items: center;
+  gap: 8px;
+}
+.dist-bar-track {
+  background: var(--color-bg-subtle);
+  border-radius: 4px;
+  height: 16px;
+  overflow: hidden;
+}
+.dist-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+.dist-bar-fill--fallback {
+  background: var(--color-text-muted);
+}
+.dist-bar-fill--hatch {
+  background-image: repeating-linear-gradient(45deg, currentColor, currentColor 3px, transparent 3px, transparent 6px);
+}
+.dist-bar-fill--channel {
+  background: var(--color-primary-dark);
+}
+.dist-fallback-link {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.stats-distribution-grid,
+.hour-weekday-grid,
+.top-questions-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.top-questions-col h2,
+.hour-weekday-panel h2 {
+  font-size: 16px;
+}
+
+/* 학습현황(L1) */
+.learning-queue-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.learning-filter-bar {
+  align-items: flex-end;
+}
+.learning-recurred-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #eef2ff;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.learning-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.learning-table th,
+.learning-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+.learning-row--highlight {
+  background: #fffbeb;
+}
+.learning-expand-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 16px;
+}
+.learning-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recurred-badge {
+  display: block;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.learning-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  background: var(--color-bg-subtle);
+  border-radius: 8px;
+}
+.learning-detail-panel h4 {
+  margin: 0 0 6px;
+}
+.learning-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.suggestion-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.suggestion-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pending-limit-banner {
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+.node-unlinked-banner {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.node-unlinked-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.node-unlinked-banner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bulk-result-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--color-bg);
+}
+.bulk-result-title {
+  font-weight: 700;
+}
+.learning-highlight-card {
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  padding: 12px;
+  background: #eef2ff;
+}
+.learning-highlight-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+@media (max-width: 1023px) {
+  .stats-distribution-grid,
+  .hour-weekday-grid,
+  .top-questions-panel {
+    grid-template-columns: 1fr;
+  }
+  .stats-metric-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .stats-metric-row {
+    grid-template-columns: 1fr;
+  }
+  .dist-bar-row {
+    grid-template-columns: 1fr;
+  }
+  .learning-table-wrap {
+    overflow-x: auto;
+  }
+}

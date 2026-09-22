@@ -24,6 +24,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
         <NavLink to={`/chatbots/${chatbotId}/dashboard`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabDashboard}
         </NavLink>
+        <NavLink to={`/chatbots/${chatbotId}/stats`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabStats}
+        </NavLink>
         <NavLink to={`/chatbots/${chatbotId}/settings`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabSettings}
         </NavLink>

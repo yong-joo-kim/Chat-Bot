@@ -87,6 +87,11 @@ export const ApiErrorCode = z.enum([
   'DUPLICATE_EMAIL',
   'BANNED_WORD_BLOCKED',
   'AUDIT_RANGE_TOO_WIDE',
+  // 통계/분석(No.14~15) 그룹 추가(stats-learning-설계.md §4.4, DD-65)
+  'STATS_RANGE_TOO_WIDE',
+  'INVALID_GRANULARITY',
+  'ALREADY_RESOLVED',
+  'BULK_SIZE_EXCEEDED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 
@@ -127,6 +132,40 @@ export const SafeUrlSchema = z
  */
 export function normalizeText(text: string): string {
   return text.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * KST(Asia/Seoul) 버킷 변환의 단일 소스(FR-0-31, ADR-0017). 대한민국은 서머타임이 없어
+ * 고정 오프셋(540분)으로 충분하다. `apps/api`(적재·집계) · `prisma/scripts`(백필) ·
+ * `prisma/seed.ts` · `apps/web`(표기) 네 소비자가 공유하는 횡단 관심사다.
+ * ⚠ `apps/api/src/stats/lib/dashboard-period.ts`의 KST 헬퍼와는 **의도적으로 분리**되어 있다
+ * (J-4 — 대시보드 코드 무변경). 두 구현의 동일성은 AC-14A-9로 고정한다.
+ */
+export const KST_OFFSET_MINUTES = 540;
+
+/** UTC `Date` → KST 기준 `YYYY-MM-DD` 문자열(적재 시점 확정, EX-14-7/EX-14-12). */
+export function toKstDayBucket(date: Date): string {
+  const kst = new Date(date.getTime() + KST_OFFSET_MINUTES * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** UTC `Date` → KST 기준 시(0~23). 시간대 분포(FR-14-28, DD-59) 전용. */
+export function toKstHourOfDay(date: Date): number {
+  const kst = new Date(date.getTime() + KST_OFFSET_MINUTES * 60 * 1000);
+  return kst.getUTCHours();
+}
+
+/**
+ * `dayBucket`(`YYYY-MM-DD`) 문자열만으로 요일을 파생한다(0=월 ~ 6=일, ISO-8601, FR-14-29).
+ * `Date` 타임존 함수에 의존하지 않아 서버 TZ와 무관하게 결정적이다(ADR-0017).
+ */
+export function toKstWeekday(dayBucket: string): number {
+  const [y, m, d] = dayBucket.split('-').map(Number);
+  const jsDay = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1)).getUTCDay(); // 0=일 ~ 6=토
+  return (jsDay + 6) % 7; // 0=월 ~ 6=일로 변환
 }
 
 export function csvEnumArray<T extends [string, ...string[]]>(enumSchema: z.ZodEnum<T>) {

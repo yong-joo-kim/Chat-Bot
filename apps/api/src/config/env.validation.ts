@@ -32,6 +32,15 @@ const EnvSchema = z.object({
   BANNED_WORD_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
   AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
   ADMIN_WEB_ORIGIN: z.string().optional(),
+  // 통계/분석(No.14~15) 그룹 추가 — 전부 선택(기본값 있음, FR-0-38). 하나도 설정하지 않아도 기동한다(AC-X-4).
+  STATS_MAX_RANGE_DAYS: z.coerce.number().int().positive().default(92),
+  STATS_MAX_RANGE_WEEKS: z.coerce.number().int().positive().default(53),
+  STATS_MAX_RANGE_MONTHS: z.coerce.number().int().positive().default(24),
+  STATS_TIMEZONE: z.string().default('Asia/Seoul'),
+  UNANSWERED_MAX_PENDING: z.coerce.number().int().positive().default(5000),
+  UNANSWERED_MAX_QUESTION_LENGTH: z.coerce.number().int().positive().default(200),
+  INTENT_SUGGEST_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.25),
+  LEARNING_BULK_MAX_ITEMS: z.coerce.number().int().positive().default(50),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

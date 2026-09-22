@@ -16,6 +16,7 @@ import { FaqsModule } from './faqs/faqs.module';
 import { ChannelsModule } from './channels/channels.module';
 import { SimulationModule } from './simulation/simulation.module';
 import { ConversationModule } from './conversation/conversation.module';
+import { LearningModule } from './learning/learning.module';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { CommonAuthModule } from './common/auth/auth.module';
@@ -53,6 +54,7 @@ import { validate } from './config/env.validation';
     SimulationModule,
     BannedWordsModule,
     ConversationModule,
+    LearningModule,
     AuthModule,
     UsersModule,
   ],

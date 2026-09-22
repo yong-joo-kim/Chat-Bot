@@ -374,21 +374,55 @@ model ConversationLog {
   isAnswered      Boolean  @default(true)
   /// [신규] 입구 금지어 필터에 차단된 턴(DD-37, FR-12-45). No.15가 재학습 후보로 잘못 집어 올리는 것을 막는다.
   blockedByFilter Boolean  @default(false)
+  /// [신규 DD-50] KST(Asia/Seoul) 기준 일 버킷 `YYYY-MM-DD`. **적재 시점에 확정**되며 조회 시점에
+  /// 재계산하지 않는다(EX-14-7/EX-14-12). 문자열 사전순 비교가 날짜순과 일치하므로 기간 필터도
+  /// 이 컬럼의 gte/lte로 수행한다 — DB 날짜 함수를 쓰지 않는다(ADR-0017).
+  /// `""`는 **백필 미완 센티넬**이다(§3.3). 정상 경로에서는 생기지 않는다.
+  dayBucket       String   @default("")
+  /// [신규 DD-59] KST 기준 시각(0~23). 시간대 분포(FR-14-28) 전용이며 `-1`은 백필 미완 센티넬이다.
+  hourBucket      Int      @default(-1)
   createdAt       DateTime @default(now())
 
   @@index([chatbotId, createdAt])
+  @@index([chatbotId, dayBucket])
   @@map("conversation_logs")
 }
 
+/// [전면 보강 DD-49] 미응답 질문 검토 큐. Phase 0부터 테이블만 있었고 **쓰기 주체는 이번 Phase에 생긴다**
+/// (ADR-0004의 "쓰기 주체가 생길 때 채운다" 기준 충족 시점 — ADR-0019).
+/// ⚠ 저장되는 문자열은 전부 **금지어·PII 마스킹이 끝난 값**이다(ADR-0013). 마스킹 전 원문은 유입 경로가 없다.
 model UnansweredQuestion {
-  id                  String   @id @default(uuid())
-  chatbotId           String
-  chatbot             Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  questionText        String
-  occurredCount       Int      @default(1)
-  suggestedIntentName String?
-  status              String   @default("PENDING")
-  createdAt           DateTime @default(now())
+  id                 String    @id @default(uuid())
+  chatbotId          String
+  chatbot            Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 표시용 원문 — 최초 수집 1건을 보존한다(FR-15-4).
+  questionText       String
+  /// [신규] normalizeText(questionText). 병합 키이며 유일성 판정 기준이다(ADR-0006).
+  questionNormalized String
+  /// [신규] 최근 표기 변형 샘플 **최대 5건**(JSON string[]). 상세 표시 + 발생 추이 파생(DD-67).
+  variants           String    @default("[]")
+  occurredCount      Int       @default(1)
+  /// [신규] 최근 발생 시각. 목록 기본 정렬 2순위·기간 필터의 기준이다(`createdAt`은 최초 발생).
+  lastOccurredAt     DateTime  @default(now())
+  /// UnansweredQuestionStatus: PENDING | RESOLVED | IGNORED (zod enum이 값 제약의 단일 소스)
+  status             String    @default("PENDING")
+  /// [신규] 반영/무시 이후 재발생 횟수. 상태를 자동으로 되돌리지 않는다(FR-15-5).
+  recurredCount      Int       @default(0)
+  recurredAfterAt    DateTime?
+  /// [신규] 수집 소스. 이번 Phase는 'UNANSWERED' 1종. No.44(피드백 루프)가 'NEGATIVE_FEEDBACK'을 더한다.
+  source             String    @default("UNANSWERED")
+  /// [신규] 최초 수집 턴의 채널. FK는 걸지 않는다(로그성 스냅샷).
+  channelType        String?
+  /// [신규] 반영 결과. FK를 걸지 않는다 — 의도가 삭제돼도 "그때 이 의도로 반영했다"는 사실은 남는다
+  /// (`AuditLog.actorId`·`ConversationLog.matchedIntentId`와 동일한 의도적 예외, 개발명세서 §3.1).
+  resolvedIntentId   String?
+  resolvedAt         DateTime?
+  resolvedById       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
+  @@unique([chatbotId, questionNormalized])
+  @@index([chatbotId, status, occurredCount])
+  @@index([chatbotId, lastOccurredAt])
   @@map("unanswered_questions")
 }

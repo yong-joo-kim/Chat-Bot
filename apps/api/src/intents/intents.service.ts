@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
+import type { Intent as PrismaIntentRow } from '@prisma/client';
 import {
   AUDIT_LIMITS,
   BulkDeleteDto,
@@ -263,6 +264,97 @@ export class IntentsService {
       summary: `예문 추가 ${dto.add?.length ?? 0}건 · 삭제 ${dto.remove?.length ?? 0}건`,
     });
     return { intent: toIntentDetail(row, links.map((l) => l.node)), meta: { deduplicatedCount, conflicts } };
+  }
+
+  /**
+   * DD-62(§10.2, ADR-0018) — `learning` 모듈이 호출하는 공용 예문 반영 메서드.
+   * `create()`/`updateExamples()`와 **동일한 코어**(dedupe·상한·충돌검사·감사기록)를 재사용한다(NFR-M4).
+   * `intentId`가 주어지면 그 의도에 병합하고, `intentName`만 주어지면 정규화 이름으로 조회해
+   * 있으면 병합·없으면 신규 생성한다(AC-15B-6/7). `deferBundleInvalidate: true`(기본 `false`)면
+   * 번들 무효화를 호출부(`LearningApplyService`)로 미룬다 — 기본값이 `false`이므로 이 메서드를
+   * 호출하지 않는 기존 경로(`create`/`updateExamples`)는 **무회귀**다.
+   */
+  async applyLearningExample(
+    chatbotId: string,
+    target: { intentId?: string; intentName?: string },
+    exampleText: string,
+    opts: { auditSummary: string; deferBundleInvalidate?: boolean },
+  ): Promise<{
+    intentId: string;
+    intentName: string;
+    created: boolean;
+    exampleCount: number;
+    linkedNodeCount: number;
+    conflicts: IntentMutationResult['meta']['conflicts'];
+  }> {
+    await this.scope.assertWritable(chatbotId);
+
+    let existing: PrismaIntentRow | null = null;
+    if (target.intentId) {
+      existing = await this.prisma.intent.findFirst({ where: { id: target.intentId, chatbotId } });
+      if (!existing) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
+    } else if (target.intentName) {
+      existing = await this.prisma.intent.findFirst({ where: { chatbotId, nameNormalized: normalizeText(target.intentName) } });
+    } else {
+      throw new ApiException('VALIDATION_FAILED', 400, '기존 의도 ID 또는 새 의도명 중 하나를 지정해 주세요.');
+    }
+
+    let row: PrismaIntentRow;
+    let created = false;
+    let conflicts: IntentMutationResult['meta']['conflicts'];
+
+    if (existing) {
+      const { examples } = mergeExampleMutation(this.parseExamplesJson(existing.examples), [exampleText], []);
+      if (examples.length > MAX_EXAMPLES) {
+        throw new ApiException('LIMIT_EXCEEDED', 400, `예문은 최대 ${MAX_EXAMPLES}개까지 등록할 수 있습니다(현재 ${examples.length}개).`);
+      }
+      conflicts = await this.computeConflicts(chatbotId, existing.id, examples);
+      row = await this.prisma.intent.update({ where: { id: existing.id }, data: { examples: JSON.stringify(examples) } });
+      await this.auditLogService.record({
+        action: 'UPDATE',
+        targetType: 'Intent',
+        targetId: row.id,
+        targetName: row.name,
+        chatbotId,
+        before: this.toAuditSnapshot(existing),
+        after: this.toAuditSnapshot(row),
+        summary: opts.auditSummary,
+      });
+    } else {
+      created = true;
+      const trimmedName = (target.intentName as string).trim();
+      const nameNormalized = normalizeText(trimmedName);
+      const { examples } = dedupeExamples([exampleText]);
+      conflicts = await this.computeConflicts(chatbotId, undefined, examples);
+      row = await this.prisma.intent.create({
+        data: { chatbotId, name: trimmedName, nameNormalized, examples: JSON.stringify(examples) },
+      });
+      await this.auditLogService.record({
+        action: 'CREATE',
+        targetType: 'Intent',
+        targetId: row.id,
+        targetName: row.name,
+        chatbotId,
+        after: this.toAuditSnapshot(row),
+        summary: opts.auditSummary,
+      });
+    }
+
+    // linkedNodeCount(FR-15-25) — updateExamples()와 동일하게 역참조를 재사용한다(ADR-0005, 추가 쿼리 최소화).
+    const linkedNodeCount = await this.prisma.dialogNodeIntent.count({ where: { intentId: row.id } });
+
+    if (!opts.deferBundleInvalidate) {
+      this.bundleService.invalidate(chatbotId);
+    }
+
+    return {
+      intentId: row.id,
+      intentName: row.name,
+      created,
+      exampleCount: this.parseExamplesJson(row.examples).length,
+      linkedNodeCount,
+      conflicts,
+    };
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {

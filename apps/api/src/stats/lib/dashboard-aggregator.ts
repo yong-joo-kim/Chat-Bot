@@ -1,5 +1,12 @@
 import type { VisitCountBasis } from '@chat-bot/shared-types';
 
+/**
+ * 정규화 병합으로 순위가 바뀔 여지를 남기면서도 응답을 예측 가능하게 유지하는 후보 상한(ADR-0004).
+ * No.14 신규 질문순위(`aggregateTopQuestions` 재사용)도 이 상수를 그대로 쓴다(DD-58) — 두 벌로
+ * 만들지 않는다. `stats.service.ts`의 기존 `getDashboard()` 로컬 상수는 그대로 유지한다(무회귀).
+ */
+export const TOP_QUESTION_CANDIDATE_LIMIT = 500;
+
 export interface TopQuestionRow {
   question: string;
   count: number;

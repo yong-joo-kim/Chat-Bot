@@ -18,6 +18,7 @@ import type { InboundTurn } from './adapters/channel-adapter';
 import { parseChannelConfig } from '../channels/lib/channel-config';
 import { buildBotResponseText, judgeAnswered } from './lib/conversation-log';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
+import type { InputKind } from '../learning/lib/collect-decision';
 
 /** 금지어 차단 시 반환하는 고정 안내(FR-12-38, S-11). 관리자 문구 커스터마이즈는 이번 Phase 범위 밖이다. */
 const BANNED_WORD_GUIDANCE_TEXT = '바람직하지 않은 표현이 포함되어 있습니다. 다시 입력해 주세요.';
@@ -76,6 +77,7 @@ export class PublicConversationService {
         rawBotResponse: BANNED_WORD_GUIDANCE_TEXT,
         isAnswered: false,
         blockedByFilter: true,
+        inputKind: resolveInputKind(inbound),
       });
 
       // 슬롯이 채워지지 않고 세션도 끊기지 않는다 — 요청에 실려온 상태를 그대로 반환한다(EX-12-26).
@@ -118,6 +120,7 @@ export class PublicConversationService {
       matchedNodeId: result.matchedNodeId,
       matchedFaqId: result.matchedFaqId,
       isAnswered: judgeAnswered(result.trace),
+      inputKind: resolveInputKind(inbound),
     });
 
     return response;
@@ -139,4 +142,15 @@ function resolveFilterableInboundText(inbound: InboundTurn): string | undefined 
   if (inbound.buttonAction?.kind === 'NODE') return undefined;
   if (inbound.buttonAction?.kind === 'MESSAGE') return inbound.buttonAction.text;
   return inbound.message ?? '';
+}
+
+/**
+ * 미응답 질문 수집기(DD-52, FR-15-2)의 버튼 턴 판별 기준 — `resolveFilterableInboundText()`와
+ * **동일한 분기**를 쓴다(판정식을 복제하지 않는다, ADR-0019). `ConversationLog` 컬럼을 늘리지 않고
+ * 파이프라인이 `record()`의 파라미터로 직접 전달한다.
+ */
+function resolveInputKind(inbound: InboundTurn): InputKind {
+  if (inbound.buttonAction?.kind === 'NODE') return 'BUTTON_NODE';
+  if (inbound.buttonAction?.kind === 'MESSAGE') return 'BUTTON_MESSAGE';
+  return 'TEXT';
 }

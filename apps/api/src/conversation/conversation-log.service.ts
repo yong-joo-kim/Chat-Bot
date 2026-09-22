@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ChannelType } from '@chat-bot/shared-types';
+import { toKstDayBucket, toKstHourOfDay } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
+import { UnansweredCollectorService } from '../learning/unanswered-collector.service';
+import type { InputKind } from '../learning/lib/collect-decision';
 import { maskPii } from './lib/pii-mask';
 
 export interface RecordConversationLogParams {
@@ -18,6 +21,8 @@ export interface RecordConversationLogParams {
   isAnswered: boolean;
   /** 입구 금지어 필터에 차단된 턴인지(DD-37, FR-12-45). 기본 false. */
   blockedByFilter?: boolean;
+  /** [신규 DD-52] 버튼 턴 판별 — `ConversationLog` 컬럼을 늘리지 않고 파이프라인이 직접 전달한다(FR-15-2). */
+  inputKind: InputKind;
 }
 
 /**
@@ -35,6 +40,7 @@ export class ConversationLogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bannedWordFilter: BannedWordFilterService,
+    private readonly collector: UnansweredCollectorService,
   ) {}
 
   async record(params: RecordConversationLogParams): Promise<void> {
@@ -44,6 +50,12 @@ export class ConversationLogService {
       // ⚠ botResponse도 마스킹 대상이다 — completionMessage의 {슬롯} 치환값에 사용자가 입력한
       // 전화번호/이메일이 그대로 들어갈 수 있다(§8.4).
       const botResponse = maskPii(await this.bannedWordFilter.maskPlainText(params.rawBotResponse)).maskedText;
+
+      // ③ dayBucket/hourBucket 계산(KST, 적재 시점 확정 — DD-50/59, ADR-0017). 문자열 1개+정수 1개 계산이라
+      // 대화 응답 시간에 측정 가능한 영향이 없다(NFR-P6).
+      const now = new Date();
+      const dayBucket = toKstDayBucket(now);
+      const hourBucket = toKstHourOfDay(now);
 
       await this.prisma.conversationLog.create({
         data: {
@@ -58,7 +70,20 @@ export class ConversationLogService {
           matchedFaqId: params.matchedFaqId,
           isAnswered: params.isAnswered,
           blockedByFilter: params.blockedByFilter ?? false,
+          dayBucket,
+          hourBucket,
         },
+      });
+
+      // ⑤ 미응답 질문 수집(DD-51, ADR-0019) — INSERT 성공 이후에만 호출한다(§3.4 포함관계 불변식).
+      // `record()`는 "무엇을 수집할지"를 알지 않는다 — 마스킹된 값과 판정 결과만 넘긴다.
+      await this.collector.collect({
+        chatbotId: params.chatbotId,
+        channelType: params.channelType,
+        questionText: userMessage,
+        isAnswered: params.isAnswered,
+        blockedByFilter: params.blockedByFilter ?? false,
+        inputKind: params.inputKind,
       });
     } catch (e) {
       // 경고 로그에도 메시지 본문을 넣지 않는다(chatbotId/sessionId/오류코드만, NFR-S4).

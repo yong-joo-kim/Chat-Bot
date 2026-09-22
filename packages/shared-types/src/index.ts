@@ -14,5 +14,6 @@ export * from './channel';
 export * from './security';
 export * from './audit';
 export * from './stats';
+export * from './learning';
 export * from './output-view';
 export * from './contrast';

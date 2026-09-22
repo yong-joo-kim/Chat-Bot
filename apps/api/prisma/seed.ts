@@ -1,9 +1,11 @@
 // 개발/수동 검증용 시드(D-5, `docs/02-spec/chatbot-operations-설계.md` §10).
-// 3트랙: A(대시보드 집계 검증용 100건 로그) / B(빈 상태 검증용 0건) / C(보관+과거로그).
+// 트랙: A(대시보드 집계 검증용 100건 로그) / B(빈 상태 검증용 0건) / C(보관+과거로그) /
+// D(No.14 시계열·시간대/요일 분포 검증용, stats-learning-설계.md §14.1) /
+// E(No.15 미응답 큐 검증용, 상태 3종·재발생·추천 포함) / F(채널 미설정 빈 상태).
 // 멱등: 그룹/챗봇은 name·slug 기준 upsert, 대화로그는 매 실행마다 deleteMany 후 재생성한다.
 // 자동 테스트(test-automation)는 이 시드가 아니라 자체 fixture를 쓰되 수치는 아래 표와 정렬한다.
 import { PrismaClient } from '@prisma/client';
-import { normalizeEmail, normalizeText } from '@chat-bot/shared-types';
+import { normalizeEmail, normalizeText, toKstDayBucket, toKstHourOfDay } from '@chat-bot/shared-types';
 import { hashPassword } from '../src/common/auth/lib/password-hash';
 
 const prisma = new PrismaClient();
@@ -158,9 +160,178 @@ async function replaceConversationLogs(chatbotId: string, logs: LogSeed[]): Prom
       userMessage: log.userMessage,
       botResponse: log.isAnswered ? '안내해 드리겠습니다.' : '죄송합니다. 다시 문의해 주세요.',
       isAnswered: log.isAnswered,
+      // [신규 DD-50/59] KST 일/시 버킷 — API·백필 스크립트와 동일한 순수 함수로 계산한다(FR-0-31).
+      dayBucket: toKstDayBucket(log.createdAt),
+      hourBucket: toKstHourOfDay(log.createdAt),
       createdAt: log.createdAt,
     })),
   });
+}
+
+interface StatsTrendLogSeed extends LogSeed {
+  blockedByFilter?: boolean;
+  matchedNodeId?: string;
+  matchedFaqId?: string;
+}
+
+/** `now`(KST 기준 "오늘") 대비 `daysAgo`일 전, KST `hour:minute`을 UTC `Date`로 변환한다(FR-0-31). */
+function kstWallTime(now: Date, daysAgo: number, hour: number, minute: number): Date {
+  const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const y = kstNow.getUTCFullYear();
+  const m = kstNow.getUTCMonth();
+  const d = kstNow.getUTCDate() - daysAgo;
+  return new Date(Date.UTC(y, m, d, hour, minute, 0, 0) - 9 * 60 * 60 * 1000);
+}
+
+/**
+ * 트랙 D(`stats-trend-bot`) — No.14 시계열/분포 검증용(NFR-M7). 최근 60일에 걸친 로그,
+ * 응답/미응답/금지어 차단 혼합, 노드·FAQ 응답 출처 혼합, 평일 10~11시·14~15시 시간대 편중,
+ * 주말 저조. KST 일 경계 검증용 로그 2건(23:50/00:10)을 포함한다(AC-14A-4).
+ */
+function buildTrackDLogs(now: Date): StatsTrendLogSeed[] {
+  const logs: StatsTrendLogSeed[] = [];
+
+  for (let daysAgo = 0; daysAgo < 60; daysAgo += 1) {
+    const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const probeDate = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate() - daysAgo));
+    const kstWeekday = probeDate.getUTCDay(); // 0=일~6=토
+    const isWeekend = kstWeekday === 0 || kstWeekday === 6;
+    const turnsToday = isWeekend ? 2 : 6;
+
+    for (let t = 0; t < turnsToday; t += 1) {
+      // 평일은 10~11시·14~15시에 몰리도록 편중시킨다(AC-14B-5류 시간대 검증).
+      const peakHours = [10, 11, 14, 15];
+      const hour = isWeekend ? 9 + (t % 6) : peakHours[t % peakHours.length];
+      const minute = (t * 17) % 60;
+      const createdAt = kstWallTime(now, daysAgo, hour, minute);
+      const isBlocked = t === 0 && daysAgo % 15 === 0;
+      const isAnswered = !isBlocked && t % 4 !== 3;
+      logs.push({
+        userMessage: `추세질문 D${daysAgo}-${t}`,
+        isAnswered,
+        blockedByFilter: isBlocked,
+        sessionId: `trend-session-${daysAgo}-${t % 3}`,
+        createdAt,
+        matchedNodeId: isAnswered && t % 2 === 0 ? 'seed-node-ref' : undefined,
+        matchedFaqId: isAnswered && t % 2 === 1 ? 'seed-faq-ref' : undefined,
+      });
+    }
+  }
+
+  // AC-14A-4 — KST 일 경계 검증용: 23:50과 00:10이 서로 다른 날짜 버킷에 들어가야 한다.
+  logs.push({ userMessage: 'KST 경계 검증 23:50', isAnswered: true, sessionId: 'boundary-1', createdAt: new Date('2026-09-21T14:50:00.000Z') });
+  logs.push({ userMessage: 'KST 경계 검증 00:10', isAnswered: true, sessionId: 'boundary-2', createdAt: new Date('2026-09-21T15:10:00.000Z') });
+
+  return logs;
+}
+
+async function replaceStatsTrendLogs(chatbotId: string, logs: StatsTrendLogSeed[]): Promise<void> {
+  await prisma.conversationLog.deleteMany({ where: { chatbotId } });
+  if (logs.length === 0) return;
+  await prisma.conversationLog.createMany({
+    data: logs.map((log) => ({
+      chatbotId,
+      channelType: 'WEB',
+      sessionId: log.sessionId ?? undefined,
+      userMessage: log.userMessage,
+      botResponse: log.isAnswered ? '안내해 드리겠습니다.' : '죄송합니다. 다시 문의해 주세요.',
+      isAnswered: log.isAnswered,
+      blockedByFilter: log.blockedByFilter ?? false,
+      matchedNodeId: log.matchedNodeId,
+      matchedFaqId: log.matchedFaqId,
+      dayBucket: toKstDayBucket(log.createdAt),
+      hourBucket: toKstHourOfDay(log.createdAt),
+      createdAt: log.createdAt,
+    })),
+  });
+}
+
+/**
+ * 트랙 E(`learning-queue-bot`) — No.15 미응답 큐 검증용(NFR-M7). 정규화 병합 대상 변형 3종,
+ * `PENDING`/`RESOLVED`/`IGNORED` 각 1건 이상, 반영 후 재발생 1건, 추천이 걸리는 의도
+ * (`배송문의` + 예문)와 추천 0건인 질문 각 1건. ⚠ 대응 대화 로그도 함께 생성한다(§3.4 불변식).
+ */
+async function seedLearningQueue(chatbotId: string, now: Date): Promise<void> {
+  await prisma.unansweredQuestion.deleteMany({ where: { chatbotId } });
+
+  await prisma.intent.deleteMany({ where: { chatbotId } });
+  const shippingIntent = await prisma.intent.create({
+    data: {
+      chatbotId,
+      name: '배송문의',
+      nameNormalized: normalizeText('배송문의'),
+      examples: JSON.stringify(['배송 언제 오나요', '택배 조회하고 싶어요']),
+    },
+  });
+
+  const pendingWithSuggestion = '해외배송도 되나요?';
+  const pendingNoSuggestion = '포장 선물 되나요?';
+  const resolvedRecurred = '환불 절차 알려주세요';
+  const ignoredQuestion = 'ㅋㅋㅋ';
+
+  await prisma.unansweredQuestion.create({
+    data: {
+      chatbotId,
+      questionText: pendingWithSuggestion,
+      questionNormalized: normalizeText(pendingWithSuggestion),
+      variants: JSON.stringify([pendingWithSuggestion, ' 해외배송 되나요? ', '해외배송되나요']),
+      occurredCount: 3,
+      lastOccurredAt: now,
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.unansweredQuestion.create({
+    data: {
+      chatbotId,
+      questionText: pendingNoSuggestion,
+      questionNormalized: normalizeText(pendingNoSuggestion),
+      variants: JSON.stringify([pendingNoSuggestion]),
+      occurredCount: 1,
+      lastOccurredAt: now,
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.unansweredQuestion.create({
+    data: {
+      chatbotId,
+      questionText: resolvedRecurred,
+      questionNormalized: normalizeText(resolvedRecurred),
+      variants: JSON.stringify([resolvedRecurred]),
+      occurredCount: 5,
+      lastOccurredAt: now,
+      status: 'RESOLVED',
+      resolvedIntentId: shippingIntent.id,
+      resolvedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+      // S-9 — 반영 후에도 매칭되지 않아 재발생한 사례(재발생 배지 검증용).
+      recurredCount: 4,
+      recurredAfterAt: now,
+    },
+  });
+
+  await prisma.unansweredQuestion.create({
+    data: {
+      chatbotId,
+      questionText: ignoredQuestion,
+      questionNormalized: normalizeText(ignoredQuestion),
+      variants: JSON.stringify([ignoredQuestion, '.', '테스트']),
+      occurredCount: 6,
+      lastOccurredAt: now,
+      status: 'IGNORED',
+    },
+  });
+
+  // §3.4 불변식 — 큐가 있는 챗봇은 대응 대화 로그도 함께 가진다(영구삭제 차단 집합 유지).
+  await replaceStatsTrendLogs(
+    chatbotId,
+    [pendingWithSuggestion, pendingNoSuggestion, resolvedRecurred, ignoredQuestion].map((q, i) => ({
+      userMessage: q,
+      isAnswered: false,
+      sessionId: `learning-session-${i}`,
+      createdAt: now,
+    })),
+  );
 }
 
 async function main(): Promise<void> {
@@ -512,9 +683,30 @@ async function main(): Promise<void> {
   await prisma.channel.deleteMany({ where: { chatbotId: emptyChannelBot.id } });
   await replaceConversationLogs(emptyChannelBot.id, []);
 
+  // 트랙 D: No.14 시계열·분포 검증용(stats-learning-설계.md §14.1) — 최근 60일 분포 로그
+  const statsTrendBot = await upsertChatbot({
+    groupId: supportGroup.id,
+    name: '통계 추세 검증 챗봇',
+    slug: 'stats-trend-bot',
+    status: 'ACTIVE',
+    description: 'No.14 기간 시계열·시간대/요일 분포 검증용 — 최근 60일 분포 로그',
+  });
+  await replaceStatsTrendLogs(statsTrendBot.id, buildTrackDLogs(now));
+
+  // 트랙 E: No.15 미응답 큐 검증용(stats-learning-설계.md §14.1)
+  const learningQueueBot = await upsertChatbot({
+    groupId: supportGroup.id,
+    name: '학습현황 검증 챗봇',
+    slug: 'learning-queue-bot',
+    status: 'ACTIVE',
+    description: 'No.15 미응답 큐 검증용 — 상태 3종·재발생·추천 포함',
+  });
+  await seedLearningQueue(learningQueueBot.id, now);
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed 완료: support=${supportBot.id}(100 logs), empty=${emptyBot.id}(0 logs), archived=${archivedBot.id}(20 logs), emptyChannel=${emptyChannelBot.id}(0 channels)`,
+    `Seed 완료: support=${supportBot.id}(100 logs), empty=${emptyBot.id}(0 logs), archived=${archivedBot.id}(20 logs), ` +
+      `emptyChannel=${emptyChannelBot.id}(0 channels), statsTrend=${statsTrendBot.id}(60일 분포), learningQueue=${learningQueueBot.id}(미응답 큐 4건)`,
   );
 }
 

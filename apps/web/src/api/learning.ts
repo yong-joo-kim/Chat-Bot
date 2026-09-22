@@ -1,0 +1,61 @@
+import { apiClient } from './client';
+import type {
+  BulkIgnoreDto,
+  BulkResolveDto,
+  BulkResult,
+  Paginated,
+  ResolveResult,
+  ResolveUnansweredQuestionDto,
+  UnansweredQuestionDetail,
+  UnansweredQuestionListItem,
+  UnansweredQuestionStatus,
+  UnansweredQuestionSummary,
+} from '@chat-bot/shared-types';
+
+export interface UnansweredListParams {
+  status?: UnansweredQuestionStatus[];
+  from?: string;
+  to?: string;
+  q?: string;
+  recurredOnly?: boolean;
+  sort?: 'occurredCount' | 'lastOccurredAt' | 'createdAt';
+  order?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+function buildQuery(params: object): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      qs.set(key, value.join(','));
+      continue;
+    }
+    if (value === false) continue;
+    qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+/** No.15 학습현황(미응답 큐) — 조회 `dialogue:read` / 반영·무시·재오픈·일괄 `dialogue:write`(FR-15-9~38). */
+export const learningApi = {
+  list: (chatbotId: string, params: UnansweredListParams) =>
+    apiClient.get<Paginated<UnansweredQuestionListItem>>(`/chatbots/${chatbotId}/unanswered-questions${buildQuery(params)}`),
+  /** 탭 배지·상한 배너 전용 경량 API(FR-15-14). */
+  summary: (chatbotId: string) => apiClient.get<UnansweredQuestionSummary>(`/chatbots/${chatbotId}/unanswered-questions/summary`),
+  findOne: (chatbotId: string, id: string) =>
+    apiClient.get<UnansweredQuestionDetail>(`/chatbots/${chatbotId}/unanswered-questions/${id}`),
+  resolve: (chatbotId: string, id: string, dto: ResolveUnansweredQuestionDto) =>
+    apiClient.post<ResolveResult>(`/chatbots/${chatbotId}/unanswered-questions/${id}/resolve`, dto),
+  ignore: (chatbotId: string, id: string) =>
+    apiClient.post<UnansweredQuestionListItem>(`/chatbots/${chatbotId}/unanswered-questions/${id}/ignore`, undefined),
+  reopen: (chatbotId: string, id: string) =>
+    apiClient.post<UnansweredQuestionListItem>(`/chatbots/${chatbotId}/unanswered-questions/${id}/reopen`, undefined),
+  bulkResolve: (chatbotId: string, dto: BulkResolveDto) =>
+    apiClient.post<BulkResult>(`/chatbots/${chatbotId}/unanswered-questions/bulk-resolve`, dto),
+  bulkIgnore: (chatbotId: string, dto: BulkIgnoreDto) =>
+    apiClient.post<BulkResult>(`/chatbots/${chatbotId}/unanswered-questions/bulk-ignore`, dto),
+};

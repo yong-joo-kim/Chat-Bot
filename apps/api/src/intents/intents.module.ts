@@ -8,5 +8,7 @@ import { IntentsService } from './intents.service';
   imports: [ChatbotsModule, DialogueCommonModule],
   controllers: [IntentsController],
   providers: [IntentsService],
+  // `learning` 모듈이 `applyLearningExample()`을 호출한다(DD-62, ADR-0018).
+  exports: [IntentsService],
 })
 export class IntentsModule {}

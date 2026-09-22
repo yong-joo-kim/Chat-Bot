@@ -51,3 +51,20 @@ export function addDaysToDateInputValue(dateStr: string, days: number): string {
 export function formatPercent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }
+
+/**
+ * 상대 시각 표기("3시간 전" 등, `UnansweredRow`의 최근 발생 열). 절대 시각은 항상 `title` 속성으로
+ * 함께 제공해 상대 표기만으로 정보가 유실되지 않게 한다(stats-learning-ui-spec.md §4.4).
+ */
+export function formatRelativeTime(value: string | Date): string {
+  const date = toDate(value);
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.round(diffMs / (60 * 1000));
+  if (diffMinutes < 1) return '방금 전';
+  if (diffMinutes < 60) return `${diffMinutes}분 전`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}시간 전`;
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}일 전`;
+  return formatDate(date);
+}
