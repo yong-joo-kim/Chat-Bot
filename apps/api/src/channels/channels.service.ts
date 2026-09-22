@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CHANNEL_IMPLEMENTATION } from '@chat-bot/shared-types';
+import { CHANNEL_IMPLEMENTATION, CHANNEL_TYPE_LABELS } from '@chat-bot/shared-types';
 import type { ChannelListItem, ChannelType, UpdateChannelDto } from '@chat-bot/shared-types';
 import { channelConfigSchemaFor } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { buildChannelCatalog, toChannelListItem } from './lib/channel-catalog';
 import { defaultChannelConfig, parseChannelConfig } from './lib/channel-config';
@@ -17,6 +18,7 @@ export class ChannelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async list(chatbotId: string): Promise<{ items: ChannelListItem[] }> {
@@ -60,6 +62,18 @@ export class ChannelsService {
       ? await this.prisma.channel.update({ where: { id: existing.id }, data: { enabled, config: serializedConfig } })
       : await this.prisma.channel.create({ data: { chatbotId, type, enabled, config: serializedConfig } });
 
+    // 채널은 상태 머신이 아니다 — enabled 변화도 STATUS_CHANGE가 아니라 UPDATE + summary로 표기한다(§9.5).
+    await this.auditLogService.record({
+      action: existing ? 'UPDATE' : 'CREATE',
+      targetType: 'Channel',
+      targetId: row.id,
+      targetName: CHANNEL_TYPE_LABELS[type],
+      chatbotId,
+      before: existing ?? undefined,
+      after: row,
+      ...(existing && existing.enabled !== row.enabled ? { summary: `사용 여부 변경: ${existing.enabled} → ${row.enabled}` } : {}),
+    });
+
     return toChannelListItem(type, row);
   }
 
@@ -69,5 +83,13 @@ export class ChannelsService {
     const existing = await this.prisma.channel.findUnique({ where: { chatbotId_type: { chatbotId, type } } });
     if (!existing) return;
     await this.prisma.channel.delete({ where: { id: existing.id } });
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'Channel',
+      targetId: existing.id,
+      targetName: CHANNEL_TYPE_LABELS[type],
+      chatbotId,
+      before: existing,
+    });
   }
 }

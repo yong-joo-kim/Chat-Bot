@@ -17,8 +17,13 @@ import {
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import { loginAs, seedTestUsers } from './helpers/auth.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
+
+// No.12 전역 가드 도입 이후 전 요청에 인증 쿠키가 필요하다(NFR-M4). beforeAll에서 로그인해 채운다.
+// 공개 API(`/public/*`) 호출에도 그대로 실리지만 `@Public()` 경로는 쿠키 유무와 무관하게 통과한다.
+let authCookie = '';
 
 interface ApiResponse<T = unknown> {
   status: number;
@@ -43,6 +48,7 @@ function jsonRequest<T = unknown>(
         path: pathname + search,
         headers: {
           ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...(authCookie ? { Cookie: authCookie } : {}),
           ...headers,
         },
       },
@@ -108,13 +114,16 @@ describe('품질/채널(No.10~11) 통합 테스트', () => {
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalFilters(new AllExceptionsFilter());
-    moduleRef.get(PrismaService);
+    const prisma = moduleRef.get(PrismaService);
 
     await app.listen(0);
     const server = app.getHttpServer() as http.Server;
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;
     baseUrl = `http://127.0.0.1:${port}/api/v1`;
+
+    await seedTestUsers(prisma);
+    authCookie = await loginAs(baseUrl, 'ADMIN');
   }, 60_000);
 
   afterAll(async () => {

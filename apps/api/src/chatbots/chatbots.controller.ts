@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   Chatbot,
   ChatbotListItem,
@@ -26,13 +26,12 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { ChatbotsService } from './chatbots.service';
 import { EmbedCodeService } from './embed-code.service';
 
 // NOTE: `GET /slug-available`은 `GET /:id`보다 먼저 선언해야 한다(설계서 §5.2 라우트 선언 순서 주의).
-@UseGuards(PermissionGuard)
+// PermissionGuard는 No.12부터 APP_GUARD로 전역 등록되어 여기서 개별 부착하지 않는다(FR-12-19, ADR-0015).
 @Controller('chatbots')
 export class ChatbotsController {
   constructor(

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   ContextListItem,
   ContextListQuery,
@@ -12,11 +12,9 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { ContextsService } from './contexts.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/contexts')
 export class ContextsController {
   constructor(private readonly contextsService: ContextsService) {}

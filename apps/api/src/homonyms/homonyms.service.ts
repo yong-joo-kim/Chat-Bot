@@ -15,6 +15,7 @@ import { resolveHomonym, buildClarifyOutput } from '@chat-bot/dialogue-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { toHomonymEntity, toHomonymListItem } from './homonym.mapper';
@@ -28,7 +29,21 @@ export class HomonymsService {
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
   ) {}
+
+  private toAuditSnapshot(row: { id: string; word: string; policy: string; meanings: string }) {
+    return { ...row, meaningCount: this.parseMeaningsJson(row.meanings).length };
+  }
+
+  private parseMeaningsJson(json: string): unknown[] {
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
 
   private async assertWordFree(chatbotId: string, wordNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.homonymDictionary.findFirst({
@@ -67,6 +82,14 @@ export class HomonymsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'HomonymDictionary',
+      targetId: row.id,
+      targetName: row.word,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
     return toHomonymEntity(row);
   }
 
@@ -122,15 +145,32 @@ export class HomonymsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'HomonymDictionary',
+      targetId: row.id,
+      targetName: row.word,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
     return toHomonymEntity(row);
   }
 
   /** 다른 리소스가 사전 항목을 참조하지 않으므로 항상 허용한다(FR-7-9). */
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.prisma.homonymDictionary.delete({ where: { id } });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'HomonymDictionary',
+      targetId: current.id,
+      targetName: current.word,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 
   /** 테스트 입력란(FR-7-11) — 엔진의 `resolveHomonym`만 호출한다(노드/FAQ 매칭 없음). */

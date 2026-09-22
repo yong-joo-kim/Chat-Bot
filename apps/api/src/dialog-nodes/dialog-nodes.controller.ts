@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   CopyDialogNodeDto,
   CopyDialogNodeSchema,
@@ -16,11 +16,9 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { DialogNodesService } from './dialog-nodes.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/dialog-nodes')
 export class DialogNodesController {
   constructor(private readonly dialogNodesService: DialogNodesService) {}

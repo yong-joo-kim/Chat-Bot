@@ -21,6 +21,17 @@ const EnvSchema = z.object({
   PUBLIC_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(120),
   TRUST_PROXY: z.coerce.boolean().default(false),
   DIALOGUE_BUNDLE_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
+  // 보안/이력(No.12~13) 그룹 추가 — 전부 선택(기본값 있음, FR-0-30). 부트스트랩 계정 변수는
+  // seed 전용이라 이 스키마 대상이 아니다(API 기동 조건이 되어서는 안 된다).
+  SESSION_IDLE_TIMEOUT_MIN: z.coerce.number().int().positive().default(120),
+  SESSION_ABSOLUTE_TIMEOUT_HOURS: z.coerce.number().int().positive().default(12),
+  LOGIN_MAX_FAILURES: z.coerce.number().int().positive().default(5),
+  LOGIN_LOCKOUT_MIN: z.coerce.number().int().positive().default(15),
+  LOGIN_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(20),
+  AUDIT_QUERY_MAX_RANGE_DAYS: z.coerce.number().int().positive().default(90),
+  BANNED_WORD_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
+  AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
+  ADMIN_WEB_ORIGIN: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

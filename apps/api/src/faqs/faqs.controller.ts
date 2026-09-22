@@ -11,7 +11,6 @@ import {
   Query,
   Res,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -40,12 +39,10 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { ApiException } from '../common/api.exception';
 import { FaqsService } from './faqs.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/faqs')
 export class FaqsController {
   constructor(private readonly faqsService: FaqsService) {}

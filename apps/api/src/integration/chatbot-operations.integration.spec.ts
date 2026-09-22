@@ -15,6 +15,7 @@ import {
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import { loginAs, seedTestUsers } from './helpers/auth.helper';
 
 // apps/api 루트(이 파일 기준 src/integration/../.. = apps/api)
 const API_ROOT = join(__dirname, '..', '..');
@@ -23,6 +24,9 @@ interface ApiResponse<T = unknown> {
   status: number;
   body: T;
 }
+
+// No.12 전역 가드 도입 이후 전 요청에 인증 쿠키가 필요하다(NFR-M4). beforeAll에서 로그인해 채운다.
+let authCookie = '';
 
 function request<T = unknown>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
   return new Promise((resolve, reject) => {
@@ -34,9 +38,10 @@ function request<T = unknown>(method: string, url: string, body?: unknown): Prom
         hostname,
         port,
         path: pathname + search,
-        headers: payload
-          ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-          : undefined,
+        headers: {
+          ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...(authCookie ? { Cookie: authCookie } : {}),
+        },
       },
       (res) => {
         let data = '';
@@ -103,6 +108,9 @@ describe('챗봇 운영관리 통합 테스트 (No.1~4)', () => {
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;
     baseUrl = `http://127.0.0.1:${port}/api/v1`;
+
+    await seedTestUsers(prisma);
+    authCookie = await loginAs(baseUrl, 'ADMIN');
   }, 60_000);
 
   afterAll(async () => {

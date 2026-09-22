@@ -99,6 +99,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: '이미 같은 이름이 있습니다. 다른 이름을 입력해 주세요.',
       };
     }
+    if (target.includes('email')) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        code: 'DUPLICATE_EMAIL',
+        message: '이미 등록된 이메일입니다.',
+      };
+    }
     return {
       statusCode: HttpStatus.CONFLICT,
       code: 'DUPLICATE_SLUG',

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import {
+  AUDIT_LIMITS,
   BulkDeleteDto,
   CreateKeywordDto,
   IMPORT_LIMITS,
@@ -20,6 +21,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
@@ -58,10 +60,15 @@ export class KeywordsService {
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
   ) {}
+
+  private toAuditSnapshot(row: { id: string; name: string; description: string | null; synonyms: string }) {
+    return { ...row, synonymCount: this.parseSynonymsJson(row.synonyms).length };
+  }
 
   private parseSynonymsJson(json: string): string[] {
     try {
@@ -116,6 +123,14 @@ export class KeywordsService {
       data: { chatbotId, name: trimmedName, nameNormalized, description: dto.description, synonyms: JSON.stringify(synonyms) },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'Keyword',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
     return toKeywordDetail(row, []);
   }
 
@@ -192,15 +207,32 @@ export class KeywordsService {
       include: { node: { select: { id: true, name: true } } },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Keyword',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
     return toKeywordDetail(row, links.map((l) => l.node));
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertKeywordDeletable(chatbotId, id);
     await this.prisma.keyword.delete({ where: { id } });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'Keyword',
+      targetId: current.id,
+      targetName: current.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -227,6 +259,16 @@ export class KeywordsService {
     }
     await this.prisma.keyword.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
     this.bundleService.invalidate(chatbotId);
+
+    const targetIds = dto.ids.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'BULK_DELETE',
+      targetType: 'Keyword',
+      targetId: rows[0]?.id ?? '-',
+      chatbotId,
+      after: { deleted: rows.length, targetIds, truncated: dto.ids.length > targetIds.length },
+      summary: `일괄 삭제 / 키워드 / ${rows.length}건`,
+    });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -332,6 +374,7 @@ export class KeywordsService {
     let createdItems = 0;
     let updatedItems = 0;
     let createdValues = 0;
+    const targetIds: string[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of plan.items) {
@@ -355,9 +398,10 @@ export class KeywordsService {
           });
           updatedItems += 1;
           createdValues += item.values.length;
+          targetIds.push(item.existingId);
         } else {
           const capped = item.values.slice(0, MAX_SYNONYMS);
-          await tx.keyword.create({
+          const created = await tx.keyword.create({
             data: {
               chatbotId,
               name: item.name,
@@ -368,10 +412,21 @@ export class KeywordsService {
           });
           createdItems += 1;
           createdValues += capped.length;
+          targetIds.push(created.id);
         }
       }
     });
     this.bundleService.invalidate(chatbotId);
+
+    const cappedTargetIds = targetIds.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'IMPORT',
+      targetType: 'Keyword',
+      targetId: cappedTargetIds[0] ?? '-',
+      chatbotId,
+      after: { created: createdItems, updated: updatedItems, targetIds: cappedTargetIds, truncated: targetIds.length > cappedTargetIds.length },
+      summary: `대량 등록 / 키워드 / 신규 ${createdItems}건·갱신 ${updatedItems}건`,
+    });
 
     return {
       createdItems,

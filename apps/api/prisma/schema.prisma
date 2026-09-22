@@ -249,25 +249,109 @@ model Channel {
 
 model User {
   id        String   @id @default(uuid())
+  /// 정규화(trim + 소문자) 후 저장된다. 별도 *Normalized 컬럼을 두지 않는 이유는 §3.3(security-audit-설계.md).
   email     String   @unique
   name      String
+  /// RoleName(shared-types zod enum)이 값 제약의 단일 소스다. `Role`/`Permission` 테이블은 만들지 않는다(ADR-0015).
   role      String   @default("VIEWER")
+  /// [신규] `scrypt$N=32768,r=8,p=1$<salt>$<hash>` 형식 문자열(ADR-0014). 평문은 어떤 경로로도 저장되지 않는다(NFR-S1).
+  /// ⚠ UserSchema(shared-types)에는 이 필드가 존재하지 않는다 — 타입 수준에서 응답 유출을 막는다.
+  passwordHash String
+  /// [신규] UserStatus: ACTIVE | DISABLED. 물리 삭제는 제공하지 않는다(FR-12-30).
+  status    String   @default("ACTIVE")
+  /// [신규] 최초 로그인/관리자 초기화 직후 true. true인 동안 다른 API는 403이다(FR-12-13).
+  mustChangePassword Boolean @default(true)
+  /// [신규] 연속 실패 카운터. 성공 시 0으로 초기화된다(FR-12-6).
+  failedLoginCount Int      @default(0)
+  /// [신규] 잠금 해제 시각. now()보다 미래면 잠금 상태다.
+  lockedUntil DateTime?
+  /// [신규] 마지막 로그인 성공 시각(FR-12-34 목록 표시).
+  lastLoginAt DateTime?
   createdAt DateTime @default(now())
+  /// [신규] 목록 정렬·감사(Channel과 동일 문제).
+  updatedAt DateTime @updatedAt
 
+  sessions  Session[]
+
+  @@index([role])
+  @@index([status, createdAt])
   @@map("users")
+}
+
+/// [신규] 서버 보관 불투명 세션(J-1, ADR-0014). JWT를 쓰지 않는다.
+model Session {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// ⚠ 토큰 원문은 저장하지 않는다. sha256(token) hex만 저장한다(NFR-S2).
+  tokenHash         String   @unique
+  createdAt         DateTime @default(now())
+  /// 슬라이딩 유휴 만료의 기준. 쓰기 증폭을 막기 위해 갱신 주기를 둔다(§7.3).
+  lastSeenAt        DateTime @default(now())
+  /// 유휴 만료 시각(요청 시 갱신).
+  expiresAt         DateTime
+  /// 절대 만료 시각(갱신 불가, AC-12A-7).
+  absoluteExpiresAt DateTime
+  ip                String?
+  userAgent         String?
+  /// 로그아웃·강제 무효화 시각. null이 아니면 무효 세션이다.
+  revokedAt         DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model AuditLog {
   id          String   @id @default(uuid())
+  /// 시스템 동작(seed·부트스트랩)은 null이다(FR-13-10).
   actorId     String?
+  /// [신규] 기록 시점 스냅샷. 계정이 비활성/개명돼도 그때의 사실을 보존한다(FR-13-7).
+  actorEmail  String?
+  /// [신규] 기록 시점의 역할 스냅샷.
+  actorRole   String?
+  /// AuditAction(shared-types zod enum) 12종이 값 제약의 단일 소스다(FR-13-4).
   action      String
+  /// Prisma 모델명과 동일한 PascalCase 문자열(§9.3 targetType 표).
   targetType  String
   targetId    String
+  /// [신규] 삭제된 대상도 목록에서 이름으로 읽힌다(FR-13-7, AC-13-15).
+  targetName  String?
+  /// [신규] 대화 자산 변경의 소속 챗봇(FR-13-6). FK는 걸지 않는다.
+  chatbotId   String?
+  /// 허용 필드 화이트리스트 스냅샷(JSON 문자열). 8KB 초과 시 절단 + truncated 표기(FR-13-11).
   beforeValue String?
   afterValue  String?
+  /// [신규] 대량 작업 요약·거부 사유 등 사람이 읽는 한 줄(FR-13-5, FR-13-9).
+  summary     String?
+  /// [신규] 인증 이력의 출처(FR-13-8).
+  ip          String?
+  userAgent   String?
   createdAt   DateTime @default(now())
 
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([chatbotId, createdAt])
   @@map("audit_logs")
+}
+
+/// [신규] 전역 금지어 사전(J-3, FR-12-35). 챗봇 스코프가 아니다.
+model BannedWord {
+  id             String   @id @default(uuid())
+  word           String
+  /// normalizeText() 결과(ADR-0006). 유일성·매칭의 기준이다.
+  wordNormalized String
+  /// BannedWordMatchType: EXACT | CONTAINS
+  matchType      String   @default("CONTAINS")
+  /// BannedWordPolicy: BLOCK | WARN
+  policy         String   @default("BLOCK")
+  enabled        Boolean  @default(true)
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([wordNormalized])
+  @@map("banned_words")
 }
 
 model ConversationLog {
@@ -288,6 +372,8 @@ model ConversationLog {
   /// [신규] 어떤 FAQ가 답했는지(DD-20 보강). 없으면 "FAQ 응답"과 "폴백"을 구분할 수 없다.
   matchedFaqId    String?
   isAnswered      Boolean  @default(true)
+  /// [신규] 입구 금지어 필터에 차단된 턴(DD-37, FR-12-45). No.15가 재학습 후보로 잘못 집어 올리는 것을 막는다.
+  blockedByFilter Boolean  @default(false)
   createdAt       DateTime @default(now())
 
   @@index([chatbotId, createdAt])

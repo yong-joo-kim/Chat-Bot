@@ -1,12 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch } from '@nestjs/common';
 import { ChannelListItem, ChannelType, UpdateChannelDto, UpdateChannelSchema } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodParamPipe } from '../common/zod-param.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { ChannelsService } from './channels.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/channels')
 export class ChannelsController {
   constructor(private readonly channelsService: ChannelsService) {}

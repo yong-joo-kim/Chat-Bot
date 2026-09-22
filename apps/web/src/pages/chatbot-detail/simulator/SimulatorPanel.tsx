@@ -193,6 +193,8 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
           <div className="simulator-chat-area">
             <div className="simulator-chat-toolbar">
               <p className="field-hint">{msg.statsCaption}</p>
+              {/* FR-12-42: 금지어 필터는 실제 대화(공개 API)에만 적용되고 이 시뮬레이터에는 적용되지 않는다. */}
+              <p className="field-hint">{msg.bannedWordFilterCaption}</p>
               <button type="button" className="btn btn-secondary" onClick={handleReset}>
                 {msg.resetButton}
               </button>

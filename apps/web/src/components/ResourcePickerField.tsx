@@ -1,11 +1,17 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { intentsApi, keywordsApi, contextsApi, dialogNodesApi } from '../api/dialogue';
+import { chatbotsApi } from '../api/chatbots';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { MESSAGES } from '../constants/messages';
 import { InlineFieldError } from './InlineFieldError';
 
-export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node';
+/**
+ * `chatbot`은 다른 4종과 달리 어떤 챗봇 "안"의 리소스가 아니라 챗봇 자체를 검색 대상으로 삼는다
+ * (security-audit-ui-spec.md §3.9 `AuditLogFilterBar`의 `chatbotId` 필터). 이 타입일 때는
+ * `chatbotId` prop(스코프)이 필요 없다 — 전역 `GET /chatbots` 목록에서 바로 검색한다.
+ */
+export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot';
 
 interface Option {
   id: string;
@@ -23,6 +29,8 @@ async function searchResource(chatbotId: string, type: ResourcePickerType, q: st
       return (await contextsApi.list(chatbotId, query)).items;
     case 'node':
       return (await dialogNodesApi.list(chatbotId, query)).items;
+    case 'chatbot':
+      return (await chatbotsApi.list(query)).items;
     default:
       return [];
   }
@@ -39,6 +47,8 @@ async function findOneResource(chatbotId: string, type: ResourcePickerType, id: 
         return await contextsApi.findOne(chatbotId, id);
       case 'node':
         return await dialogNodesApi.findOne(chatbotId, id);
+      case 'chatbot':
+        return await chatbotsApi.findOne(id);
       default:
         return null;
     }
@@ -51,7 +61,8 @@ export interface ResourcePickerFieldProps {
   id: string;
   label: string;
   resourceType: ResourcePickerType;
-  chatbotId: string;
+  /** `resourceType==='chatbot'`일 때는 스코프가 필요 없으므로 생략 가능하다. */
+  chatbotId?: string;
   multiple: boolean;
   value: string[] | string | null;
   onChange: (value: string[] | string | null) => void;
@@ -76,7 +87,7 @@ export const ResourcePickerField = forwardRef<HTMLInputElement, ResourcePickerFi
     id,
     label,
     resourceType,
-    chatbotId,
+    chatbotId = '',
     multiple,
     value,
     onChange,

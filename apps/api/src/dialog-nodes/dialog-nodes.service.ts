@@ -18,6 +18,7 @@ import { buildFlowTree, computeIncomingCounts, validateDialogueDesign } from '@c
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException, ApiExceptionDetail } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
@@ -41,7 +42,13 @@ export class DialogNodesService {
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
   ) {}
+
+  private toAuditSnapshot(row: NodeRowWithLinks) {
+    const entity = toDialogNodeEntity(row);
+    return { ...entity, outputCount: entity.outputs.length };
+  }
 
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.dialogNode.findFirst({
@@ -137,6 +144,14 @@ export class DialogNodesService {
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'DialogNode',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
 
     return toDialogNodeEntity(row);
   }
@@ -255,6 +270,15 @@ export class DialogNodesService {
       return tx.dialogNode.findUniqueOrThrow({ where: { id }, include: { intentLinks: true, keywordLinks: true } });
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'DialogNode',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
 
     return toDialogNodeEntity(row);
   }
@@ -292,13 +316,21 @@ export class DialogNodesService {
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'COPY',
+      targetType: 'DialogNode',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
 
     return toDialogNodeEntity(row);
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertNodeDeletable(chatbotId, id);
     await this.prisma.$transaction(async (tx) => {
       await tx.dialogNodeIntent.deleteMany({ where: { nodeId: id } });
@@ -306,6 +338,14 @@ export class DialogNodesService {
       await tx.dialogNode.delete({ where: { id } });
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'DialogNode',
+      targetId: current.id,
+      targetName: current.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 
   async validate(chatbotId: string): Promise<DesignValidationReport> {

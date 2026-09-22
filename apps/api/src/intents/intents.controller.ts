@@ -11,7 +11,6 @@ import {
   Query,
   Res,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -40,12 +39,10 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { ApiException } from '../common/api.exception';
 import { IntentsService } from './intents.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/intents')
 export class IntentsController {
   constructor(private readonly intentsService: IntentsService) {}

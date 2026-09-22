@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import {
+  AUDIT_LIMITS,
   BulkDeleteDto,
   CreateIntentDto,
   IMPORT_LIMITS,
@@ -22,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
@@ -63,10 +65,16 @@ export class IntentsService {
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
   ) {}
+
+  /** 감사 스냅샷용 — 원문 예문 배열이 아니라 건수로 대체한다(FR-13-11, ADR-0016 §9.6). */
+  private toAuditSnapshot(row: { id: string; name: string; description: string | null; examples: string }) {
+    return { ...row, exampleCount: this.parseExamplesJson(row.examples).length };
+  }
 
   private parseExamplesJson(json: string): string[] {
     try {
@@ -124,6 +132,14 @@ export class IntentsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'Intent',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
 
     return { intent: toIntentDetail(row, []), meta: { deduplicatedCount, conflicts } };
   }
@@ -207,6 +223,15 @@ export class IntentsService {
       include: { node: { select: { id: true, name: true } } },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Intent',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
     return { intent: toIntentDetail(row, links.map((l) => l.node)), meta: { deduplicatedCount, conflicts } };
   }
 
@@ -227,15 +252,33 @@ export class IntentsService {
       include: { node: { select: { id: true, name: true } } },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Intent',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+      summary: `예문 추가 ${dto.add?.length ?? 0}건 · 삭제 ${dto.remove?.length ?? 0}건`,
+    });
     return { intent: toIntentDetail(row, links.map((l) => l.node)), meta: { deduplicatedCount, conflicts } };
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertIntentDeletable(chatbotId, id);
     await this.prisma.intent.delete({ where: { id } });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'Intent',
+      targetId: current.id,
+      targetName: current.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -265,6 +308,16 @@ export class IntentsService {
 
     await this.prisma.intent.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
     this.bundleService.invalidate(chatbotId);
+
+    const targetIds = dto.ids.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'BULK_DELETE',
+      targetType: 'Intent',
+      targetId: rows[0]?.id ?? '-',
+      chatbotId,
+      after: { deleted: rows.length, targetIds, truncated: dto.ids.length > targetIds.length },
+      summary: `일괄 삭제 / 의도 / ${rows.length}건`,
+    });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -372,6 +425,7 @@ export class IntentsService {
     let createdItems = 0;
     let updatedItems = 0;
     let createdValues = 0;
+    const targetIds: string[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of plan.items) {
@@ -389,9 +443,10 @@ export class IntentsService {
           });
           updatedItems += 1;
           createdValues += item.values.length;
+          targetIds.push(item.existingId);
         } else {
           const capped = item.values.slice(0, MAX_EXAMPLES);
-          await tx.intent.create({
+          const created = await tx.intent.create({
             data: {
               chatbotId,
               name: item.name,
@@ -402,10 +457,21 @@ export class IntentsService {
           });
           createdItems += 1;
           createdValues += capped.length;
+          targetIds.push(created.id);
         }
       }
     });
     this.bundleService.invalidate(chatbotId);
+
+    const cappedTargetIds = targetIds.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'IMPORT',
+      targetType: 'Intent',
+      targetId: cappedTargetIds[0] ?? '-',
+      chatbotId,
+      after: { created: createdItems, updated: updatedItems, targetIds: cappedTargetIds, truncated: targetIds.length > cappedTargetIds.length },
+      summary: `대량 등록 / 의도 / 신규 ${createdItems}건·갱신 ${updatedItems}건`,
+    });
 
     return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors };
   }

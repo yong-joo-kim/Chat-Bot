@@ -22,6 +22,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { toChatbotDto, toChatbotListItemDto } from './chatbot.mapper';
 import { deriveCopyName } from './lib/copy-name.util';
 import { deriveCopySlug, SlugDerivationExhaustedError } from './lib/slug.util';
@@ -45,7 +46,10 @@ const NOT_FOUND_MESSAGE = '요청하신 대상을 찾을 수 없습니다.';
 
 @Injectable()
 export class ChatbotsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   /** StatsModule 등 타 모듈의 존재 검증에 사용된다(설계서 §6 chatbots.module.ts 주석). */
   async existsById(id: string): Promise<boolean> {
@@ -76,6 +80,7 @@ export class ChatbotsService {
         skin: JSON.stringify(DEFAULT_CHATBOT_SKIN),
       },
     });
+    await this.auditLogService.record({ action: 'CREATE', targetType: 'Chatbot', targetId: row.id, targetName: row.name, chatbotId: row.id, after: row });
     return toChatbotDto(row);
   }
 
@@ -130,6 +135,15 @@ export class ChatbotsService {
         ...(dto.slug !== undefined ? { slug: dto.slug } : {}),
       },
     });
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Chatbot',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId: row.id,
+      before: current,
+      after: row,
+    });
     return toChatbotDto(row);
   }
 
@@ -143,6 +157,16 @@ export class ChatbotsService {
     const row = await this.prisma.chatbot.update({
       where: { id },
       data: { skin: serializeSkin(nextSkin) },
+    });
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Chatbot',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId: row.id,
+      before: current,
+      after: row,
+      summary: '스킨 변경',
     });
     return toChatbotDto(row);
   }
@@ -164,15 +188,35 @@ export class ChatbotsService {
     }
 
     const row = await this.prisma.chatbot.update({ where: { id }, data: { status: dto.status } });
+    await this.auditLogService.record({
+      action: 'STATUS_CHANGE',
+      targetType: 'Chatbot',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId: row.id,
+      before: current,
+      after: row,
+      summary: `상태 변경: ${currentStatus} → ${dto.status}`,
+    });
     return toChatbotDto(row);
   }
 
   async moveGroup(id: string, dto: MoveChatbotGroupDto): Promise<Chatbot> {
-    await this.findRowOrThrow(id);
+    const current = await this.findRowOrThrow(id);
     const group = await this.prisma.chatbotGroup.findUnique({ where: { id: dto.groupId } });
     if (!group) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
 
     const row = await this.prisma.chatbot.update({ where: { id }, data: { groupId: dto.groupId } });
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'Chatbot',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId: row.id,
+      before: current,
+      after: row,
+      summary: '소속 그룹 이동',
+    });
     return toChatbotDto(row);
   }
 
@@ -214,6 +258,7 @@ export class ChatbotsService {
         skin: original.skin,
       },
     });
+    await this.auditLogService.record({ action: 'COPY', targetType: 'Chatbot', targetId: row.id, targetName: row.name, chatbotId: row.id, after: row });
     return toChatbotDto(row);
   }
 
@@ -221,7 +266,16 @@ export class ChatbotsService {
   async archive(id: string): Promise<void> {
     const current = await this.findRowOrThrow(id);
     if (current.status === 'ARCHIVED') return;
-    await this.prisma.chatbot.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    const row = await this.prisma.chatbot.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'Chatbot',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId: row.id,
+      before: current,
+      after: row,
+    });
   }
 
   /** 영구 삭제(FR-1-15(b), FR-1-16, ADR-0002 §7.8). */
@@ -274,6 +328,14 @@ export class ChatbotsService {
     }
 
     await this.prisma.chatbot.delete({ where: { id } });
+    await this.auditLogService.record({
+      action: 'PURGE',
+      targetType: 'Chatbot',
+      targetId: current.id,
+      targetName: current.name,
+      chatbotId: current.id,
+      before: current,
+    });
   }
 
   /** slug 실시간 중복 확인(FR-3-7). 형식 위반도 400이 아니라 `available:false, reason:'FORMAT'`으로 응답한다. */

@@ -2,14 +2,21 @@ import type { MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { MESSAGES } from '../constants/messages';
 import { useUnsavedGuard } from '../context/UnsavedGuardContext';
+import { useAuth } from '../context/AuthContext';
+import { SystemSettingsMenu } from './security/SystemSettingsMenu';
+import { UserMenu } from './security/UserMenu';
 
-export function TopBar(): JSX.Element {
+/** F-1: 로그인 화면(L1)/부팅 게이트에서는 `AuthContext.user`가 없으므로 이 컴포넌트 자체가 렌더되지 않는다. */
+export function TopBar(): JSX.Element | null {
   const { confirmNavigation } = useUnsavedGuard();
+  const { user } = useAuth();
 
   // AC-3-8: 상세 탭에 저장하지 않은 변경 사항이 있으면 TopBar의 "챗봇 목록" 이동도 확인 다이얼로그로 가로챈다.
   function handleChatbotListClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (!confirmNavigation()) e.preventDefault();
   }
+
+  if (!user) return null;
 
   return (
     <>
@@ -26,6 +33,10 @@ export function TopBar(): JSX.Element {
             {MESSAGES.common.chatbotListNav}
           </Link>
         </nav>
+        <div className="top-bar-actions">
+          <SystemSettingsMenu />
+          <UserMenu />
+        </div>
       </header>
     </>
   );

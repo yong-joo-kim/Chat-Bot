@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
@@ -27,7 +28,19 @@ export class ContextsService {
     private readonly scope: ChatbotScopeService,
     private readonly referenceCheck: ReferenceCheckService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
   ) {}
+
+  private toAuditSnapshot(row: { id: string; name: string; slots: string; cancelKeywords: string; sessionTimeoutMinutes: number }) {
+    let slotCount = 0;
+    try {
+      const parsed = JSON.parse(row.slots);
+      slotCount = Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      slotCount = 0;
+    }
+    return { ...row, slotCount };
+  }
 
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.contextVariable.findFirst({
@@ -72,6 +85,14 @@ export class ContextsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'ContextVariable',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
     return toContextEntity(row);
   }
 
@@ -127,14 +148,31 @@ export class ContextsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'ContextVariable',
+      targetId: row.id,
+      targetName: row.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
     return toContextEntity(row);
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.referenceCheck.assertContextDeletable(chatbotId, id);
     await this.prisma.contextVariable.delete({ where: { id } });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'ContextVariable',
+      targetId: current.id,
+      targetName: current.name,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 }

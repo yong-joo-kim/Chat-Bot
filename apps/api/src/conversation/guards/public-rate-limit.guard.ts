@@ -2,8 +2,8 @@ import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { ApiException } from '../../common/api.exception';
-import type { RateLimitStore } from '../rate-limit.store';
-import { resolveClientIp } from '../lib/client-ip';
+import type { RateLimitStore } from '../../common/rate-limit/rate-limit.store';
+import { resolveClientIp } from '../../common/rate-limit/lib/client-ip';
 
 const WINDOW_MS = 60_000;
 

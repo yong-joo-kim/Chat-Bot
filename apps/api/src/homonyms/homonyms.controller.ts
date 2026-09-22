@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   CreateHomonymDto,
   CreateHomonymSchema,
@@ -14,11 +14,9 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { ZodQueryPipe } from '../common/zod-query.pipe';
-import { PermissionGuard } from '../common/auth/permission.guard';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { HomonymsService } from './homonyms.service';
 
-@UseGuards(PermissionGuard)
 @Controller('chatbots/:chatbotId/homonyms')
 export class HomonymsController {
   constructor(private readonly homonymsService: HomonymsService) {}

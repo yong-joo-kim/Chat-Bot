@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { deriveCopyName } from '../chatbots/lib/copy-name.util';
 import { deriveCopySlug, SlugDerivationExhaustedError } from '../chatbots/lib/slug.util';
 import { toChatbotGroupWithCountDto } from './chatbot-groups.mapper';
@@ -18,13 +19,17 @@ const GROUP_WITH_COUNT_INCLUDE = { _count: { select: { chatbots: true } } } as c
 
 @Injectable()
 export class ChatbotGroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   async create(dto: CreateChatbotGroupDto): Promise<ChatbotGroupWithCount> {
     const row = await this.prisma.chatbotGroup.create({
       data: { name: dto.name, description: dto.description },
       include: GROUP_WITH_COUNT_INCLUDE,
     });
+    await this.auditLogService.record({ action: 'CREATE', targetType: 'ChatbotGroup', targetId: row.id, targetName: row.name, after: row });
     return toChatbotGroupWithCountDto(row);
   }
 
@@ -46,7 +51,7 @@ export class ChatbotGroupsService {
   }
 
   async update(id: string, dto: UpdateChatbotGroupDto): Promise<ChatbotGroupWithCount> {
-    await this.findRowOrThrow(id);
+    const before = await this.findRowOrThrow(id);
     const row = await this.prisma.chatbotGroup.update({
       where: { id },
       data: {
@@ -55,6 +60,7 @@ export class ChatbotGroupsService {
       },
       include: GROUP_WITH_COUNT_INCLUDE,
     });
+    await this.auditLogService.record({ action: 'UPDATE', targetType: 'ChatbotGroup', targetId: row.id, targetName: row.name, before, after: row });
     return toChatbotGroupWithCountDto(row);
   }
 
@@ -69,6 +75,7 @@ export class ChatbotGroupsService {
       );
     }
     await this.prisma.chatbotGroup.delete({ where: { id } });
+    await this.auditLogService.record({ action: 'DELETE', targetType: 'ChatbotGroup', targetId: row.id, targetName: row.name, before: row });
   }
 
   /** 그룹 복사 — 소속 챗봇도 함께 복제한다(FR-1-7, AC-1-9). 하위 대화설계 리소스는 복제하지 않는다(FR-1-14). */
@@ -118,6 +125,9 @@ export class ChatbotGroupsService {
         where: { id: newGroup.id },
         include: GROUP_WITH_COUNT_INCLUDE,
       });
+      return result;
+    }).then(async (result) => {
+      await this.auditLogService.record({ action: 'COPY', targetType: 'ChatbotGroup', targetId: result.id, targetName: result.name, after: result });
       return toChatbotGroupWithCountDto(result);
     });
   }

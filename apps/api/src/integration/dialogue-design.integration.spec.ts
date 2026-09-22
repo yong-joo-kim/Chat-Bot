@@ -17,6 +17,7 @@ import {
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import { loginAs, seedTestUsers } from './helpers/auth.helper';
 
 // apps/api 루트(이 파일 기준 src/integration/../.. = apps/api)
 const API_ROOT = join(__dirname, '..', '..');
@@ -25,6 +26,9 @@ interface ApiResponse<T = unknown> {
   status: number;
   body: T;
 }
+
+// No.12 전역 가드 도입 이후 전 요청에 인증 쿠키가 필요하다(NFR-M4). beforeAll에서 로그인해 채운다.
+let authCookie = '';
 
 function jsonRequest<T = unknown>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
   return new Promise((resolve, reject) => {
@@ -36,9 +40,10 @@ function jsonRequest<T = unknown>(method: string, url: string, body?: unknown): 
         hostname,
         port,
         path: pathname + search,
-        headers: payload
-          ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-          : undefined,
+        headers: {
+          ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...(authCookie ? { Cookie: authCookie } : {}),
+        },
       },
       (res) => {
         let data = '';
@@ -70,7 +75,7 @@ async function uploadCsv<T = unknown>(url: string, filename: string, csvContent:
   const form = new FormData();
   const blob = new Blob([csvContent], { type: 'text/csv' });
   form.append('file', blob, filename);
-  const res = await fetch(url, { method: 'POST', body: form });
+  const res = await fetch(url, { method: 'POST', body: form, headers: authCookie ? { Cookie: authCookie } : undefined });
   const text = await res.text();
   let parsed: unknown;
   try {
@@ -123,13 +128,16 @@ describe('대화 설계(No.5~9) 통합 테스트', () => {
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalFilters(new AllExceptionsFilter());
-    moduleRef.get(PrismaService);
+    const prisma = moduleRef.get(PrismaService);
 
     await app.listen(0);
     const server = app.getHttpServer() as http.Server;
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;
     baseUrl = `http://127.0.0.1:${port}/api/v1`;
+
+    await seedTestUsers(prisma);
+    authCookie = await loginAs(baseUrl, 'ADMIN');
   }, 60_000);
 
   afterAll(async () => {

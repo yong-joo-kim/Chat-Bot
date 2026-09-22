@@ -73,6 +73,20 @@ export const ApiErrorCode = z.enum([
   'RATE_LIMITED',
   'OVERLAY_INVALID',
   'NO_CHANGES_TO_COMPARE',
+  // 보안/이력(No.12~13) 그룹 추가(security-audit-설계.md §4.3, FR-0-28)
+  'UNAUTHENTICATED',
+  'SESSION_EXPIRED',
+  'ACCOUNT_DISABLED',
+  'INVALID_CREDENTIALS',
+  'ACCOUNT_LOCKED',
+  'FORBIDDEN',
+  'PASSWORD_CHANGE_REQUIRED',
+  'PASSWORD_POLICY',
+  'LAST_ADMIN',
+  'SELF_MODIFICATION',
+  'DUPLICATE_EMAIL',
+  'BANNED_WORD_BLOCKED',
+  'AUDIT_RANGE_TOO_WIDE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

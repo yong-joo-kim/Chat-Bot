@@ -3,9 +3,50 @@
 // 멱등: 그룹/챗봇은 name·slug 기준 upsert, 대화로그는 매 실행마다 deleteMany 후 재생성한다.
 // 자동 테스트(test-automation)는 이 시드가 아니라 자체 fixture를 쓰되 수치는 아래 표와 정렬한다.
 import { PrismaClient } from '@prisma/client';
-import { normalizeText } from '@chat-bot/shared-types';
+import { normalizeEmail, normalizeText } from '@chat-bot/shared-types';
+import { hashPassword } from '../src/common/auth/lib/password-hash';
 
 const prisma = new PrismaClient();
+
+/**
+ * 보안/이력(No.12~13) seed — ADMIN 1(부트스트랩) + EDITOR 1 + VIEWER 1(NFR-M5, 권한별 수동 검증용).
+ * ADMIN만 `mustChangePassword=true`다 — 나머지 2명까지 강제하면 수동 검증이 매번 비밀번호 변경
+ * 화면에 막혀 불가능해진다. 세션·감사로그는 만들지 않는다(실제 동작으로만 생성되어야 한다).
+ */
+async function upsertUser(params: { email: string; name: string; role: string; password: string; mustChangePassword: boolean }) {
+  const email = normalizeEmail(params.email);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return existing;
+  const passwordHash = await hashPassword(params.password);
+  return prisma.user.create({
+    data: { email, name: params.name, role: params.role, passwordHash, mustChangePassword: params.mustChangePassword },
+  });
+}
+
+async function seedUsers(): Promise<void> {
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@chat-bot.local';
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? 'ChangeMe!2026';
+
+  await upsertUser({ email: bootstrapEmail, name: '시스템 관리자', role: 'ADMIN', password: bootstrapPassword, mustChangePassword: true });
+  await upsertUser({ email: 'editor@chat-bot.local', name: '챗봇 편집자', role: 'EDITOR', password: 'Editor!2026', mustChangePassword: false });
+  await upsertUser({ email: 'viewer@chat-bot.local', name: '운영 모니터', role: 'VIEWER', password: 'Viewer!2026', mustChangePassword: false });
+}
+
+/** 금지어 3~5건(NFR-M5) — 실제 비속어 대신 중립 문자열을 쓴다(저장소에 비속어 사전을 커밋하지 않는다). */
+async function seedBannedWords(): Promise<void> {
+  const defs = [
+    { word: '테스트금지어1', matchType: 'CONTAINS', policy: 'BLOCK' },
+    { word: '테스트금지어2', matchType: 'CONTAINS', policy: 'BLOCK' },
+    { word: '테스트경고어1', matchType: 'CONTAINS', policy: 'WARN' },
+    { word: '테스트완전일치어', matchType: 'EXACT', policy: 'WARN' },
+  ];
+  for (const def of defs) {
+    const wordNormalized = normalizeText(def.word);
+    const existing = await prisma.bannedWord.findUnique({ where: { wordNormalized } });
+    if (existing) continue;
+    await prisma.bannedWord.create({ data: { word: def.word, wordNormalized, matchType: def.matchType, policy: def.policy } });
+  }
+}
 
 const DEFAULT_SKIN = JSON.stringify({ primaryColor: '#4F46E5', headerTitle: '챗봇 상담' });
 
@@ -124,6 +165,9 @@ async function replaceConversationLogs(chatbotId: string, logs: LogSeed[]): Prom
 
 async function main(): Promise<void> {
   const now = new Date();
+
+  await seedUsers();
+  await seedBannedWords();
 
   const supportGroup = await upsertGroup('고객지원 그룹', '1차 개발 검증용 샘플 그룹');
   const archivedGroup = await upsertGroup('보관 그룹', '보관 처리된 챗봇을 모아두는 그룹');

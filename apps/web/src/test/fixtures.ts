@@ -74,3 +74,102 @@ export function makeDashboardSummary(overrides: Partial<DashboardSummary> = {}):
     ...overrides,
   };
 }
+
+/* ── 보안/이력(No.12~13) 픽스처 ── */
+import type { AuditLogDetail, AuditLogListItem, BannedWord, CurrentUser, User } from '@chat-bot/shared-types';
+
+export function makeUser(overrides: Partial<User> = {}): User {
+  return {
+    id: '44444444-4444-4444-8444-444444444444',
+    email: 'editor@chat-bot.local',
+    name: '김편집',
+    role: 'EDITOR',
+    status: 'ACTIVE',
+    mustChangePassword: false,
+    lastLoginAt: new Date('2026-09-20T09:00:00.000Z'),
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-09-20T09:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+export function makeCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
+  const base = makeUser();
+  return {
+    ...base,
+    permissions: ['chatbot:read', 'chatbot:write', 'dialogue:read', 'dialogue:write', 'channel:read', 'channel:write', 'simulation:read'],
+    ...overrides,
+  };
+}
+
+export function makeAdminUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
+  return makeCurrentUser({
+    id: '55555555-5555-4555-8555-555555555555',
+    email: 'admin@chat-bot.local',
+    name: '박관리',
+    role: 'ADMIN',
+    permissions: [
+      'chatbot:read', 'chatbot:write', 'chatbot:delete', 'chatbot:purge',
+      'dialogue:read', 'dialogue:write', 'channel:read', 'channel:write', 'simulation:read',
+      'user:read', 'user:write', 'security:read', 'security:write', 'audit:read',
+    ],
+    ...overrides,
+  });
+}
+
+export function makeViewerUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
+  return makeCurrentUser({
+    id: '66666666-6666-4666-8666-666666666666',
+    email: 'viewer@chat-bot.local',
+    name: '이조회',
+    role: 'VIEWER',
+    permissions: ['chatbot:read', 'dialogue:read', 'channel:read', 'simulation:read'],
+    ...overrides,
+  });
+}
+
+export function makeBannedWord(overrides: Partial<BannedWord> = {}): BannedWord {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    word: '금칙어',
+    wordNormalized: '금칙어',
+    matchType: 'CONTAINS',
+    policy: 'BLOCK',
+    enabled: true,
+    description: null,
+    createdAt: new Date('2026-09-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+export function makeAuditLogListItem(overrides: Partial<AuditLogListItem> = {}): AuditLogListItem {
+  return {
+    id: '88888888-8888-4888-8888-888888888888',
+    createdAt: new Date('2026-09-19T14:22:00.000Z'),
+    actorId: '44444444-4444-4444-8444-444444444444',
+    actorEmail: 'editor@chat-bot.local',
+    actorRole: 'EDITOR',
+    action: 'DELETE',
+    targetType: 'Intent',
+    targetId: '99999999-9999-4999-8999-999999999999',
+    targetName: '주문_배송조회',
+    chatbotId: '22222222-2222-4222-8222-222222222222',
+    summary: null,
+    ...overrides,
+  };
+}
+
+export function makeAuditLogDetail(overrides: Partial<AuditLogDetail> = {}): AuditLogDetail {
+  const item = makeAuditLogListItem(overrides);
+  return {
+    ...item,
+    before: { name: '주문_배송조회', examples: ['배송 조회해줘'] },
+    after: null,
+    changedFields: ['name', 'examples'],
+    truncated: false,
+    ip: '127.0.0.1',
+    userAgent: 'vitest',
+    ...overrides,
+  };
+}

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import {
+  AUDIT_LIMITS,
   BulkDeleteDto,
   CreateFaqDto,
   FaqCategory,
@@ -22,6 +23,7 @@ import {
 import { suggestSimilarFaqs } from '@chat-bot/dialogue-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
@@ -52,10 +54,15 @@ export class FaqsService {
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
     private readonly bundleService: DialogueBundleService,
+    private readonly auditLogService: AuditLogService,
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
   ) {}
+
+  private toAuditSnapshot(row: { id: string; question: string; category: string; enabled: boolean; altQuestions: string }) {
+    return { ...row, altQuestionCount: this.parseAltQuestionsJson(row.altQuestions).length };
+  }
 
   private async assertNotDuplicate(chatbotId: string, question: string, altQuestions: string[], excludeId?: string): Promise<void> {
     const others = await this.prisma.faqEntry.findMany({
@@ -100,6 +107,14 @@ export class FaqsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'CREATE',
+      targetType: 'FaqEntry',
+      targetId: row.id,
+      targetName: row.question,
+      chatbotId,
+      after: this.toAuditSnapshot(row),
+    });
     return toFaqEntity(row);
   }
 
@@ -175,15 +190,32 @@ export class FaqsService {
       },
     });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'UPDATE',
+      targetType: 'FaqEntry',
+      targetId: row.id,
+      targetName: row.question,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+      after: this.toAuditSnapshot(row),
+    });
     return toFaqEntity(row);
   }
 
   /** 참조 제약이 없으므로 항상 허용한다(FR-9-10). */
   async remove(chatbotId: string, id: string): Promise<void> {
     await this.scope.assertWritable(chatbotId);
-    await this.findRowOrThrow(chatbotId, id);
+    const current = await this.findRowOrThrow(chatbotId, id);
     await this.prisma.faqEntry.delete({ where: { id } });
     this.bundleService.invalidate(chatbotId);
+    await this.auditLogService.record({
+      action: 'DELETE',
+      targetType: 'FaqEntry',
+      targetId: current.id,
+      targetName: current.question,
+      chatbotId,
+      before: this.toAuditSnapshot(current),
+    });
   }
 
   async bulkDelete(chatbotId: string, dto: BulkDeleteDto): Promise<void> {
@@ -192,6 +224,16 @@ export class FaqsService {
     if (rows.length !== dto.ids.length) throw new ApiException('NOT_FOUND', 404, '일부 FAQ를 찾을 수 없습니다.');
     await this.prisma.faqEntry.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
     this.bundleService.invalidate(chatbotId);
+
+    const targetIds = dto.ids.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'BULK_DELETE',
+      targetType: 'FaqEntry',
+      targetId: rows[0]?.id ?? '-',
+      chatbotId,
+      after: { deleted: rows.length, targetIds, truncated: dto.ids.length > targetIds.length },
+      summary: `일괄 삭제 / FAQ / ${rows.length}건`,
+    });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -288,6 +330,7 @@ export class FaqsService {
     let createdItems = 0;
     let updatedItems = 0;
     let createdValues = 0;
+    const targetIds: string[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of plan.items) {
@@ -307,9 +350,10 @@ export class FaqsService {
           });
           updatedItems += 1;
           createdValues += item.altQuestions.length;
+          targetIds.push(item.existingId);
         } else {
           const altQuestions = dedupeAltQuestions(item.altQuestions, item.question).altQuestions.slice(0, 30);
-          await tx.faqEntry.create({
+          const created = await tx.faqEntry.create({
             data: {
               chatbotId,
               category: item.category,
@@ -322,10 +366,21 @@ export class FaqsService {
           });
           createdItems += 1;
           createdValues += altQuestions.length;
+          targetIds.push(created.id);
         }
       }
     });
     this.bundleService.invalidate(chatbotId);
+
+    const cappedTargetIds = targetIds.slice(0, AUDIT_LIMITS.bulkTargetIds);
+    await this.auditLogService.record({
+      action: 'IMPORT',
+      targetType: 'FaqEntry',
+      targetId: cappedTargetIds[0] ?? '-',
+      chatbotId,
+      after: { created: createdItems, updated: updatedItems, targetIds: cappedTargetIds, truncated: targetIds.length > cappedTargetIds.length },
+      summary: `대량 등록 / FAQ / 신규 ${createdItems}건·갱신 ${updatedItems}건`,
+    });
 
     return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors };
   }

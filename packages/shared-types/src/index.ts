@@ -12,6 +12,7 @@ export * from './dialogue-engine';
 export * from './conversation';
 export * from './channel';
 export * from './security';
+export * from './audit';
 export * from './stats';
 export * from './output-view';
 export * from './contrast';
