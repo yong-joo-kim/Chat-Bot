@@ -26,5 +26,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.spec.ts'],
+    // `CSS.escape`(jsdom 미구현, `pending-indicator.ts`가 사용) 등 jsdom 환경 격차를 메우는
+    // 테스트 전용 폴리필 — 프로덕션 번들에는 포함되지 않는다(`src/test/css-escape-polyfill.ts`).
+    setupFiles: ['src/test/css-escape-polyfill.ts'],
   },
 });

@@ -52,6 +52,7 @@ export function ChatBubble({
   }
 
   const matchedCaption =
+    (message.matchTrace?.ragUsed && msg.matchedCaption.rag(message.matchTrace.ragSourceCount ?? 0)) ||
     (message.matchedNodeName && msg.matchedCaption.node(message.matchedNodeName)) ||
     (message.matchedFaqQuestion && msg.matchedCaption.faq(message.matchedFaqQuestion)) ||
     (message.matchedIntentName && msg.matchedCaption.intent(message.matchedIntentName)) ||
@@ -72,7 +73,7 @@ export function ChatBubble({
           label={msg.unsupportedOutputsNotice(message.unsupportedOutputs.length, message.unsupportedOutputs.join('/'))}
         />
       )}
-      {message.trace && <TracePanel trace={message.trace} chatbotId={chatbotId} />}
+      {message.trace && <TracePanel trace={message.trace} chatbotId={chatbotId} matchTrace={message.matchTrace} />}
     </div>
   );
 }

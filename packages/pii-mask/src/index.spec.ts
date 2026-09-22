@@ -1,4 +1,4 @@
-import { maskPii } from './pii-mask';
+import { maskPii } from './index';
 
 describe('maskPii — FR-11-23, ADR-0013', () => {
   it('주민등록번호는 전량 마스킹된다', () => {

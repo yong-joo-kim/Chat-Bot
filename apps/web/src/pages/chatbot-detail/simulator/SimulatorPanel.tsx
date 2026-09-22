@@ -11,6 +11,7 @@ import { SessionStatePanel } from './SessionStatePanel';
 import { NodeJumpPicker } from './NodeJumpPicker';
 import { MessageComposer } from './MessageComposer';
 import { CompareView } from './CompareView';
+import { RagUsageToggle } from './RagUsageToggle';
 import type { SimMessage } from './types';
 
 let seq = 0;
@@ -59,6 +60,9 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
   const [sending, setSending] = useState(false);
   const [viewMode, setViewMode] = useState<'chat' | 'compare'>('chat');
   const [assetCounts, setAssetCounts] = useState<AssetCounts | null>(null);
+  // FR-N2-3: 기본 꺼짐. 세션(탭 유지) 동안은 체크 상태를 유지해 매턴 껐다 켜는 비용을 줄인다.
+  const [useRag, setUseRag] = useState(false);
+  const [sendingUsesRag, setSendingUsesRag] = useState(false);
   const inputWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,8 +77,9 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
 
   async function sendTurn(payload: { message?: string; buttonAction?: ButtonAction }): Promise<void> {
     setSending(true);
+    setSendingUsesRag(useRag);
     try {
-      const res = await simulationApi.simulate(chatbotId, { ...payload, state, overlay });
+      const res = await simulationApi.simulate(chatbotId, { ...payload, state, overlay, useRag });
       const next: SimMessage[] = [];
       if (res.stateDiscarded.length > 0) {
         next.push({ id: nextId(), role: 'system', text: msg.stateDiscardedNotice });
@@ -89,6 +94,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         matchedFaqQuestion: res.matchedFaqQuestion,
         overlayApplied: res.overlayApplied,
         unsupportedOutputs: res.unsupportedOutputs,
+        matchTrace: res.matchTrace,
       });
       setMessages((prev) => [...prev, ...next]);
       setState(res.state);
@@ -105,6 +111,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
       ]);
     } finally {
       setSending(false);
+      setSendingUsesRag(false);
     }
   }
 
@@ -184,6 +191,8 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
           <input type="radio" name={`sim-mode-${mode}`} checked={viewMode === 'compare'} onChange={() => setViewMode('compare')} />
           {mode === 'drawer' ? msg.modeCompareDrawer : msg.modeCompare}
         </label>
+        {/* AC-N2-26: 비교 모드에서는 useRag 토글 자체가 렌더되지 않고, 고정 캡션만 남는다. */}
+        {viewMode === 'compare' && <span className="field-hint">{msg.ragToggle.compareNotice}</span>}
       </fieldset>
 
       {viewMode === 'compare' ? (
@@ -203,6 +212,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
               messages={messages}
               chatbotId={chatbotId}
               sending={sending}
+              sendingLabel={sendingUsesRag ? msg.sendingRag : msg.sending}
               onButtonClick={handleButtonClick}
               onRetry={handleRetry}
             />
@@ -210,6 +220,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
               <span className="field-label-static">{msg.nodeJump.label}</span>
               <NodeJumpPicker chatbotId={chatbotId} disabled={sending} onSubmit={(nodeId) => void handleNodeJump(nodeId)} />
             </div>
+            <RagUsageToggle checked={useRag} onChange={setUseRag} disabled={sending} />
             <MessageComposer disabled={sending} onSend={handleSend} />
           </div>
           <SessionStatePanel state={state ?? null} />

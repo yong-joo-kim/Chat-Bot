@@ -1,13 +1,25 @@
 import { useId, useState } from 'react';
-import type { TraceStep } from '@chat-bot/shared-types';
+import type { MatchTrace, TraceStep } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../../constants/messages';
 import { TraceStepRow } from './TraceStepRow';
+import { MatchScorePanel } from './MatchScorePanel';
 
-/** 메시지별 판정 근거 토글(FR-10-9). 기본 접힘, 키보드로 펼칠 수 있다(`aria-expanded`). */
-export function TracePanel({ trace, chatbotId }: { trace: TraceStep[]; chatbotId: string }): JSX.Element | null {
+/**
+ * 메시지별 판정 근거 토글(FR-10-9). 기본 접힘, 키보드로 펼칠 수 있다(`aria-expanded`).
+ * `matchTrace`(FR-N3-10)가 있으면 같은 펼침 영역 안에 `MatchScorePanel`을 함께 보여준다(ui-spec §4.2.3).
+ */
+export function TracePanel({
+  trace,
+  chatbotId,
+  matchTrace,
+}: {
+  trace: TraceStep[];
+  chatbotId: string;
+  matchTrace?: MatchTrace;
+}): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  if (trace.length === 0) return null;
+  if (trace.length === 0 && !matchTrace) return null;
   const msg = MESSAGES.simulator.tracePanel;
 
   return (
@@ -16,11 +28,16 @@ export function TracePanel({ trace, chatbotId }: { trace: TraceStep[]; chatbotId
         {open ? msg.toggleHide : msg.toggleShow} <span aria-hidden="true">{open ? '▴' : '▾'}</span>
       </button>
       {open && (
-        <ul id={panelId} className="trace-step-list">
-          {trace.map((step, i) => (
-            <TraceStepRow key={i} step={step} chatbotId={chatbotId} />
-          ))}
-        </ul>
+        <div id={panelId}>
+          {matchTrace && <MatchScorePanel matchTrace={matchTrace} />}
+          {trace.length > 0 && (
+            <ul className="trace-step-list">
+              {trace.map((step, i) => (
+                <TraceStepRow key={i} step={step} chatbotId={chatbotId} />
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

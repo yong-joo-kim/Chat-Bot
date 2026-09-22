@@ -20,7 +20,10 @@ export { advanceContextSession, startContextSession, validateSlotValue, promptOu
 export type { AdvanceResult, SlotValueResult } from './context-session';
 
 export { matchFaqEntry, suggestSimilarFaqs } from './faq';
-export type { FaqMatchResult, FaqSuggestionResult } from './faq';
+export type { FaqMatchResult, FaqSuggestionResult, MatchFaqEntryOptions } from './faq';
+
+export { judgeBand } from './semantic';
+export type { SemanticBand } from './semantic';
 
 export { executeOutputs } from './outputs';
 export type { ExecuteOutputsOptions, ExecuteOutputsResult } from './outputs';

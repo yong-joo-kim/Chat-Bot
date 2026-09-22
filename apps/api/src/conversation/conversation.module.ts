@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { DialogueCommonModule } from '../dialogue-common/dialogue-common.module';
 import { BannedWordsModule } from '../banned-words/banned-words.module';
 import { LearningModule } from '../learning/learning.module';
+import { EmbeddingModule } from '../embedding/embedding.module';
+import { AnswerSettingsModule } from '../answer-settings/answer-settings.module';
+import { RagModule } from '../rag/rag.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicAccessService } from './public-access.service';
@@ -17,9 +20,12 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
  * `BannedWordsModule`을 명시 import해 `BannedWordFilterService`를 주입받는다(입구/출구 필터 2지점, DD-44).
  * No.14~15부터 `LearningModule`을 명시 import해 `UnansweredCollectorService`를 주입받는다(DD-51).
  * 의존 방향은 `conversation → learning` 단방향이며 역방향(`learning → conversation`)은 만들지 않는다.
+ * FAQ/의도 매칭 고도화 그룹부터 `EmbeddingModule`(1단계 점수)·`AnswerSettingsModule`(설정 캐시)·
+ * `RagModule`(2단계 폴백)을 추가로 import한다. `RagModule`은 `conversation`을 모른다 — 로그 적재는
+ * `ConversationLogPort` 인터페이스로 호출 시점에 전달한다(DD-85, 순환 참조 회피).
  */
 @Module({
-  imports: [DialogueCommonModule, BannedWordsModule, LearningModule],
+  imports: [DialogueCommonModule, BannedWordsModule, LearningModule, EmbeddingModule, AnswerSettingsModule, RagModule],
   controllers: [PublicConversationController],
   providers: [
     PublicConversationService,

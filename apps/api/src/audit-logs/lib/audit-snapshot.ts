@@ -8,7 +8,29 @@ import type { AuditTargetType } from '@chat-bot/shared-types';
  */
 const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   ChatbotGroup: ['name', 'description'],
-  Chatbot: ['name', 'slug', 'status', 'groupId', 'description', 'avatarUrl'],
+  // FAQ/의도 매칭 고도화 그룹(nlu-rag-answering-설계.md §11.3, FR-N3-9) 추가분 — AI 답변 설정
+  // 저장은 `targetType: 'Chatbot'`으로 기록하며 화이트리스트에 임계값 3종·활성화 여부·스코프
+  // 3종·정책·타임아웃을 포함한다(대화 문장은 절대 포함하지 않는다, AC-N1-19).
+  Chatbot: [
+    'name',
+    'slug',
+    'status',
+    'groupId',
+    'description',
+    'avatarUrl',
+    'semanticEnabled',
+    'acceptThreshold',
+    'lowThreshold',
+    'marginThreshold',
+    'ragEnabled',
+    'ragCompany',
+    'ragCategory',
+    'ragSubcategory',
+    'ragSimilarityThreshold',
+    'fallbackPolicy',
+    'showSources',
+    'ragTimeoutMs',
+  ],
   Intent: ['name', 'description', 'exampleCount'],
   Keyword: ['name', 'synonymCount'],
   HomonymDictionary: ['word', 'policy', 'meaningCount'],

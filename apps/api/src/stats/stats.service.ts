@@ -262,7 +262,7 @@ export class StatsService {
     const [bySourceRows, byHourRows, byWeekdayRows, sessionRows] = await this.withTimeout(
       Promise.all([
         this.prisma.conversationLog.groupBy({
-          by: ['matchedNodeId', 'matchedFaqId', 'isAnswered'],
+          by: ['matchedNodeId', 'matchedFaqId', 'isAnswered', 'answeredByRag'],
           where,
           _count: { _all: true },
         }),
@@ -287,11 +287,16 @@ export class StatsService {
     const sourceCounts = new Map<string, number>();
     let sourceTotal = 0;
     for (const row of bySourceRows) {
-      const source = classifyResponseSource({ matchedNodeId: row.matchedNodeId, matchedFaqId: row.matchedFaqId, isAnswered: row.isAnswered });
+      const source = classifyResponseSource({
+        matchedNodeId: row.matchedNodeId,
+        matchedFaqId: row.matchedFaqId,
+        isAnswered: row.isAnswered,
+        answeredByRag: row.answeredByRag,
+      });
       sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + row._count._all);
       sourceTotal += row._count._all;
     }
-    const bySource = (['NODE', 'FAQ', 'OTHER', 'FALLBACK'] as const).map((source) => {
+    const bySource = (['NODE', 'FAQ', 'RAG', 'OTHER', 'FALLBACK'] as const).map((source) => {
       const count = sourceCounts.get(source) ?? 0;
       return { source, count, ratio: sourceTotal === 0 ? 0 : Math.round((count / sourceTotal) * 10000) / 10000 };
     });

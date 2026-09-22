@@ -67,4 +67,17 @@ describe('widget core/store — DOM 무의존 reducer(FR-W-16)', () => {
     const state = reducer({ ...createInitialState(), status: 'OPEN' }, { type: 'CLOSE' });
     expect(state.status).toBe('CLOSED');
   });
+
+  it('PENDING_STARTED는 AWAITING_ANSWER로 전이한다(입력을 잠그지 않는 대기 상태, FR-N2-38)', () => {
+    const state = reducer({ ...createInitialState(), status: 'OPEN' }, { type: 'PENDING_STARTED' });
+    expect(state.status).toBe('AWAITING_ANSWER');
+  });
+
+  it('PENDING_RESOLVED는 DISABLED가 아니면 OPEN으로, DISABLED면 유지한다', () => {
+    const resolved = reducer({ ...createInitialState(), status: 'AWAITING_ANSWER' }, { type: 'PENDING_RESOLVED' });
+    expect(resolved.status).toBe('OPEN');
+
+    const stillDisabled = reducer({ ...createInitialState(), status: 'DISABLED' }, { type: 'PENDING_RESOLVED' });
+    expect(stillDisabled.status).toBe('DISABLED');
+  });
 });

@@ -1,7 +1,11 @@
 /**
- * PII 마스킹 순수 함수(FR-11-23, NFR-S4, ADR-0013). `ConversationLogService.record()` 내부
- * 단 1곳에서만 호출한다 — 다른 곳에서 `prisma.conversationLog.create`를 직접 호출하지 않는다(§6 규약).
+ * PII 마스킹 순수 함수(FR-11-23, NFR-S4, ADR-0013). **`packages/pii-mask`로 승격**됐다(DD-84,
+ * nlu-rag-answering-설계.md §7.3) — 소비자가 2곳(`ConversationLogService.record()` 저장 경로,
+ * `RagAnswerService` 외부 RAG 송신 경로)이 되어 명세서 §5의 승격 조건을 충족했다. 동작은 이동 전과
+ * 완전히 동일하다(AC-N4-7 — 함수 복제 금지, 정책 변경 0). `apps/api`는 이 함수를 재export하지 않고
+ * `@chat-bot/pii-mask`를 직접 import한다.
  *
+
  * **실제 구현은 정규식 휴리스틱 기반 1패스**다(종류별 정규식을 순서대로 적용해 치환). ADR-0013 §3이
  * 언급한 형제 프로젝트 `Auto QA`의 2단계 구조(① 구분자로 형태가 특정되는 패턴 ② 구분자 없는 연속
  * 숫자열을 길이/문맥/Luhn·주민번호 체크섬으로 분류)는 **이식하지 않았다** — 2단계(체크섬 기반 분류)는

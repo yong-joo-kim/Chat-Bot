@@ -1,0 +1,12 @@
+pyproject.toml
+src/ml_worker/__init__.py
+src/ml_worker/app.py
+src/ml_worker/config.py
+src/ml_worker/embedder.py
+src/ml_worker.egg-info/PKG-INFO
+src/ml_worker.egg-info/SOURCES.txt
+src/ml_worker.egg-info/dependency_links.txt
+src/ml_worker.egg-info/requires.txt
+src/ml_worker.egg-info/top_level.txt
+tests/test_app.py
+tests/test_embedder.py

@@ -92,6 +92,14 @@ export const ApiErrorCode = z.enum([
   'INVALID_GRANULARITY',
   'ALREADY_RESOLVED',
   'BULK_SIZE_EXCEEDED',
+  // FAQ/의도 매칭 고도화(NLU 1단계 + RAG 2단계) 그룹 추가(nlu-rag-answering-설계.md §10.3, FR-0-45)
+  'RAG_NOT_CONFIGURED',
+  'RAG_UPSTREAM_UNAVAILABLE',
+  'RAG_DISABLED',
+  'EMBEDDING_UNAVAILABLE',
+  'REINDEX_IN_PROGRESS',
+  'PENDING_ANSWER_NOT_FOUND',
+  'INVALID_THRESHOLD',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

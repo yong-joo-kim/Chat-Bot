@@ -327,6 +327,14 @@ export class ChatbotsService {
       throw new ApiException('CHATBOT_HAS_CHILDREN', 409, `연결된 데이터(${detail})가 있어 삭제할 수 없습니다.`);
     }
 
+    // FAQ/의도 매칭 고도화 그룹 추가(nlu-rag-answering-설계.md §6.6) — 이 3종은 사전검사(409) 대상이
+    // 아니라 파생 데이터라 **삭제 대상**이다(ADR-0002의 "하위 데이터 제거" 분류). `embeddingVector`·
+    // `chatbotAnswerSetting`은 FK가 `onDelete: Restrict`라 챗봇 삭제 전에 먼저 지워야 한다.
+    // `ragCallLog`는 FK가 없어 막지는 않지만 로그 규약상 함께 정리한다.
+    await this.prisma.embeddingVector.deleteMany({ where: { chatbotId: id } });
+    await this.prisma.chatbotAnswerSetting.deleteMany({ where: { chatbotId: id } });
+    await this.prisma.ragCallLog.deleteMany({ where: { chatbotId: id } });
+
     await this.prisma.chatbot.delete({ where: { id } });
     await this.auditLogService.record({
       action: 'PURGE',

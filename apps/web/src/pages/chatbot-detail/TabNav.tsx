@@ -45,6 +45,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
         <span className="tab-nav-group-caption" aria-hidden="true">
           {MESSAGES.detail.tabGroupVerify}
         </span>
+        <NavLink to={`/chatbots/${chatbotId}/answer-settings`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabAnswerSettings}
+        </NavLink>
         <NavLink to={`/chatbots/${chatbotId}/simulator`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabSimulator}
         </NavLink>

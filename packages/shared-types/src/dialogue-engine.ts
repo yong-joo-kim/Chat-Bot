@@ -93,7 +93,7 @@ export type DialogueBundle = z.infer<typeof DialogueBundleSchema>;
  * trace — FR-E-8
  * ---------------------------------------------------------------------------------------------- */
 
-export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT']);
+export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT', 'SEMANTIC']);
 export type TraceStage = z.infer<typeof TraceStageEnum>;
 
 export const TraceCodeEnum = z.enum([
@@ -130,6 +130,11 @@ export const TraceCodeEnum = z.enum([
   'CLARIFY_RESOLVED',
   'CLARIFY_DISCARDED',
   'STATE_DISCARDED',
+  // NLU/RAG 매칭 고도화(ADR-0020) 추가 코드 — 1단계 의미 유사도 판정 결과.
+  'SEMANTIC_MATCHED',
+  'SEMANTIC_AMBIGUOUS',
+  'SEMANTIC_BELOW_THRESHOLD',
+  'SEMANTIC_SKIPPED',
 ]);
 export type TraceCode = z.infer<typeof TraceCodeEnum>;
 
@@ -246,3 +251,31 @@ export const FlowTreeSchema = z.object({
   orphanNodes: z.array(ResourceRefSchema),
 });
 export type FlowTree = z.infer<typeof FlowTreeSchema>;
+
+/* ------------------------------------------------------------------------------------------------
+ * 1단계(NLU 의미 유사도 매칭) 엔진 입력 — J-2, ADR-0020.
+ * ⚠ zod 스키마가 아니라 순수 TS 타입이다 — 엔진에 zod를 반입하지 않는다는 기존 규약을 유지한다.
+ * `apps/api`(SemanticMatchService)가 턴마다 계산해 `ResolveOptions.semantic`으로 주입한다.
+ * 엔진은 이 값을 읽기만 한다(네트워크·시간·난수 없음 — 결정론 유지, FR-0-40).
+ * ---------------------------------------------------------------------------------------------- */
+
+export interface SemanticRankedCandidate {
+  kind: 'FAQ' | 'INTENT';
+  id: string;
+  /** 코사인 유사도(0..1). */
+  score: number;
+  /** 되묻기 버튼에 그대로 쓰이는 원문(질문·대체질문 또는 의도명·예문 중 최고 점수 텍스트). */
+  matchedText: string;
+}
+
+export interface SemanticMatchInput {
+  /** `<model-name>@<rev>|<prefix-rule>|<norm-rule>` 규약 문자열(DD-69). */
+  modelId: string;
+  /** FAQ id → 최고 유사도(질문·대체질문 중 최댓값). */
+  faqScores: ReadonlyMap<string, number>;
+  /** 의도 id → 최고 유사도(의도명·예문 중 최댓값). */
+  intentScores: ReadonlyMap<string, number>;
+  /** 되묻기 후보 구성을 위한 상위 N(점수 내림차순, 결정론적 타이브레이크 포함 — FAQ→INTENT, id asc). */
+  ranked: readonly SemanticRankedCandidate[];
+  thresholds: { accept: number; low: number; margin: number };
+}

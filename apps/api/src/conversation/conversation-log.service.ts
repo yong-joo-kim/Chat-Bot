@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
 import { UnansweredCollectorService } from '../learning/unanswered-collector.service';
 import type { InputKind } from '../learning/lib/collect-decision';
-import { maskPii } from './lib/pii-mask';
+import { maskPii } from '@chat-bot/pii-mask';
 
 export interface RecordConversationLogParams {
   /** 공개 대화 API의 `messageId`를 그대로 쓴다(§8.3) — 향후 피드백(No.44)이 이 값을 앵커로 쓸 수 있다. */
@@ -23,6 +23,8 @@ export interface RecordConversationLogParams {
   blockedByFilter?: boolean;
   /** [신규 DD-52] 버튼 턴 판별 — `ConversationLog` 컬럼을 늘리지 않고 파이프라인이 직접 전달한다(FR-15-2). */
   inputKind: InputKind;
+  /** [신규] 2단계(외부 RAG)가 답한 턴인가(J-10, DD-82). No.14 응답출처 `RAG` 조각의 유일한 근거. 기본 false. */
+  answeredByRag?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export class ConversationLogService {
           matchedFaqId: params.matchedFaqId,
           isAnswered: params.isAnswered,
           blockedByFilter: params.blockedByFilter ?? false,
+          answeredByRag: params.answeredByRag ?? false,
           dayBucket,
           hourBucket,
         },

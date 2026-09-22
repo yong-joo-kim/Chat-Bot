@@ -7,9 +7,18 @@ export interface FaqMatchResult {
   matchedText: string;
 }
 
+export interface MatchFaqEntryOptions {
+  /**
+   * true면 부분 문자열 포함 매칭을 평가하지 않는다(DD-73, ADR-0020) — 반환값이 있다면 항상 정확일치다.
+   * 미지정(기본 false)이면 기존 동작(정확일치+부분일치)과 바이트 단위로 동일하다(AC-N1-3).
+   */
+  exactOnly?: boolean;
+}
+
 /** FAQ `question` + `altQuestions`를 동등하게 취급해 매칭한다(FR-9-3). `enabled=false`는 제외(FR-9-7). */
-export function matchFaqEntry(normalizedInput: string, faqs: FaqEntry[]): FaqMatchResult | null {
+export function matchFaqEntry(normalizedInput: string, faqs: FaqEntry[], options?: MatchFaqEntryOptions): FaqMatchResult | null {
   if (!normalizedInput) return null;
+  const exactOnly = options?.exactOnly ?? false;
   let best: FaqMatchResult | null = null;
   let bestScore = 0;
 
@@ -22,7 +31,7 @@ export function matchFaqEntry(normalizedInput: string, faqs: FaqEntry[]): FaqMat
       let score = 0;
       if (normalizedInput === norm) {
         score = norm.length + 1000;
-      } else if (normalizedInput.includes(norm) || norm.includes(normalizedInput)) {
+      } else if (!exactOnly && (normalizedInput.includes(norm) || norm.includes(normalizedInput))) {
         score = Math.min(normalizedInput.length, norm.length);
       }
       if (score > bestScore) {

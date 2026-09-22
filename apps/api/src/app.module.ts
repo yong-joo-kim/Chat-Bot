@@ -25,6 +25,9 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { BannedWordsModule } from './banned-words/banned-words.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { EmbeddingModule } from './embedding/embedding.module';
+import { RagModule } from './rag/rag.module';
+import { AnswerSettingsModule } from './answer-settings/answer-settings.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -57,6 +60,9 @@ import { validate } from './config/env.validation';
     LearningModule,
     AuthModule,
     UsersModule,
+    EmbeddingModule,
+    RagModule,
+    AnswerSettingsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

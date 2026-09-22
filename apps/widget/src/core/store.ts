@@ -5,7 +5,12 @@ import type { PublicChatbotConfig } from '@chat-bot/shared-types';
  * DOM 무의존 상태/리듀서(FR-W-16). `ui/`가 `dispatch()` 결과로 화면을 그린다(단방향 `store + reducer`,
  * ADR-0012 — React 없이도 동일한 멘탈모델을 유지한다). §5.2 상태 전이 다이어그램을 그대로 구현한다.
  */
-export type WidgetStatus = 'CLOSED' | 'OPENING' | 'OPEN' | 'SENDING' | 'ERROR' | 'DISABLED';
+/**
+ * `AWAITING_ANSWER`(신규, ADR-0023)는 `SENDING`과 별개 상태다 — `SENDING`은 "요청을 보내고 짧게
+ * 기다리는 중"이고, `AWAITING_ANSWER`는 "이미 PENDING 응답은 받았고 백그라운드 완료(최대 90초)를
+ * 기다리는 중"이라 입력을 잠그지 않는다(FR-N2-38, `nlu-rag-answering-ui-spec.md` §4.4.1).
+ */
+export type WidgetStatus = 'CLOSED' | 'OPENING' | 'OPEN' | 'SENDING' | 'AWAITING_ANSWER' | 'ERROR' | 'DISABLED';
 export type WidgetErrorKind = 'NETWORK' | 'RATE_LIMITED' | 'UNKNOWN';
 
 export interface WidgetMessage {
@@ -32,7 +37,11 @@ export type WidgetAction =
   | { type: 'SEND_STARTED'; userMessage?: WidgetMessage }
   | { type: 'SEND_SUCCEEDED'; botMessages: WidgetMessage[] }
   | { type: 'SEND_FAILED'; kind: WidgetErrorKind; message: string }
-  | { type: 'RETRY_DISMISSED' };
+  | { type: 'RETRY_DISMISSED' }
+  /** PENDING 응답 수신 — 입력을 잠그지 않는 대기 상태로 전환한다(§4.4.1). */
+  | { type: 'PENDING_STARTED' }
+  /** 폴링 종료(READY/FAILED/EXPIRED/TIMEOUT 전부 포함) — 최종 말풍선은 호출부가 별도로 추가한다. */
+  | { type: 'PENDING_RESOLVED' };
 
 export function createInitialState(): WidgetState {
   return { status: 'CLOSED', config: null, messages: [], greetingShown: false };
@@ -92,6 +101,10 @@ export function reducer(state: WidgetState, action: WidgetAction): WidgetState {
       return { ...state, status: 'ERROR', error: { kind: action.kind, message: action.message } };
     case 'RETRY_DISMISSED':
       return { ...state, status: state.config ? 'OPEN' : 'CLOSED', error: undefined };
+    case 'PENDING_STARTED':
+      return { ...state, status: 'AWAITING_ANSWER', error: undefined };
+    case 'PENDING_RESOLVED':
+      return { ...state, status: state.status === 'DISABLED' ? 'DISABLED' : 'OPEN' };
     default:
       return state;
   }

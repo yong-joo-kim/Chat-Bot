@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@chat-bot/dialogue-engine": "workspace:*",
+    "@chat-bot/pii-mask": "workspace:*",
     "@chat-bot/shared-types": "workspace:*",
     "@nestjs/common": "^10.4.15",
     "@nestjs/config": "^3.3.0",

@@ -1,4 +1,4 @@
-import type { ButtonAction, ConversationState, PublicChatbotConfig, PublicMessageResponse } from '@chat-bot/shared-types';
+import type { ButtonAction, ConversationState, PendingAnswerPollResponse, PublicChatbotConfig, PublicMessageResponse } from '@chat-bot/shared-types';
 
 /**
  * 공개 API 2개만 호출하는 fetch 래퍼(FR-W-13). `credentials:'omit'`(NFR-S3) — 자격증명 기반
@@ -55,6 +55,9 @@ export function createPublicClient(apiBase: string, slug: string) {
     getConfig: (): Promise<PublicChatbotConfig> => request<PublicChatbotConfig>('/config'),
     sendMessage: (payload: PublicMessagePayload): Promise<PublicMessageResponse> =>
       request<PublicMessageResponse>('/messages', { method: 'POST', body: JSON.stringify(payload) }),
+    /** 보류 답변 폴링(ADR-0023) — `messageId` 불일치/TTL 만료는 404(`NOT_FOUND`)로 온다. */
+    pollMessage: (messageId: string): Promise<PendingAnswerPollResponse> =>
+      request<PendingAnswerPollResponse>(`/messages/${encodeURIComponent(messageId)}`),
   };
 }
 

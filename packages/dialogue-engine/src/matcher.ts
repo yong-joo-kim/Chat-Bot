@@ -20,6 +20,14 @@ export interface MatchIntentOptions {
   boostIntentIds?: string[];
   /** 사전 구축한 인덱스 재사용(FR-E-10). 대량 예문에서 반복 정규화를 피한다. */
   index?: DialogueIndex;
+  /**
+   * true면 부분 문자열 포함 매칭을 평가하지 않는다(DD-73, ADR-0020) — `ResolveOptions.semantic`이
+   * 주입된 턴(1단계 활성)에서 쓴다. 그 턴의 "의미 유사도 점수"는 `apps/api`가 조립한
+   * `SemanticMatchInput.ranked`를 통해 `resolver.ts`가 별도로 판정하므로(`judgeBand`), 이 옵션이
+   * true일 때 이 함수는 **정확일치 전용 검사기**가 된다 — 반환값이 있다면 항상 정확일치다.
+   * 미지정(기본 false)이면 기존 동작(정확일치+부분일치)과 바이트 단위로 동일하다(AC-N1-3).
+   */
+  exactOnly?: boolean;
 }
 
 const BOOST_SCORE = 100_000;
@@ -29,6 +37,7 @@ export function matchIntent(input: string, intents: Intent[], options?: MatchInt
   if (!normalizedInput) return null;
 
   const boostSet = new Set(options?.boostIntentIds ?? []);
+  const exactOnly = options?.exactOnly ?? false;
   let best: IntentMatch | null = null;
   let bestScore = 0;
 
@@ -37,7 +46,7 @@ export function matchIntent(input: string, intents: Intent[], options?: MatchInt
     let score = 0;
     if (normalizedInput === norm) {
       score = norm.length + 1000;
-    } else if (normalizedInput.includes(norm) || norm.includes(normalizedInput)) {
+    } else if (!exactOnly && (normalizedInput.includes(norm) || norm.includes(normalizedInput))) {
       score = Math.min(normalizedInput.length, norm.length);
     } else {
       return;

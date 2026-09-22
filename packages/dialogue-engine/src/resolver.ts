@@ -5,6 +5,8 @@ import type {
   DialogueResolution,
   HomonymResolution,
   PendingClarify,
+  SemanticMatchInput,
+  SemanticRankedCandidate,
   TraceStep,
 } from '@chat-bot/shared-types';
 import { normalizeText, tokenize, containsWord } from './normalize';
@@ -17,6 +19,7 @@ import { matchFaqEntry } from './faq';
 import { advanceContextSession } from './context-session';
 import { executeOutputs } from './outputs';
 import type { DialogueIndex } from './dialogue-index';
+import { judgeBand } from './semantic';
 import { CLARIFY_TTL_MS, DEFAULT_FALLBACK_RESPONSE, EMPTY_INPUT_RESPONSE, MAX_INPUT_LENGTH, intentOnlyResponse } from './constants';
 
 export interface ResolveOptions {
@@ -31,6 +34,11 @@ export interface ResolveOptions {
   clarifyTtlMs?: number;
   /** `resolveTurn`이 상태 봉투를 재검증할 때 쓰는 최대 수명(기본 24시간). `resolveResponse` 자체는 사용하지 않는다. */
   stateMaxAgeMs?: number;
+  /**
+   * [신규] `apps/api`가 턴마다 사전 계산한 1단계(NLU 의미 유사도) 점수 맵(J-2, ADR-0020).
+   * 미지정 시 현행 동작(정확일치+부분일치)과 완전히 동일하다 — 저하 모드가 곧 현행 동작이다(AC-N1-3).
+   */
+  semantic?: SemanticMatchInput;
 }
 
 function textOutput(text: string): DialogOutput {
@@ -269,14 +277,30 @@ export function resolveResponse(
     }
   }
 
+  // 1단계(NLU 의미 유사도) 3구간 판정 — `semantic` 미주입 시 undefined이며 아래 모든 분기가
+  // 현행 동작(정확일치+부분일치)과 바이트 단위로 동일해진다(DD-73, AC-N1-3).
+  const semantic = options.semantic;
+  const semanticBand = semantic ? judgeBand(semantic.ranked, semantic.thresholds) : undefined;
+  const semanticConfirmedCandidate = semanticBand?.kind === 'CONFIRMED' ? semanticBand.candidate : undefined;
+
   const boostIntentIds =
     homonymEval.resolution?.status === 'RESOLVED' && homonymEval.resolution.intentId
       ? [homonymEval.resolution.intentId]
       : undefined;
-  const intentMatch = matchIntent(raw, bundle.intents, { boostIntentIds, index: options.index });
+  // `semantic`이 주입된 턴에서는 부분 문자열 포함 매칭을 평가하지 않는다(DD-73) — 반환값이 있다면 항상 정확일치다.
+  const intentMatch = matchIntent(raw, bundle.intents, { boostIntentIds, index: options.index, exactOnly: !!semantic });
   // ⚠ 부스트만으로는 부족하다 — matchIntent가 예문 매칭에 실패하면 null을 반환하므로,
   // S1.5에서 확정된 의도를 "확정 값"으로 강제한다(단순 부스트가 아니다, DD-27).
-  ctx.matchedIntentId = intentMatch?.intentId ?? clarified?.intentId;
+  // `semantic` 3구간 판정이 확정(CONFIRMED)한 의도도 같은 자격으로 강제한다 — 의미 매칭이
+  // 노드 트리거(S3)에도 전파되는 것은 의도된 동작 변경이다(FR-N1-11, AC-N1-6 명시 고정).
+  const semanticConfirmedIntentId =
+    semanticConfirmedCandidate?.kind === 'INTENT' && bundle.intents.some((i) => i.id === semanticConfirmedCandidate.id)
+      ? semanticConfirmedCandidate.id
+      : undefined;
+  ctx.matchedIntentId = intentMatch?.intentId ?? clarified?.intentId ?? semanticConfirmedIntentId;
+  if (!intentMatch && !clarified && semanticConfirmedIntentId) {
+    trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_MATCHED', targetId: semanticConfirmedIntentId, score: semanticConfirmedCandidate?.score });
+  }
 
   // S3 — DialogNode 매칭
   const rankedNodes = options.index?.nodesRanked ?? rankNodes(bundle.dialogNodes);
@@ -313,20 +337,76 @@ export function resolveResponse(
   }
 
   // S4 — FAQ
-  const faqMatch = matchFaqEntry(norm, bundle.faqs);
-  if (faqMatch) {
-    trace.push({ stage: 'FAQ', code: 'FAQ_MATCHED', targetId: faqMatch.faqId });
-    return {
-      input,
-      normalizedInput: norm,
-      matchedFaqId: faqMatch.faqId,
-      matchedIntentId: ctx.matchedIntentId,
-      homonymResolution: homonymEval.resolution ?? undefined,
-      outputs: [...carry, textOutput(faqMatch.answer)],
-      nextSession: nextSessionOverride ?? null,
-      unsupportedOutputs: [],
-      trace,
-    };
+  if (semantic) {
+    // ① 정규화 정확일치는 항상 최우선이다(FR-N1-9). 정확일치 시 3구간 판정을 거치지 않는다.
+    const faqExact = matchFaqEntry(norm, bundle.faqs, { exactOnly: true });
+    if (faqExact) {
+      trace.push({ stage: 'FAQ', code: 'FAQ_MATCHED', targetId: faqExact.faqId });
+      return {
+        input,
+        normalizedInput: norm,
+        matchedFaqId: faqExact.faqId,
+        matchedIntentId: ctx.matchedIntentId,
+        homonymResolution: homonymEval.resolution ?? undefined,
+        outputs: [...carry, textOutput(faqExact.answer)],
+        nextSession: nextSessionOverride ?? null,
+        unsupportedOutputs: [],
+        trace,
+      };
+    }
+
+    if (semanticConfirmedCandidate?.kind === 'FAQ') {
+      const faq = bundle.faqs.find((f) => f.id === semanticConfirmedCandidate.id && f.enabled !== false);
+      if (faq) {
+        trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_MATCHED', targetId: faq.id, score: semanticConfirmedCandidate.score });
+        return {
+          input,
+          normalizedInput: norm,
+          matchedFaqId: faq.id,
+          matchedIntentId: ctx.matchedIntentId,
+          homonymResolution: homonymEval.resolution ?? undefined,
+          outputs: [...carry, textOutput(faq.answer)],
+          nextSession: nextSessionOverride ?? null,
+          unsupportedOutputs: [],
+          trace,
+        };
+      }
+      // 색인이 가리키는 FAQ가 이미 삭제/비활성화됐다 — 신뢰하지 않고 실패로 흘려보낸다(EX-N1-3과 대칭).
+      trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_BELOW_THRESHOLD' });
+    } else if (semanticBand?.kind === 'AMBIGUOUS') {
+      // 모호 구간 — 후보 질문 원문을 MESSAGE 버튼으로 제시한다(FR-N1-12). 클릭 시 그 텍스트가
+      // 재입력되어 정확일치로 확정된다. `ConversationState` 스키마는 바꾸지 않는다(DD-75).
+      trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_AMBIGUOUS' });
+      return {
+        input,
+        normalizedInput: norm,
+        homonymResolution: homonymEval.resolution ?? undefined,
+        outputs: [...carry, buildSemanticClarifyOutput(semanticBand.candidates)],
+        nextSession: nextSessionOverride ?? null,
+        unsupportedOutputs: [],
+        trace,
+      };
+    } else if (semanticBand?.kind === 'FAILED') {
+      trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_BELOW_THRESHOLD' });
+    }
+    // semanticBand이 CONFIRMED(kind==='INTENT')이면 여기서 할 일이 없다 — ctx.matchedIntentId가
+    // 이미 세워져 있으므로 아래 S5가 그대로 처리한다.
+  } else {
+    const faqMatch = matchFaqEntry(norm, bundle.faqs);
+    if (faqMatch) {
+      trace.push({ stage: 'FAQ', code: 'FAQ_MATCHED', targetId: faqMatch.faqId });
+      return {
+        input,
+        normalizedInput: norm,
+        matchedFaqId: faqMatch.faqId,
+        matchedIntentId: ctx.matchedIntentId,
+        homonymResolution: homonymEval.resolution ?? undefined,
+        outputs: [...carry, textOutput(faqMatch.answer)],
+        nextSession: nextSessionOverride ?? null,
+        unsupportedOutputs: [],
+        trace,
+      };
+    }
   }
 
   // S5 — 의도 단독(FR-E2-2로 조건 완화: `ctx.matchedIntentId`가 세워지는 경로는 여전히
@@ -348,6 +428,32 @@ export function resolveResponse(
 
   // S6 — 폴백
   return resolveFallback({ input, normalizedInput: norm, carry, nextSessionOverride, session, trace }, bundle, now, options);
+}
+
+const CLARIFY_BUTTON_LABEL_MAX = 40;
+const CLARIFY_BUTTON_VALUE_MAX = 200;
+
+/** 후보 텍스트를 버튼 라벨 상한(40자)에 맞춰 자른다. `value`(재입력 시 정확일치 대상)는 자르지 않는다. */
+function truncateClarifyLabel(text: string): string {
+  return text.length <= CLARIFY_BUTTON_LABEL_MAX ? text : `${text.slice(0, CLARIFY_BUTTON_LABEL_MAX - 1)}…`;
+}
+
+/**
+ * 1단계 모호 구간(FR-N1-12) 되묻기 출력 — 후보 질문 원문을 `MESSAGE` 버튼으로 제시한다.
+ * 클릭 시 그 텍스트가 재입력되어 정확일치로 확정된다(AC-N1-5). 최대 3건(FR-N1-13, `judgeBand`가 보장).
+ */
+function buildSemanticClarifyOutput(candidates: readonly SemanticRankedCandidate[]): DialogOutput {
+  return {
+    type: 'BUTTON',
+    payload: {
+      text: '이 중에 해당하는 게 있을까요?',
+      buttons: candidates.map((c) => ({
+        label: truncateClarifyLabel(c.matchedText),
+        action: 'MESSAGE' as const,
+        value: c.matchedText.length > CLARIFY_BUTTON_VALUE_MAX ? c.matchedText.slice(0, CLARIFY_BUTTON_VALUE_MAX) : c.matchedText,
+      })),
+    },
+  };
 }
 
 function dictWordOrFallback(bundle: DialogueBundle, homonymId: string): string {

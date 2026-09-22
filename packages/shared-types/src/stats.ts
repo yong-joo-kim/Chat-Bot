@@ -65,13 +65,17 @@ export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
 export const StatsGranularity = z.enum(['DAY', 'WEEK', 'MONTH']);
 export type StatsGranularity = z.infer<typeof StatsGranularity>;
 
-/** 응답 출처 판정 결과(FR-14-20). 판정 순서는 `stats/lib/response-source.ts` 순수 함수 1곳(§7.3). */
-export const ResponseSource = z.enum(['NODE', 'FAQ', 'OTHER', 'FALLBACK']);
+/**
+ * 응답 출처 판정 결과(FR-14-20). 판정 순서는 `stats/lib/response-source.ts` 순수 함수 1곳(§7.3).
+ * `RAG`는 2단계(외부 RAG) 응답 조각이다(J-10, DD-82) — `ConversationLog.answeredByRag`가 유일한 근거.
+ */
+export const ResponseSource = z.enum(['NODE', 'FAQ', 'RAG', 'OTHER', 'FALLBACK']);
 export type ResponseSource = z.infer<typeof ResponseSource>;
 
 export const RESPONSE_SOURCE_LABELS: Record<ResponseSource, string> = {
   NODE: '노드',
   FAQ: 'FAQ',
+  RAG: '문서 기반(RAG)',
   OTHER: '기타',
   FALLBACK: '폴백(미응답)',
 };

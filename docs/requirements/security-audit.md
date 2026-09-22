@@ -608,6 +608,8 @@ PM이 판단을 요청한 항목을 포함해, 기준 목록·선행 명세의 �
   | **5** | **`POST /api/v1/auth/logout`** | `AuthController#logout` (DD-45로 추가) |
 
   `@Public()`은 클래스가 아니라 **핸들러**에 부착한다(부착 단위가 섞이면 개수 고정 테스트가 의미를 잃는다).
+
+  > **갱신(2026-09-22 · FAQ/의도 매칭 고도화)**: `@Public()` 핸들러는 **정확히 6개**가 된다. 6번은 `GET /api/v1/public/chatbots/:slug/messages/:messageId`(`PublicConversationController#pollMessage`, 보류 답변 폴링)이며, 근거는 `decisions/ADR-0023-async-pending-answer-delivery.md` §2와 `nlu-rag-answering-설계.md` §11.1이다. 개수 고정 테스트는 무력화하지 않고 **6으로 갱신**한다(위 5개 표는 이력으로 보존).
 - **AC-C-5** 신규 환경변수를 하나도 설정하지 않아도 API가 기동한다(FR-0-30).
 - **AC-C-6** 공개 대화 API의 기존 AC(AC-P-1~15)가 전부 그대로 통과한다.
 

@@ -41,7 +41,9 @@ export function renderCard(payload: CardPayload, onButtonAction: (action: Button
   card.appendChild(body);
 
   if (payload.buttons && payload.buttons.length > 0) {
-    card.appendChild(renderButtonGroup(payload.buttons, onButtonAction));
+    // 카드 버튼은 되묻기(FR-N1-12)가 절대 쓰지 않는 경로다(엔진은 되묻기를 항상 최상위 BUTTON
+    // 아웃풋으로만 반환한다, resolver.ts). 세로 스택 판정에서 구조적으로 제외한다.
+    card.appendChild(renderButtonGroup(payload.buttons, onButtonAction, { allowStackedLayout: false }));
   }
   return card;
 }

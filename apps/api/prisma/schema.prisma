@@ -53,6 +53,8 @@ model Chatbot {
   channels              Channel[]
   conversationLogs      ConversationLog[]
   unansweredQuestions   UnansweredQuestion[]
+  embeddingVectors      EmbeddingVector[]
+  answerSetting         ChatbotAnswerSetting?
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -381,11 +383,101 @@ model ConversationLog {
   dayBucket       String   @default("")
   /// [신규 DD-59] KST 기준 시각(0~23). 시간대 분포(FR-14-28) 전용이며 `-1`은 백필 미완 센티넬이다.
   hourBucket      Int      @default(-1)
+  /// [신규] 2단계(외부 RAG)가 답한 턴인가(J-10, DD-82). No.14 응답출처 `RAG` 조각의 유일한 근거 —
+  /// `matchedNodeId`/`matchedFaqId`가 둘 다 null인 채 `isAnswered=true`인 턴을 기존 "기타"와 구분한다.
+  /// 쓰기 주체는 `ConversationLogService.record()` 1곳(파라미터 전달)이다. 백필 불필요 — 기존 행은
+  /// 전부 false가 사실과 일치한다(과거에는 2단계가 존재하지 않았다).
+  answeredByRag   Boolean  @default(false)
   createdAt       DateTime @default(now())
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
   @@map("conversation_logs")
+}
+
+/// [신규] 1단계(NLU 의미 유사도) 색인 벡터(nlu-rag-answering-설계.md §6.1, ADR-0024).
+/// 색인 대상 4종만 담는다 — 답변 본문·노드 아웃풋은 색인하지 않는다(FR-N1-16).
+/// 원문 텍스트는 저장하지 않는다 — `ownerId`/`slotIndex`로 역참조한다.
+model EmbeddingVector {
+  id            String   @id @default(uuid())
+  chatbotId     String
+  chatbot       Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// FAQ_QUESTION | FAQ_ALT | INTENT_NAME | INTENT_EXAMPLE(zod EmbeddingOwnerType이 값 제약 단일 소스)
+  ownerType     String
+  /// FaqEntry.id 또는 Intent.id. FK를 걸지 않는다(파생·로그 규약 — 걸면 벡터가 있는 FAQ/의도를
+  /// 영원히 삭제할 수 없다). 고아 행 정리는 색인 서비스가 재색인 시 담당한다.
+  ownerId       String
+  /// altQuestions/examples 배열 내 위치. 단일 필드(question/name)는 0.
+  slotIndex     Int      @default(0)
+  /// normalizeText(원문)의 sha256 — 재임베딩 회피 키(FR-N1-19). 값이 같으면 재임베딩하지 않는다.
+  textHash      String
+  modelId       String
+  dimension     Int
+  /// L2 정규화된 Float32Array(little-endian)의 base64 직렬화(DD-70). JSON 배열이 아니다.
+  vector        String
+  /// READY | PENDING | FAILED (zod EmbeddingVectorStatus)
+  status        String   @default("PENDING")
+  failureReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([chatbotId, ownerType, ownerId, slotIndex, modelId])
+  @@index([chatbotId, modelId, status])
+  @@index([chatbotId, ownerType, ownerId])
+  @@map("embedding_vectors")
+}
+
+/// [신규] 챗봇별 1단계·2단계 답변 선택 설정(1:1, ADR-0021 §4). 행이 없으면 전부 기본값이며
+/// **두 단계 모두 비활성**이다 — 최초 저장 때 upsert로 생성한다. `provider` 필드는 존재하지 않는다(FR-N2-6).
+model ChatbotAnswerSetting {
+  chatbotId              String   @id
+  chatbot                Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  semanticEnabled        Boolean  @default(false)
+  acceptThreshold        Float    @default(0.80)
+  lowThreshold           Float    @default(0.60)
+  marginThreshold        Float    @default(0.05)
+  ragEnabled             Boolean  @default(false)
+  ragCompany             String?
+  ragCategory            String?
+  ragSubcategory         String?
+  /// null이면 요청에 similarity_threshold 필드를 아예 넣지 않는다(FR-N2-8)
+  ragSimilarityThreshold Float?
+  /// RAG_FIRST | NODE_FIRST (zod FallbackPolicy)
+  fallbackPolicy         String   @default("RAG_FIRST")
+  showSources            Boolean  @default(true)
+  /// 하한 120000을 서버가 강제한다(FR-N2-26)
+  ragTimeoutMs           Int      @default(120000)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("chatbot_answer_settings")
+}
+
+/// [신규] 외부 RAG 호출 관측 로그(감사용, §6.4). 질문·답변 원문은 **어디에도 저장하지 않는다**
+/// (AC-N2-29) — 원문은 `ConversationLog`에 마스킹된 채로 이미 1벌 있다.
+model RagCallLog {
+  id                String   @id @default(uuid())
+  /// FK 없음(로그 규약) — 챗봇 영구삭제 시 서비스가 동반 삭제한다.
+  chatbotId         String
+  /// 대화 턴의 messageId(= ConversationLog.id). FK 없음.
+  conversationLogId String?
+  /// SUCCESS | NO_EVIDENCE | UPSTREAM_ERROR | TIMEOUT | CIRCUIT_OPEN | RATE_LIMITED | SCHEMA_INVALID
+  outcome           String
+  httpStatus        Int?
+  latencyMs         Int
+  retryCount        Int      @default(0)
+  /// 0 | 1 | null(응답 자체를 못 받음)
+  retrievalSuccess  Int?
+  sourceCount       Int?
+  /// 스코프 오설정 추적용. 질문·답변 원문은 저장하지 않는다.
+  scopeCompany      String?
+  /// ADR-0017 KST 버킷 규약 재사용
+  dayBucket         String   @default("")
+  createdAt         DateTime @default(now())
+
+  @@index([chatbotId, dayBucket])
+  @@index([chatbotId, createdAt])
+  @@map("rag_call_logs")
 }
 
 /// [전면 보강 DD-49] 미응답 질문 검토 큐. Phase 0부터 테이블만 있었고 **쓰기 주체는 이번 Phase에 생긴다**

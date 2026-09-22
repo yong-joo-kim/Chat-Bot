@@ -4,6 +4,8 @@ import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import type { ContextSlot, DialogOutput, DialogueBundle, HomonymMeaning } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import type { DialogueBundleCache } from './dialogue-bundle.cache';
+import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
+import { VectorCacheService } from '../embedding/vector-cache.service';
 
 export interface CachedDialogueBundle {
   bundle: DialogueBundle;
@@ -24,6 +26,8 @@ export class DialogueBundleService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject('DialogueBundleCache') private readonly cache?: DialogueBundleCache,
+    private readonly reindexQueue?: ReindexQueueService,
+    private readonly vectorCache?: VectorCacheService,
   ) {}
 
   /** 캐시 우선 조회 — 적중 시 DB 접근 없이 번들+인덱스를 반환한다(NFR-P1/P2). */
@@ -37,9 +41,15 @@ export class DialogueBundleService {
     return { bundle, index };
   }
 
-  /** 대화 자산 쓰기 성공 직후 호출한다(EX-10-6). 누락 시 최대 피해는 TTL(60초) 지연이다. */
+  /**
+   * 대화 자산 쓰기 성공 직후 호출한다(EX-10-6). 누락 시 최대 피해는 TTL(60초) 지연이다.
+   * 같은 지점에서 1단계 색인 재계산을 예약하고(DD-76, FR-N1-18) 벡터 캐시를 무효화한다
+   * (DD-71 — 무효화 지점 공유. "FAQ는 최신인데 벡터는 옛것"인 상태가 구조적으로 생기지 않는다).
+   */
   invalidate(chatbotId: string): void {
     this.cache?.invalidate(chatbotId);
+    this.vectorCache?.invalidate(chatbotId);
+    this.reindexQueue?.schedule(chatbotId);
   }
 
   private safeParseArray<T>(json: string, context: string): T[] {

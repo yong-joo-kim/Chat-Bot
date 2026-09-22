@@ -10,6 +10,7 @@ import {
 } from './dialogue';
 import { ButtonActionSchema, ConversationStateSchema, DialogueResolutionSchema, StateDiscardReason } from './dialogue-engine';
 import { ChatbotSkinSchema } from './chatbot';
+import { ThresholdPreviewCandidateSchema } from './answering';
 
 /**
  * 대화 1턴 처리(시뮬레이션/비교/공개 대화) 계약 — `quality-channel-설계.md` §4.2.
@@ -77,6 +78,8 @@ export const SimulateRequestSchema = z
     // `sanitizeConversationState`(`resolveTurn` 내부)가 전담한다.
     state: z.unknown().optional(),
     overlay: DialogueOverlaySchema.optional(),
+    /** [신규] 명시적으로 켤 때만 2단계(RAG)를 실행한다(FR-N2-3). 기본 false — 외부 호출·비용을 무심코 소모하지 않는다. */
+    useRag: z.boolean().default(false),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -101,6 +104,16 @@ export const AssetCountsSchema = z.object({
 });
 export type AssetCounts = z.infer<typeof AssetCountsSchema>;
 
+/** [신규] 시뮬레이터 결과 패널의 매칭 근거(FR-N3-10). 관리자 API에만 노출한다(공개 API 금지 — NFR-S1). */
+export const MatchTraceSchema = z.object({
+  band: z.enum(['CONFIRMED', 'AMBIGUOUS', 'FAILED', 'SKIPPED']),
+  top3: z.array(ThresholdPreviewCandidateSchema).max(3),
+  ragUsed: z.boolean(),
+  ragLatencyMs: z.number().nonnegative().optional(),
+  ragSourceCount: z.number().int().nonnegative().optional(),
+});
+export type MatchTrace = z.infer<typeof MatchTraceSchema>;
+
 export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   state: ConversationStateSchema,
   stateDiscarded: z.array(StateDiscardReason),
@@ -111,6 +124,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   resolvedAt: z.coerce.date(),
   assetCounts: AssetCountsSchema,
   overlayApplied: z.boolean(),
+  /** [신규] 1단계 top3 점수·구간 판정 + 2단계 사용 여부(FR-N3-10). `semanticEnabled`가 꺼져 있으면 undefined. */
+  matchTrace: MatchTraceSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 
@@ -207,5 +222,37 @@ export const PublicMessageResponseSchema = z.object({
   outputs: z.array(DialogOutputSchema),
   state: ConversationStateSchema,
   stateReset: z.boolean(),
+  /**
+   * [신규] 2단계(외부 RAG)로 넘어간 턴에만 존재한다(ADR-0023, FR-N2-33). `id`는 `messageId`와 동일한
+   * 값이다(로그 1건 규약과 자연히 맞물린다, DD-81). 이 필드가 없는 턴의 응답은 **바이트 단위로 현행과
+   * 동일**하다(AC-N2-16) — 하위호환을 지키는 유일한 신규 필드다.
+   */
+  pendingAnswer: z
+    .object({
+      id: z.string().uuid(),
+      /** 위젯이 최초 폴링 전 대기할 시간(ms, 기본 1200). */
+      pollAfterMs: z.number().int().positive(),
+      expiresAt: z.coerce.date(),
+    })
+    .optional(),
 });
 export type PublicMessageResponse = z.infer<typeof PublicMessageResponseSchema>;
+
+/* ------------------------------------------------------------------------------------------------
+ * 보류 답변 폴링 — `GET /public/chatbots/:slug/messages/:messageId`(`@Public()` 6번째, ADR-0023).
+ * ---------------------------------------------------------------------------------------------- */
+
+export const PendingAnswerSourceSchema = z.object({
+  fileName: z.string(),
+  sectionTitle: z.string().optional(),
+  page: z.number().int().positive().optional(),
+});
+export type PendingAnswerSource = z.infer<typeof PendingAnswerSourceSchema>;
+
+/** 내부 식별자·`trace`·점수를 노출하지 않는다(ADR-0011 상속). */
+export const PendingAnswerPollResponseSchema = z.object({
+  status: z.enum(['PENDING', 'READY', 'FAILED', 'EXPIRED']),
+  outputs: z.array(DialogOutputSchema).optional(),
+  sources: z.array(PendingAnswerSourceSchema).optional(),
+});
+export type PendingAnswerPollResponse = z.infer<typeof PendingAnswerPollResponseSchema>;

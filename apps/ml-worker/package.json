@@ -1,0 +1,14 @@
+{
+  "name": "@chat-bot/ml-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "추론 전용 문장 임베딩 서비스 (Python FastAPI). apps/api의 EmbeddingProvider가 HTTP로 호출한다. ADR-0024 참고.",
+  "scripts": {
+    "setup": "node ./scripts/setup.mjs",
+    "dev": "node ./scripts/run.mjs -m ml_worker.app",
+    "start": "node ./scripts/run.mjs -m ml_worker.app",
+    "test": "node ./scripts/run.mjs -m pytest -q",
+    "health": "node ./scripts/run.mjs ./scripts/health_check.py",
+    "eval:sweep": "node ./scripts/run.mjs ./eval/sweep_thresholds.py"
+  }
+}

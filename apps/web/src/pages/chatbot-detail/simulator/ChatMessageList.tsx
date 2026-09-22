@@ -8,12 +8,15 @@ export function ChatMessageList({
   messages,
   chatbotId,
   sending,
+  sendingLabel,
   onButtonClick,
   onRetry,
 }: {
   messages: SimMessage[];
   chatbotId: string;
   sending: boolean;
+  /** `useRag` 턴은 "문서에서 찾아보고 있어요"로 문구를 전환한다(ui-spec §4.2.2). 기본은 §{sending}. */
+  sendingLabel?: string;
   onButtonClick: (action: ButtonActionView) => void;
   onRetry: (message: SimMessage) => void;
 }): JSX.Element {
@@ -24,7 +27,7 @@ export function ChatMessageList({
       ))}
       {sending && (
         <div className="chat-bubble chat-bubble--bot chat-bubble--typing" role="status">
-          <span aria-hidden="true">●●●</span> {MESSAGES.simulator.sending}
+          <span aria-hidden="true">●●●</span> {sendingLabel ?? MESSAGES.simulator.sending}
         </div>
       )}
     </div>

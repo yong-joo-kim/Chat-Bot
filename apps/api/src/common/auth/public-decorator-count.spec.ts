@@ -19,6 +19,8 @@ import { IntentsController } from '../../intents/intents.controller';
 import { KeywordsController } from '../../keywords/keywords.controller';
 import { SimulationController } from '../../simulation/simulation.controller';
 import { StatsController } from '../../stats/stats.controller';
+import { AnswerSettingsController } from '../../answer-settings/answer-settings.controller';
+import { EmbeddingController } from '../../embedding/embedding.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -36,14 +38,18 @@ function routeHandlerNames(prototype: object): string[] {
 }
 
 /**
- * `@Public()`은 정확히 5곳에만 부착된다(FR-12-20, DD-45, AC-C-4). 인가 우회는 "추가된 코드"가
- * 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가 놓쳐도 CI가 잡게 한다.
+ * `@Public()`은 정확히 6곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 5→6, 근거는
+ * `docs/02-spec/decisions/ADR-0023-async-pending-answer-delivery.md` §2 및 `nlu-rag-answering-설계.md`
+ * §11.1). 6번째는 보류 답변 폴링(`PublicConversationController#pollMessage`)이다. 인가 우회는
+ * "추가된 코드"가 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가 놓쳐도
+ * CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
  */
 describe('@Public() 부착 개수 — AC-C-4', () => {
-  it('정확히 5곳(health, 공개 대화 2곳, 로그인, 로그아웃)에만 부착되어 있다', () => {
+  it('정확히 6곳(health, 공개 대화 2곳, 보류 답변 폴링, 로그인, 로그아웃)에만 부착되어 있다', () => {
     expect(isPublic(HealthController.prototype, 'check')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'getConfig')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'sendMessage')).toBe(true);
+    expect(isPublic(PublicConversationController.prototype, 'pollMessage')).toBe(true);
     expect(isPublic(AuthController.prototype, 'login')).toBe(true);
     expect(isPublic(AuthController.prototype, 'logout')).toBe(true);
   });
@@ -64,7 +70,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 17개 컨트롤러 전체에서 @Public() 총개수가 정확히 5건이다', () => {
+  it('전수 스캔: 등록된 19개 컨트롤러 전체에서 @Public() 총개수가 정확히 6건이다', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -84,6 +90,8 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       KeywordsController,
       SimulationController,
       StatsController,
+      AnswerSettingsController,
+      EmbeddingController,
     ];
 
     const publicHandlers: string[] = [];
@@ -103,6 +111,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
         'HealthController#check',
         'PublicConversationController#getConfig',
         'PublicConversationController#sendMessage',
+        'PublicConversationController#pollMessage',
       ].sort(),
     );
   });

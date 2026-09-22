@@ -204,6 +204,50 @@ export const WIDGET_STYLES = `
   cursor: pointer;
 }
 
+/* 되묻기 후보 문장이 길 때의 세로 스택(nlu-rag-answering-ui-spec.md §4.5.2) */
+.cb-buttons--stacked { flex-direction: column; align-items: stretch; }
+.cb-buttons--stacked .cb-btn {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  border-radius: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 답변 대기(PENDING) 진행 인디케이터 — 애니메이션만으로 상태를 전달하지 않는다(#cb-status가 텍스트 담당) */
+.cb-pending-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  align-self: flex-start;
+}
+.cb-pending-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: cb-pending-pulse 1.2s ease-in-out infinite;
+}
+.cb-pending-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.cb-pending-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes cb-pending-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cb-pending-indicator span { animation: none; opacity: 0.6; }
+}
+
+/* 출처 표기(RAG 근거) — 링크가 아니라 텍스트다(NFR-A3) */
+.cb-sources { margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 6px; }
+.cb-sources-label { font-weight: 700; font-size: 12px; color: #4b5563; }
+.cb-sources ul { margin: 4px 0; padding-left: 18px; font-size: 13px; color: #374151; }
+.cb-sources-caption { margin: 4px 0 0; font-size: 11px; color: #9ca3af; }
+
 @media (max-width: 420px) {
   .cb-panel { bottom: 0; right: 0; left: 0; width: 100vw; max-width: 100vw; }
 }

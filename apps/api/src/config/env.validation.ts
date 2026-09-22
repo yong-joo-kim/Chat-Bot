@@ -41,7 +41,28 @@ const EnvSchema = z.object({
   UNANSWERED_MAX_QUESTION_LENGTH: z.coerce.number().int().positive().default(200),
   INTENT_SUGGEST_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.25),
   LEARNING_BULK_MAX_ITEMS: z.coerce.number().int().positive().default(50),
+  // FAQ/의도 매칭 고도화(NLU 1단계 + RAG 2단계) 그룹 추가 — 전부 선택(기본값 있음, FR-0-46).
+  // 하나도 설정하지 않으면 두 단계가 모두 비활성이고 시스템은 현행 규칙 매칭으로 정상 기동한다(AC-N4-1).
+  EMBEDDING_BASE_URL: z.string().optional(),
+  EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().default(300),
+  EMBEDDING_CACHE_SIZE: z.coerce.number().int().positive().default(1000),
+  EMBEDDING_CACHE_TTL_MS: z.coerce.number().int().positive().default(600000),
+  EMBEDDING_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
+  VECTOR_CACHE_MAX_BYTES: z.coerce.number().int().positive().default(268435456),
+  RAG_BASE_URL: z.string().optional(),
+  // 하한 120000은 코드가 강제한다(FR-N2-26, AC-N2-14) — 여기서는 형식만 검증한다.
+  RAG_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+  RAG_MAX_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  RAG_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(60),
+  RAG_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
+  RAG_CIRCUIT_OPEN_MS: z.coerce.number().int().positive().default(60000),
+  RAG_STATUS_CACHE_MS: z.coerce.number().int().positive().default(60000),
+  PENDING_ANSWER_TTL_MS: z.coerce.number().int().positive().default(300000),
 });
+
+/** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
+const RAG_TIMEOUT_MS_FLOOR = 120_000;
+const RAG_TIMEOUT_MS_CEIL = 300_000;
 
 export type EnvConfig = z.infer<typeof EnvSchema>;
 
@@ -53,5 +74,16 @@ export function validate(config: Record<string, unknown>): EnvConfig {
     console.error(`환경변수 검증 실패:\n${issues}`);
     throw new Error(`환경변수 검증 실패:\n${issues}`);
   }
+
+  if (result.data.RAG_TIMEOUT_MS < RAG_TIMEOUT_MS_FLOOR) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `RAG_TIMEOUT_MS(${result.data.RAG_TIMEOUT_MS}ms)가 하한(${RAG_TIMEOUT_MS_FLOOR}ms) 미만이라 자동 보정합니다(FR-N2-26).`,
+    );
+    result.data.RAG_TIMEOUT_MS = RAG_TIMEOUT_MS_FLOOR;
+  } else if (result.data.RAG_TIMEOUT_MS > RAG_TIMEOUT_MS_CEIL) {
+    result.data.RAG_TIMEOUT_MS = RAG_TIMEOUT_MS_CEIL;
+  }
+
   return result.data;
 }
