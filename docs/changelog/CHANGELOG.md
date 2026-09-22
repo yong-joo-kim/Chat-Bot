@@ -44,3 +44,15 @@ feat: 보안/이력(No.12~13) 기능그룹 구현 - 로그인/권한/계정잠�
 - apps/web 인증 도입: 로그인 화면, AuthContext, RequirePermission, 401 자동 재로그인/재시도, 회원/금지어/감사로그 관리 화면
 - code-reviewer 1차+2차 통과(Critical/High 0건)
 - 테스트 총 493개 Pass(api 263 / web 132 / dialogue-engine 72 / widget 26), 실패 0건
+
+## 2026-09-22 — bd4ae05
+
+feat: 기본 통계/학습현황(No.14~15) 기능그룹 구현 - 일/주/월 통계 대시보드, 미응답 질문 검토→의도 매칭→학습 반영
+
+- No.14 기본 통계: 일/주/월 단위 사용자현황·대화현황·질문순위·이용동향 대시보드(버킷 집계, KST 기준일, 응답소스/채널 분포, 시간대·요일 패턴)
+- No.15 학습현황: 미응답 질문 수집→검토→의도명 입력/매칭→저장 시 예문 반영 및 관련 캐시 무효화(실제 딥러닝 재학습은 범위 밖 — ADR-0018)
+- 신규 모듈 apps/api/src/stats, apps/api/src/learning / 신규 화면 apps/web/src/pages/stats, apps/web/src/pages/learning
+- DB 스키마 변경·마이그레이션(20260922024448_stats_learning_schema) 및 기존 대화로그 백필 스크립트 추가
+- ADR-0017(시계열 버킷 전략)~ADR-0019(미응답 큐 수집 모델) 및 요구사항·설계·UI 명세·시험 문서 추가
+- code-reviewer 1차 Medium 2건 발견→수정, 2차 재검토 통과(Critical/High/Medium 0건)
+- 테스트 총 617개 Pass(api 356 / web 163 / dialogue-engine 72 / widget 26), 실패 0건
