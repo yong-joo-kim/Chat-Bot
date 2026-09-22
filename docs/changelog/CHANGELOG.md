@@ -70,3 +70,17 @@ feat: FAQ/의도 매칭 고도화(1단계 NLU 유사도 검색 + 2단계 외부 
 - @Public() 핸들러 6개로 갱신(보류 답변 폴링 엔드포인트 추가, security-audit.md AC-C-4)
 - code-reviewer 1차 High 1건/Medium 2건 발견→수정, 2차 재검토 통과(Medium 1건은 잔여 리스크로 문서화)
 - 테스트 신규 46건 추가, 총 768개 Pass(api 459 / web 170 / dialogue-engine 86 / widget 45 / pii-mask 8), 실패 0건 + apps/ml-worker(pytest) 9개 별도 Pass
+
+## 2026-09-23 — 77686fb
+
+feat: 학습 고도화(No.16 예문 증강 + No.23 요소분해/경량 분류기) 기능그룹 구현
+
+- No.16 예문 증강: 규칙(G1)/Gemini/로컬 3-포트 증강 프로바이더(ADR-0026), 제안-자산 시각적 분리(ADR-0025)로 승인 전까지 예문 자산에 반영되지 않는 파이프라인 구현, apps/api/src/augmentation 신설
+- No.23 요소분해/경량 분류기: 한국어 형태소 분석기 3단 폴백(garu-ko/휴리스틱, ADR-0028)과 로지스틱 회귀 경량 분류기(ADR-0027) 구현, apps/api/src/classifier·apps/api/src/learning/{decompose,decomposition,decomposed-resolve} 신설
+- 비동기 학습 작업 큐(training-jobs) 신설: 증강 생성/분류기 학습 잡을 폴링 기반으로 처리(AsyncJobProgress, useTrainingJobPolling)
+- apps/ml-worker에 생성 프로파일 추가(ML_WORKER_ROLE=embed|augment|both, generator.py) 및 5지표 실측 기반 생성모델 후보 비교(eval/generation_candidates.py, generation-model-comparison.md)
+- apps/web: AugmentationPanel/AugmentationSuggestionTable(대화설계), ClassifierStatusPanel/DecompositionSection(학습현황) 신규 화면, NodeUnlinkedWarningBanner를 LearningLinkWarningBanner로 대체
+- Prisma 스키마 확장 및 마이그레이션(20260922124208_learning_augmentation_schema), env.validation에 AUGMENTATION_*/CLASSIFIER_*/MORPH_* 선택 환경변수 추가(전부 기본값 있음, 미설정 시 규칙 증강+분류기 비활성+휴리스틱 폴백으로 정상 기동)
+- code-reviewer 1차 Critical 2건/Medium 1건 발견→수정(이벤트루프 버그 RESOLVED), 2차 재검토에서 영구삭제 트랜잭션 미사용 Medium 신규 발견→트랜잭션화로 수정
+- test-automation 단계에서 금지어 공백 항목 오탐 실사용 버그 1건 발견→수정
+- 테스트 총 1004개 Pass(api 689 / web 176 / dialogue-engine 86 / widget 45 / pii-mask 8), 실패 0건 + apps/ml-worker(pytest) 16개 별도 Pass
