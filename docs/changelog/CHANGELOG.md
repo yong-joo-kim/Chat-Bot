@@ -84,3 +84,16 @@ feat: 학습 고도화(No.16 예문 증강 + No.23 요소분해/경량 분류기
 - code-reviewer 1차 Critical 2건/Medium 1건 발견→수정(이벤트루프 버그 RESOLVED), 2차 재검토에서 영구삭제 트랜잭션 미사용 Medium 신규 발견→트랜잭션화로 수정
 - test-automation 단계에서 금지어 공백 항목 오탐 실사용 버그 1건 발견→수정
 - 테스트 총 1004개 Pass(api 689 / web 176 / dialogue-engine 86 / widget 45 / pii-mask 8), 실패 0건 + apps/ml-worker(pytest) 16개 별도 Pass
+
+## 2026-09-23 — 046630d
+
+feat: 검증/품질 고도화(No.19 대화검증시스템·TC테스트 + No.20 학습영향도 TEST) 기능그룹 구현
+
+- No.19 대화검증시스템·TC테스트: 테스트셋/TC CRUD, 엑셀/CSV 임포트(정규화 유일성), 테스트런 실행기(임베딩·RAG·의도분류 오버레이 포함), 판정(judge-test-case)·요약(summarize-run) 로직, 챗봇당 동시 실행 1건 부분 유니크 인덱스 제약(TOCTOU 최종 방어선) 구현(apps/api/src/validation 신설, ADR-0029)
+- No.20 학습영향도 TEST: 예문 증강 제안을 실제 반영 전 별도 테스트런으로 비교 검증하는 영향도 체크 파이프라인(test-run-compare, 리소스 격리) 구현(ADR-0030), AugmentationPanel에 영향도 체크 버튼/세트 선택 다이얼로그 추가
+- 관리자 콘솔 9번째 탭 "대화검증" 신설: 테스트셋/TC 목록·상세, 테스트런 목록·상세(진행률 폴링)·비교 화면, 시뮬레이터 연동, 결과 CSV 내보내기
+- 공통 로직 승격/추출: apps/api/src/common/lib/output-diff.ts(시뮬레이터 compare-diff와 공유), apps/api/src/embedding/lib/assemble-semantic-input.ts(의미매칭 입력조립 공용화)
+- Prisma 스키마 확장 및 마이그레이션(20260922225951_validation_regression_schema, 부분 유니크 인덱스 raw SQL 포함), env.validation에 TEST_SET_*/TEST_CASE_*/TEST_RUN_* 선택 환경변수 추가(전부 기본값 있음)
+- ADR-0007/0015/0016/0022/0027에 이번 그룹 영향 반영 블록 append, 개발명세서.md 대규모 갱신(결정 31, Permission 15종, API 21개 등)
+- code-reviewer 1차 High 1건/Medium 2건/Low 2건 발견 → 재작업으로 High는 완화 확인·Medium 2건 RESOLVED, 잔여 Low 2건은 설계서 §14 알려진 제한사항으로 기록
+- test-automation 단계 신규 89건 추가, 새 버그 없음
