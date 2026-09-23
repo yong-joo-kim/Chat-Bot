@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type { CompareResponse, DialogueOverlay } from '@chat-bot/shared-types';
 import { CompareView } from './CompareView';
 
@@ -39,7 +40,11 @@ function makeCompareResponse(overrides: Partial<CompareResponse> = {}): CompareR
 const overlay: DialogueOverlay = { dialogNodes: [{ id: 'draft-1' } as never] };
 
 function renderCompare(overlayArg: DialogueOverlay | undefined): ReturnType<typeof render> {
-  return render(<CompareView chatbotId="bot-1" overlay={overlayArg} />);
+  return render(
+    <MemoryRouter>
+      <CompareView chatbotId="bot-1" overlay={overlayArg} />
+    </MemoryRouter>,
+  );
 }
 
 describe('CompareView — A/B 비교 diff 표시(FR-10-25~30, AC-10B-7/8)', () => {

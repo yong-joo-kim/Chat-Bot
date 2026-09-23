@@ -81,6 +81,17 @@ const EnvSchema = z.object({
   CLASSIFIER_MIN_PROBABILITY: z.coerce.number().min(0).max(1).default(0.15),
   MORPH_ANALYZER: z.string().default('auto'),
   MORPH_DICT_PATH: z.string().optional(),
+  // 검증/품질 고도화(No.19 대화검증시스템·TC테스트 / No.20 학습영향도 TEST) 그룹 추가 — 전부 선택
+  // (기본값 있음, FR-0-64). 하나도 설정하지 않으면 세트 2,000 TC·챗봇 5,000 TC·배치 64·외부 RAG
+  // 비활성·보존 20+pin 5로 정상 동작한다. ml-worker 변수 추가는 0건이다.
+  TEST_SET_MAX_CASES: z.coerce.number().int().positive().default(2000),
+  TEST_CASE_MAX_PER_CHATBOT: z.coerce.number().int().positive().default(5000),
+  TEST_RUN_MAX_CASES: z.coerce.number().int().positive().default(2000),
+  TEST_RUN_EMBED_BATCH_SIZE: z.coerce.number().int().positive().default(64),
+  TEST_RUN_RAG_MAX_CALLS: z.coerce.number().int().positive().default(50),
+  TEST_RUN_RETENTION_PER_SET: z.coerce.number().int().positive().default(20),
+  TEST_RUN_PINNED_MAX: z.coerce.number().int().positive().default(5),
+  TEST_RUN_PROGRESS_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

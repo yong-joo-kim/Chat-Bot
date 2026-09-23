@@ -107,6 +107,12 @@ export const ApiErrorCode = z.enum([
   'CLASSIFIER_INSUFFICIENT_DATA',
   'CLASSIFIER_NOT_TRAINED',
   'CLASSIFIER_STALE_MODEL',
+  // 검증/품질 고도화(No.19 대화검증시스템·TC테스트 / No.20 학습영향도 TEST) 그룹 추가(FR-0-65, ADR-0029)
+  'TEST_RUN_IN_PROGRESS',
+  'TEST_RUN_NOT_COMPARABLE',
+  'TEST_SET_EMPTY',
+  'TEST_CASE_LIMIT_EXCEEDED',
+  'TEST_RUN_CANCELLED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

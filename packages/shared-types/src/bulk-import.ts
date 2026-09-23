@@ -5,7 +5,8 @@ import { z } from 'zod';
  * `docs/02-spec/dialogue-design-설계.md` §4.5, ADR-0007 근거.
  */
 
-export const ImportResourceType = z.enum(['INTENT', 'KEYWORD', 'FAQ']);
+/** `TEST_CASE`는 검증/품질 고도화(No.19) 그룹이 추가한 3번째 소비자다(ADR-0007 각주 — 새 파서 0건). */
+export const ImportResourceType = z.enum(['INTENT', 'KEYWORD', 'FAQ', 'TEST_CASE']);
 export type ImportResourceType = z.infer<typeof ImportResourceType>;
 
 export const ImportMergePolicy = z.enum(['MERGE', 'REPLACE', 'SKIP']);
@@ -22,6 +23,9 @@ export const ImportRowErrorCode = z.enum([
   'DUPLICATE_IN_FILE',
   'SYNONYM_CONFLICT',
   'INVALID_CATEGORY',
+  // 검증/품질 고도화(No.19) 그룹 추가 — TC 업로드의 기대대상명 → ID 해석 실패(FR-V1-13).
+  'TARGET_NOT_FOUND',
+  'AMBIGUOUS_TARGET',
 ]);
 export type ImportRowErrorCode = z.infer<typeof ImportRowErrorCode>;
 

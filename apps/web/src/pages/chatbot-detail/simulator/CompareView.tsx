@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { COMPARE_LIMITS, isOverlayEmpty, type CompareResponse, type DialogueOverlay } from '@chat-bot/shared-types';
 import { simulationApi } from '../../../api/simulation';
 import { ApiError } from '../../../api/client';
@@ -62,7 +63,16 @@ export function CompareView({
           onChange={(e) => setRawText(e.target.value)}
         />
         <p className="field-hint">{msg.inputCount(lines.length, COMPARE_LIMITS.messages)}</p>
+        <p className="field-hint">
+          <span aria-hidden="true">ⓘ</span> {msg.bulkVerificationHint}{' '}
+          <Link to={`/chatbots/${chatbotId}/validation/sets`}>{msg.bulkVerificationLink}</Link>
+        </p>
         <InlineFieldError id="compare-input-error" message={overLimit ? msg.inputMaxError : undefined} />
+        {overLimit && (
+          <p className="field-hint">
+            <Link to={`/chatbots/${chatbotId}/validation/sets`}>{msg.bulkVerificationLink}</Link>
+          </p>
+        )}
       </div>
       <div className="compare-toolbar">
         <label className="form-field--inline">

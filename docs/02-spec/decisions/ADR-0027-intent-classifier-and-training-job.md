@@ -147,3 +147,16 @@ K-6("수동 트리거 API를 만들지 않는다")의 금지 취지는 **"학습
 - **다중 인스턴스 전환** → `TrainingJobQueue`를 분산 큐(Redis/BullMQ)로 교체. **그때가 ADR-0024 §2를 실제로 뒤집는 시점**이다.
 - **No.21(군집분석) 착수** → 비지도 학습·대용량 배치가 들어오므로 학습 위치(`apps/api` CPU vs ml-worker)를 **다시** 판정한다. 이 ADR의 결론이 자동으로 상속되지 않는다.
 - **`TrainingJob` 행이 정리 없이 누적** → 보존기간 정책·정리 배치 도입(스케줄러 인프라와 함께, No.45).
+
+
+---
+
+## 갱신 (2026-09-23 — 큐가 학습 외 첫 소비자를 얻었다)
+
+검증/품질 고도화의 **대량 TC 실행**이 `TrainingJobQueue`의 **세 번째이자 학습이 아닌 첫 소비자**가 된다. **이 ADR의 결정(단일 인스턴스 in-process 큐 · Redis/BullMQ 미도입 · 교체 지점 1곳)은 불변**이며, 다음 두 가지만 기록한다.
+
+**① `TrainingJob`에 `TC_RUN` kind를 추가하지 않는다.** `TestRun`은 **영속 비교 자산**(보존 정책이 다르다)이고, `resultSummary`의 **"문장 원문 미포함" 규약(NFR-LS4)** 과 충돌하며, `TestRun`이 이미 상태·진행률·시각을 가져야 해 **값이 두 벌**이 된다. "Training"이 아닌 작업이 `TrainingJob`에 들어가지 않는다.
+
+**② ⚠ 코드 재확인 — 큐는 완전한 kind-agnostic이 아니었다.** `TrainingJobQueue.run()`은 `task` 콜백만 받지만 내부에서 `TrainingJobService.markRunning/updateProgress/markFinished(jobId)`를 호출하므로 **`jobId`가 `TrainingJob` 행일 것을 전제**한다. 따라서 상태 기록을 **`AsyncJobStatusSink` 포트로 분리**하고 `enqueue(jobId, task, sink = this.jobs)`로 **기본 인자를 둬 기존 호출부 2곳(augmentation·classifier)을 변경 0건**으로 유지한다. `TrainingJobService`가 그 포트의 첫 구현, `TestRunStatusSink`가 두 번째다. **교체 지점은 여전히 1곳**이며, 다중 인스턴스 전환 시에도 이 파일 하나만 바뀐다.
+
+**큐 클래스는 개명하지 않는다** — 순수 리네임이 `training-jobs` 모듈·테이블·컨트롤러·`TrainingJobService`로 번지는 데 비해 의미 불일치는 이미 싱크 분리로 해소됐다. `markFinished`는 **현재 상태가 `CANCELLED`인 행을 덮어쓰지 않는다**(취소 CAS). 기동 시 고아 작업 정리(`SERVER_RESTART`) 규약은 `TestRun`에도 **같은 시점·같은 방식**으로 적용한다.

@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../../../components/Modal';
 import { SkeletonRow } from '../../../components/Skeleton';
 import { useTrainingJobPolling } from '../../../lib/useTrainingJobPolling';
 import { AugmentationSuggestionTable } from './AugmentationSuggestionTable';
+import { AugmentationImpactCheckButton } from './AugmentationImpactCheckButton';
 
 const msg = MESSAGES.augmentation;
 
@@ -318,6 +319,7 @@ export function AugmentationPanel({ chatbotId, intentId, currentExampleCount, re
                     {canWrite && selected.size > 0 && (
                       <div className="bulk-action-bar" role="group" aria-label={msg.selectedCount(selected.size)}>
                         <span>{msg.selectedCount(selected.size)}</span>
+                        <AugmentationImpactCheckButton chatbotId={chatbotId} intentId={intentId} selectedIds={[...selected]} />
                         <button type="button" className="btn btn-primary" onClick={() => setPendingAcceptIds([...selected])}>
                           {msg.acceptSelected}
                         </button>

@@ -129,3 +129,14 @@ export const RequirePermission = (permission: Permission): MethodDecorator & Cla
 - `apps/web`: `AuthContext`가 `can(permission)`을 제공. **컴포넌트가 역할 문자열을 비교하지 않는다.** 쓰기 액션은 권한 없으면 **숨김**(비활성 아님), 페이지 단위 거부는 403 안내 화면.
 - `test-automation` 인계: ① **AC-C-4 — `@Public()` 부착 핸들러 수 = 5 고정** ② AC-12B-10(가드 미부착 신규 컨트롤러도 401) ③ AC-12B-5(클라이언트 우회 직접 호출이 403이고 DB 무변경) ④ AC-12B-8(강등 즉시 반영) ⑤ AC-12B-13(권한 없음 + 미존재 ID = 403) ⑥ AC-12B-2/AC-C-6(공개 경로 동작 불변).
 - `code-reviewer` 인계: ① `@Public()`이 5곳을 넘지 않는가 ② `@RequirePermission` 인자가 전부 유니온 값인가 ③ 컨트롤러에 `@UseGuards(PermissionGuard)` 잔존이 없는가 ④ `403` 응답 본문에 권한 문자열이 없는가 ⑤ 프런트가 역할 문자열을 직접 비교하는 곳이 없는가.
+
+
+---
+
+## 갱신 (2026-09-23 — `Permission` 14종 → 15종)
+
+검증/품질 고도화(No.19~20)가 **`simulation:write` 1종을 신설**한다(PM 확정). `ROLE_PERMISSIONS`는 EDITOR·ADMIN에 추가되고 **VIEWER는 변하지 않는다**(조회 전용 유지). `Role`/`Permission` 테이블 미생성·fail-closed 전역 가드·`@Public()` **6곳**·`403` 본문에 요구 권한 미표기 등 **다른 결정은 전부 불변**이며, 역할·권한이 코드 상수이므로 **데이터 마이그레이션은 0건**이다.
+
+**신규 문자열 0건 원칙의 첫 예외인 이유**: 대안은 "읽기 `simulation:read` / 쓰기 `dialogue:write`"였고 신규 문자열이 0건이라는 장점이 있었다. 그러나 TC 세트·실행 결과는 **대화 자산이 아니라 검증 자산**이어서, 한 화면의 읽기·쓰기가 두 도메인으로 갈라진다. `simulation:write` 신설로 이 그룹의 **18개 핸들러가 `simulation:read`/`simulation:write` 2종만** 쓰게 된다. **실행(run)은 DB를 바꾸지 않지만 ml-worker 자원을 대량 소비하므로 쓰기로 분류**한다 — "동작이 바꾸는 자원을 기준으로 권한을 정한다"는 원칙의 연장이다(ADR-0029 §5).
+
+개수 고정 테스트(권한 유니온 크기)는 무력화하지 않고 **15로 갱신**한다.

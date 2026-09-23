@@ -346,6 +346,13 @@ export class ChatbotsService {
       await tx.augmentationSuggestion.deleteMany({ where: { chatbotId: id } });
       await tx.intentClassifierModel.deleteMany({ where: { chatbotId: id } });
       await tx.trainingJob.deleteMany({ where: { chatbotId: id } });
+      // 검증/품질 고도화 그룹(validation-regression-설계.md §4.3) 추가 — 4테이블도 대화 자산이 아닌
+      // 챗봇 종속 파생 자산이라 사전검사(409) 대상이 아니라 동반 삭제 대상이다. FK 방향상
+      // TestRunResult(runId) → TestRun(setId/chatbotId) → TestCase(setId) → TestCaseSet 순서로 지운다.
+      await tx.testRunResult.deleteMany({ where: { run: { chatbotId: id } } });
+      await tx.testRun.deleteMany({ where: { chatbotId: id } });
+      await tx.testCase.deleteMany({ where: { chatbotId: id } });
+      await tx.testCaseSet.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { intentsApi, keywordsApi, contextsApi, dialogNodesApi } from '../api/dialogue';
+import { intentsApi, keywordsApi, contextsApi, dialogNodesApi, faqsApi } from '../api/dialogue';
 import { chatbotsApi } from '../api/chatbots';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { MESSAGES } from '../constants/messages';
@@ -11,7 +11,8 @@ import { InlineFieldError } from './InlineFieldError';
  * (security-audit-ui-spec.md §3.9 `AuditLogFilterBar`의 `chatbotId` 필터). 이 타입일 때는
  * `chatbotId` prop(스코프)이 필요 없다 — 전역 `GET /chatbots` 목록에서 바로 검색한다.
  */
-export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot';
+/** `faq`는 검증/품질 고도화(No.19) 그룹이 추가한 6번째 타입이다 — TC의 "기대 대상"(FAQ)을 고른다. */
+export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq';
 
 interface Option {
   id: string;
@@ -31,6 +32,8 @@ async function searchResource(chatbotId: string, type: ResourcePickerType, q: st
       return (await dialogNodesApi.list(chatbotId, query)).items;
     case 'chatbot':
       return (await chatbotsApi.list(query)).items;
+    case 'faq':
+      return (await faqsApi.list(chatbotId, query)).items.map((f) => ({ id: f.id, name: f.question }));
     default:
       return [];
   }
@@ -49,6 +52,10 @@ async function findOneResource(chatbotId: string, type: ResourcePickerType, id: 
         return await dialogNodesApi.findOne(chatbotId, id);
       case 'chatbot':
         return await chatbotsApi.findOne(id);
+      case 'faq': {
+        const entry = await faqsApi.findOne(chatbotId, id);
+        return entry ? { id: entry.id, name: entry.question } : null;
+      }
       default:
         return null;
     }

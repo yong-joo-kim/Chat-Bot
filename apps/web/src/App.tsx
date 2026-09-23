@@ -29,6 +29,12 @@ import { HomonymsPage } from './pages/dialogue/HomonymsPage';
 import { ContextsListPage } from './pages/dialogue/ContextsListPage';
 import { ContextFormPage } from './pages/dialogue/ContextFormPage';
 import { FaqsPage } from './pages/dialogue/FaqsPage';
+import { ValidationShell } from './pages/chatbot-detail/validation/ValidationShell';
+import { TestSetListPage } from './pages/chatbot-detail/validation/sets/TestSetListPage';
+import { TestSetDetailPage } from './pages/chatbot-detail/validation/sets/TestSetDetailPage';
+import { TestRunListPage } from './pages/chatbot-detail/validation/runs/TestRunListPage';
+import { TestRunDetailPage } from './pages/chatbot-detail/validation/runs/TestRunDetailPage';
+import { TestRunComparePage } from './pages/chatbot-detail/validation/compare/TestRunComparePage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -97,6 +103,14 @@ export function App(): JSX.Element {
               <Route path="contexts/new" element={<ContextFormPage />} />
               <Route path="contexts/:contextId" element={<ContextFormPage />} />
               <Route path="faqs" element={<FaqsPage />} />
+            </Route>
+            <Route path="validation" element={<ValidationShell />}>
+              <Route index element={<Navigate to="sets" replace />} />
+              <Route path="sets" element={<TestSetListPage />} />
+              <Route path="sets/:setId" element={<TestSetDetailPage />} />
+              <Route path="runs" element={<TestRunListPage />} />
+              <Route path="runs/:runId" element={<TestRunDetailPage />} />
+              <Route path="compare" element={<TestRunComparePage />} />
             </Route>
           </Route>
           <Route

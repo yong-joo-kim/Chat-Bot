@@ -58,6 +58,8 @@ model Chatbot {
   augmentationSuggestions AugmentationSuggestion[]
   intentClassifierModel   IntentClassifierModel?
   trainingJobs            TrainingJob[]
+  testCaseSets            TestCaseSet[]
+  testRuns                TestRun[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -612,4 +614,161 @@ model TrainingJob {
   @@index([chatbotId, kind, status])
   @@index([chatbotId, createdAt])
   @@map("training_jobs")
+}
+
+/// [신규 2026-09-23 검증/품질 고도화] No.19 회귀 검증 TC의 묶음(ADR-0029 §2/§6). 챗봇당 최대 20개이며
+/// `nameNormalized`로 챗봇 내 정규화 유일성을 강제한다(ADR-0006 재사용). 이 그룹에서 유일한 감사 대상
+/// (실행·비교는 읽기 연산이라 감사하지 않는다 — ADR-0029 §5).
+model TestCaseSet {
+  id             String   @id @default(uuid())
+  chatbotId      String
+  chatbot        Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name           String
+  /// normalizeText(name). 챗봇 내 유일(ADR-0006 규약 재사용).
+  nameNormalized String
+  description    String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cases TestCase[]
+  runs  TestRun[]
+
+  @@unique([chatbotId, nameNormalized])
+  @@index([chatbotId, updatedAt])
+  @@map("test_case_sets")
+}
+
+/// [신규 2026-09-23 검증/품질 고도화] 기대값을 가진 검증 입력(FR-V1-2~7). `expectedTargetId`에
+/// **FK를 걸지 않는다** — 걸면 TC가 있는 의도/FAQ/노드를 영원히 삭제할 수 없고, 삭제는 정당한 동작이다
+/// (`AugmentationSuggestion.intentId`와 동일한 의도적 예외). 대상이 사라지면 실행 시 UNRESOLVED로 드러난다.
+model TestCase {
+  id     String      @id @default(uuid())
+  setId  String
+  set    TestCaseSet @relation(fields: [setId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 조회·상한 판정용 비정규화 컬럼(세트 조인 없이 챗봇 총량을 센다).
+  chatbotId String
+  seq    Int
+  /// JSON string[] 1~5턴. 2건 이상이면 멀티턴이며 **마지막 턴으로 판정**한다(FR-V1-2).
+  messages String
+  /// 턴을 '\n'으로 결합한 뒤 normalizeText. 세트 내 중복 판정 키(FR-V1-7).
+  messagesNormalized String
+  /// INTENT | FAQ | NODE | FALLBACK | ANY (zod TestCaseExpectedKind가 값 제약 단일 소스)
+  expectedKind String
+  /// Intent/FaqEntry/DialogNode.id. FK 없음(위 설명 참고).
+  expectedTargetId String?
+  /// 참고 메모. **판정에 일절 사용되지 않는다**(FR-V1-5).
+  expectedAnswerNote String?
+  tags    String?
+  enabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([setId, messagesNormalized])
+  @@index([setId, seq])
+  @@index([chatbotId])
+  @@map("test_cases")
+}
+
+/// [신규 2026-09-23 검증/품질 고도화] 실행 스냅샷 = 이 그룹의 "버전 축"(ADR-0029 §2). 큐
+/// (`TrainingJobQueue`)는 재사용하되 상태 기록은 포트(`AsyncJobStatusSink`)로 분리해 이 테이블이
+/// 자기 상태를 소유한다(ADR-0029 §4). `TrainingJob`에 `TC_RUN` kind를 추가하지 않는다.
+model TestRun {
+  id        String      @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot     @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  setId     String
+  set       TestCaseSet @relation(fields: [setId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// SINGLE | OVERLAY_COMPARE
+  mode      String   @default("SINGLE")
+  /// NONE | INLINE | AUGMENTATION_SUGGESTIONS
+  overlaySource String @default("NONE")
+  /// QUEUED | RUNNING | SUCCEEDED | FAILED | CANCELLED
+  status    String   @default("QUEUED")
+  progress  Int      @default(0)
+  totalCount Int     @default(0)
+  processedCount Int @default(0)
+  /// JSON. { a:{pass,fail,notJudged,unresolved}, b?:{...}, regressed?, improved?, excludedSuggestions? }
+  summary   String?
+  /// JSON 환경 지문(§6.3) — 이것이 "무엇이 달랐나"의 1차 설명이다.
+  envFingerprint String?
+  degradedMode Boolean @default(false)
+  useRag       Boolean @default(false)
+  ragCallCount Int     @default(0)
+  /// 보존 정책(세트당 20건)에서 제외되는 고정 실행. 세트당 최대 5건.
+  pinned       Boolean @default(false)
+  failureReason String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  results TestRunResult[]
+
+  @@index([chatbotId, setId, createdAt])
+  @@index([chatbotId, status])
+  @@map("test_runs")
+}
+
+// [code-review 대응 2026-09-23] test_runs에는 이 스키마에 표현되지 않는 부분 유니크 인덱스가 하나
+// 더 있다 — chatbotId별로 status IN ('QUEUED','RUNNING')인 행은 최대 1개
+// (동시 실행 1건 검사의 TOCTOU 방어, ADR-0029). Prisma 스키마 언어는 WHERE 절이 있는 부분 인덱스를
+// 표현할 수 없어 마이그레이션 SQL에 raw로만 존재한다
+// (prisma/migrations/20260922225951_validation_regression_schema/migration.sql 참고). 이후
+// `prisma migrate dev`로 test_runs 관련 마이그레이션을 새로 생성할 때, diff가 이 인덱스를 삭제하는
+// 구문을 끼워 넣지 않는지 반드시 확인할 것 — 삭제된다면 해당 라인을 새 마이그레이션에서 제거하고
+// 인덱스 자체는 유지해야 한다.
+
+/// [신규 2026-09-23 검증/품질 고도화] TC 1건의 실행 결과(비교의 원자 단위). `caseId`에 **FK를 걸지
+/// 않는다**(TC가 지워져도 과거 실행 결과는 사실 기록으로 남아야 한다). 질문 문장 원문을 담는다 —
+/// TC 문장은 관리자가 작성한 검증 입력이지 사용자 발화가 아니다(NFR-S8과 무충돌).
+model TestRunResult {
+  id    String  @id @default(uuid())
+  runId String
+  run   TestRun @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// TestCase.id. FK 없음(위 설명 참고).
+  caseId String
+  seq    Int
+  /// 실행 시점 스냅샷. TC가 수정·삭제돼도 결과 화면이 성립해야 한다.
+  questionText String
+  expectedKind String
+  expectedTargetId String?
+  /// PASS | FAIL | NOT_JUDGED | UNRESOLVED
+  resultA String
+  matchedIntentIdA String?
+  matchedFaqIdA    String?
+  matchedNodeIdA   String?
+  /// CONFIRMED | AMBIGUOUS | FAILED | SKIPPED
+  bandA      String?
+  top1ScoreA Float?
+  top1KindA  String?
+  top1IdA    String?
+  marginToTop2A Float?
+  /// serializeOutputsForDiff()의 sha256. 판정이 아니라 **변화 감지**에만 쓴다(FR-V1-28).
+  outputsHashA String
+  /// 선두 120자. 화면 미리보기 전용.
+  outputsPreviewA String?
+  unsupportedCountA Int     @default(0)
+  blockedByFilterA  Boolean @default(false)
+  elapsedMsA        Int     @default(0)
+  /// mode=OVERLAY_COMPARE일 때만 채워진다(B 계열).
+  resultB          String?
+  matchedIntentIdB String?
+  matchedFaqIdB    String?
+  matchedNodeIdB   String?
+  bandB            String?
+  top1ScoreB       Float?
+  outputsHashB     String?
+  outputsPreviewB  String?
+  /// SAME | DIFFERENT — compareDiff() 결과(복제 0건).
+  diffStatus     String?
+  wouldUseRag    Boolean @default(false)
+  ragAttempted   Boolean @default(false)
+  ragLatencyMs   Int?
+  ragSourceCount Int?
+  createdAt      DateTime @default(now())
+
+  @@index([runId, resultA])
+  @@index([runId, caseId])
+  @@map("test_run_results")
 }

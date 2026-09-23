@@ -82,3 +82,16 @@ ROCHA 원본 매뉴얼은 No.6을 "**엑셀** 대량 업로드 예문 등록"으
 - `shared-types/src/bulk-import.ts`: 2단계 계약 + `IMPORT_LIMITS` + `escapeCsvCell()`(서버 내보내기와 프런트 오류 CSV가 공유, NFR-S7).
 - 내보내기·템플릿은 **UTF-8 BOM 포함 CSV**를 기본으로 하고, `format=xlsx`는 템플릿에만 제공한다(AC-6B-1, AC-6B-9).
 - 후속: 수평 확장 착수 시 `ImportStagingStore`의 Redis/DB 구현으로 교체. 취약점 모니터링 대상에 `exceljs`를 포함한다.
+
+
+---
+
+## 갱신 (2026-09-23 — 검증/품질 고도화)
+
+**결정은 불변이다. 소비자가 하나 늘었다.** TC 대량 업로드가 이 인프라의 **세 번째 소비자**가 된다(의도·키워드·FAQ에 이어). 파서(`.csv` 자체 구현 / `.xlsx` `exceljs` 스트리밍)·2단계 계약(dry-run → commit)·**메모리 스테이징 TTL 10분·1회용 `importToken`**·`ImportBatch` 미생성·`IMPORT_LIMITS`(5MB·5,000행)·`escapeCsvCell`은 **전부 그대로 재사용**하며 새 파서·새 스테이징을 만들지 않는다.
+
+확장은 **enum 값 추가 3건**뿐이다(하위호환):
+- `ImportResourceType`에 **`TEST_CASE`**
+- `ImportRowErrorCode`에 **`TARGET_NOT_FOUND`**(기대 대상명을 찾을 수 없음)·**`AMBIGUOUS_TARGET`**(정규화 기준 동명이인 — 커밋하지 않는다)
+
+TC 임포트의 고유 단계는 **dry-run 시점의 이름 → ID 해석** 하나이며, 실패는 기존 `ImportRowError` 체계로 행 번호와 함께 보고된다. 기대 대상을 **ID로 저장**하는 이유는 이름 저장 시 이름 변경이 **TC의 거짓 실패**로 나타나기 때문이다(`validation-regression-설계.md` §8).

@@ -1,0 +1,93 @@
+# ADR-0029 — 검증 실행 스냅샷(`TestRun`)을 버전 축으로 삼고, 판정을 매칭 ID 일치로 한정한다
+
+- **상태**: 채택 (2026-09-23)
+- **관련**: 요구사항 `docs/requirements/validation-regression.md` J-1/J-2/J-3/J-4/J-5/J-6/J-11/J-12 · 설계 `validation-regression-설계.md` §4~§6·§9
+- **연관 ADR**: ADR-0018(재학습 경계 — 같은 "선점 금지" 논리) · ADR-0025(제안/자산 분리) · ADR-0027(`TrainingJob`·in-process 큐) · ADR-0015(권한) · ADR-0016(감사) · ADR-0008(미지원 아웃풋 3종)
+- **Supersedes**: 없음
+
+## 1. 맥락
+
+카탈로그 No.19는 "**버전 비교**", No.20은 "**운영 챗봇 vs 추가학습 챗봇 응답 비교**"를 요구한다. 두 표현 모두 **무엇의 버전인지, 어떤 두 챗봇인지**를 말하지 않는다. 직전 그룹(No.16/23)이 예문 증강을 도입해 **승인 한 번으로 대화 동작이 즉시 바뀌게** 됐으므로(`appliedImmediately === true`), 그 변화를 관찰할 수단이 필요해진 시점이다.
+
+## 2. 결정 — "버전"은 자산이 아니라 **실행 결과**다
+
+**`TestRun`(실행 스냅샷)이 곧 버전 축이다. 자산 스냅샷 테이블을 만들지 않는다.**
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| **(1) 실행 스냅샷을 버전 축으로** | **채택** | 우리가 필요한 것은 "자산의 과거 상태 복원"이 아니라 "**과거 판정 결과와의 차이**"다. 결과만 저장하면 스냅샷 없이 회귀를 탐지할 수 있고, 신규 설계가 **결과 테이블 2개**로 끝난다 |
+| (2) TC 세트 자체의 버전 이력 | 기각 | 세트는 **입력**이지 결과가 아니다. 세트가 바뀌면 애초에 비교가 성립하지 않으며(`TEST_RUN_NOT_COMPARABLE`), 세트 변경 추적은 **감사로그(No.13)가 이미 한다** |
+| (3) 챗봇 자산 스냅샷 | 기각 | **No.25(챗봇 복원/버전 이력관리)의 본체를 선점**한다. 스냅샷 저장소·복원·정리 배치·용량 정책이 통째로 끌려 들어온다 — ADR-0018이 "모델 산출물 버전·롤백이 끌려 들어온다"며 분류기를 미룬 것과 **같은 논리**다. 게다가 회귀 탐지에 자산 스냅샷이 **필요하지 않다** |
+| (4) 챗봇 인스턴스 복제 비교 | 기각 | `ChatbotsService.copy()`는 **`Chatbot` 행 하나만 복사하는 얕은 복사**다. 딥 복사를 만드는 순간 "쌍둥이의 동기화·병합·승격"이 생기는데 그것이 **No.40(Dev/Staging/Prod)** 의 본체다 |
+
+대신 각 실행에 **환경 지문**(자산 건수 6종·`embeddingModelId`·임계값 3종·저하 여부·오버레이 소스)을 남겨 "무엇이 달랐나"의 1차 설명을 제공한다. `embeddingModelId`가 다르면 비교 화면이 **강한 경고**를 띄운다 — 입력 공간이 다르면 차이의 대부분은 회귀가 아니다.
+
+**"운영 vs 추가학습"은 두 모드로 분해한다**: **M1**(과거 실행 `SINGLE` ↔ 현재 실행 `SINGLE`, 사후 회귀) · **M2**(1회 실행 안에서 A=저장본 / B=저장본+오버레이, 사전 회귀). M1이 "재학습 회귀 리스크 관리"에, M2가 "운영 vs 추가학습 응답 비교"에 대응한다 — 카탈로그 원문 한 줄에 두 요구가 들어 있었다. **M1 비교 결과는 저장하지 않고 조회 시점에 계산**한다(저장하면 낡는다 — ADR-0019의 "추천을 저장하지 않는다"와 같은 판단).
+
+## 3. 결정 — 판정은 **매칭 대상 ID 일치**가 유일한 축이다
+
+결과는 **4값**이다: `PASS` · `FAIL` · `NOT_JUDGED`(`expectedKind: 'ANY'`) · `UNRESOLVED`(기대 대상이 현재 자산에 없음).
+
+**응답 텍스트 일치를 판정에 쓰지 않는 이유**(원리적 불가):
+1. RAG/생성형 응답은 매번 다르다(ADR-0023 — 외부 LLM, 비결정론).
+2. `SCENARIO`/`SURVEY`/`API_CONDITION` 3종은 실행되지 않고 `unsupportedOutputs`로 보고된다(ADR-0008).
+3. 컨텍스트 폼의 `completionMessage`는 슬롯 치환으로 매번 달라진다.
+
+반면 **매칭 ID는 결정론적**이며(엔진은 순수 함수, 타이브레이크까지 고정) **그것이 바로 "인텐트·응답 매칭"의 검증 대상**이다. 응답은 `serializeOutputsForDiff()`의 해시로 **변화 감지에만** 쓴다(복제 0건).
+
+**`UNRESOLVED`를 FAIL로 집계하지 않는다.** 자산 삭제는 **의도된 변경**이지 회귀가 아니다. FAIL로 세면 회귀 신호가 노이즈에 묻힌다. 요약에 별도 칸으로 표시하고 "TC 정리가 필요합니다" + 일괄 비활성 액션을 제시한다.
+
+**엔티티(키워드)는 `expectedKind: 'NODE'` 로 간접 검증한다.** `DialogueTurnResult`에 `matchedKeywordIds`가 존재하지 않아 직접 판정은 엔진 수정을 요구하는데, 노드 인풋 조건이 `의도 + 키워드` 조합이므로(ADR-0005) **그 노드가 매칭됐다 = 키워드 조건이 충족됐다**가 성립한다. **PM이 간접 검증으로 확정**했으므로 엔진 확장(`matchedKeywordIds?`)은 **만들지 않는다**. 화면과 문서가 이 차이를 숨기지 않고 명시한다.
+
+## 4. 결정 — 큐는 재사용하되 상태는 `TestRun`이 소유한다 (⚠ 현 구현의 제약과 그 해결)
+
+**`TrainingJob`에 `TC_RUN` kind를 추가하지 않는다.** 근거: ① `TestRun`은 **영속 비교 자산**이고 `TrainingJob`은 **로그성 작업 상태**라 보존 정책이 다르다 ② `TrainingJob.resultSummary`는 **문장 원문 미포함**이 규약인데(NFR-LS4) TC 결과는 질문 문장을 담아야 화면이 성립한다 ③ `TestRun`이 이미 `status`·`progress`·시각을 가져야 하므로 **값이 두 벌**이 된다 ④ "Training"이 아닌 작업이 `TrainingJob`에 들어가지 않는다.
+
+⚠ **코드 재확인 결과, 요구사항 J-6의 "큐는 완전히 kind-agnostic"은 절반만 맞다.** `TrainingJobQueue.run()`은 `task` 콜백만 받지만 내부에서 `TrainingJobService.markRunning/updateProgress/markFinished(jobId)`를 호출한다 — 즉 **`jobId`가 `TrainingJob` 행일 것을 전제**한다. 따라서 "큐만 재사용 + `TestRun`이 상태 소유"는 현 구현 그대로는 **불가능**하다.
+
+**해결: 상태 기록을 포트로 분리한다.**
+
+```ts
+export interface AsyncJobStatusSink {
+  markRunning(jobId: string): Promise<void>;
+  updateProgress(jobId: string, progress: number): Promise<void>;
+  markFinished(jobId, status: 'SUCCEEDED'|'PARTIAL'|'FAILED', resultSummary?, failureReason?): Promise<void>;
+}
+
+// 기본 인자로 기존 동작을 보존한다 — 기존 호출부 2곳(augmentation · classifier)은 변경 0건.
+enqueue(jobId: string, task: TrainingJobTask, sink: AsyncJobStatusSink = this.jobs): void
+```
+
+`TrainingJobService`가 이 포트의 **첫 구현**이 되고, `TestRunStatusSink`가 두 번째다. 대안 비교:
+
+| 안 | 판정 |
+|---|---|
+| A. `TrainingJob` 행을 함께 만들고 kind 추가 | 기각 — 위 ①~④ 그대로 |
+| **B. 상태 싱크 포트 분리(채택)** | 큐 파일 1개 수정, 기존 호출부 무변경, **교체 지점은 여전히 1곳**. "Training"이라는 이름이 상태 기록과 분리되어 의미 불일치도 해소된다 |
+| C. `TestRunQueue` 신설 | 기각 — 동일 코드 복제. 다중 인스턴스 전환 시 **교체 지점이 2곳**이 되어 ADR-0027의 이점을 잃는다 |
+
+**큐 클래스는 개명하지 않는다**(FR-V1-36 확정). 개명은 `training-jobs` 모듈·테이블·컨트롤러·`TrainingJobService`로 번지는 순수 리네임인데, 의미 불일치는 이미 싱크 분리로 해소됐고 리네임은 회귀 위험만 남긴다.
+
+**취소 처리**: `markFinished`는 **현재 상태가 `CANCELLED`인 행을 덮어쓰지 않는다**(CAS). 실행기는 다음 TC 경계에서 취소를 감지해 중단하고, 취소된 실행은 **비교 기준선으로 선택할 수 없다**(부분 실행끼리 비교하면 "사라진 TC"가 회귀로 보인다).
+
+## 5. 결정 — 권한은 `simulation:write` 신설(14 → 15종), 실행은 감사 비대상
+
+**PM 확정**으로 `Permission` 유니온에 **`simulation:write`를 신설**한다(`ROLE_PERMISSIONS`: EDITOR·ADMIN 부여, VIEWER 제외). 대안이었던 "읽기 `simulation:read` / 쓰기 `dialogue:write`"는 신규 문자열 0건이라는 장점이 있었으나, **한 화면의 읽기·쓰기가 두 도메인으로 갈라지는** 어색함이 남는다. 이 그룹의 18개 핸들러는 **`simulation:read`/`simulation:write` 2종만** 쓴다. 실행은 DB를 바꾸지 않지만 **ml-worker 자원을 대량 소비**하므로 쓰기 권한으로 분류한다.
+
+이 변경은 ADR-0015의 **결정을 바꾸지 않고 범위만 넓히므로**(`@Public()` 5 → 6과 같은 유형) ADR-0015에 갱신 각주를 단다.
+
+**감사(ADR-0016)**: `AuditTargetType`에 **`TestCaseSet` 1종만** 추가한다. 세트 CRUD·임포트는 기록하고 **실행·취소·비교는 기록하지 않는다** — 읽기 연산이며 자산을 바꾸지 않고, 기록하면 실행 1회당 감사 1건이 쌓인다(FR-15-35·FR-L2-25와 같은 판단).
+
+## 6. 결과
+
+- 신규 테이블 4개(`TestCaseSet`·`TestCase`·`TestRun`·`TestRunResult`), **기존 테이블 컬럼 변경 0건·백필 불필요·DROP만으로 완전 롤백**.
+- `TestCase.expectedTargetId`와 `TestRunResult.caseId`에 **FK를 걸지 않는다**(`AugmentationSuggestion.intentId`와 동일한 의도적 예외) — 걸면 TC가 있는 의도를 영원히 삭제할 수 없고, 삭제는 정당한 동작이다.
+- **보존 정책**: 세트당 최근 20건 + 고정(pin) 5건, 초과분은 **새 실행 완료 직후** 결과와 함께 정리한다(스케줄러 인프라 부재 — 선행 그룹과 동일 판단).
+- 챗봇 영구삭제 시 4테이블 **동반 삭제**(차단 409 대상이 아니다).
+
+## 7. 감수하는 비용
+
+1. **`TestRunResult`가 문장 원문을 담는다** — `TrainingJob.resultSummary`의 "원문 미포함" 규약과 다르다. 그러나 TC 문장은 **관리자가 작성한 검증 입력**이지 수집된 사용자 발화가 아니며(NFR-S8과 무충돌), 담지 않으면 결과 화면이 성립하지 않는다. 대신 **실행·비교 로그에는 원문을 남기지 않는다**.
+2. **2,000 TC × 20 run = 40,000행/세트** — 보존 정책으로 상한을 건다. 재검토 트리거는 `test_run_results` 100만 행이다.
+3. **엔티티 직접 판정이 빠진다** — 카탈로그 원문과의 차이를 화면·문서에 명시한다. 재검토 트리거는 "노드 기대값으로 설명되지 않는 키워드 오탐이 실제로 보고될 때"이며, 그때는 엔진 선택 필드 추가를 별도 ADR로 올린다.
+4. **`Permission`이 15종이 된다** — `@RequirePermission` 인자 타입이 강제하므로 오타는 빌드 실패로 드러난다. VIEWER 권한 집합은 변하지 않아 기존 권한 테스트는 무수정 통과한다.

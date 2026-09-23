@@ -3007,3 +3007,109 @@ a:focus-visible {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ------------------------------------------------------------------------ */
+/* 검증/품질 고도화 (No.19 대화검증시스템·TC테스트 / No.20 학습영향도 TEST)      */
+/* validation-regression-ui-spec.md §3.3(판정 4값)·§4.5(5분류)                */
+/* ------------------------------------------------------------------------ */
+.judgment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.judgment-badge-hint {
+  font-weight: 400;
+  font-size: 12px;
+}
+.classification-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.test-set-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.test-set-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+.test-set-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-text);
+  text-decoration: none;
+  flex: 1;
+  min-width: 200px;
+}
+.test-set-card-name {
+  font-weight: 700;
+}
+.test-set-card-desc,
+.test-set-card-count {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.test-set-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.test-case-turn-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--color-text-muted);
+}
+.test-run-summary-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.test-run-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.unresolved-group-panel {
+  border: 1px dashed #92400e;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+.unresolved-group-panel-title {
+  font-weight: 700;
+  margin: 0;
+}
+.recent-runs-preview ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.only-in-one-section {
+  margin-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 10px;
+}

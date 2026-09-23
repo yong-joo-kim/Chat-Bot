@@ -51,6 +51,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
         <NavLink to={`/chatbots/${chatbotId}/simulator`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabSimulator}
         </NavLink>
+        <NavLink to={`/chatbots/${chatbotId}/validation`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabValidation}
+        </NavLink>
       </div>
       <span className="tab-nav-divider" aria-hidden="true" />
       <div className="tab-nav-group" role="group" aria-label={MESSAGES.detail.tabGroupDeploy}>

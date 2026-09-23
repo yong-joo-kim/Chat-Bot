@@ -9,12 +9,25 @@ import { MESSAGES } from '../../../constants/messages';
 import { intentsApi, keywordsApi, faqsApi } from '../../../api/dialogue';
 import { ApiError } from '../../../api/client';
 
+type ImportApi = {
+  importValidate: (chatbotId: string, formData: FormData) => Promise<ImportValidateResult>;
+  importCommit: (chatbotId: string, dto: { importToken: string; mergePolicy: ImportMergePolicy; errorPolicy: ImportErrorPolicy }) => Promise<ImportCommitResult>;
+  templateUrl: (chatbotId: string, format: 'csv' | 'xlsx') => string;
+};
+
 export interface BulkImportModalProps {
   resourceType: ImportResourceType;
   chatbotId: string;
   isOpen: boolean;
   onClose: () => void;
   onCommitted: () => void;
+  /**
+   * `TEST_CASE`(검증/품질 고도화, No.19)처럼 `chatbotId` 외에 추가 스코프(세트 ID)가 필요한
+   * 소비자를 위한 API 오버라이드(ui-spec §4.2.2 — TC 업로드는 `test-sets/:setId/cases/import/*`).
+   */
+  apiOverride?: ImportApi;
+  /** TC 업로드는 "기존 항목과 이름이 겹칠 때" 개념이 없다(§4.2.2) — true면 정책 라디오를 숨기고 'MERGE'로 고정 전송한다. */
+  hideMergePolicy?: boolean;
 }
 
 const API_BY_TYPE = {
@@ -27,6 +40,7 @@ const TITLE_BY_TYPE: Record<ImportResourceType, string> = {
   INTENT: MESSAGES.dialogue.bulkImport.titleIntent,
   KEYWORD: MESSAGES.dialogue.bulkImport.titleKeyword,
   FAQ: MESSAGES.dialogue.bulkImport.titleFaq,
+  TEST_CASE: MESSAGES.dialogue.bulkImport.titleTestCase,
 };
 
 function buildErrorCsv(errors: ImportValidateResult['errors']): string {
@@ -46,10 +60,18 @@ function downloadCsv(filename: string, content: string): void {
 }
 
 /** D2c/D5b — 의도·키워드·FAQ 공용 대량 업로드 3단계 모달(ui-spec §4.4). */
-export function BulkImportModal({ resourceType, chatbotId, isOpen, onClose, onCommitted }: BulkImportModalProps): JSX.Element {
+export function BulkImportModal({
+  resourceType,
+  chatbotId,
+  isOpen,
+  onClose,
+  onCommitted,
+  apiOverride,
+  hideMergePolicy = false,
+}: BulkImportModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.bulkImport;
   const { showToast } = useToast();
-  const api = API_BY_TYPE[resourceType];
+  const api: ImportApi = apiOverride ?? API_BY_TYPE[resourceType as 'INTENT' | 'KEYWORD' | 'FAQ'];
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -103,7 +125,7 @@ export function BulkImportModal({ resourceType, chatbotId, isOpen, onClose, onCo
     setCommitting(true);
     setAbortedBanner(null);
     try {
-      const res = await api.importCommit(chatbotId, { importToken: result.importToken, mergePolicy, errorPolicy });
+      const res = await api.importCommit(chatbotId, { importToken: result.importToken, mergePolicy: hideMergePolicy ? 'MERGE' : mergePolicy, errorPolicy });
       setCommitResult(res);
       setStep(3);
       onCommitted();
@@ -197,21 +219,23 @@ export function BulkImportModal({ resourceType, chatbotId, isOpen, onClose, onCo
             conflicts={result.conflicts}
           />
 
-          <fieldset className="form-field" style={{ border: 'none', padding: 0, marginTop: 16 }}>
-            <legend className="field-label-static">{msg.mergePolicyLabel}</legend>
-            <label className="form-field--inline">
-              <input type="radio" name="mergePolicy" checked={mergePolicy === 'MERGE'} onChange={() => setMergePolicy('MERGE')} />
-              {msg.mergePolicyMerge} — {msg.mergePolicyMergeDesc}
-            </label>
-            <label className="form-field--inline">
-              <input type="radio" name="mergePolicy" checked={mergePolicy === 'REPLACE'} onChange={() => setMergePolicy('REPLACE')} />
-              {msg.mergePolicyReplace} — {msg.mergePolicyReplaceDesc}
-            </label>
-            <label className="form-field--inline">
-              <input type="radio" name="mergePolicy" checked={mergePolicy === 'SKIP'} onChange={() => setMergePolicy('SKIP')} />
-              {msg.mergePolicySkip} — {msg.mergePolicySkipDesc}
-            </label>
-          </fieldset>
+          {!hideMergePolicy && (
+            <fieldset className="form-field" style={{ border: 'none', padding: 0, marginTop: 16 }}>
+              <legend className="field-label-static">{msg.mergePolicyLabel}</legend>
+              <label className="form-field--inline">
+                <input type="radio" name="mergePolicy" checked={mergePolicy === 'MERGE'} onChange={() => setMergePolicy('MERGE')} />
+                {msg.mergePolicyMerge} — {msg.mergePolicyMergeDesc}
+              </label>
+              <label className="form-field--inline">
+                <input type="radio" name="mergePolicy" checked={mergePolicy === 'REPLACE'} onChange={() => setMergePolicy('REPLACE')} />
+                {msg.mergePolicyReplace} — {msg.mergePolicyReplaceDesc}
+              </label>
+              <label className="form-field--inline">
+                <input type="radio" name="mergePolicy" checked={mergePolicy === 'SKIP'} onChange={() => setMergePolicy('SKIP')} />
+                {msg.mergePolicySkip} — {msg.mergePolicySkipDesc}
+              </label>
+            </fieldset>
+          )}
 
           <fieldset className="form-field" style={{ border: 'none', padding: 0 }}>
             <legend className="field-label-static">{msg.errorPolicyLabel}</legend>

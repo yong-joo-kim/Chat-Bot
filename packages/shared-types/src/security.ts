@@ -17,9 +17,12 @@ export const ROLE_LABELS: Record<RoleName, string> = {
   VIEWER: '운영 모니터',
 };
 
-/* ── 권한 14종 유니온 (FR-0-25, FR-12-18) ──
-   ⚠ 기존 75곳의 @RequirePermission 문자열이 전부 이 목록에 존재해야 한다.
-   명명 규칙: `<도메인>:<동작>`. 새 도메인이 생기면 이 규칙으로 추가한다. */
+/* ── 권한 15종 유니온 (FR-0-25, FR-12-18, ADR-0029 §5) ──
+   ⚠ 기존 75곳+의 @RequirePermission 문자열이 전부 이 목록에 존재해야 한다.
+   명명 규칙: `<도메인>:<동작>`. 새 도메인이 생기면 이 규칙으로 추가한다.
+   [신규 2026-09-23 검증/품질 고도화] `simulation:write`(14→15) — TC 세트/실행의 쓰기·실행·취소·고정을
+   가리키는 권한이다. "읽기 simulation:read / 쓰기 dialogue:write" 조합(신규 문자열 0종)도 대안이었으나,
+   한 화면의 읽기·쓰기가 두 도메인으로 갈라지는 어색함을 피하기 위해 신설을 확정했다(ADR-0029 §5). */
 export const Permission = z.enum([
   'chatbot:read',
   'chatbot:write',
@@ -30,6 +33,7 @@ export const Permission = z.enum([
   'channel:read',
   'channel:write',
   'simulation:read',
+  'simulation:write',
   'user:read',
   'user:write',
   'security:read',
@@ -42,7 +46,17 @@ export type Permission = z.infer<typeof Permission>;
    프런트는 이 상수를 재계산하지 않고 `GET /auth/me`가 반환한 permissions[]를 쓴다(NFR-S6). ── */
 export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
   VIEWER: ['chatbot:read', 'dialogue:read', 'channel:read', 'simulation:read'],
-  EDITOR: ['chatbot:read', 'dialogue:read', 'channel:read', 'simulation:read', 'chatbot:write', 'chatbot:delete', 'dialogue:write', 'channel:write'],
+  EDITOR: [
+    'chatbot:read',
+    'dialogue:read',
+    'channel:read',
+    'simulation:read',
+    'chatbot:write',
+    'chatbot:delete',
+    'dialogue:write',
+    'channel:write',
+    'simulation:write',
+  ],
   ADMIN: [
     'chatbot:read',
     'dialogue:read',
@@ -52,6 +66,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
     'chatbot:delete',
     'dialogue:write',
     'channel:write',
+    'simulation:write',
     'chatbot:purge',
     'user:read',
     'user:write',

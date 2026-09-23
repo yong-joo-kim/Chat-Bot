@@ -65,4 +65,24 @@ describe('TrainingJobQueue — ADR-0027 §4 in-process 큐(교체 지점 1곳)',
 
     expect(jobs.updateProgress).toHaveBeenCalledWith('job-3', 50);
   });
+
+  it('ADR-0029 §4 — 커스텀 sink를 넘기면 TrainingJobService는 전혀 호출되지 않는다(포트 분리, 기본 인자만 기존 동작 보존)', async () => {
+    const jobs = buildJobsMock();
+    const queue = new TrainingJobQueue(jobs);
+    const sink = {
+      markRunning: jest.fn().mockResolvedValue(undefined),
+      updateProgress: jest.fn().mockResolvedValue(undefined),
+      markFinished: jest.fn().mockResolvedValue(undefined),
+    };
+    const task = jest.fn().mockResolvedValue({ status: 'SUCCEEDED' as const, resultSummary: { a: 1 } });
+
+    queue.enqueue('run-1', task, sink);
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sink.markRunning).toHaveBeenCalledWith('run-1');
+    expect(sink.markFinished).toHaveBeenCalledWith('run-1', 'SUCCEEDED', { a: 1 }, undefined);
+    expect(jobs.markRunning).not.toHaveBeenCalled();
+    expect(jobs.markFinished).not.toHaveBeenCalled();
+  });
 });

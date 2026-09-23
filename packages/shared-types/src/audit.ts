@@ -55,6 +55,8 @@ export const AuditTargetType = z.enum([
   'User',
   'BannedWord',
   'Session',
+  // 검증/품질 고도화(No.19/20) 그룹 추가 — TC 세트만 감사 대상이다(실행·비교는 읽기 연산, ADR-0029 §5).
+  'TestCaseSet',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -71,6 +73,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   User: '회원',
   BannedWord: '금지어',
   Session: '세션',
+  TestCaseSet: '검증 세트',
 };
 
 /**
