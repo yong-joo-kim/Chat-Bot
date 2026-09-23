@@ -113,4 +113,44 @@ describe('HttpEmbeddingProvider', () => {
     const provider = await HttpEmbeddingProvider.connect(baseUrl);
     await expect(provider.healthy()).resolves.toBe(false);
   });
+  describe('타임아웃 분리 — 단건(대화 예산) vs 배치(관리자 경로)', () => {
+    const health = { status: 'ok', modelId: 'm@1|noprefix|l2', dimension: 3, device: 'cpu', warmedUp: true };
+
+    /** signal이 abort될 때까지 대기하다가, `delayMs` 뒤에는 정상 응답을 준다. */
+    function slowEmbed(delayMs: number, count: number) {
+      return (_url: string, init?: RequestInit): Promise<Response> =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => resolve(jsonResponse({ modelId: 'm@1|noprefix|l2', dimension: 3, vectors: Array.from({ length: count }, () => [0.1, 0.2, 0.3]) })),
+            delayMs,
+          );
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          });
+        });
+    }
+
+    it('단건 호출은 timeoutMs를 넘기면 "시간 초과" 사유로 실패한다', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(health));
+      const provider = await HttpEmbeddingProvider.connect(baseUrl, { timeoutMs: 20, batchTimeoutMs: 1000 });
+      fetchMock.mockImplementationOnce(slowEmbed(100, 1));
+      await expect(provider.embed(['x'], 'QUERY')).rejects.toThrow('ml-worker 호출 시간 초과(20ms)');
+    });
+
+    it('배치 호출은 timeoutMs를 넘겨도 batchTimeoutMs 안이면 성공한다(CPU 재색인 회귀 방지)', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(health));
+      const provider = await HttpEmbeddingProvider.connect(baseUrl, { timeoutMs: 20, batchTimeoutMs: 1000 });
+      fetchMock.mockImplementationOnce(slowEmbed(100, 3));
+      const vectors = await provider.embed(['a', 'b', 'c'], 'PASSAGE');
+      expect(vectors).toHaveLength(3);
+    });
+
+    it('배치 호출도 batchTimeoutMs를 넘기면 실패한다', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(health));
+      const provider = await HttpEmbeddingProvider.connect(baseUrl, { timeoutMs: 10, batchTimeoutMs: 30 });
+      fetchMock.mockImplementationOnce(slowEmbed(200, 2));
+      await expect(provider.embed(['a', 'b'], 'PASSAGE')).rejects.toThrow('ml-worker 호출 시간 초과(30ms)');
+    });
+  });
 });

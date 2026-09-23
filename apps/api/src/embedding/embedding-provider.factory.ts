@@ -30,7 +30,8 @@ export class EmbeddingProviderFactory {
 
     try {
       const timeoutMs = this.config.get<number>('EMBEDDING_TIMEOUT_MS') ?? 300;
-      this.provider = await HttpEmbeddingProvider.connect(baseUrl, { timeoutMs });
+      const batchTimeoutMs = this.config.get<number>('EMBEDDING_BATCH_TIMEOUT_MS') ?? 30_000;
+      this.provider = await HttpEmbeddingProvider.connect(baseUrl, { timeoutMs, batchTimeoutMs });
       this.logger.log(`임베딩 서비스 연결됨: modelId=${this.provider.modelId} dimension=${this.provider.dimension}`);
       return this.provider;
     } catch (e) {

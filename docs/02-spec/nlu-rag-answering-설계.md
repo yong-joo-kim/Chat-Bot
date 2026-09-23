@@ -397,6 +397,8 @@ simulation ──▶ embedding, rag, answer-settings
 
 > **금지 사항**: 예산을 못 지킨다고 `EMBEDDING_TIMEOUT_MS`를 조용히 올려 **공개 대화 500ms(P95) 예산을 깨지 않는다.** 예산 변경은 설계 문서 갱신을 거친다.
 
+> **보완(2026-09-23, 라이브 데모 발견)**: 300ms 예산은 **단건 질의** 기준인데, 초기 구현은 배치 호출(재색인 최대 64건)에도 같은 값을 적용해 CPU 전용 환경(KURE-v1)에서 **재색인이 전부 `FAILED`로 끝나고 경고 로그만 남는** 문제가 있었다. 대화 예산은 그대로 두고, 2건 이상 배치 호출에만 별도 `EMBEDDING_BATCH_TIMEOUT_MS`(기본 30000)를 적용하도록 분리했다(`HttpEmbeddingProvider`). 공개 대화 경로(`QueryEmbeddingService`)는 항상 단건이므로 예산이 바뀌지 않는다. 타임아웃 실패는 `failureReason`에 `ml-worker 호출 시간 초과(Nms)`로 남아 원인 식별이 가능하다.
+
 ### 8.2 ml-worker 런타임 (ADR-0024)
 
 **결정: Python 3.11 + FastAPI + uvicorn, 추론 라이브러리는 sentence-transformers/FlagEmbedding. Node ONNX 단독 구성은 기각한다.**
@@ -858,7 +860,8 @@ VIEWER는 저장·점검·재색인 버튼이 렌더되지 않으며, API 직접
 | 변수 | 위치 | 기본값 | 용도 |
 |---|---|---|---|
 | `EMBEDDING_BASE_URL` | `apps/api/.env` | (없음) | **미설정 = 1단계 비활성** |
-| `EMBEDDING_TIMEOUT_MS` | `apps/api/.env` | `300` | 질의 임베딩 클라이언트 타임아웃(FR-N1-31) |
+| `EMBEDDING_TIMEOUT_MS` | `apps/api/.env` | `300` | **단건** 질의 임베딩 클라이언트 타임아웃(FR-N1-31) |
+| `EMBEDDING_BATCH_TIMEOUT_MS` | `apps/api/.env` | `30000` | **2건 이상 배치** 임베딩 타임아웃(재색인 등 관리자 경로, 2026-09-23 추가) |
 | `EMBEDDING_CACHE_SIZE` | `apps/api/.env` | `1000` | 질의 임베딩 LRU 건수 |
 | `EMBEDDING_CACHE_TTL_MS` | `apps/api/.env` | `600000` | 질의 임베딩 LRU TTL |
 | `VECTOR_CACHE_MAX_BYTES` | `apps/api/.env` | `268435456` | 챗봇 벡터 메모리 캐시 상한(256MB, §8.5) |

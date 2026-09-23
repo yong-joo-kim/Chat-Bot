@@ -45,6 +45,8 @@ const EnvSchema = z.object({
   // 하나도 설정하지 않으면 두 단계가 모두 비활성이고 시스템은 현행 규칙 매칭으로 정상 기동한다(AC-N4-1).
   EMBEDDING_BASE_URL: z.string().optional(),
   EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().default(300),
+  // 배치(2건 이상) 임베딩 전용 — 재색인·TC 실행 등 관리자 경로. 대화 예산(EMBEDDING_TIMEOUT_MS)과 분리한다.
+  EMBEDDING_BATCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   EMBEDDING_CACHE_SIZE: z.coerce.number().int().positive().default(1000),
   EMBEDDING_CACHE_TTL_MS: z.coerce.number().int().positive().default(600000),
   EMBEDDING_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
