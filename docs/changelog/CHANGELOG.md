@@ -112,3 +112,16 @@ feat: 챗봇 복원/버전 이력관리(No.25) 기능그룹 구현
 - 관리자 콘솔에 "버전 이력" 탭 신설: 목록/생성/상세(콘텐츠 보기)/차이 비교/복원 다이얼로그, 기존 대량변경 화면에 자동 스냅샷 사전/사후 안내 배너 추가
 - code-reviewer 3라운드 통과(Critical/High 0건)
 - 테스트 api 974 / web 224 통과
+
+## 2026-09-24 — dfc7d42
+
+feat: 운영 예약 배포(No.28) 기능그룹 구현
+
+- DeploySchedule 테이블 신설 및 챗봇당 활성 예약 충돌 방지용 부분 유니크 인덱스(마이그레이션 20260923150000_deploy_schedules_schema), 액션 3종(RESTORE_VERSION/PUBLISH/SET_WEB_CHANNEL) 지원(apps/api/src/deploy-schedules 신설, ADR-0032)
+- 실행 엔진: in-process 30초 DB 폴링 루프(PollingLoop, CLOCK 주입으로 테스트 결정화) + CAS 기반 claim + lease로 다중 인스턴스 동시 실행 방지, misfire 10분 허용 윈도우 초과 시 MISSED 처리
+- 콘텐츠 해시 불일치 시 실행 스킵(미실행) 및 동일 챗봇 후속 예약 HELD 전이, 일시적 오류는 재시도, 영구 오류는 실패로 분류(recovery-judge/outcome-classifier)
+- version-restore.service의 RESTORE_BUSY를 별도 예외로 분리하고 actorOverride 지원(예약 실행 시 시스템 액터로 기록), retention prune이 스케줄이 참조 중인 버전을 보존하도록 보완
+- env boolean 값 파서 신설(env-boolean.ts)로 환경변수 불리언 파싱 규칙 명시화
+- 관리자 콘솔: 챗봇별 예약 탭(생성/목록/상세/체인 패널/결과 요약), 전역 예약 페이지(24시간 요약 바), 주의 필요 배지, 엔진 비활성 배너, 예약 충돌 배너
+- apps/api/src/validation/lib/validation-sealing.spec.ts의 금지 모듈명 오타('FaqModule'→'FaqsModule') 수정 및 금지 목록이 실제 선언된 Module 클래스인지 사전 단언하는 assertion 추가
+- 테스트 api 1228 / web 289 전건 통과, 미자동화 항목(AC-D2-6/AC-D2-9/AC-D3-7 BUSY분기/AC-D5-3, ScheduleDeployDialog axe)은 문서에 기록
