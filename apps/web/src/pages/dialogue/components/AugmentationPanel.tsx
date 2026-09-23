@@ -10,6 +10,8 @@ import { AsyncJobProgress } from '../../../components/AsyncJobProgress';
 import { ProposalContainer } from '../../../components/ProposalContainer';
 import { ConfirmDialog } from '../../../components/Modal';
 import { SkeletonRow } from '../../../components/Skeleton';
+import { AutoSnapshotPreNotice } from '../../../components/AutoSnapshotPreNotice';
+import { AutoSnapshotNotice } from '../../../components/AutoSnapshotNotice';
 import { useTrainingJobPolling } from '../../../lib/useTrainingJobPolling';
 import { AugmentationSuggestionTable } from './AugmentationSuggestionTable';
 import { AugmentationImpactCheckButton } from './AugmentationImpactCheckButton';
@@ -201,6 +203,18 @@ export function AugmentationPanel({ chatbotId, intentId, currentExampleCount, re
       } else if (succeededTexts.length > 0) {
         showToast(MESSAGES.learning.resolveSuccessImmediate);
       }
+      /** [신규 2026-09-23 No.25] 승인 직전 자동 스냅샷 결과(§4.5.3) — 필드가 없거나 UNCHANGED/DISABLED면 아무 것도 표시하지 않는다. */
+      if (res.autoSnapshot && (res.autoSnapshot.status === 'CREATED' || res.autoSnapshot.status === 'FAILED')) {
+        showToast(
+          <AutoSnapshotNotice
+            outcome={res.autoSnapshot}
+            chatbotId={chatbotId}
+            createdText={msg.autoSnapshotCreated}
+            viewLinkText={msg.autoSnapshotViewLink}
+            failedText={msg.autoSnapshotFailed}
+          />,
+        );
+      }
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
     } finally {
@@ -264,6 +278,7 @@ export function AugmentationPanel({ chatbotId, intentId, currentExampleCount, re
               )}
 
               <ProposalContainer title={msg.proposalContainerTitle} safetyNotice={msg.safetyNotice}>
+                <AutoSnapshotPreNotice text={msg.autoSnapshotPreNotice} />
                 {isGenerating && <AsyncJobProgress label={msg.generating} />}
                 {!isGenerating && jobState.phase === 'timeout' && (
                   <p className="field-hint" role="status">

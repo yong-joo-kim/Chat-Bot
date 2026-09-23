@@ -7,8 +7,10 @@
 export * from './common';
 export * from './chatbot';
 export * from './dialogue';
-export * from './bulk-import';
 export * from './dialogue-engine';
+export * from './answering';
+export * from './version';
+export * from './bulk-import';
 export * from './conversation';
 export * from './channel';
 export * from './security';
@@ -17,5 +19,4 @@ export * from './stats';
 export * from './learning';
 export * from './output-view';
 export * from './contrast';
-export * from './answering';
 export * from './validation';

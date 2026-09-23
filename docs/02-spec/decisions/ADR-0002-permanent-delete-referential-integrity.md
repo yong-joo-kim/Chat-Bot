@@ -59,3 +59,14 @@
 - `chatbots.service.ts`: `archive()` / `permanentDelete()` 분리, 후자는 사전 count 검사 포함.
 - `all-exceptions.filter.ts`: `P2002 → 409 DUPLICATE_SLUG`, `P2003 → 409 CHATBOT_HAS_CHILDREN` 매핑.
 - 후속 Phase(No.13 이력관리)는 영구 삭제 직전 스냅샷을 `AuditLog.beforeValue`에 남기는 지점으로 `permanentDelete()`를 사용한다.
+
+
+---
+
+## 갱신 (2026-09-23 — No.25로 "되돌릴 수단"이 생겼다)
+
+§근거의 "버전 스냅샷/롤백(No.25)도 … 없어 **되돌릴 수단이 전무하다**"는 **대화 자산에 한해 더 이상 사실이 아니다.** No.25가 대화 자산 시점 스냅샷과 ID 보존 원자적 복원을 도입했다(ADR-0031). **이 ADR의 결정은 전부 불변이다** — cascade 금지·2단계 삭제·사전 검사 409·`confirmName` 서버 재검증.
+
+- **영구삭제는 여전히 불가역이다.** `ChatbotVersion`·`ChatbotVersionPayload`·`ChatbotVersionSequence`는 **"하위 데이터 제거" 분류**로 영구삭제 트랜잭션에서 **동반 삭제**된다(사전 검사 409 대상이 아니다 — 스냅샷이 영구삭제를 막으면 보관 챗봇을 영원히 지울 수 없다). 따라서 영구삭제 후에는 스냅샷도 남지 않는다. 오프사이트 백업은 No.45의 몫이다.
+- **보관(`ARCHIVED`) 중에는 스냅샷이 보존**되며 보관 해제 후 복원할 수 있다.
+- **복원은 이 ADR이 말하는 "복구 불가능한 파괴적 동작"이 아니다** — 복원 직전 상태를 같은 트랜잭션에서 자동 백업하므로 가역이다. 그래서 `chatbot:purge`(ADMIN 전용)와 같은 등급을 요구하지 않고 `dialogue:write` + `chatbot:write`(EDITOR 이상)로 둔다.

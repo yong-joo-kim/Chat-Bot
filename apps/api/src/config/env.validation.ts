@@ -94,6 +94,16 @@ const EnvSchema = z.object({
   TEST_RUN_RETENTION_PER_SET: z.coerce.number().int().positive().default(20),
   TEST_RUN_PINNED_MAX: z.coerce.number().int().positive().default(5),
   TEST_RUN_PROGRESS_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
+  // 챗봇 복원/버전 이력관리(No.25) 그룹 추가 — 전부 선택(기본값 있음, FR-0-74). 하나도 설정하지
+  // 않으면 자동 스냅샷 활성·보존 자동30/수동30/고정10·1건 20MB·챗봇당 300MB·트랜잭션 timeout 30초로
+  // 정상 동작한다(AC-H4-8). ml-worker 변수 추가는 0건이다.
+  VERSION_AUTO_SNAPSHOT_ENABLED: z.coerce.boolean().default(true),
+  VERSION_RETENTION_AUTO: z.coerce.number().int().min(1).default(30),
+  VERSION_RETENTION_MANUAL: z.coerce.number().int().min(1).default(30),
+  VERSION_PINNED_MAX: z.coerce.number().int().min(0).default(10),
+  VERSION_SNAPSHOT_MAX_BYTES: z.coerce.number().int().min(1_048_576).default(20_971_520),
+  VERSION_TOTAL_MAX_BYTES_PER_CHATBOT: z.coerce.number().int().min(1_048_576).default(314_572_800),
+  VERSION_TX_TIMEOUT_MS: z.coerce.number().int().min(5000).default(30000),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -119,6 +129,12 @@ export function validate(config: Record<string, unknown>): EnvConfig {
     result.data.RAG_TIMEOUT_MS = RAG_TIMEOUT_MS_FLOOR;
   } else if (result.data.RAG_TIMEOUT_MS > RAG_TIMEOUT_MS_CEIL) {
     result.data.RAG_TIMEOUT_MS = RAG_TIMEOUT_MS_CEIL;
+  }
+
+  // No.25 §15 — 총량 상한이 1건 상한보다 작으면 기동은 계속하되 경고만 남긴다(기동 실패 아님).
+  if (result.data.VERSION_TOTAL_MAX_BYTES_PER_CHATBOT < result.data.VERSION_SNAPSHOT_MAX_BYTES) {
+    // eslint-disable-next-line no-console
+    console.warn('VERSION_TOTAL_MAX_BYTES_PER_CHATBOT이 VERSION_SNAPSHOT_MAX_BYTES보다 작습니다. 값을 다시 확인해 주세요.');
   }
 
   return result.data;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { IntentListItem, KeywordListItem } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { intentsApi, keywordsApi } from '../../api/dialogue';
@@ -11,6 +11,7 @@ import { SkeletonRow } from '../../components/Skeleton';
 import { Pagination } from '../../components/Pagination';
 import { KebabMenu } from '../../components/KebabMenu';
 import { ConfirmDialog } from '../../components/Modal';
+import { AutoSnapshotPreNotice } from '../../components/AutoSnapshotPreNotice';
 import { MESSAGES } from '../../constants/messages';
 import { LinkedNodeCountBadge } from './badges';
 import { IntentEditModal } from './components/IntentEditModal';
@@ -367,6 +368,8 @@ export function IntentsKeywordsPage(): JSX.Element {
           setBulkDeleteBlocked(false);
         }}
       >
+        <AutoSnapshotPreNotice text={MESSAGES.dialogue.bulkDeleteAutoSnapshotNotice} />
+        <Link to={`/chatbots/${chatbot.id}/versions`}>{MESSAGES.dialogue.bulkDeleteAutoSnapshotLink}</Link>
         {bulkDeleteBlocked && (
           <div className="form-banner form-banner--error" role="alert">
             {msg.bulkDeleteBlocked}

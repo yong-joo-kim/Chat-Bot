@@ -187,3 +187,17 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 검증/품질 고도화가 **`TestCaseSet` 1종**을 감사 대상에 추가한다. TC 세트는 **관리자가 만들어 다수 인원이 공유하는 자산**이며 "누가 기대값을 바꿨나"가 통제 대상이다. 세트 CRUD는 표준 `CREATE`/`UPDATE`/`DELETE`로, **개별 TC 편집은 소속 세트의 `UPDATE`로** 기록하고, **대량 임포트는 배치 1건 + 요약**(이 ADR의 기존 규약 그대로)이다.
 
 **실행·취소·고정·비교는 감사 대상이 아니다.** 읽기 연산이고 자산을 바꾸지 않으며, 기록하면 실행 1회당 감사 1건이 쌓인다(FR-15-35의 큐 상태 변경, FR-L2-25의 분류기 학습과 **같은 판단**). 또한 실행 결과에는 **관리자가 작성한 문장만** 들어가므로 NFR-S8(감사로그에 사용자 발화 유입 금지)과는 무관하다.
+
+
+---
+
+## 갱신 (2026-09-23 — `RESTORE` 요약 액션 · `ChatbotVersion` 대상 · actor 스냅샷 읽기)
+
+챗봇 복원/버전 이력관리(No.25, ADR-0031)가 다음을 추가한다. **감사로그의 결정(append-only · 커밋 후 기록 · 화이트리스트 부분 스냅샷 · 복원 원천이 아님)은 전부 불변**이며, 감수비용 5("`beforeValue`로 복원할 수 없다 — 복원은 No.25의 본체")는 **예고대로 No.25가 별도 저장소(`ChatbotVersion`)로 이행**했다.
+
+1. **`AuditAction`에 `RESTORE`(12 → 13종, 라벨 `'복원'`)를 추가하고 `DESTRUCTIVE_AUDIT_ACTIONS`에 포함**한다. `targetType='Chatbot'`, `summary` 예: `"v27로 복원 (백업 v28) — 의도 +0/−0/~1, FAQ +0/−3/~0"`.
+2. **`RESTORE`는 §7의 요약 액션**이다 — `record()`의 요약 분기(`BULK_DELETE`/`IMPORT`)에 `RESTORE`를 더해 화이트리스트를 건너뛴다. `after`는 `{ fromVersionNo, backupVersionNo, counts: { <종류>: { added, removed, modified } } }`로 **number만** 담는다(§7 표의 값 종류 제약 그대로 — 원문·이름 없음). **복원이 바꾼 개별 항목 수백 건을 감사 레코드로 풀어 쓰지 않는다**(행당 1건 기록을 기각한 §대안과 같은 판단). 요약 액션 호출부는 6곳 → **7곳**이며 code-reviewer 전수 점검 대상에 포함한다.
+3. **`AuditTargetType`에 `ChatbotVersion`(라벨 `'챗봇 버전'`)을 추가**한다 — 수동 저장(`CREATE`)·라벨/메모 수정·고정/해제(`UPDATE`)·수동 삭제(`DELETE`). `AUDIT_FIELDS.ChatbotVersion = ['versionNo','trigger','label','memo','pinned','sizeBytes']`.
+4. **자동 스냅샷 생성과 보존 정리, 복원 직전 백업 생성은 기록하지 않는다** — 자동 생성은 이미 감사되는 본 동작(`IMPORT`·`BULK_DELETE`·`Intent UPDATE`)의 부수 효과이고, 정리는 시스템 동작이며, 백업 번호는 `RESTORE` 요약에 포함된다. 기록하면 대량 작업마다 감사가 2배가 된다(FR-15-35·ADR-0029 §5와 같은 판단).
+5. **`AuditLogService.currentActorSnapshot(): { id, email, role } | null` 공개 메서드를 추가**한다. 스냅샷 메타의 `createdById`/`createdByEmail`은 이 메서드로만 얻는다 — **`RequestContextService.get()` 호출 지점은 여전히 `AuditLogService` 1곳**이다(§결과 code-reviewer 점검 ③ 유지).
+6. 버전 이력은 감사로그를 **복제하지 않는다** — "두 버전 사이의 감사 레코드"는 `(chatbotId, createdAt)` 인덱스로 **건수만** 세고 이력관리 화면으로 필터 링크를 건다(`audit:read` 전용 경로). **§6의 `(targetType, targetId, createdAt)` 인덱스 재검토 트리거는 발동하지 않는다** — No.25는 `targetId`로 조회하지 않으며, 항목별 변경 이력 화면은 1차 범위 밖이고 만들더라도 **스냅샷 차이**로 구현한다.

@@ -25,6 +25,7 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
+import { VersionCaptureService } from '../versions/capture/version-capture.service';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
 import { CsvSheetReader } from '../dialogue-common/import/csv-sheet-reader';
 import { XlsxSheetReader } from '../dialogue-common/import/xlsx-sheet-reader';
@@ -64,6 +65,7 @@ export class KeywordsService {
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
+    private readonly versionCapture: VersionCaptureService,
   ) {}
 
   private toAuditSnapshot(row: { id: string; name: string; description: string | null; synonyms: string }) {
@@ -257,6 +259,10 @@ export class KeywordsService {
         blocked.map((b) => ({ field: b.id, message: b.name })),
       );
     }
+
+    // [신규 No.25] 일괄 삭제 직전 자동 스냅샷(§6.4 훅 #4) — fail-open, 본 동작 트랜잭션 밖·직전.
+    await this.versionCapture.captureAuto(chatbotId, 'BEFORE_BULK_DELETE', { resourceType: 'KEYWORD', itemCount: rows.length });
+
     await this.prisma.keyword.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
     this.bundleService.invalidate(chatbotId);
 
@@ -371,6 +377,9 @@ export class KeywordsService {
       throw new ApiException('IMPORT_ABORTED', 400, `오류 ${errors.length}건이 있어 전체를 취소했습니다. 한 건도 반영되지 않았습니다.`);
     }
 
+    // [신규 No.25] 임포트 커밋 직전 자동 스냅샷(§6.4 훅 #3) — fail-open, 본 동작 트랜잭션 밖·직전.
+    const autoSnapshot = await this.versionCapture.captureAuto(chatbotId, 'BEFORE_IMPORT', { resourceType: 'KEYWORD', itemCount: plan.items.length });
+
     let createdItems = 0;
     let updatedItems = 0;
     let createdValues = 0;
@@ -434,6 +443,7 @@ export class KeywordsService {
       createdValues,
       skippedRows: plan.duplicatedRows + errors.length,
       errors,
+      autoSnapshot,
     };
   }
 

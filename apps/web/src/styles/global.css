@@ -306,6 +306,10 @@ a:focus-visible {
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
+.modal-banner--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
 
 /* 토스트 */
 .toast-region {
@@ -1363,6 +1367,10 @@ a:focus-visible {
 .form-banner--info {
   background: #dbeafe;
   color: #1d4ed8;
+}
+.form-banner--warning {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 /* 흐름 미리보기 / 설계 점검 패널 */
@@ -3112,4 +3120,233 @@ a:focus-visible {
   margin-top: 12px;
   border-top: 1px dashed var(--color-border);
   padding-top: 10px;
+}
+
+/* ============================================================================================
+ * No.25 챗봇 복원/버전 이력관리 (`version-history-ui-spec.md`)
+ * ========================================================================================== */
+.version-list-page,
+.version-diff-page,
+.version-content-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.version-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.version-filter-bar,
+.version-diff-target-selector,
+.version-diff-filter-bar,
+.version-content-kind-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.version-current-state-row {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.version-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.version-row-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.version-restore-event-divider {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+.version-row {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.version-row-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  font: inherit;
+  color: var(--color-text);
+}
+.version-row-no {
+  font-weight: 700;
+}
+.version-row-timestamp {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.version-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.version-integrity-warning {
+  color: #92400e;
+  font-weight: 600;
+}
+.version-row-label--none {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.version-pin-toggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+}
+.version-pin-toggle[aria-pressed='true'] {
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+.version-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.version-row-detail {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.version-trigger-badge,
+.change-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.version-diff-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--color-text);
+}
+.version-diff-item-table,
+.version-content-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.version-diff-item-table th,
+.version-diff-item-table td,
+.version-content-table th,
+.version-content-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.version-recreated-hint {
+  margin-left: 8px;
+  color: #92400e;
+}
+.diff-item-fields {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.diff-value-set,
+.diff-ref-set {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.diff-value-added {
+  color: #166534;
+}
+.diff-value-removed {
+  color: #991b1b;
+}
+.diff-struct-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.diff-struct-pair pre {
+  background: var(--color-bg-subtle);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.restore-blocker-list,
+.restore-warning-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.restore-warning-heading {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.restore-accepted-warning {
+  margin-bottom: 8px;
+}
+.restore-ack-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.restore-result-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.restore-result-title {
+  font-weight: 700;
+}
+.restore-result-actions {
+  display: flex;
+  gap: 8px;
+}
+.auto-snapshot-notice,
+.auto-snapshot-pre-notice {
+  margin: 8px 0;
 }

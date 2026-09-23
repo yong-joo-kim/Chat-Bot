@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { buildDialogueIndex } from '@chat-bot/dialogue-engine';
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import type { ContextSlot, DialogOutput, DialogueBundle, HomonymMeaning } from '@chat-bot/shared-types';
@@ -6,6 +7,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { DialogueBundleCache } from './dialogue-bundle.cache';
 import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
 import { VectorCacheService } from '../embedding/vector-cache.service';
+
+/** `build()`의 두 번째 인자로 받을 수 있는 클라이언트 종류 — 기본 프로퍼티(PrismaService) 또는 인터랙티브 트랜잭션 클라이언트. */
+type DbClient = PrismaService | Prisma.TransactionClient;
 
 export interface CachedDialogueBundle {
   bundle: DialogueBundle;
@@ -62,15 +66,39 @@ export class DialogueBundleService {
     }
   }
 
-  async build(chatbotId: string): Promise<DialogueBundle> {
-    const [intents, keywords, homonyms, dialogNodes, contexts, faqs] = await Promise.all([
-      this.prisma.intent.findMany({ where: { chatbotId } }),
-      this.prisma.keyword.findMany({ where: { chatbotId } }),
-      this.prisma.homonymDictionary.findMany({ where: { chatbotId } }),
-      this.prisma.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } }),
-      this.prisma.contextVariable.findMany({ where: { chatbotId } }),
-      this.prisma.faqEntry.findMany({ where: { chatbotId } }),
-    ]);
+  /**
+   * `db`를 생략하면 기존과 동일하게 `Promise.all` 6회 **병렬** 조회다(기존 호출부 무변경).
+   * `db`에 인터랙티브 트랜잭션 클라이언트가 주어지면(No.25 버전 캡처, §6.1) 6회 조회를 **순차 await**
+   * 한다 — 단일 커넥션인 tx 클라이언트 위에서 병렬 발행을 금지해 "노드는 새 의도를 참조하는데
+   * 의도 목록은 옛것"인 일관성 깨짐을 막는다(FR-H1-6).
+   */
+  async build(chatbotId: string, db: DbClient = this.prisma): Promise<DialogueBundle> {
+    const isTransactionClient = db !== this.prisma;
+
+    let intents: Awaited<ReturnType<typeof this.prisma.intent.findMany>>;
+    let keywords: Awaited<ReturnType<typeof this.prisma.keyword.findMany>>;
+    let homonyms: Awaited<ReturnType<typeof this.prisma.homonymDictionary.findMany>>;
+    let dialogNodes: Awaited<ReturnType<typeof this.prisma.dialogNode.findMany<{ include: { intentLinks: true; keywordLinks: true } }>>>;
+    let contexts: Awaited<ReturnType<typeof this.prisma.contextVariable.findMany>>;
+    let faqs: Awaited<ReturnType<typeof this.prisma.faqEntry.findMany>>;
+
+    if (isTransactionClient) {
+      intents = await db.intent.findMany({ where: { chatbotId } });
+      keywords = await db.keyword.findMany({ where: { chatbotId } });
+      homonyms = await db.homonymDictionary.findMany({ where: { chatbotId } });
+      dialogNodes = await db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } });
+      contexts = await db.contextVariable.findMany({ where: { chatbotId } });
+      faqs = await db.faqEntry.findMany({ where: { chatbotId } });
+    } else {
+      [intents, keywords, homonyms, dialogNodes, contexts, faqs] = await Promise.all([
+        db.intent.findMany({ where: { chatbotId } }),
+        db.keyword.findMany({ where: { chatbotId } }),
+        db.homonymDictionary.findMany({ where: { chatbotId } }),
+        db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } }),
+        db.contextVariable.findMany({ where: { chatbotId } }),
+        db.faqEntry.findMany({ where: { chatbotId } }),
+      ]);
+    }
 
     return {
       intents: intents.map((row) => ({

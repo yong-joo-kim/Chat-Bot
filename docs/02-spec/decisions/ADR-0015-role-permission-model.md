@@ -140,3 +140,21 @@ export const RequirePermission = (permission: Permission): MethodDecorator & Cla
 **신규 문자열 0건 원칙의 첫 예외인 이유**: 대안은 "읽기 `simulation:read` / 쓰기 `dialogue:write`"였고 신규 문자열이 0건이라는 장점이 있었다. 그러나 TC 세트·실행 결과는 **대화 자산이 아니라 검증 자산**이어서, 한 화면의 읽기·쓰기가 두 도메인으로 갈라진다. `simulation:write` 신설로 이 그룹의 **18개 핸들러가 `simulation:read`/`simulation:write` 2종만** 쓰게 된다. **실행(run)은 DB를 바꾸지 않지만 ml-worker 자원을 대량 소비하므로 쓰기로 분류**한다 — "동작이 바꾸는 자원을 기준으로 권한을 정한다"는 원칙의 연장이다(ADR-0029 §5).
 
 개수 고정 테스트(권한 유니온 크기)는 무력화하지 않고 **15로 갱신**한다.
+
+
+---
+
+## 갱신 (2026-09-23 — `@RequirePermission` 복수 인자 AND, 신규 권한 0종)
+
+챗봇 복원/버전 이력관리(No.25)의 **복원 미리보기·확정은 `dialogue:write`와 `chatbot:write`를 모두** 요구한다 — 복원은 대화 자산(`dialogue:*`)과 답변설정·표시설정(`chatbot:write`, `answer-settings.controller.ts`가 쓰는 권한)을 **함께** 바꾸기 때문이다. PM이 **신규 권한 0종**(대안 `chatbot:restore` 신설 기각)으로 확정했으므로, 단일 권한만 판정하던 데코레이터·가드를 확장한다.
+
+```ts
+export const RequirePermission = (...permissions: [Permission, ...Permission[]]) =>
+  SetMetadata(PERMISSION_METADATA_KEY, permissions);      // 항상 배열로 저장
+// PermissionGuard: 메타데이터가 단일 값이든 배열이든 배열로 정규화 → **전부 보유**해야 통과(AND)
+```
+
+- **불변**: `Permission` 유니온 **15종** · `ROLE_PERMISSIONS` · `@Public()` **6곳** · fail-closed 판정 순서 ①~⑦ · `403` 본문에 요구 권한 미표기 · 기존 호출(인자 1개) 한 글자도 변경 없음.
+- **AND만** 지원한다. OR 조합은 수요가 없고, 섞이면 판정 규칙이 데코레이터에서 읽히지 않는다.
+- 빈 호출(`RequirePermission()`)은 튜플 타입으로 **컴파일 오류**다. `PERMISSION_DENIED` 이력의 `summary`에는 요구 권한을 `a+b`로 남긴다(응답 본문에는 여전히 미포함).
+- 복원이 ADMIN 전용이 아닌 이유: 복원 직전 자동 백업으로 **가역 동작**이며(ADR-0031 §4), "즉시 롤백"은 사고 현장의 EDITOR가 할 수 있어야 의미가 있다. 조직 통제상 승인이 필요해지면(No.36/45) `chatbot:restore` 신설 또는 2인 승인을 재검토한다.

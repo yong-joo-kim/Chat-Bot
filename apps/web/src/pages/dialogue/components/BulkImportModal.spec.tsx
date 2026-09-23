@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '../../../components/Toast';
 import { ApiError } from '../../../api/client';
 import { BulkImportModal } from './BulkImportModal';
@@ -20,9 +21,11 @@ vi.mock('../../../api/dialogue', () => ({
 
 function renderModal(onCommitted = vi.fn()): ReturnType<typeof render> {
   return render(
-    <ToastProvider>
-      <BulkImportModal resourceType="INTENT" chatbotId="bot-1" isOpen onClose={vi.fn()} onCommitted={onCommitted} />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <BulkImportModal resourceType="INTENT" chatbotId="bot-1" isOpen onClose={vi.fn()} onCommitted={onCommitted} />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -196,5 +199,57 @@ describe('BulkImportModal — 대량 업로드 3단계 플로우', () => {
       conflicts: [],
     });
     await screen.findByText('2/3 검증 결과');
+  });
+
+  /** [신규 2026-09-23 No.25] E1 — 자동 스냅샷 안내(§4.5.1). `autoSnapshot` 필드 유무에 따라 표시가 갈린다. */
+  describe('자동 스냅샷 안내(§4.5.1)', () => {
+    async function toStep3(autoSnapshot?: { status: string; versionNo?: number; versionId?: string }): Promise<void> {
+      const user = userEvent.setup();
+      mockImportValidate.mockResolvedValue({
+        importToken: 'token-snap',
+        expiresAt: new Date(),
+        resourceType: 'INTENT',
+        totalRows: 1,
+        newItems: 1,
+        updatedItems: 0,
+        newValues: 1,
+        duplicatedRows: 0,
+        errors: [],
+        conflicts: [],
+      });
+      mockImportCommit.mockResolvedValue({ createdItems: 1, updatedItems: 0, createdValues: 1, skippedRows: 0, errors: [], autoSnapshot });
+      renderModal();
+
+      expect(screen.getByText('커밋 직전 상태가 자동으로 저장됩니다(버전 이력에서 되돌릴 수 있음).')).toBeInTheDocument();
+
+      await user.upload(screen.getByLabelText('파일 선택'), makeFile());
+      await user.click(screen.getByRole('button', { name: '검증하기' }));
+      await screen.findByText('2/3 검증 결과');
+      await user.click(screen.getByRole('button', { name: '반영하기' }));
+      await screen.findByText('3/3 완료');
+    }
+
+    it('autoSnapshot.status===CREATED면 버전 번호와 "버전 이력에서 보기" 링크가 표시된다', async () => {
+      await toStep3({ status: 'CREATED', versionNo: 15, versionId: 'v-15' });
+      expect(await screen.findByText(/이 작업 직전 상태가 v15로 자동 저장되었습니다\./)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: '버전 이력에서 보기 →' })).toHaveAttribute('href', '/chatbots/bot-1/versions');
+    });
+
+    it('autoSnapshot.status===FAILED면 경고 문구가 표시된다', async () => {
+      await toStep3({ status: 'FAILED' });
+      expect(await screen.findByText(/직전 상태가 자동 저장되지 않았습니다/)).toBeInTheDocument();
+    });
+
+    it('autoSnapshot 필드가 없으면(구버전 서버) 아무 안내도 표시하지 않는다', async () => {
+      await toStep3(undefined);
+      expect(screen.queryByText(/자동 저장되었습니다/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/자동 저장되지 않았습니다/)).not.toBeInTheDocument();
+    });
+
+    it('autoSnapshot.status===UNCHANGED면 아무 안내도 표시하지 않는다', async () => {
+      await toStep3({ status: 'UNCHANGED', versionNo: 14 });
+      expect(screen.queryByText(/자동 저장되었습니다/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/자동 저장되지 않았습니다/)).not.toBeInTheDocument();
+    });
   });
 });

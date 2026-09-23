@@ -20,6 +20,8 @@ export const AuditAction = z.enum([
   'LOGIN_FAILED',
   'LOGOUT',
   'PERMISSION_DENIED',
+  // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §12, ADR-0031 §7) — 요약 액션.
+  'RESTORE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -36,10 +38,12 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   LOGIN_FAILED: '로그인 실패',
   LOGOUT: '로그아웃',
   PERMISSION_DENIED: '권한거부',
+  RESTORE: '복원',
 };
 
-/** 파괴적 동작(시각적 구분 대상, FR-13-21). */
-export const DESTRUCTIVE_AUDIT_ACTIONS: readonly AuditAction[] = ['DELETE', 'PURGE', 'BULK_DELETE'];
+/** 파괴적 동작(시각적 구분 대상, FR-13-21). 복원은 백업이 있어 가역이지만 대화 자산 전체를
+ * 바꾸는 동작이라 시각적으로 구분한다(No.25 그룹 추가). */
+export const DESTRUCTIVE_AUDIT_ACTIONS: readonly AuditAction[] = ['DELETE', 'PURGE', 'BULK_DELETE', 'RESTORE'];
 
 /* ── 대상 유형 (§9.3) — Prisma 모델명과 1:1 ── */
 export const AuditTargetType = z.enum([
@@ -57,6 +61,8 @@ export const AuditTargetType = z.enum([
   'Session',
   // 검증/품질 고도화(No.19/20) 그룹 추가 — TC 세트만 감사 대상이다(실행·비교는 읽기 연산, ADR-0029 §5).
   'TestCaseSet',
+  // 챗봇 복원/버전 이력관리(No.25) 그룹 추가 — 수동 생성/라벨·메모/고정/삭제/복원 감사 대상(§12).
+  'ChatbotVersion',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -74,6 +80,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   BannedWord: '금지어',
   Session: '세션',
   TestCaseSet: '검증 세트',
+  ChatbotVersion: '챗봇 버전',
 };
 
 /**

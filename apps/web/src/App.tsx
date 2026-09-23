@@ -35,6 +35,9 @@ import { TestSetDetailPage } from './pages/chatbot-detail/validation/sets/TestSe
 import { TestRunListPage } from './pages/chatbot-detail/validation/runs/TestRunListPage';
 import { TestRunDetailPage } from './pages/chatbot-detail/validation/runs/TestRunDetailPage';
 import { TestRunComparePage } from './pages/chatbot-detail/validation/compare/TestRunComparePage';
+import { VersionListPage } from './pages/chatbot-detail/versions/VersionListPage';
+import { VersionDiffPage } from './pages/chatbot-detail/versions/diff/VersionDiffPage';
+import { VersionContentPage } from './pages/chatbot-detail/versions/content/VersionContentPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -88,6 +91,10 @@ export function App(): JSX.Element {
               <Route path="learning" element={<LearningQueuePage />} />
             </Route>
             <Route path="settings" element={<SettingsTab />} />
+            <Route path="versions" element={<VersionListPage />} />
+            <Route path="versions/:versionId" element={<VersionListPage />} />
+            <Route path="versions/:versionId/diff" element={<VersionDiffPage />} />
+            <Route path="versions/:versionId/content" element={<VersionContentPage />} />
             <Route path="skin" element={<SkinEmbedTab />} />
             <Route path="answer-settings" element={<AnswerSettingsTab />} />
             <Route path="simulator" element={<SimulatorTab />} />

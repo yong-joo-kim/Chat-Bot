@@ -24,9 +24,10 @@ export function AuditLogsPage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const chatbotId = searchParams.get('chatbotId') ?? undefined;
   const chatbotName = searchParams.get('chatbotName') ?? undefined;
-
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  /** [신규 2026-09-23 No.25] `AuditCountDisclosure`의 "이력관리에서 보기" 딥링크(§10.1 link)가 `from`/`to`를
+   * `date` input 형식(yyyy-mm-dd)으로 넘긴다 — ISO 문자열이 와도 앞 10자만 취해 안전하게 자른다. */
+  const [from, setFrom] = useState(() => searchParams.get('from')?.slice(0, 10) ?? '');
+  const [to, setTo] = useState(() => searchParams.get('to')?.slice(0, 10) ?? '');
   const [actorId, setActorId] = useState('');
   const [action, setAction] = useState<AuditAction[]>([]);
   const [targetType, setTargetType] = useState<AuditTargetType[]>([]);

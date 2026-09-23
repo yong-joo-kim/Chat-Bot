@@ -10,6 +10,7 @@ import { AugmentationAcceptService } from './augmentation-accept.service';
 import { AugmentationJobRunner } from './augmentation-job.runner';
 import { AugmentationProviderFactory } from './providers/augmentation-provider.factory';
 import { LearningApplyService } from '../learning/learning-apply.service';
+import { VersionCaptureModule } from '../versions/capture/version-capture.module';
 
 /**
  * No.16 예문 증강 모듈(ADR-0025/0026). 의존 방향(설계서 §9.2):
@@ -21,7 +22,7 @@ import { LearningApplyService } from '../learning/learning-apply.service';
  * (상태 없는 얇은 래퍼 — `DialogueCommonModule`의 `DialogueBundleService`만 필요).
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, TrainingJobsModule, IntentsModule],
+  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, TrainingJobsModule, IntentsModule, VersionCaptureModule],
   controllers: [AugmentationController],
   providers: [AugmentationService, AugmentationAcceptService, AugmentationJobRunner, AugmentationProviderFactory, LearningApplyService],
 })

@@ -24,6 +24,7 @@ import { toPaginated } from '../common/pagination';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { IntentsService } from '../intents/intents.service';
 import { LearningApplyService } from './learning-apply.service';
+import { VersionCaptureService } from '../versions/capture/version-capture.service';
 import { toUnansweredQuestionListItem, parseVariantsJson } from './unanswered-question.mapper';
 import { suggestIntents } from './lib/intent-suggest';
 import type { SuggestCandidateIntent } from './lib/intent-suggest';
@@ -45,6 +46,7 @@ export class UnansweredQuestionsService {
     private readonly learningApply: LearningApplyService,
     private readonly config: ConfigService,
     private readonly classifierPredict: ClassifierPredictService,
+    private readonly versionCapture: VersionCaptureService,
   ) {}
 
   private async findRowOrThrow(chatbotId: string, id: string): Promise<PrismaUnansweredQuestion> {
@@ -306,6 +308,9 @@ export class UnansweredQuestionsService {
     await this.scope.assertWritable(chatbotId);
     this.assertBulkSizeOrThrow(dto.items.length);
 
+    // [신규 No.25] 학습현황 일괄 반영 직전 자동 스냅샷(§6.4 훅 #8) — fail-open, 본 동작 트랜잭션 밖·직전.
+    const autoSnapshot = await this.versionCapture.captureAuto(chatbotId, 'BEFORE_LEARNING_BULK_APPLY', { itemCount: dto.items.length });
+
     const results: ResolveResult[] = [];
     const failed: BulkFailure[] = [];
     const succeededIntentIds: string[] = [];
@@ -337,7 +342,7 @@ export class UnansweredQuestionsService {
       for (const result of results) result.appliedImmediately = applyResult.appliedImmediately;
     }
 
-    return { succeeded: results.length, results, failed };
+    return { succeeded: results.length, results, failed, autoSnapshot };
   }
 
   async bulkIgnore(chatbotId: string, dto: BulkIgnoreDto): Promise<BulkResult> {

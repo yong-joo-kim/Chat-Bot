@@ -113,6 +113,16 @@ export const ApiErrorCode = z.enum([
   'TEST_SET_EMPTY',
   'TEST_CASE_LIMIT_EXCEEDED',
   'TEST_RUN_CANCELLED',
+  // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §10.3, FR-0-75) — 9종
+  'VERSION_SNAPSHOT_TOO_LARGE',
+  'VERSION_SCHEMA_UNSUPPORTED',
+  'VERSION_INTEGRITY_FAILED',
+  'VERSION_PINNED_LIMIT_EXCEEDED',
+  'VERSION_PINNED',
+  'RESTORE_PREVIEW_STALE',
+  'RESTORE_BLOCKED_BY_ACTIVE_JOB',
+  'RESTORE_IN_PROGRESS',
+  'RESTORE_NO_CHANGES',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

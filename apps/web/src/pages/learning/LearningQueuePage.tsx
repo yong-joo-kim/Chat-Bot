@@ -427,7 +427,9 @@ export function LearningQueuePage(): JSX.Element {
         onCancel={() => setBulkIgnoreConfirmOpen(false)}
       />
 
-      {bulkResult && <BulkResultPanel result={bulkResult} questionTextById={questionTextById} onClose={() => setBulkResult(null)} />}
+      {bulkResult && (
+        <BulkResultPanel result={bulkResult} chatbotId={chatbot.id} questionTextById={questionTextById} onClose={() => setBulkResult(null)} />
+      )}
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { escapeCsvCell, IMPORT_LIMITS } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { FileUploadField } from '../../../components/FileUploadField';
 import { ImportValidationReportTable } from '../../../components/ImportValidationReportTable';
+import { AutoSnapshotPreNotice } from '../../../components/AutoSnapshotPreNotice';
+import { AutoSnapshotNotice } from '../../../components/AutoSnapshotNotice';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { intentsApi, keywordsApi, faqsApi } from '../../../api/dialogue';
@@ -159,6 +161,7 @@ export function BulkImportModal({
 
       {step === 1 && (
         <div>
+          {resourceType !== 'TEST_CASE' && <AutoSnapshotPreNotice text={msg.autoSnapshotPreNotice} />}
           <p>{msg.templateIntro}</p>
           <div className="dialogue-toolbar-actions" style={{ marginBottom: 16 }}>
             <a className="btn btn-secondary" href={api.templateUrl(chatbotId, 'csv')}>
@@ -289,6 +292,13 @@ export function BulkImportModal({
             {msg.commitResultUpdated(commitResult.updatedItems)} · {msg.commitResultValues(commitResult.createdValues)} ·{' '}
             {msg.commitResultSkipped(commitResult.skippedRows)}
           </p>
+          <AutoSnapshotNotice
+            outcome={commitResult.autoSnapshot}
+            chatbotId={chatbotId}
+            createdText={msg.autoSnapshotCreated}
+            viewLinkText={msg.autoSnapshotViewLink}
+            failedText={msg.autoSnapshotFailed}
+          />
           {commitResult.errors.length > 0 && (
             <button
               type="button"

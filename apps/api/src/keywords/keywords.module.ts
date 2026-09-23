@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ChatbotsModule } from '../chatbots/chatbots.module';
 import { DialogueCommonModule } from '../dialogue-common/dialogue-common.module';
+import { VersionCaptureModule } from '../versions/capture/version-capture.module';
 import { KeywordsController } from './keywords.controller';
 import { KeywordsService } from './keywords.service';
 
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule],
+  imports: [ChatbotsModule, DialogueCommonModule, VersionCaptureModule],
   controllers: [KeywordsController],
   providers: [KeywordsService],
   // [2026-09-22 학습 고도화] `learning` 모듈(`DecomposedResolveService`)이 엔티티 반영에

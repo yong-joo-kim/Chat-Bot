@@ -353,6 +353,12 @@ export class ChatbotsService {
       await tx.testRun.deleteMany({ where: { chatbotId: id } });
       await tx.testCase.deleteMany({ where: { chatbotId: id } });
       await tx.testCaseSet.deleteMany({ where: { chatbotId: id } });
+      // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §13, FR-H1-21, AC-H4-7) — 사전
+      // 검사(409) 대상이 아니라 동반 삭제 대상이다(ADR-0002 "하위 데이터 제거" 분류). payload →
+      // version → sequence 순서로 지운다(FK 방향).
+      await tx.chatbotVersionPayload.deleteMany({ where: { version: { chatbotId: id } } });
+      await tx.chatbotVersion.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotVersionSequence.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

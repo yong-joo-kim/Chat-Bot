@@ -140,3 +140,18 @@
 - **증강 승인율이 안정되고 골든셋으로 제안 품질이 검증됨** → FAQ 질문·대체질문 증강, 챗봇 전체 일괄 증강 재검토.
 - **`AugmentationSuggestion`이 챗봇당 상한에 상시 도달** → 자동 만료(TTL 기반 물리 정리) 배치 도입 — **스케줄러 인프라 도입 시점에 함께**(No.45).
 - **파인튜닝 요구가 실제로 발생**(세일즈 요건 확정 + GPU 인프라 상시화) → (b)안을 별도 ADR로 재검토. 이번 그룹이 만든 예문이 그 학습 데이터가 된다.
+
+
+---
+
+## 갱신 (2026-09-23 — 자산 쓰기 봉인 L2/S-1의 세 번째 허용 파일: 복원 applier)
+
+챗봇 복원/버전 이력관리(No.25, ADR-0031)의 **`apps/api/src/versions/restore/version-restore.applier.ts`** 가 `Intent`·`Keyword`(및 나머지 대화 자산)를 트랜잭션 안에서 쓴다. 따라서 §5 봉인 **L2**("`Intent.examples`·`Keyword.synonyms`를 쓰는 Prisma 호출은 2개 파일뿐")와 `asset-write-sealing.spec.ts` **S-1**의 허용 파일이 **2 → 3**이 된다(가드 단언 "정확히 2개" → 3개).
+
+**이 예외가 "승인 없는 자산 변경 금지"를 약화하지 않는 이유**
+- 복원은 **관리자의 명시적 요청 핸들러 1곳**(`POST …/versions/:versionId/restore`, `dialogue:write` + `chatbot:write`)에서만 실행된다. 스케줄러·Job·콜백 경로가 없다.
+- 복원이 쓰는 내용은 **과거에 실제로 존재했던 자산 상태**다 — 스냅샷 본문을 만드는 경로는 **실제 DB 자산의 캡처뿐**이며 **내보내기·가져오기가 존재하지 않는다**(NFR-HS5). 따라서 제안(`AugmentationSuggestion`)이나 외부 문장이 승인 없이 예문으로 들어가는 경로가 되지 않는다.
+- 복원은 `AugmentationSuggestion`에 **쓰기 0건**이며 `applyLearningExample()`을 호출하지 않는다 — **L3(호출부 allowlist 3곳)·S-2는 불변**이다.
+- 버전 모듈 쪽에도 대화 자산 쓰기가 applier **1파일**뿐임을 `version-sealing.spec.ts`가 단언한다(L4와 같은 형식).
+
+**영향 기록**: 롤백으로 제거된 **승인 증강 예문은 다시 제안되지 않는다**(`@@unique([intentId, textNormalized])` — 감수비용 2와 같은 성질, PM 확정 P-8). 복원 미리보기가 그 건수를 경고로 보여 준다. 반대로 **증강 승인 직전 자동 스냅샷**(`BEFORE_AUGMENT_ACCEPT`)이 "승인 후 되돌리기"의 유일한 안전망이 된다 — 승격된 문장은 일반 예문이라(§5) 증강분만 골라낼 표시가 없기 때문이다.

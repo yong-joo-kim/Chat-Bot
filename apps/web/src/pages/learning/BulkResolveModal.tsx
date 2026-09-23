@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { normalizeText } from '@chat-bot/shared-types';
 import type { BulkResult, UnansweredQuestionListItem } from '@chat-bot/shared-types';
 import { Modal } from '../../components/Modal';
+import { AutoSnapshotPreNotice } from '../../components/AutoSnapshotPreNotice';
 import { MESSAGES } from '../../constants/messages';
 import { learningApi } from '../../api/learning';
 import { intentsApi } from '../../api/dialogue';
@@ -90,6 +91,7 @@ export function BulkResolveModal({ isOpen, chatbotId, questions, intentOptions, 
 
   return (
     <Modal isOpen={isOpen} title={MESSAGES.learning.bulkResolveModalTitle} onClose={onClose} closeOnEsc={!submitting}>
+      <AutoSnapshotPreNotice text={MESSAGES.learning.autoSnapshotPreNotice} />
       <ul>
         {preview.map((q) => (
           <li key={q.id}>{q.questionText}</li>

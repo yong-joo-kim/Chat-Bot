@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ApiErrorCode, PaginationQuerySchema, SortOrder, csvEnumArray } from './common';
 import { ExampleConflictSchema } from './dialogue';
+import { AutoSnapshotOutcomeSchema } from './version';
 
 /**
  * No.15 학습현황(관리자 보조 재학습) 도메인 스키마.
@@ -172,6 +173,8 @@ export const BulkResultSchema = z.object({
   succeeded: z.number().int().nonnegative(),
   results: z.array(ResolveResultSchema),
   failed: z.array(BulkFailureSchema),
+  /** [신규 2026-09-23 No.25] 일괄 반영 직전 자동 스냅샷 결과(BEFORE_LEARNING_BULK_APPLY). 선택 필드. */
+  autoSnapshot: AutoSnapshotOutcomeSchema.optional(),
 });
 export type BulkResult = z.infer<typeof BulkResultSchema>;
 
@@ -292,6 +295,8 @@ export const AugmentationAcceptResponseSchema = z.object({
   /** ★ DD-113 — `LearningApplyService.applyLearning()`의 반환값을 그대로 전달한다(교체하지 않는다). */
   appliedImmediately: z.boolean(),
   linkedNodeCount: z.number().int().nonnegative(),
+  /** [신규 2026-09-23 No.25] 승인 직전 자동 스냅샷 결과(BEFORE_AUGMENT_ACCEPT). 선택 필드. */
+  autoSnapshot: AutoSnapshotOutcomeSchema.optional(),
 });
 export type AugmentationAcceptResponse = z.infer<typeof AugmentationAcceptResponseSchema>;
 

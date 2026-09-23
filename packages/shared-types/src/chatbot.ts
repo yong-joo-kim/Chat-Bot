@@ -192,6 +192,17 @@ export const SlugAvailabilitySchema = z.object({
 });
 export type SlugAvailability = z.infer<typeof SlugAvailabilitySchema>;
 
+/**
+ * [신규 2026-09-23 No.25] 챗봇 버전 스냅샷의 표시 설정 4필드(ADR-0031 §1, P-2). 원본과 같은 파일에
+ * 파생 스키마를 둔다(개발명세서 §6-9). `avatarUrl`/`description`은 `ChatbotSchema`의 `.optional()`과
+ * 달리 스냅샷 저장 형식에서는 "값 없음"을 `null`로 명시한다(§5.1 — undefined는 직렬화에서 생략된다).
+ */
+export const ChatbotSnapshotProfileSchema = ChatbotSchema.pick({ name: true, avatarUrl: true, description: true, skin: true }).extend({
+  avatarUrl: SafeUrlSchema.nullable(),
+  description: z.string().max(500).nullable(),
+});
+export type ChatbotSnapshotProfile = z.infer<typeof ChatbotSnapshotProfileSchema>;
+
 /** 임베드 코드 응답(FR-4-9, FR-4-14). 조회 시점에 생성되며 DB에 저장하지 않는다. */
 export const EmbedCodeSchema = z.object({
   pc: z.string(),

@@ -44,6 +44,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 검증/품질 고도화(No.19) 그룹 추가 — TC 세트만 감사 대상이다(ADR-0029 §5). `caseCount`는
   // 서비스가 스냅샷 입력을 만들 때 이미 건수로 채워 넘긴다(대량 필드 원문 미포함 규약과 동일).
   TestCaseSet: ['name', 'description', 'isDefault', 'caseCount'],
+  // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §12) — 수동 생성/라벨·메모/고정/
+  // 삭제 감사. `RESTORE`는 요약 액션이라 이 화이트리스트를 거치지 않는다(AuditLogService.isBulkSummary).
+  ChatbotVersion: ['versionNo', 'trigger', 'label', 'memo', 'pinned', 'sizeBytes'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

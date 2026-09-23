@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { AutoSnapshotOutcomeSchema } from './version';
 
 /**
  * 대량 업로드(엑셀/CSV) 2단계 계약 — 의도·키워드·FAQ 3개 도메인이 공유(FR-6-19~30, FR-9-9).
  * `docs/02-spec/dialogue-design-설계.md` §4.5, ADR-0007 근거.
+ * [신규 2026-09-23 No.25] `version.ts → bulk-import.ts` 단방향 — `AutoSnapshotOutcomeSchema` 1개만 가져온다.
  */
 
 /** `TEST_CASE`는 검증/품질 고도화(No.19) 그룹이 추가한 3번째 소비자다(ADR-0007 각주 — 새 파서 0건). */
@@ -72,6 +74,9 @@ export const ImportCommitResultSchema = z.object({
   createdValues: z.number().int().nonnegative(),
   skippedRows: z.number().int().nonnegative(),
   errors: z.array(ImportRowErrorSchema),
+  /** [신규 2026-09-23 No.25] 임포트 커밋 직전 자동 스냅샷 결과(BEFORE_IMPORT). 구버전 서버 응답에는
+   * 없을 수 있어 선택 필드다 — 프런트는 없으면 아무것도 표시하지 않는다(§6.5). */
+  autoSnapshot: AutoSnapshotOutcomeSchema.optional(),
 });
 export type ImportCommitResult = z.infer<typeof ImportCommitResultSchema>;
 

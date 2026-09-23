@@ -30,6 +30,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
         <NavLink to={`/chatbots/${chatbotId}/settings`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabSettings}
         </NavLink>
+        <NavLink to={`/chatbots/${chatbotId}/versions`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabVersions}
+        </NavLink>
       </div>
       <span className="tab-nav-divider" aria-hidden="true" />
       <div className="tab-nav-group" role="group" aria-label={MESSAGES.detail.tabGroupDesign}>

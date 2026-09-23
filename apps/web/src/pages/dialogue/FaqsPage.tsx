@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { FaqCategory, FaqEntry } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { faqsApi } from '../../api/dialogue';
@@ -11,6 +11,7 @@ import { SkeletonRow } from '../../components/Skeleton';
 import { Pagination } from '../../components/Pagination';
 import { KebabMenu } from '../../components/KebabMenu';
 import { ConfirmDialog } from '../../components/Modal';
+import { AutoSnapshotPreNotice } from '../../components/AutoSnapshotPreNotice';
 import { MESSAGES } from '../../constants/messages';
 import { FaqCategoryBadge } from './badges';
 import { FaqEditModal } from './components/FaqEditModal';
@@ -341,7 +342,10 @@ export function FaqsPage(): JSX.Element {
         danger
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkDeleteOpen(false)}
-      />
+      >
+        <AutoSnapshotPreNotice text={MESSAGES.dialogue.bulkDeleteAutoSnapshotNotice} />
+        <Link to={`/chatbots/${chatbot.id}/versions`}>{MESSAGES.dialogue.bulkDeleteAutoSnapshotLink}</Link>
+      </ConfirmDialog>
     </div>
   );
 }

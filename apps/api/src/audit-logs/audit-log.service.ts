@@ -42,6 +42,15 @@ export class AuditLogService {
     private readonly requestContext: RequestContextService,
   ) {}
 
+  /**
+   * [신규 2026-09-23 No.25] 현재 요청 주체 스냅샷(ADR-0031 §12) — 버전 캡처(`createdById/Email`)가
+   * 이 메서드로만 얻는다. `RequestContextService.get()` 호출 지점은 여전히 `AuditLogService` 1곳이다
+   * (개발명세서 §2.1 규약 불변). 시스템 경로·ALS 부재 시 `null`.
+   */
+  currentActorSnapshot(): { id: string; email: string; role: string } | null {
+    return this.requestContext.get()?.actor ?? null;
+  }
+
   async record(input: AuditRecordInput): Promise<void> {
     try {
       const ctx = this.requestContext.get();
@@ -49,7 +58,9 @@ export class AuditLogService {
 
       // 대량 작업 요약(FR-13-5)은 엔터티 스냅샷이 아니라 이미 안전하게 구성된 요약 객체다 —
       // targetType 화이트리스트로 걸러내면 요약 필드(created/updated/targetIds 등)가 전부 사라진다.
-      const isBulkSummary = input.action === 'BULK_DELETE' || input.action === 'IMPORT';
+      // [신규 2026-09-23 No.25] `RESTORE`도 요약 액션이다(ADR-0031 §12) — 개별 변경 수백 건을
+      // 화이트리스트로 풀어 쓰지 않고 종류별 건수(number만)로 남긴다.
+      const isBulkSummary = input.action === 'BULK_DELETE' || input.action === 'IMPORT' || input.action === 'RESTORE';
       const beforeSnapshot = isBulkSummary ? ((input.before as Record<string, unknown> | undefined) ?? null) : buildSnapshot(input.targetType, input.before ?? null);
       const afterSnapshot = isBulkSummary ? ((input.after as Record<string, unknown> | undefined) ?? null) : buildSnapshot(input.targetType, input.after ?? null);
       const before = serializeSnapshot(beforeSnapshot);

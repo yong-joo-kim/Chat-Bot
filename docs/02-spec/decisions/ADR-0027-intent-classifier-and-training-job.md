@@ -160,3 +160,16 @@ K-6("수동 트리거 API를 만들지 않는다")의 금지 취지는 **"학습
 **② ⚠ 코드 재확인 — 큐는 완전한 kind-agnostic이 아니었다.** `TrainingJobQueue.run()`은 `task` 콜백만 받지만 내부에서 `TrainingJobService.markRunning/updateProgress/markFinished(jobId)`를 호출하므로 **`jobId`가 `TrainingJob` 행일 것을 전제**한다. 따라서 상태 기록을 **`AsyncJobStatusSink` 포트로 분리**하고 `enqueue(jobId, task, sink = this.jobs)`로 **기본 인자를 둬 기존 호출부 2곳(augmentation·classifier)을 변경 0건**으로 유지한다. `TrainingJobService`가 그 포트의 첫 구현, `TestRunStatusSink`가 두 번째다. **교체 지점은 여전히 1곳**이며, 다중 인스턴스 전환 시에도 이 파일 하나만 바뀐다.
 
 **큐 클래스는 개명하지 않는다** — 순수 리네임이 `training-jobs` 모듈·테이블·컨트롤러·`TrainingJobService`로 번지는 데 비해 의미 불일치는 이미 싱크 분리로 해소됐다. `markFinished`는 **현재 상태가 `CANCELLED`인 행을 덮어쓰지 않는다**(취소 CAS). 기동 시 고아 작업 정리(`SERVER_RESTART`) 규약은 `TestRun`에도 **같은 시점·같은 방식**으로 적용한다.
+
+
+---
+
+## 갱신 (2026-09-23 — stale 조건 ③은 예문 **감소**를 감지하지 않는다 · 복원 시 모델 삭제)
+
+**코드 확인 사실**: `classifier/lib/stale-judge.ts`의 `EXAMPLES_DRIFTED`는 `currentExampleCount − exampleCountAtTrain > 50` — **증가만** 판정한다(`INTENTS_DRIFTED`는 절대값 10%라 양방향이다). 따라서 "증강 50건 승인 → 재학습 → 증강을 되돌림(예문 감소)" 경로에서 **stale이 뜨지 않고, 증강분으로 학습된 모델이 미응답 큐 추천에 계속 쓰인다.**
+
+**결정(ADR-0031 §5)**: 챗봇 복원/버전 이력관리의 **복원은 같은 트랜잭션에서 `IntentClassifierModel` 행을 삭제**한다. 추천은 즉시 LEXICAL(bigram)로 복귀하고 상태 API는 `NOT_TRAINED`를 보고하며, 화면은 "복원 후 재학습이 필요합니다"를 안내한다. 재학습은 수 초이고 대화 경로와 무관하므로(이 ADR §1) 삭제가 가장 싸고 확실하다. 모델 버전 이력을 만들지 않는다는 §6의 결정은 **불변**이다.
+
+**조건 ③을 절대값(`|Δ| > 50`)으로 바꿀지는 별도 판단**으로 남긴다 — 복원 경로는 삭제로 우회하므로 이번에 필수가 아니다. 단 복원이 아닌 경로(관리자가 예문을 대량 수동 삭제)에서도 같은 틈이 있으므로, **재검토 트리거**: "예문 대량 삭제 후 추천 품질 저하"가 보고될 때 조건 ③을 절대값으로 정밀화한다(순수 함수 1곳 수정).
+
+**진행 중 작업과의 관계**: 복원은 이 챗봇의 `TrainingJob`이 `QUEUED`/`RUNNING`이면 `409 RESTORE_BLOCKED_BY_ACTIVE_JOB`으로 거부한다 — 학습은 끝나면서 **복원 전 데이터로 학습한 모델을 upsert**하므로 복원과 뒤섞인 결과를 만든다. 이 판정은 복원 쓰기 트랜잭션 안에서 이뤄져 **DB 직렬화로 TOCTOU가 없다**. 큐·`TrainingJobService`는 **변경 0건**이다.

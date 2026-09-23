@@ -58,9 +58,16 @@ export class PermissionGuard implements CanActivate {
       throw new ApiException('PASSWORD_CHANGE_REQUIRED', 403, '비밀번호를 먼저 변경해야 합니다.');
     }
 
-    const required = this.reflector.getAllAndOverride<Permission>(PERMISSION_METADATA_KEY, [context.getHandler(), context.getClass()]);
-    if (required && !hasPermission(user.role as RoleName, required)) {
-      await this.recordPermissionDenied(user, req, required);
+    // [신규 2026-09-23 No.25] 복수 인자 AND(ADR-0031 §7) — 기존 단일 인자 호출도 배열 1개로 저장되므로
+    // 판정 로직은 하나다. 데코레이터가 없으면 `undefined`.
+    const required = this.reflector.getAllAndOverride<Permission[] | Permission>(PERMISSION_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const requiredList = required === undefined ? [] : Array.isArray(required) ? required : [required];
+    const missing = requiredList.filter((p) => !hasPermission(user.role as RoleName, p));
+    if (missing.length > 0) {
+      await this.recordPermissionDenied(user, req, requiredList);
       // 요구 권한 문자열은 응답 본문에 담지 않는다(FR-12-23, AC-12B-7) — 서버 로그·AuditLog.summary에만 남긴다.
       throw new ApiException('FORBIDDEN', 403, '이 작업을 수행할 권한이 없습니다.');
     }
@@ -70,7 +77,7 @@ export class PermissionGuard implements CanActivate {
   }
 
   /** PERMISSION_DENIED 폭증 방지 — 동일 사용자·경로 조합은 60초 내 1건으로 합친다(FR-13-9, DD-46). */
-  private async recordPermissionDenied(user: SessionUser, req: Request, required: Permission): Promise<void> {
+  private async recordPermissionDenied(user: SessionUser, req: Request, required: readonly Permission[]): Promise<void> {
     const routePath = (req.route as { path?: string } | undefined)?.path ?? req.path;
     const key = `audit:denied:${user.id}:${req.method} ${routePath}`;
     const result = this.rateLimitStore.consume(key, Date.now(), 1, PERMISSION_DENIED_WINDOW_MS);
@@ -80,7 +87,7 @@ export class PermissionGuard implements CanActivate {
       action: 'PERMISSION_DENIED',
       targetType: 'Session',
       targetId: user.id,
-      summary: `${req.method} ${req.path} · 요구 권한 ${required}`,
+      summary: `${req.method} ${req.path} · 요구 권한 ${required.join('+')}`,
       actorOverride: { id: user.id, email: user.email, role: user.role },
     });
   }

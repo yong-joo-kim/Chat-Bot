@@ -28,6 +28,7 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
+import { VersionCaptureService } from '../versions/capture/version-capture.service';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
 import { CsvSheetReader } from '../dialogue-common/import/csv-sheet-reader';
 import { XlsxSheetReader } from '../dialogue-common/import/xlsx-sheet-reader';
@@ -70,6 +71,7 @@ export class IntentsService {
     @Inject('ImportStagingStore') private readonly stagingStore: ImportStagingStore,
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
+    private readonly versionCapture: VersionCaptureService,
   ) {}
 
   /** 감사 스냅샷용 — 원문 예문 배열이 아니라 건수로 대체한다(FR-13-11, ADR-0016 §9.6). */
@@ -398,6 +400,9 @@ export class IntentsService {
       );
     }
 
+    // [신규 No.25] 일괄 삭제 직전 자동 스냅샷(§6.4 훅 #2) — fail-open, 본 동작 트랜잭션 밖·직전.
+    await this.versionCapture.captureAuto(chatbotId, 'BEFORE_BULK_DELETE', { resourceType: 'INTENT', itemCount: rows.length });
+
     await this.prisma.intent.deleteMany({ where: { chatbotId, id: { in: dto.ids } } });
     this.bundleService.invalidate(chatbotId);
 
@@ -514,6 +519,9 @@ export class IntentsService {
       );
     }
 
+    // [신규 No.25] 임포트 커밋 직전 자동 스냅샷(§6.4 훅 #1) — fail-open, 본 동작 트랜잭션 밖·직전.
+    const autoSnapshot = await this.versionCapture.captureAuto(chatbotId, 'BEFORE_IMPORT', { resourceType: 'INTENT', itemCount: plan.items.length });
+
     let createdItems = 0;
     let updatedItems = 0;
     let createdValues = 0;
@@ -565,7 +573,7 @@ export class IntentsService {
       summary: `대량 등록 / 의도 / 신규 ${createdItems}건·갱신 ${updatedItems}건`,
     });
 
-    return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors };
+    return { createdItems, updatedItems, createdValues, skippedRows: plan.duplicatedRows + errors.length, errors, autoSnapshot };
   }
 
   async importTemplate(format: 'csv' | 'xlsx'): Promise<{ content: Buffer | string; filename: string; mimeType: string }> {

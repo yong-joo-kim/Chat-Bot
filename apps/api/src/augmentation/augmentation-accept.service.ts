@@ -9,6 +9,7 @@ import { VectorCacheService } from '../embedding/vector-cache.service';
 import { cosineSimilarity } from '../embedding/lib/cosine';
 import { IntentsService } from '../intents/intents.service';
 import { LearningApplyService } from '../learning/learning-apply.service';
+import { VersionCaptureService } from '../versions/capture/version-capture.service';
 import { resolveAugmentationThresholds } from './lib/augmentation-thresholds';
 
 /**
@@ -26,6 +27,7 @@ export class AugmentationAcceptService {
     private readonly intentsService: IntentsService,
     private readonly learningApply: LearningApplyService,
     private readonly config: ConfigService,
+    private readonly versionCapture: VersionCaptureService,
   ) {}
 
   private toFailure(id: string, e: unknown): { id: string; code: ApiErrorCode; message: string } {
@@ -98,6 +100,16 @@ export class AugmentationAcceptService {
       }
     }
 
+    // [신규 No.25] 증강 승인 직전 자동 스냅샷(§6.4 훅 #7) — fail-open, 편입 대상이 1건 이상일 때만.
+    // 재검증(②) 뒤·편입 루프 앞: 재검증은 임베딩 호출(수 초)을 포함해, 그 사이의 다른 편집이 스냅샷에
+    // 반영되도록 편입 직전에 둔다. `Intent.examples`에는 증강 표시가 없어 이 스냅샷이 승인 후
+    // 되돌리기의 유일한 안전망이다(J-3).
+    const acceptTargetCount = candidateIds.filter((id) => !noveltyExcluded.has(id)).length;
+    const autoSnapshot =
+      acceptTargetCount > 0
+        ? await this.versionCapture.captureAuto(chatbotId, 'BEFORE_AUGMENT_ACCEPT', { targetId: intentId, itemCount: acceptTargetCount })
+        : undefined;
+
     const succeededIntentIds: string[] = [];
     let succeededCount = 0;
     let linkedNodeCount = 0;
@@ -133,6 +145,6 @@ export class AugmentationAcceptService {
       appliedImmediately = applyResult.appliedImmediately;
     }
 
-    return { succeeded: succeededCount, failed, appliedImmediately, linkedNodeCount };
+    return { succeeded: succeededCount, failed, appliedImmediately, linkedNodeCount, autoSnapshot };
   }
 }

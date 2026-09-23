@@ -60,6 +60,9 @@ model Chatbot {
   trainingJobs            TrainingJob[]
   testCaseSets            TestCaseSet[]
   testRuns                TestRun[]
+  /// [신규 2026-09-23 No.25] 역참조만(Prisma 양방향 관계 요건) — DB 컬럼 변화 0.
+  versions                ChatbotVersion[]
+  versionSequence         ChatbotVersionSequence?
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -771,4 +774,75 @@ model TestRunResult {
   @@index([runId, resultA])
   @@index([runId, caseId])
   @@map("test_run_results")
+}
+
+/// [신규 2026-09-23 No.25 챗봇 복원/버전 이력관리] 챗봇 대화 자산 시점 스냅샷의 메타(ADR-0031). 목록·상세·보존
+/// 정리는 이 테이블만 읽는다 — 본문(payload)은 `ChatbotVersionPayload`로 분리되어 목록 조회가 구조적으로
+/// 본문을 읽을 수 없다(FR-H1-17, AC-H1-12).
+model ChatbotVersion {
+  id              String   @id @default(uuid())
+  chatbotId       String
+  chatbot         Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 챗봇별 단조 증가. 정리·삭제로 비어도 재사용하지 않는다(FR-H1-19) — `ChatbotVersionSequence`가 발급한다.
+  versionNo       Int
+  /// MANUAL | BEFORE_IMPORT | BEFORE_BULK_DELETE | BEFORE_AUGMENT_ACCEPT | BEFORE_LEARNING_BULK_APPLY | BEFORE_RESTORE
+  trigger         String
+  /// JSON { resourceType?, targetId?, itemCount? } — 문장 원문을 담지 않는다(FR-H1-9).
+  triggerContext  String?
+  /// 캡처 시점의 본문 형식. 복원·차이 전 업캐스터 체인으로 현재 형식으로 변환한다(FR-H1-12).
+  schemaVersion   Int
+  /// sha256 hex(64). 정규 직렬화(타임스탬프 제외) 기준(FR-H1-11, §5.2).
+  contentHash     String
+  /// JSON VersionCounts — 목록의 종류별 건수(FR-H2-1). payload를 읽지 않고 표시하기 위한 비정규화.
+  counts          String
+  /// 본문 UTF-8 바이트 수(압축 전). 크기·총량 상한 판정 기준(FR-H1-14~16).
+  sizeBytes       Int
+  /// 'json'(현행 유일). 압축 도입 시 'json+gzip'을 추가한다 — 컬럼이 있으므로 마이그레이션 불필요(ADR-0031 §2).
+  payloadEncoding String   @default("json")
+  /// JSON VersionIntegrityWarning[] 최대 100건(FR-H1-8). 본문에서 재계산 가능한 파생값이라 본문에는 두지 않는다.
+  integrityWarnings     String @default("[]")
+  integrityWarningCount Int    @default(0)
+  label           String?
+  memo            String?
+  /// 보존 정리 제외. 챗봇당 최대 10건(VERSION_PINNED_MAX).
+  pinned          Boolean  @default(false)
+  /// BEFORE_RESTORE일 때 "어느 버전으로 복원하기 직전"인가. FK 없음 — 대상 버전이 정리돼도 이 행은 남는다.
+  restoredFromVersionId String?
+  /// 표시용 스냅샷(대상이 정리돼도 "v27로 복원하기 전" 표기가 유지된다 — AuditLog.targetName과 같은 규약).
+  restoredFromVersionNo Int?
+  /// 생성 주체 스냅샷. FK 없음(AuditLog.actorId 규약). 시스템 경로·ALS 부재 시 null.
+  createdById     String?
+  createdByEmail  String?
+  createdAt       DateTime @default(now())
+  /// 라벨·메모·고정 변경 시각.
+  updatedAt       DateTime @updatedAt
+
+  payload         ChatbotVersionPayload?
+
+  @@unique([chatbotId, versionNo])
+  @@index([chatbotId, createdAt])
+  @@index([chatbotId, trigger, createdAt])
+  @@map("chatbot_versions")
+}
+
+/// [신규 2026-09-23 No.25] 스냅샷 본문(1:1). 이 테이블을 참조하는 코드는 캡처·본문 리더·보존 정리·챗봇
+/// 영구삭제 4곳뿐이다(§16 V-7).
+model ChatbotVersionPayload {
+  versionId String         @id
+  version   ChatbotVersion @relation(fields: [versionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 정규 JSON(§5.1). payloadEncoding='json'이면 UTF-8 텍스트 그대로다.
+  payload   String
+
+  @@map("chatbot_version_payloads")
+}
+
+/// [신규 2026-09-23 No.25] 챗봇별 versionNo 발급기. `max(versionNo)+1`은 최신 버전 삭제 시 번호를 재사용하므로
+/// 쓰지 않는다(FR-H1-19). `Chatbot`에 카운터 컬럼을 두지 않는 이유: Prisma `@updatedAt`이 증가 때마다
+/// `Chatbot.updatedAt`을 바꿔 챗봇 목록 정렬(`chatbots(updatedAt)`)이 스냅샷 생성만으로 뒤섞인다.
+model ChatbotVersionSequence {
+  chatbotId     String  @id
+  chatbot       Chatbot @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  lastVersionNo Int     @default(0)
+
+  @@map("chatbot_version_sequences")
 }

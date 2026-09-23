@@ -25,6 +25,9 @@ function buildDeps(overrides: Partial<Record<string, unknown>> = {}) {
     applyLearning: jest.fn().mockResolvedValue({ mode: 'IMMEDIATE', appliedImmediately: true, jobId: null }),
   };
   const config = { get: jest.fn().mockReturnValue(undefined) };
+  // [신규 2026-09-23 No.25] 증강 승인 직전 자동 스냅샷 훅(§6.4 훅 #7) — 이 서비스 자체의 기존
+  // 동작(승격 로직)에는 영향이 없으므로 항상 DISABLED로 응답하는 목이면 충분하다.
+  const versionCapture = { captureAuto: jest.fn().mockResolvedValue({ status: 'DISABLED' }) };
 
   return {
     prisma,
@@ -34,6 +37,7 @@ function buildDeps(overrides: Partial<Record<string, unknown>> = {}) {
     intentsService,
     learningApply,
     config,
+    versionCapture,
     ...overrides,
   };
 }
@@ -47,6 +51,7 @@ function buildService(deps: ReturnType<typeof buildDeps>): AugmentationAcceptSer
     deps.intentsService as never,
     deps.learningApply as never,
     deps.config as never,
+    deps.versionCapture as never,
   );
 }
 

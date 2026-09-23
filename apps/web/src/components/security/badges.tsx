@@ -55,6 +55,8 @@ const AUDIT_ACTION_COLOR: Record<AuditAction, { bg: string; fg: string }> = {
   LOGIN_FAILED: { bg: '#FEF3C7', fg: '#92400E' },
   LOGOUT: { bg: '#F3F4F6', fg: '#374151' },
   PERMISSION_DENIED: { bg: '#FEF3C7', fg: '#92400E' },
+  /** [신규 2026-09-23 No.25] 복원(FR-0-73, `RESTORE`) — 파괴적 동작 목록에 포함(ADR-0016). */
+  RESTORE: { bg: '#FFEDD5', fg: '#9A3412' },
 };
 
 /** 파괴적 동작 3종은 굵게+좌측 강조선으로 한 번 더 구분한다(FR-13-21). */

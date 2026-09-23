@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-01-01T00:00:00.000Z",
+  "chatbotId": "8216b9bd-3ca5-4144-a955-235edbd64424",
+  "assets": {
+    "intents": [
+      {
+        "id": "0193ed3d-6dcf-4c48-ad04-43b03ba0cb9e",
+        "name": "환불규정문의",
+        "description": "환불 규정 안내",
+        "examples": ["환불 어떻게 하나요", "환불 규정 알려주세요"],
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "keywords": [
+      {
+        "id": "649fbb1a-2296-4b21-b01d-7cc16e07f6db",
+        "name": "환불",
+        "synonyms": ["환불", "refund"],
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "homonyms": [
+      {
+        "id": "f33d16a5-4722-40b7-b073-e7c27724c855",
+        "word": "사과",
+        "meanings": [
+          { "label": "과일", "contextHints": ["먹다"] },
+          { "label": "사죄", "contextHints": ["미안"] }
+        ],
+        "policy": "ASK",
+        "clarifyPrompt": "어떤 의미인가요?",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "dialogNodes": [
+      {
+        "id": "039ca51b-1313-41fc-a3d7-a9ac24780580",
+        "name": "환불규정 응답",
+        "nodeType": "NORMAL",
+        "matchMode": "ANY",
+        "enabled": true,
+        "priority": 100,
+        "intentIds": ["0193ed3d-6dcf-4c48-ad04-43b03ba0cb9e"],
+        "keywordIds": ["649fbb1a-2296-4b21-b01d-7cc16e07f6db"],
+        "outputs": [{ "type": "TEXT", "payload": { "text": "환불 규정 안내드립니다." } }],
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "c478cb2e-b1af-4a61-9eb8-687e0dde959d",
+        "name": "폴백",
+        "nodeType": "FALLBACK",
+        "matchMode": "ANY",
+        "enabled": true,
+        "priority": 0,
+        "intentIds": [],
+        "keywordIds": [],
+        "outputs": [{ "type": "TEXT", "payload": { "text": "죄송합니다. 이해하지 못했습니다." } }],
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "contexts": [
+      {
+        "id": "9a449b80-541b-45d2-8ad3-a22360322fe4",
+        "name": "배송지입력",
+        "slots": [
+          {
+            "name": "address",
+            "label": "배송지",
+            "prompt": "배송지를 입력해주세요",
+            "type": "TEXT",
+            "required": true,
+            "maxRetry": 2
+          }
+        ],
+        "completionMessage": "입력이 완료되었습니다.",
+        "cancelKeywords": ["취소", "그만", "처음으로"],
+        "sessionTimeoutMinutes": 30,
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "faqs": [
+      {
+        "id": "b37196de-ab93-41ed-b31d-255bc642fd2e",
+        "category": "FAQ",
+        "question": "영업시간이 어떻게 되나요?",
+        "answer": "평일 9시~18시입니다.",
+        "altQuestions": ["운영시간이 어떻게 되나요"],
+        "enabled": true,
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "answerSetting": {
+    "semanticEnabled": false,
+    "acceptThreshold": 0.8,
+    "lowThreshold": 0.6,
+    "marginThreshold": 0.05,
+    "ragEnabled": false,
+    "ragCompany": null,
+    "ragCategory": null,
+    "ragSubcategory": null,
+    "ragSimilarityThreshold": null,
+    "fallbackPolicy": "RAG_FIRST",
+    "showSources": true,
+    "ragTimeoutMs": 120000
+  },
+  "profile": {
+    "name": "고정 픽스처 챗봇",
+    "avatarUrl": null,
+    "description": null,
+    "skin": { "primaryColor": "#4F46E5", "headerTitle": "챗봇 상담" }
+  }
+}

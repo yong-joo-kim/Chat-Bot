@@ -2,11 +2,12 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 
 interface ToastItem {
   id: number;
-  message: string;
+  message: ReactNode;
 }
 
 interface ToastContextValue {
-  showToast: (message: string) => void;
+  /** `ReactNode`도 허용한다 — No.25 증강 승인 결과의 자동 스냅샷 안내처럼 링크를 포함한 토스트가 필요할 수 있다(§4.5.3). */
+  showToast: (message: ReactNode) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -16,7 +17,7 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: ReactNode) => {
     const id = ++idRef.current;
     setToasts((prev) => [...prev, { id, message }]);
     window.setTimeout(() => {
