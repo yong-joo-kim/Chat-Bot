@@ -219,3 +219,24 @@ export function csvEnumArray<T extends [string, ...string[]]>(enumSchema: z.ZodE
     return val;
   }, z.array(enumSchema).optional());
 }
+
+/**
+ * 문자열 boolean 명시 파서 — `z.coerce.boolean()` 대체. `Boolean("false") === true`라서 coerce는
+ * `?enabled=false`·`X=false`를 `true`로 만든다. 허용: `true|false|1|0`(앞뒤 공백·대소문자 무시).
+ * 빈 문자열·null은 "미지정"(undefined), 그 외 문자열은 그대로 넘겨 `z.boolean()`이 거부하게 한다.
+ * 쿼리(`queryBoolean`)와 API 환경변수(`apps/api/src/config/lib/env-boolean.ts`)가 같은 규칙을 쓴다.
+ */
+export function parseBooleanString(val: unknown): unknown {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val !== 'string') return val;
+  const s = val.trim().toLowerCase();
+  if (s === '') return undefined;
+  if (s === 'true' || s === '1') return true;
+  if (s === 'false' || s === '0') return false;
+  return val;
+}
+
+/** 목록 쿼리용 boolean. 기본값이 필요하면 `.default(false)`를 붙인다. */
+export function queryBoolean() {
+  return z.preprocess(parseBooleanString, z.boolean().optional());
+}

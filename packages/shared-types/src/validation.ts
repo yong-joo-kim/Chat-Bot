@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema } from './common';
+import { PaginationQuerySchema, queryBoolean } from './common';
 import { DialogueOverlaySchema } from './conversation';
 
 /**
@@ -145,7 +145,7 @@ export type UpdateTestCaseDto = z.infer<typeof UpdateTestCaseSchema>;
 
 export const TestCaseListQuerySchema = PaginationQuerySchema.extend({
   expectedKind: TestCaseExpectedKind.optional(),
-  enabled: z.coerce.boolean().optional(),
+  enabled: queryBoolean().optional(),
   q: z.string().trim().min(1).max(200).optional(),
 });
 export type TestCaseListQuery = z.infer<typeof TestCaseListQuerySchema>;
@@ -304,7 +304,7 @@ export const TestRunResultListQuerySchema = PaginationQuerySchema.extend({
   resultA: TestCaseResultKind.optional(),
   q: z.string().trim().min(1).max(200).optional(),
   /** OVERLAY_COMPARE 전용 — A=PASS → B=FAIL(요약의 `regressed`와 같은 규칙)만 서버에서 거른다. */
-  regressedOnly: z.coerce.boolean().default(false),
+  regressedOnly: queryBoolean().default(false),
 });
 export type TestRunResultListQuery = z.infer<typeof TestRunResultListQuerySchema>;
 

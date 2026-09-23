@@ -344,7 +344,7 @@ Job 완료 콜백이 자산을 직접 쓰는 코드 경로는 **0건**이다(정
 **바꿀 내용**
 ````text
 (첫 수동 저장 또는 첫 대량 작업이 v1이 된다).**
-> **운영 예약 배포 그룹(No.28)이 추가한 5개도 전부 선택이며 API 전용이다(ml-worker 변수 추가 0건). 하나도 설정하지 않으면 엔진 활성 · 폴링 30초 · 유예 10분 · 재시도 창 15분 · 임대 5분으로 정상 동작한다. `DEPLOY_SCHEDULE_LEASE_MINUTES`가 `2 × VERSION_TX_TIMEOUT_MS + 60초`보다 짧으면 기동 시 경고 로그 + 하한으로 보정한다(기동 실패 아님). `DEPLOY_SCHEDULE_ENABLED`는 `true｜false｜1｜0`만 받는 명시 파서로 검증한다 — ⚠ 기존 `TRUST_PROXY`·`CLASSIFIER_ENABLED`·`VERSION_AUTO_SNAPSHOT_ENABLED`의 `z.coerce.boolean()`은 문자열 "false"를 `true`로 해석하는 결함이 있어 별도 수정 대상이다(`scheduled-deploy-설계.md` §15). 리드타임·최대 기간·간격·챗봇당 상한은 환경변수가 아니라 FE/BE 공용 코드 상수(`DEPLOY_SCHEDULE_LIMITS`)다. 신규 seed는 없다 — `DeploySchedule` 0행이 정상 상태다.**
+> **운영 예약 배포 그룹(No.28)이 추가한 5개도 전부 선택이며 API 전용이다(ml-worker 변수 추가 0건). 하나도 설정하지 않으면 엔진 활성 · 폴링 30초 · 유예 10분 · 재시도 창 15분 · 임대 5분으로 정상 동작한다. `DEPLOY_SCHEDULE_LEASE_MINUTES`가 `2 × VERSION_TX_TIMEOUT_MS + 60초`보다 짧으면 기동 시 경고 로그 + 하한으로 보정한다(기동 실패 아님). `DEPLOY_SCHEDULE_ENABLED`는 `true｜false｜1｜0`만 받는 명시 파서로 검증한다 — 2026-09-24부터 모든 boolean 환경변수(`TRUST_PROXY`·`AUTH_COOKIE_SECURE`·`CLASSIFIER_ENABLED`·`VERSION_AUTO_SNAPSHOT_ENABLED` 포함)가 같은 명시 파서를 쓴다(`scheduled-deploy-설계.md` §15). 리드타임·최대 기간·간격·챗봇당 상한은 환경변수가 아니라 FE/BE 공용 코드 상수(`DEPLOY_SCHEDULE_LIMITS`)다. 신규 seed는 없다 — `DeploySchedule` 0행이 정상 상태다.**
 ````
 
 ### A-30. §6 결정 20 — No.28 갱신 각주

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, SafeUrlSchema, SortOrder, csvEnumArray } from './common';
+import { PaginationQuerySchema, SafeUrlSchema, SortOrder, csvEnumArray, queryBoolean } from './common';
 
 /** 기능요구사항.md No.1 챗봇 리스트/그룹 관리 */
 export const ChatbotGroupSchema = z.object({
@@ -138,7 +138,7 @@ export const ChatbotListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(100).optional(),
   sort: z.enum(['createdAt', 'updatedAt', 'name']).default('updatedAt'),
   order: SortOrder.default('desc'),
-  includeArchived: z.coerce.boolean().default(false),
+  includeArchived: queryBoolean().default(false),
 });
 export type ChatbotListQuery = z.infer<typeof ChatbotListQuerySchema>;
 

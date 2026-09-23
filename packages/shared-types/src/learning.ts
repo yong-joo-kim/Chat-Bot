@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiErrorCode, PaginationQuerySchema, SortOrder, csvEnumArray } from './common';
+import { ApiErrorCode, PaginationQuerySchema, SortOrder, csvEnumArray, queryBoolean } from './common';
 import { ExampleConflictSchema } from './dialogue';
 import { AutoSnapshotOutcomeSchema } from './version';
 
@@ -75,7 +75,7 @@ export const UnansweredQuestionListQuerySchema = PaginationQuerySchema.extend({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   q: z.string().max(200).optional(),
-  recurredOnly: z.coerce.boolean().default(false),
+  recurredOnly: queryBoolean().default(false),
   sort: z.enum(['occurredCount', 'lastOccurredAt', 'createdAt']).default('occurredCount'),
   order: SortOrder.default('desc'),
 });

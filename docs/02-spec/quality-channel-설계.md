@@ -910,7 +910,7 @@ apps/widget/
 | `VITE_PUBLIC_API_BASE_URL` | `apps/widget/.env` | ✅(전체화면 빌드) | `http://localhost:3000/api/v1` | `/c/:slug` 모드의 API 베이스. **임베드 모드는 `data-api-base`에서 주입**하므로 이 값을 쓰지 않는다 |
 
 - 기존 5개 변수는 변경하지 않는다. `WIDGET_BASE_URL`은 이제 **실제로 위젯이 서빙되는 주소**가 된다(dev: `http://localhost:5174` = `apps/widget`의 vite dev 포트).
-- 신규 4개는 전부 **선택(기본값 있음)** 이므로 `env.validation.ts`에 `z.coerce.number().default(...)` / `z.coerce.boolean().default(false)`로 추가하되 **기동 실패 조건을 늘리지 않는다**(NFR-M6). 배포형태 중립 유지.
+- 신규 4개는 전부 **선택(기본값 있음)** 이므로 `env.validation.ts`에 `z.coerce.number().default(...)` / `envBoolean(false)`(2026-09-24 수정 — 당초 `z.coerce.boolean()`은 "false"를 true로 해석하는 결함이 있었다)로 추가하되 **기동 실패 조건을 늘리지 않는다**(NFR-M6). 배포형태 중립 유지.
 
 ---
 

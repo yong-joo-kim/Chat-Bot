@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray } from './common';
+import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray, queryBoolean } from './common';
 
 /**
  * 대화 설계(빌더) No.5~9 도메인 스키마.
@@ -654,7 +654,7 @@ export const DialogNodeListQuerySchema = PaginationQuerySchema.extend({
   sort: z.enum(['name', 'createdAt', 'updatedAt', 'priority']).default('updatedAt'),
   order: SortOrder.default('desc'),
   nodeType: csvEnumArray(DialogNodeType),
-  enabled: z.coerce.boolean().optional(),
+  enabled: queryBoolean().optional(),
 });
 export type DialogNodeListQuery = z.infer<typeof DialogNodeListQuerySchema>;
 
@@ -699,7 +699,7 @@ export type UpdateFaqDto = z.infer<typeof UpdateFaqSchema>;
 export const FaqListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   category: csvEnumArray(FaqCategory),
-  enabled: z.coerce.boolean().optional(),
+  enabled: queryBoolean().optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
 });

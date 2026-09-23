@@ -153,7 +153,7 @@ SQLite는 네이티브 enum이 없어 `status String @default("DRAFT")`을 유�
 | `UpdateChatbotGroupSchema` | `CreateChatbotGroupSchema.partial()` (`description` nullable) | FR-1-4 |
 | `ChatbotGroupWithCountSchema` | `ChatbotGroupSchema.extend({ chatbotCount: z.number().int().nonnegative() })` | FR-1-2 |
 | `CopyChatbotGroupSchema` | `{ name?: string.min(1).max(100) }` | FR-1-7 |
-| `ChatbotListQuerySchema` | `PaginationQuerySchema.extend({ groupId?: uuid, status?: csvEnumArray(ChatbotStatus), q?: string.max(100), sort: z.enum(['createdAt','updatedAt','name']).default('updatedAt'), order: SortOrder.default('desc'), includeArchived: coerce.boolean().default(false) })` | FR-1-9, FR-1-10, FR-0-5 |
+| `ChatbotListQuerySchema` | `PaginationQuerySchema.extend({ groupId?: uuid, status?: csvEnumArray(ChatbotStatus), q?: string.max(100), sort: z.enum(['createdAt','updatedAt','name']).default('updatedAt'), order: SortOrder.default('desc'), includeArchived: queryBoolean().default(false) })` | FR-1-9, FR-1-10, FR-0-5 |
 | `ChatbotListItemSchema` | `ChatbotSchema.extend({ groupName: z.string() })` — 목록 행에 소속 그룹명 표시 | FR-1-11 |
 | `CopyChatbotSchema` | `{ targetGroupId?: uuid, name?: string, slug?: SlugSchema }` | FR-1-13 |
 | `UpdateChatbotStatusSchema` | `{ status: ChatbotStatus }` | FR-1-17 |

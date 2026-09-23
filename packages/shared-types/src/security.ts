@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, SortOrder, csvEnumArray } from './common';
+import { PaginationQuerySchema, SortOrder, csvEnumArray, queryBoolean } from './common';
 
 /**
  * No.12 회원·권한·보안 관리 (`security-audit-설계.md` §4.1, ADR-0014/0015).
@@ -239,7 +239,7 @@ export type BannedWord = z.infer<typeof BannedWordSchema>;
 export const BannedWordListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().trim().min(1).max(100).optional(),
   policy: csvEnumArray(BannedWordPolicy),
-  enabled: z.coerce.boolean().optional(),
+  enabled: queryBoolean().optional(),
   sort: z.enum(['createdAt', 'updatedAt', 'word']).default('updatedAt'),
   order: SortOrder.default('desc'),
 });

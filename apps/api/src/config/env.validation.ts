@@ -20,7 +20,7 @@ const EnvSchema = z.object({
   // 품질/채널(No.10~11) 그룹 추가 — 전부 선택(기본값 있음), 기동 실패 조건을 늘리지 않는다(NFR-M6).
   PUBLIC_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(30),
   PUBLIC_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(120),
-  TRUST_PROXY: z.coerce.boolean().default(false),
+  TRUST_PROXY: envBoolean(false),
   DIALOGUE_BUNDLE_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
   // 보안/이력(No.12~13) 그룹 추가 — 전부 선택(기본값 있음, FR-0-30). 부트스트랩 계정 변수는
   // seed 전용이라 이 스키마 대상이 아니다(API 기동 조건이 되어서는 안 된다).
@@ -31,7 +31,7 @@ const EnvSchema = z.object({
   LOGIN_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(20),
   AUDIT_QUERY_MAX_RANGE_DAYS: z.coerce.number().int().positive().default(90),
   BANNED_WORD_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
-  AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
+  AUTH_COOKIE_SECURE: envBoolean(false),
   ADMIN_WEB_ORIGIN: z.string().optional(),
   // 통계/분석(No.14~15) 그룹 추가 — 전부 선택(기본값 있음, FR-0-38). 하나도 설정하지 않아도 기동한다(AC-X-4).
   STATS_MAX_RANGE_DAYS: z.coerce.number().int().positive().default(92),
@@ -76,7 +76,7 @@ const EnvSchema = z.object({
   AUGMENTATION_KEEP_MAX: z.coerce.number().min(0).max(1).default(0.97),
   AUGMENTATION_NOVELTY_MAX: z.coerce.number().min(0).max(1).default(0.95),
   AUGMENTATION_SUGGESTION_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  CLASSIFIER_ENABLED: z.coerce.boolean().default(false),
+  CLASSIFIER_ENABLED: envBoolean(false),
   CLASSIFIER_MIN_SAMPLES: z.coerce.number().int().positive().default(20),
   CLASSIFIER_MIN_PER_CLASS: z.coerce.number().int().positive().default(3),
   CLASSIFIER_MIN_CLASSES: z.coerce.number().int().positive().default(2),
@@ -98,7 +98,7 @@ const EnvSchema = z.object({
   // 챗봇 복원/버전 이력관리(No.25) 그룹 추가 — 전부 선택(기본값 있음, FR-0-74). 하나도 설정하지
   // 않으면 자동 스냅샷 활성·보존 자동30/수동30/고정10·1건 20MB·챗봇당 300MB·트랜잭션 timeout 30초로
   // 정상 동작한다(AC-H4-8). ml-worker 변수 추가는 0건이다.
-  VERSION_AUTO_SNAPSHOT_ENABLED: z.coerce.boolean().default(true),
+  VERSION_AUTO_SNAPSHOT_ENABLED: envBoolean(true),
   VERSION_RETENTION_AUTO: z.coerce.number().int().min(1).default(30),
   VERSION_RETENTION_MANUAL: z.coerce.number().int().min(1).default(30),
   VERSION_PINNED_MAX: z.coerce.number().int().min(0).default(10),

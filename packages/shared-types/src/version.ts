@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, csvEnumArray } from './common';
+import { PaginationQuerySchema, csvEnumArray, queryBoolean } from './common';
 import { DialogueBundleSchema } from './dialogue-engine';
 import { ChatbotAnswerSettingSchema } from './answering';
 import { ChatbotSnapshotProfileSchema } from './chatbot';
@@ -167,7 +167,7 @@ export type ChatbotVersionDetail = z.infer<typeof ChatbotVersionDetailSchema>;
 export const ChatbotVersionListQuerySchema = PaginationQuerySchema.extend({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   triggerGroup: csvEnumArray(VersionTriggerGroup),
-  pinned: z.coerce.boolean().optional(),
+  pinned: queryBoolean().optional(),
 });
 export type ChatbotVersionListQuery = z.infer<typeof ChatbotVersionListQuerySchema>;
 

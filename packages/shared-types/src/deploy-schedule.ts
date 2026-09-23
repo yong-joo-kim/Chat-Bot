@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, csvEnumArray } from './common';
+import { PaginationQuerySchema, csvEnumArray, queryBoolean } from './common';
 import { RestoreBlockerSchema, RestoreWarningSchema, VersionDiffSummarySchema } from './version';
 import { ChatbotStatus } from './chatbot';
 
@@ -211,7 +211,7 @@ export const DeployScheduleListQuerySchema = PaginationQuerySchema.extend({
   action: csvEnumArray(DeployScheduleAction),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
-  needsAttention: z.coerce.boolean().optional(),
+  needsAttention: queryBoolean().optional(),
   /** 전역 목록(`/deploy-schedules`)에서만 사용된다. */
   chatbotId: z.string().uuid().optional(),
   order: z.enum(['asc', 'desc']).default('asc'),

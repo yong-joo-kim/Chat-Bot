@@ -1,17 +1,12 @@
 import { z } from 'zod';
+import { parseBooleanString } from '@chat-bot/shared-types';
 
 /**
- * [신규 2026-09-23 No.28] `z.coerce.boolean()`의 함정(§15 ⚠) — `Boolean("false") === true`라서
- * `=false`를 명시해도 `true`가 된다. 이 헬퍼는 `'true'|'false'|'1'|'0'`만 허용하는 명시 파서다.
- * 새 boolean 환경변수는 전부 이 헬퍼를 쓴다(기존 `TRUST_PROXY`·`CLASSIFIER_ENABLED`·
- * `VERSION_AUTO_SNAPSHOT_ENABLED`의 `z.coerce.boolean()` 교체는 이 그룹 범위 밖 — 별도 수정 건으로 권고).
+ * boolean 환경변수 명시 파서. `z.coerce.boolean()`은 `Boolean("false") === true`라서 `=false`를
+ * 명시해도 `true`가 된다(예: `TRUST_PROXY=false`가 `X-Forwarded-For`를 신뢰). 허용 값은
+ * `true|false|1|0`(앞뒤 공백·대소문자 무시)이고, 미설정·빈 값은 기본값, 그 외 값은 기동 시 검증 실패다.
+ * boolean 환경변수는 전부 이 헬퍼를 쓴다 — 규칙은 쿼리용 `queryBoolean()`과 같다(`parseBooleanString`).
  */
 export function envBoolean(defaultValue: boolean) {
-  return z.preprocess((v) => {
-    if (v === undefined) return undefined;
-    if (typeof v === 'boolean') return v;
-    if (v === 'true' || v === '1') return true;
-    if (v === 'false' || v === '0') return false;
-    return v;
-  }, z.boolean().default(defaultValue));
+  return z.preprocess(parseBooleanString, z.boolean().default(defaultValue));
 }

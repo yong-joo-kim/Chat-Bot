@@ -1123,6 +1123,8 @@ DeployScheduleStateCheck = {
 리드타임·최대 기간·간격·챗봇당 상한은 **환경변수가 아니라 `DEPLOY_SCHEDULE_LIMITS` 코드 상수**다(FE 입력 검증과 어긋나지 않게 — 요구사항 §5.5). 조정 요구가 생기면 `meta.limits`가 이미 서버 값을 내려주므로 상수 → 설정 승격이 FE 무변경으로 가능하다.
 
 > ⚠ **코드 확인 중 발견한 기존 결함(이 그룹 범위 밖 — 보고만)**: `env.validation.ts`의 `TRUST_PROXY`·`CLASSIFIER_ENABLED`·`VERSION_AUTO_SNAPSHOT_ENABLED`는 `z.coerce.boolean()`이다. 이는 `Boolean("false") === true`라서 **`=false`로 설정해도 `true`가 된다**(미설정일 때만 기본값이 적용). 특히 `TRUST_PROXY=false`를 명시한 배포가 `X-Forwarded-For`를 신뢰하게 된다. 이 그룹의 `DEPLOY_SCHEDULE_ENABLED`는 명시 파서(`envBoolean()` 헬퍼 — `config/lib/env-boolean.ts` 신설)로 만들고, 기존 3개의 교체는 **별도 수정 건**으로 처리할 것을 권고한다(동작이 바뀌는 수정이므로 이 그룹에 섞지 않는다).
+>
+> ✅ **수정 완료(2026-09-24, No.28 후속)**: 위 3개와 `AUTH_COOKIE_SECURE`(같은 결함 — `=false`면 Secure 쿠키가 강제돼 http 환경 로그인이 깨질 수 있었다)를 모두 `envBoolean()`으로 교체했다. 규칙은 `true|false|1|0`(앞뒤 공백·대소문자 무시), 미설정·빈 값은 기본값, 그 외 값은 기동 시 검증 실패다(**동작 변경**: 예전에는 `yes` 등 임의 값이 조용히 `true`였다). 같은 원인의 **목록 쿼리 결함**도 함께 고쳤다 — `shared-types`의 쿼리 스키마 9곳(`enabled`·`includeArchived`·`needsAttention`·`recurredOnly`·`regressedOnly`·`pinned`)이 `z.coerce.boolean()`이라 `?enabled=false`가 `true`로 해석돼, 대화 노드 목록·테스트셋 상세의 "비활성만" 필터가 활성 항목을 돌려주고 있었다. 공용 `parseBooleanString()`/`queryBoolean()`(`shared-types/common.ts`)으로 교체했고 `envBoolean()`도 같은 함수를 쓴다. 회귀 시험: `config/env.validation.spec.ts`, `common/query-boolean.spec.ts`. **이후 boolean 입력에 `z.coerce.boolean()`을 쓰지 않는다.**
 
 ---
 

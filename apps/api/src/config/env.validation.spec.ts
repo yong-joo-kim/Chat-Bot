@@ -57,3 +57,27 @@ describe('env.validation — validate() RAG_TIMEOUT_MS 보정(FR-N2-26, AC-N2-14
     expect(() => validate({})).toThrow(/환경변수 검증 실패/);
   });
 });
+
+describe('env.validation — boolean 환경변수 명시 파싱(z.coerce.boolean 결함 회귀)', () => {
+  const BOOL_VARS = [
+    ['TRUST_PROXY', false],
+    ['AUTH_COOKIE_SECURE', false],
+    ['CLASSIFIER_ENABLED', false],
+    ['VERSION_AUTO_SNAPSHOT_ENABLED', true],
+    ['DEPLOY_SCHEDULE_ENABLED', true],
+  ] as const;
+
+  it.each(BOOL_VARS)('%s: "false"/"0"/" FALSE "는 false, "true"/"1"/"True"는 true로 파싱된다', (name) => {
+    for (const v of ['false', '0', ' FALSE ']) expect(validate(baseEnv({ [name]: v }))[name]).toBe(false);
+    for (const v of ['true', '1', 'True']) expect(validate(baseEnv({ [name]: v }))[name]).toBe(true);
+  });
+
+  it.each(BOOL_VARS)('%s: 미설정·빈 값이면 기본값(%s)이다', (name, def) => {
+    expect(validate(baseEnv())[name]).toBe(def);
+    expect(validate(baseEnv({ [name]: '' }))[name]).toBe(def);
+  });
+
+  it.each(BOOL_VARS)('%s: 허용되지 않은 값("yes")은 기동 시 검증 실패다', (name) => {
+    expect(() => validate(baseEnv({ [name]: 'yes' }))).toThrow(/환경변수 검증 실패/);
+  });
+});
