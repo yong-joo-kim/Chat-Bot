@@ -303,6 +303,8 @@ export type TestRunResult = z.infer<typeof TestRunResultSchema>;
 export const TestRunResultListQuerySchema = PaginationQuerySchema.extend({
   resultA: TestCaseResultKind.optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  /** OVERLAY_COMPARE 전용 — A=PASS → B=FAIL(요약의 `regressed`와 같은 규칙)만 서버에서 거른다. */
+  regressedOnly: z.coerce.boolean().default(false),
 });
 export type TestRunResultListQuery = z.infer<typeof TestRunResultListQuerySchema>;
 

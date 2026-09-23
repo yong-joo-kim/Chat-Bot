@@ -36,4 +36,11 @@ describe('TestRunStatusSink.markFinished — 취소 레지스트리 정리(code-
     await sink.markFinished('run-3', 'SUCCEEDED', { a: {} });
     expect(cancelRegistry.clear).toHaveBeenCalledWith('run-3');
   });
+
+  it('updateMany가 DB 오류로 실패해도 cancelRegistry.clear(runId)는 호출되고 오류는 그대로 전파된다', async () => {
+    const { sink, prisma, cancelRegistry } = buildSink();
+    prisma.testRun.updateMany.mockRejectedValue(new Error('SQLITE_BUSY'));
+    await expect(sink.markFinished('run-4', 'SUCCEEDED', { a: {} })).rejects.toThrow('SQLITE_BUSY');
+    expect(cancelRegistry.clear).toHaveBeenCalledWith('run-4');
+  });
 });

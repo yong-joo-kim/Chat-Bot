@@ -1739,7 +1739,7 @@ export const MESSAGES = {
       regressedCount: (n: number) => `회귀 ${n}건`,
       improvedCount: (n: number) => `개선 ${n}건`,
       filterRegressedOnly: '회귀만',
-      filterRegressedOnlyHint: '(현재 페이지 기준 — 다른 페이지의 회귀는 페이지를 이동해 확인하세요)',
+      filterRegressedOnlyHint: '(전체 결과 기준 — A 통과 → B 실패인 항목만 표시)',
       columnA: 'A(저장본)',
       columnB: 'B(저장본 + 오버레이 적용)',
       returnToAugmentation: '증강 승인 화면으로 돌아가기',

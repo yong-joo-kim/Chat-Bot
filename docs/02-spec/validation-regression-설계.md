@@ -560,4 +560,8 @@ PASS/FAIL·회귀/개선은 **아이콘 + 텍스트 라벨 병기**(색상 단�
 
 **M2(오버레이 비교) "회귀만 보기"는 현재 페이지 기준으로만 동작한다.** `TestRunResultListQuerySchema`에 classification/diffStatus 서버 필터 파라미터가 없어, 51번째 TC 이후의 결과는 페이지를 이동해야 확인할 수 있다(페이지네이션 + "현재 페이지 기준" 안내 문구로 완화됨, 상단 요약의 총 회귀 건수는 항상 정확함). **후속 조치 후보**: M1의 `TestRunComparisonQuerySchema.filter`(콤마 구분 분류 필터) 패턴을 참고해 `listResults`에도 서버사이드 필터를 추가하는 설계 변경을 검토할 것. 착수 전까지는 이 제한을 감수한다.
 
+> **해소(2026-09-23)**: 스키마 변경 없이 기존 컬럼으로 해결했다. `TestRunResultListQuerySchema`에 `regressedOnly`(boolean, 기본 false)를 추가하고, `listResults`가 `resultA='PASS' AND resultB='FAIL'`(실행기 요약의 `regressed` 집계와 동일 규칙)로 **실행 전체**를 거른다. 웹은 클라이언트 페이지 필터를 제거하고 서버 필터로 조회하며, 토글 시 1페이지로 돌아간다. 웹의 `REGRESSED` 파생 규칙도 `B !== PASS`에서 `B === FAIL`로 서버와 일치시켰다(오버레이는 대상 존재·expectedKind를 바꾸지 않으므로 실제 결과는 동일). 안내 문구는 "전체 결과 기준"으로 변경.
+
 **`TestRunStatusSink.markFinished()`에서 `prisma.testRun.updateMany` 실패 시 `cancelRegistry.clear()`가 스킵될 수 있다.** DB 순간 장애 시에만 발생하는 드문 경로이며, 그 경우 해당 `runId`가 취소 레지스트리에 프로세스 재시작 전까지 남는다(무한 누적 버그의 재발은 아님 — 정상 종료 경로는 전부 정리됨). **후속 조치 후보**: `updateMany` 이후 로직을 `finally`로 감싸 정리 호출을 보장할 것.
+
+> **해소(2026-09-23)**: `updateMany`를 `try/finally`로 감싸 DB 오류 시에도 `cancelRegistry.clear(runId)`가 호출되도록 했다(오류는 그대로 전파). 단위테스트 추가.

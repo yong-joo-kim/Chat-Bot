@@ -142,3 +142,31 @@ describe('TestRunService — 동시 실행 1건·빈 세트·취소·고정 상�
     await expect(service.pin('bot-1', 'run-1', { pinned: true })).rejects.toBeInstanceOf(ApiException);
   });
 });
+
+describe('TestRunService.listResults — M2 "회귀만" 서버 필터(설계서 §14 후속 조치)', () => {
+  function buildWithResults() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const ctx = buildService({
+      testRun: { findFirst: jest.fn().mockResolvedValue({ id: 'run-1', chatbotId: 'bot-1' }) },
+      testRunResult: { findMany, count },
+    });
+    return { ...ctx, findMany, count };
+  }
+
+  it('regressedOnly=true면 페이지가 아니라 실행 전체에서 A=PASS → B=FAIL만 조회·집계한다', async () => {
+    const { service, findMany, count } = buildWithResults();
+    await service.listResults('bot-1', 'run-1', { page: 2, pageSize: 50, regressedOnly: true });
+
+    const expectedWhere = { runId: 'run-1', resultA: 'PASS', resultB: 'FAIL' };
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expectedWhere, skip: 50, take: 50 }));
+    expect(count).toHaveBeenCalledWith({ where: expectedWhere });
+  });
+
+  it('regressedOnly=false면 resultB 조건을 붙이지 않는다', async () => {
+    const { service, findMany } = buildWithResults();
+    await service.listResults('bot-1', 'run-1', { page: 1, pageSize: 50, regressedOnly: false });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { runId: 'run-1' } }));
+  });
+});

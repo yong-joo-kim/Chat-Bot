@@ -181,7 +181,13 @@ export class TestRunService implements OnModuleInit {
     await this.scope.assertReadable(chatbotId);
     await this.getRowOrThrow(chatbotId, runId);
 
-    const where = { runId, ...(query.resultA ? { resultA: query.resultA } : {}), ...(query.q ? { questionText: { contains: query.q } } : {}) };
+    const where = {
+      runId,
+      ...(query.resultA ? { resultA: query.resultA } : {}),
+      ...(query.q ? { questionText: { contains: query.q } } : {}),
+      // 요약의 regressed 집계(test-run.executor.ts)와 같은 규칙 — 페이지가 아니라 실행 전체에서 거른다.
+      ...(query.regressedOnly ? { resultA: 'PASS', resultB: 'FAIL' } : {}),
+    };
     const [rows, total] = await Promise.all([
       this.prisma.testRunResult.findMany({ where, orderBy: { seq: 'asc' }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
       this.prisma.testRunResult.count({ where }),

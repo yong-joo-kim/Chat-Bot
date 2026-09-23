@@ -142,8 +142,12 @@ describe('TestRunDetailPage — OVERLAY_COMPARE(M2) 결과 페이지네이션', 
     mockGetOne.mockReset();
     mockListResults.mockReset();
     mockGetOne.mockResolvedValue(mockRun);
-    mockListResults.mockImplementation((_chatbotId: string, _runId: string, query: { page?: number }) => {
+    mockListResults.mockImplementation((_chatbotId: string, _runId: string, query: { page?: number; regressedOnly?: boolean }) => {
       const page = query?.page ?? 1;
+      if (query?.regressedOnly) {
+        // 서버가 실행 전체에서 A=PASS → B=FAIL만 걸러 준다.
+        return Promise.resolve({ items: [page2Items[0]], total: 1, page, pageSize: 50 });
+      }
       return Promise.resolve({
         items: page === 1 ? page1Items : page2Items,
         total: 60,
@@ -170,28 +174,40 @@ describe('TestRunDetailPage — OVERLAY_COMPARE(M2) 결과 페이지네이션', 
     expect(await screen.findByText('질문 51')).toBeInTheDocument();
   });
 
-  it('"회귀만" 체크박스 옆에 현재 페이지 기준이라는 안내 문구가 있어 오해를 방지한다', async () => {
+  it('"회귀만" 안내 문구는 전체 결과 기준임을 알린다', async () => {
     renderPage();
     await waitFor(() => expect(mockListResults).toHaveBeenCalled());
 
-    expect(await screen.findByText(/현재 페이지 기준/)).toBeInTheDocument();
+    expect(await screen.findByText(/전체 결과 기준/)).toBeInTheDocument();
   });
 
-  it('1페이지에서 "회귀만"을 켜도 51번째(2페이지)의 회귀는 페이지를 이동해야 확인할 수 있다', async () => {
+  it('"회귀만"을 켜면 서버 필터로 조회해 51번째(원래 2페이지)의 회귀가 1페이지에 바로 보인다', async () => {
     renderPage();
     await waitFor(() => expect(mockListResults).toHaveBeenCalled());
     await screen.findByText('질문 1');
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('checkbox', { name: '회귀만' }));
-    // 1페이지 안에는 회귀가 없으므로 필터를 켜면 0건으로 보인다(안내 문구가 이 상황의 오해를 방지한다).
-    expect(screen.queryByText('질문 1')).not.toBeInTheDocument();
 
-    const nav = await screen.findByRole('navigation', { name: '페이지 내비게이션' });
-    const page2Button = within(nav).getByRole('button', { name: '2' });
-    await user.click(page2Button);
-
-    await waitFor(() => expect(mockListResults).toHaveBeenCalledWith(chatbot.id, RUN_ID, expect.objectContaining({ page: 2 })));
+    await waitFor(() =>
+      expect(mockListResults).toHaveBeenCalledWith(chatbot.id, RUN_ID, expect.objectContaining({ page: 1, regressedOnly: true })),
+    );
     expect(await screen.findByText('질문 51')).toBeInTheDocument();
+    expect(screen.queryByText('질문 1')).not.toBeInTheDocument();
+  });
+
+  it('2페이지에서 "회귀만"을 켜면 1페이지로 돌아간다', async () => {
+    renderPage();
+    await screen.findByText('질문 1');
+    const user = userEvent.setup();
+    const nav = await screen.findByRole('navigation', { name: '페이지 내비게이션' });
+    await user.click(within(nav).getByRole('button', { name: '2' }));
+    await screen.findByText('질문 51');
+
+    mockListResults.mockClear();
+    await user.click(screen.getByRole('checkbox', { name: '회귀만' }));
+    await waitFor(() =>
+      expect(mockListResults).toHaveBeenLastCalledWith(chatbot.id, RUN_ID, expect.objectContaining({ page: 1, regressedOnly: true })),
+    );
   });
 });

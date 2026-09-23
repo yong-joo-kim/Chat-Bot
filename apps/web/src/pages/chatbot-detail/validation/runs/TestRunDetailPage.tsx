@@ -34,7 +34,8 @@ function formatDuration(ms: number | null | undefined): string {
 /** M2에서 A/B 각각의 판정으로부터 파생한 4분류(ONLY_IN_ONE 없음, ui-spec §4.4.2 표). */
 function deriveOverlayClassification(resultA: TestCaseResultKind, resultB: TestCaseResultKind | null | undefined, diffStatus: string | null | undefined): TestRunComparisonKind {
   if (!resultB) return 'UNCHANGED';
-  if (resultA === 'PASS' && resultB !== 'PASS') return 'REGRESSED';
+  // 서버 요약·"회귀만" 필터와 같은 규칙(A=PASS → B=FAIL).
+  if (resultA === 'PASS' && resultB === 'FAIL') return 'REGRESSED';
   if (resultA !== 'PASS' && resultB === 'PASS') return 'IMPROVED';
   if (resultA !== resultB || diffStatus === 'DIFFERENT') return 'CHANGED';
   return 'UNCHANGED';
@@ -89,6 +90,7 @@ export function TestRunDetailPage(): JSX.Element {
         page: resultsPage,
         pageSize: RESULT_PAGE_SIZE,
         resultA: run.mode === 'SINGLE' && failOnly ? 'FAIL' : undefined,
+        regressedOnly: run.mode === 'OVERLAY_COMPARE' && regressedOnly ? true : undefined,
       });
       setResults(res.items);
       setResultsTotal(res.total);
@@ -97,7 +99,7 @@ export function TestRunDetailPage(): JSX.Element {
     } finally {
       setResultsLoading(false);
     }
-  }, [chatbot.id, runId, resultsPage, failOnly, isTerminal, run, showToast]);
+  }, [chatbot.id, runId, resultsPage, failOnly, regressedOnly, isTerminal, run, showToast]);
 
   useEffect(() => {
     void loadResults();
@@ -267,15 +269,21 @@ export function TestRunDetailPage(): JSX.Element {
                 {MESSAGES.validation.overlayCompare.improvedCount(run.summary.improved ?? 0)}
               </p>
               <label className="form-field--inline">
-                <input type="checkbox" checked={regressedOnly} onChange={(e) => setRegressedOnly(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={regressedOnly}
+                  onChange={(e) => {
+                    setRegressedOnly(e.target.checked);
+                    setResultsPage(1);
+                  }}
+                />
                 {MESSAGES.validation.overlayCompare.filterRegressedOnly}
               </label>
               <p className="field-hint">{MESSAGES.validation.overlayCompare.filterRegressedOnlyHint}</p>
               <div className="compare-turn-list">
                 {results
                   .map((r) => ({ r, classification: deriveOverlayClassification(r.resultA, r.resultB, r.diffStatus) }))
-                  .filter(({ classification }) => !regressedOnly || classification === 'REGRESSED')
-                  .map(({ r, classification }) => (
+                                    .map(({ r, classification }) => (
                     <div key={r.id} className="compare-turn-row">
                       <div className="compare-turn-header">
                         <span>{r.questionText}</span>

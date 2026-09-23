@@ -39,18 +39,21 @@ export class TestRunStatusSink implements AsyncJobStatusSink {
   ): Promise<void> {
     // TestRunStatus에는 PARTIAL이 없다 — 실행기는 PARTIAL을 반환하지 않지만, 방어적으로 SUCCEEDED로 흡수한다.
     const mapped = status === 'PARTIAL' ? 'SUCCEEDED' : status;
-    await this.prisma.testRun.updateMany({
-      where: { id: runId, status: { not: 'CANCELLED' } },
-      data: {
-        status: mapped,
-        progress: 100,
-        finishedAt: new Date(),
-        ...(resultSummary !== undefined ? { summary: JSON.stringify(resultSummary) } : {}),
-        ...(failureReason !== undefined ? { failureReason } : {}),
-      },
-    });
-    // 실행이 최종 상태(성공/실패/이미 CANCELLED)에 도달했다 — 취소 레지스트리 항목을 정리해
-    // 프로세스 수명 동안 무한히 누적되는 것을 막는다(code-review 대응).
-    this.cancelRegistry.clear(runId);
+    try {
+      await this.prisma.testRun.updateMany({
+        where: { id: runId, status: { not: 'CANCELLED' } },
+        data: {
+          status: mapped,
+          progress: 100,
+          finishedAt: new Date(),
+          ...(resultSummary !== undefined ? { summary: JSON.stringify(resultSummary) } : {}),
+          ...(failureReason !== undefined ? { failureReason } : {}),
+        },
+      });
+    } finally {
+      // 실행이 최종 상태(성공/실패/이미 CANCELLED)에 도달했다 — 취소 레지스트리 항목을 정리해
+      // 프로세스 수명 동안 무한히 누적되는 것을 막는다(code-review 대응). DB 갱신이 실패해도 정리한다.
+      this.cancelRegistry.clear(runId);
+    }
   }
 }
