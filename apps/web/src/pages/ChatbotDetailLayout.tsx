@@ -6,11 +6,14 @@ import { groupsApi } from '../api/groups';
 import { ApiError } from '../api/client';
 import { ConfirmDialog } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 import { MESSAGES } from '../constants/messages';
 import { useUnsavedGuard } from '../context/UnsavedGuardContext';
+import { useDeployScheduleMeta } from '../lib/useDeployScheduleMeta';
 import { ChatbotDetailHeader } from './chatbot-detail/ChatbotDetailHeader';
 import { StatusTransitionControls } from './chatbot-detail/StatusTransitionControls';
 import { TabNav } from './chatbot-detail/TabNav';
+import { ScheduleDeployDialog } from './chatbot-detail/deploy-schedules/ScheduleDeployDialog';
 
 export interface ChatbotDetailContext {
   chatbot: Chatbot;
@@ -34,6 +37,13 @@ export function ChatbotDetailLayout(): JSX.Element {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   // AC-3-8: TopBar의 "챗봇 목록" 링크도 동일한 가드를 타도록 전역 컨텍스트의 가드를 그대로 사용한다.
   const { setGuard: setUnsavedGuard, confirmNavigation } = useUnsavedGuard();
+  const { can } = useAuth();
+  // No.28 E2 — "공개 예약..."(`scheduled-deploy-ui-spec.md` §4.5.2). 실제 코드에서
+  // `StatusTransitionControls`는 `SettingsTab`이 아니라 이 레이아웃(모든 탭 공통 헤더)에 있다
+  // (화면설계서가 전제한 위치와 다름 — 완료 보고에 기재).
+  const [publishScheduleOpen, setPublishScheduleOpen] = useState(false);
+  const deployMeta = useDeployScheduleMeta();
+  const canSchedulePublish = chatbot?.status === 'DRAFT' && can('chatbot:write');
 
   const load = useCallback(async () => {
     if (!chatbotId) return;
@@ -113,6 +123,27 @@ export function ChatbotDetailLayout(): JSX.Element {
         onArchiveRequest={() => setArchiveDialogOpen(true)}
         onRestore={() => handleStatusChange('DRAFT')}
       />
+      {canSchedulePublish && (
+        <div className="publish-schedule-row">
+          <button type="button" className="btn btn-outline" onClick={() => setPublishScheduleOpen(true)}>
+            {MESSAGES.deploySchedules.entry.publishScheduleButton}
+          </button>
+        </div>
+      )}
+      {deployMeta && (
+        <ScheduleDeployDialog
+          chatbotId={chatbot.id}
+          isOpen={publishScheduleOpen}
+          onClose={() => setPublishScheduleOpen(false)}
+          onCreated={(label) => {
+            setPublishScheduleOpen(false);
+            showToast(MESSAGES.deploySchedules.dialog.createSuccess(label));
+          }}
+          timezone={deployMeta.timezone}
+          chatbotStatus={chatbot.status}
+          initialAction="PUBLISH"
+        />
+      )}
       <TabNav chatbotId={chatbot.id} onBeforeNavigate={confirmNavigation} />
       <div className="tab-content">
         <Outlet context={{ chatbot, reload: load, setUnsavedGuard } satisfies ChatbotDetailContext} />

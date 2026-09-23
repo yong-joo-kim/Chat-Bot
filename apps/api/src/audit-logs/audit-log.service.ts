@@ -20,8 +20,19 @@ export interface AuditRecordInput {
   before?: unknown;
   after?: unknown;
   summary?: string;
-  /** 인증되지 않은 주체를 기록해야 하는 auth 경로 전용(로그인 실패 등). */
+  /** 인증되지 않은 주체를 기록해야 하는 auth 경로 전용(로그인 실패 등) + 예약 실행기
+   * (`deploy-schedules/**`, 요청 컨텍스트가 없는 경로 — scheduled-deploy-설계.md §8.4). */
   actorOverride?: AuditActorOverride;
+}
+
+/**
+ * [신규 2026-09-23 No.28] 예약 실행기가 `restore()`(§9.2)·`ChatbotPublicationService`(§5.4)에 넘기는
+ * 호출 문맥 — 요청 컨텍스트가 없는 경로에서 감사 주체를 예약자로 남기기 위함(ADR-0032 §5).
+ */
+export interface ScheduledInvocation {
+  actor: AuditActorOverride;
+  auditSummaryPrefix: string;
+  triggerContext?: { deployScheduleId: string };
 }
 
 /**

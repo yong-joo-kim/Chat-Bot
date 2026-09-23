@@ -89,6 +89,7 @@ describe('보안/이력(No.12~13) 통합 테스트', () => {
     const testDatabaseUrl = `file:${dbPath}`;
 
     process.env.DATABASE_URL = testDatabaseUrl;
+    process.env.DEPLOY_SCHEDULE_ENABLED = 'false'; // [No.28] 실행 엔진 비활성 — 기존 그룹 통합 시험은 폴링 없이 수행(§7.10)
     process.env.WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'http://localhost:5174';
     process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
 

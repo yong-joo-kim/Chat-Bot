@@ -66,4 +66,16 @@ describe('AllExceptionsFilter — mapUniqueConflict', () => {
     const { body } = catchAndCapture(p2002(['slug']));
     expect(body).toMatchObject({ code: 'DUPLICATE_SLUG' });
   });
+
+  /** 운영 예약 배포(No.28) 그룹 추가(code-review M1) — deploy_schedules 부분 유니크 인덱스 위반이
+   * 이 필터까지 도달해도 DUPLICATE_SLUG("이미 사용 중인 고유 URL")로 오분류되지 않는 방어선. */
+  it('deploy_schedules 부분 유니크 인덱스 위반은 DEPLOY_SCHEDULE_INVALID_TIME으로 매핑된다(방어선)', () => {
+    const { statusCode, body } = catchAndCapture(p2002(['deploy_schedules_chatbotId_scheduledAt_active_key']));
+    expect(statusCode).toBe(HttpStatus.CONFLICT);
+    expect(body).toMatchObject({ code: 'DEPLOY_SCHEDULE_INVALID_TIME' });
+  });
+
+  it('deploy_schedules_chatbotId_running_key 위반도 DEPLOY_SCHEDULE_INVALID_TIME으로 매핑된다', () => {
+    expect(catchAndCapture(p2002(['deploy_schedules_chatbotId_running_key'])).body).toMatchObject({ code: 'DEPLOY_SCHEDULE_INVALID_TIME' });
+  });
 });

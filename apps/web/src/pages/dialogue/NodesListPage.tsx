@@ -16,6 +16,7 @@ import { ConditionSummaryChips, NodeTypeBadge, OutputTypeIconList } from './badg
 import { FlowPreviewPanel } from './components/FlowPreviewPanel';
 import { DesignValidationPanel } from './components/DesignValidationPanel';
 import { DeleteBlockedBanner } from './components/DeleteBlockedBanner';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 
 const ALL_TYPES: DialogNodeType[] = ['NORMAL', 'START', 'FALLBACK'];
 
@@ -156,6 +157,7 @@ export function NodesListPage(): JSX.Element {
 
   return (
     <div>
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <div className="dialogue-toolbar">
         <div className="dialogue-search-row">
           <label htmlFor="node-search" className="sr-only">

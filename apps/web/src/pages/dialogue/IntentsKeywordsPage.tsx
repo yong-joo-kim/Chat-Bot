@@ -12,6 +12,7 @@ import { Pagination } from '../../components/Pagination';
 import { KebabMenu } from '../../components/KebabMenu';
 import { ConfirmDialog } from '../../components/Modal';
 import { AutoSnapshotPreNotice } from '../../components/AutoSnapshotPreNotice';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 import { MESSAGES } from '../../constants/messages';
 import { LinkedNodeCountBadge } from './badges';
 import { IntentEditModal } from './components/IntentEditModal';
@@ -146,6 +147,7 @@ export function IntentsKeywordsPage(): JSX.Element {
 
   return (
     <div className="dialogue-intents-page">
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <div className="sub-tabs" role="tablist">
         <button
           type="button"

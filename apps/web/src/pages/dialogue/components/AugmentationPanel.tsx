@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../../../components/Modal';
 import { SkeletonRow } from '../../../components/Skeleton';
 import { AutoSnapshotPreNotice } from '../../../components/AutoSnapshotPreNotice';
 import { AutoSnapshotNotice } from '../../../components/AutoSnapshotNotice';
+import { ScheduleConflictBanner } from '../../../components/ScheduleConflictBanner';
 import { useTrainingJobPolling } from '../../../lib/useTrainingJobPolling';
 import { AugmentationSuggestionTable } from './AugmentationSuggestionTable';
 import { AugmentationImpactCheckButton } from './AugmentationImpactCheckButton';
@@ -267,6 +268,7 @@ export function AugmentationPanel({ chatbotId, intentId, currentExampleCount, re
 
       {expanded && (
         <div className="augmentation-panel-body">
+          <ScheduleConflictBanner chatbotId={chatbotId} />
           {loading && !loaded && <SkeletonRow />}
           {!loading && error && <p className="field-error" role="alert">{msg.loadFailed}</p>}
           {loaded && (

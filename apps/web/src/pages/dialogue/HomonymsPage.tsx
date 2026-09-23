@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../../components/Modal';
 import { MESSAGES } from '../../constants/messages';
 import { HomonymPolicyBadge } from './badges';
 import { HomonymEditModal } from './components/HomonymEditModal';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 
 /** D3 — 동음이의어/다의어 사전 목록(ui-spec §4.5). */
 export function HomonymsPage(): JSX.Element {
@@ -85,6 +86,7 @@ export function HomonymsPage(): JSX.Element {
 
   return (
     <div>
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <div className="dialogue-toolbar">
         <div className="dialogue-search-row">
           <label htmlFor="homonym-search" className="sr-only">

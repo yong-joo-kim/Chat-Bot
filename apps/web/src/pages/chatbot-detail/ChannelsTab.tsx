@@ -4,6 +4,7 @@ import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { channelsApi } from '../../api/channels';
 import { ApiError } from '../../api/client';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../context/AuthContext';
 import { SeverityBadge } from '../../components/SeverityBadge';
 import { SkeletonCard } from '../../components/Skeleton';
 import { ErrorState } from '../../components/ErrorState';
@@ -14,6 +15,7 @@ import { ChannelCard } from './channels/ChannelCard';
 export function ChannelsTab(): JSX.Element {
   const { chatbot } = useChatbotDetailContext();
   const { showToast } = useToast();
+  const { can } = useAuth();
   const [items, setItems] = useState<ChannelListItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const isArchived = chatbot.status === 'ARCHIVED';
@@ -74,6 +76,7 @@ export function ChannelsTab(): JSX.Element {
                 isArchived={isArchived}
                 onChanged={handleChanged}
                 onRemoved={handleRemoved}
+                canScheduleWrite={can('channel:write')}
               />
             ))}
       </div>

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Chatbot, ChatbotVersionListItem, RestorePreviewResponse, RestoreResponse, VersionCurrentStatus } from '@chat-bot/shared-types';
 import { ToastProvider } from '../../../components/Toast';
 import { ApiError } from '../../../api/client';
+import { resetDeployScheduleMetaCacheForTests } from '../../../lib/useDeployScheduleMeta';
 import type { ChatbotDetailContext } from '../../ChatbotDetailLayout';
 import { VersionListPage } from './VersionListPage';
 
@@ -42,6 +43,7 @@ const mockCreate = vi.fn();
 const mockDetail = vi.fn();
 const mockRestorePreview = vi.fn();
 const mockRestore = vi.fn();
+const mockRemove = vi.fn();
 
 vi.mock('../../../api/versions', () => ({
   versionsApi: {
@@ -50,10 +52,23 @@ vi.mock('../../../api/versions', () => ({
     create: (...args: unknown[]) => mockCreate(...args),
     detail: (...args: unknown[]) => mockDetail(...args),
     update: vi.fn(),
-    remove: vi.fn(),
+    remove: (...args: unknown[]) => mockRemove(...args),
     auditCount: vi.fn(),
     restorePreview: (...args: unknown[]) => mockRestorePreview(...args),
     restore: (...args: unknown[]) => mockRestore(...args),
+  },
+}));
+
+// No.28: VersionListPage/VersionRow가 예약 관련 API(메타 조회·예약 복원 진입점)를 함께 호출한다.
+// 이 스위트는 No.25 회귀 검증이 목적이므로 항상 "예약 없음"으로 응답해 배너/다이얼로그가 뜨지 않게 한다.
+vi.mock('../../../api/deploySchedules', () => ({
+  deploySchedulesApi: {
+    meta: vi.fn().mockResolvedValue({
+      timezone: 'Asia/Seoul',
+      timezoneFallback: false,
+      engine: { enabledOnThisInstance: true, pollIntervalMs: 1000, misfireGraceMinutes: 10, retryWindowMinutes: 15, leaseMinutes: 5, overduePendingCount: 0 },
+      limits: { minLeadMinutes: 5, maxHorizonDays: 90, minSpacingMinutes: 1, maxActivePerChatbot: 5, memoMaxCodePoints: 200, longHorizonWarnDays: 30, listPageSizeDefault: 20, listPageSizeMax: 100 },
+    }),
   },
 }));
 
@@ -154,8 +169,10 @@ describe('VersionListPage', () => {
     mockDetail.mockReset();
     mockRestorePreview.mockReset();
     mockRestore.mockReset();
+    mockRemove.mockReset();
     (mockContext.reload as ReturnType<typeof vi.fn>).mockClear();
     mockUseAuth.mockReturnValue({ can: () => true });
+    resetDeployScheduleMetaCacheForTests();
   });
 
   it('목록이 로드되면 버전 번호·트리거 배지·"현재" 행이 표시된다', async () => {
@@ -260,5 +277,32 @@ describe('VersionListPage', () => {
 
     await waitFor(() => expect(mockList.mock.calls.length).toBeGreaterThan(listCallsBefore));
     expect(screen.queryByRole('button', { name: 'v14로 복원' })).not.toBeInTheDocument();
+  });
+
+  it('dialogue:write와 chatbot:write가 모두 있으면 "예약 복원" 버튼도 렌더된다(No.28 E1)', async () => {
+    mockUseAuth.mockReturnValue({ can: () => true });
+    mockList.mockResolvedValue({ items: [makeItem()], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    renderPage();
+
+    await screen.findByText('v14');
+    expect(screen.getByRole('button', { name: '예약 복원' })).toBeInTheDocument();
+  });
+
+  it('VERSION_REFERENCED_BY_SCHEDULE(409) — 삭제 시 참조 예약이 있으면 인라인 오류와 예약 배포 링크가 표시된다(No.28)', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({ can: () => true });
+    mockList.mockResolvedValue({ items: [makeItem()], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    mockRemove.mockRejectedValue(new ApiError(409, '참조하는 예약이 있습니다.', 'VERSION_REFERENCED_BY_SCHEDULE'));
+    renderPage();
+
+    await screen.findByText('v14');
+    await user.click(screen.getByRole('button', { name: 'v14 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+    await user.click(await screen.findByRole('button', { name: '삭제' }));
+
+    expect(await screen.findByText('이 버전을 대상으로 하는 예약이 있어 삭제할 수 없습니다. 먼저 예약을 취소해 주세요.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '예약 배포에서 보기' })).toHaveAttribute('href', '/chatbots/bot-1/deploy-schedules');
   });
 });

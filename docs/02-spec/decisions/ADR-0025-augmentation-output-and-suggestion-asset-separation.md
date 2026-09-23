@@ -155,3 +155,19 @@
 - 버전 모듈 쪽에도 대화 자산 쓰기가 applier **1파일**뿐임을 `version-sealing.spec.ts`가 단언한다(L4와 같은 형식).
 
 **영향 기록**: 롤백으로 제거된 **승인 증강 예문은 다시 제안되지 않는다**(`@@unique([intentId, textNormalized])` — 감수비용 2와 같은 성질, PM 확정 P-8). 복원 미리보기가 그 건수를 경고로 보여 준다. 반대로 **증강 승인 직전 자동 스냅샷**(`BEFORE_AUGMENT_ACCEPT`)이 "승인 후 되돌리기"의 유일한 안전망이 된다 — 승격된 문장은 일반 예문이라(§5) 증강분만 골라낼 표시가 없기 때문이다.
+
+
+---
+
+## 갱신 (2026-09-23 — 봉인 문구 개정: 복원 호출부에 "관리자가 승인한 예약의 실행기" 추가)
+
+운영 예약 배포(No.28, **ADR-0032 §6**)에 따라 위 갱신(2026-09-23)의 문장 "복원은 **관리자의 명시적 요청 핸들러 1곳**에서만 실행된다. 스케줄러·Job·콜백 경로가 없다."를 **다음으로 대체**한다.
+
+> 복원(대화 자산을 쓰는 `version-restore.applier.ts`)은 `VersionRestoreService.restore()` 안에서만 호출되며, `restore()`의 호출부는 **① 관리자 요청 핸들러(`POST …/versions/:versionId/restore`, `dialogue:write` + `chatbot:write`) ② 관리자가 미리보기로 확인하고 해시에 묶어 생성한 예약의 실행기(`deploy-schedules/executors/restore-version.executor.ts`)** 2곳뿐이다. 그 밖의 스케줄러·Job·콜백 경로는 없다.
+
+**이 개정이 §본뜻("승인 없는 자산 변경 금지")을 약화하지 않는 이유**
+- 예약 복원은 **관리자의 명시적 승인**이다 — 생성 시 복원 미리보기(차이·blockers·warnings)를 확인하고, 그 기준 상태를 **해시로 묶는다**. 실행 시 상태가 달라졌으면 **실행하지 않는다**(엄격 바인딩).
+- 실행 직전 **예약자의 계정 상태와 권한을 재검증**한다(`dialogue:write` + `chatbot:write`) — 권한을 잃은 사람의 승인은 실행되지 않는다. 감사 주체도 예약자다.
+- 반영 내용은 여전히 **과거에 실제로 존재한 자산 상태**다 — 스냅샷 본문을 만드는 경로는 실제 DB 자산의 캡처뿐이고 내보내기·가져오기가 없다. 제안(`AugmentationSuggestion`)이나 외부 문장이 승인 없이 예문이 되는 경로가 아니다.
+- **L1~L4 봉인은 전부 불변**이다: 예약 모듈은 `IntentsModule`·`KeywordsModule`·`AugmentationModule`을 import하지 않고(L1), 자산 테이블 쓰기 호출이 0건이며(L2 — **`asset-write-sealing.spec.ts` S-1 허용 파일은 3개 그대로**), `applyLearningExample()`을 호출하지 않는다(L3 — S-2 불변). 개발명세서 §5의 "스케줄러·백그라운드 작업·Job 완료 콜백이 자산을 **직접** 쓰는 코드 0건"도 그대로 참이다 — 예약 실행기는 applier가 아니라 `restore()`를 호출한다.
+- 구조 보장은 약속이 아니라 **주입 불가**다: `VersionsModule`이 applier를 export하지 않는다. `restore(` 호출 파일이 정확히 2개임을 `deploy-schedule-sealing.spec.ts`가 단언한다.

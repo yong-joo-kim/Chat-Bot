@@ -1,6 +1,8 @@
-import type { MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { NavLink } from 'react-router-dom';
 import { MESSAGES } from '../../constants/messages';
+import { AttentionCountBadge } from '../../components/AttentionCountBadge';
+import { deploySchedulesApi } from '../../api/deploySchedules';
 
 /**
  * href 기반 탭 링크(UIUX §9, 키보드 포커스 가능). 라우트는 6개 그대로 두되(AC-C-3),
@@ -14,6 +16,24 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
   function handleClick(e: MouseEvent<HTMLAnchorElement>): void {
     if (onBeforeNavigate && !onBeforeNavigate()) e.preventDefault();
   }
+
+  // No.28: "예약 배포" 탭의 "확인 필요" 배지 — 전역 요약에서 이 챗봇 건수만 추출한다
+  // (챗봇 스코프 집계 엔드포인트가 없어 `/deploy-schedules/summary`를 재사용, §1.5).
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    deploySchedulesApi
+      .summary()
+      .then((res) => {
+        if (cancelled) return;
+        const count = res.needsAttention.byChatbot.find((c) => c.chatbotId === chatbotId)?.count ?? 0;
+        setNeedsAttentionCount(count);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [chatbotId]);
 
   return (
     <nav className="tab-nav" aria-label="챗봇 상세 탭">
@@ -68,6 +88,9 @@ export function TabNav({ chatbotId, onBeforeNavigate }: { chatbotId: string; onB
         </NavLink>
         <NavLink to={`/chatbots/${chatbotId}/channels`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabChannels}
+        </NavLink>
+        <NavLink to={`/chatbots/${chatbotId}/deploy-schedules`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabDeploySchedules} <AttentionCountBadge count={needsAttentionCount} />
         </NavLink>
       </div>
     </nav>

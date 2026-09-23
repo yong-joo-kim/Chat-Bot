@@ -116,4 +116,17 @@ interface ChannelAdapter {
 - `ApiErrorCode` 추가: `CHANNEL_NOT_IMPLEMENTED`(409), `CHANNEL_DISABLED`(403), `CHATBOT_NOT_PUBLISHED`(403), `ORIGIN_NOT_ALLOWED`(403), `RATE_LIMITED`(429).
 - `code-reviewer` 인계: ① 공개 응답에 내부 필드 누출 여부 ② 채널 타입 분기가 2개 파일 밖에 있는지 ③ config 스키마에 자격증명 성격 필드가 추가되지 않았는지.
 - **후속 Phase 인계**: 외부 채널을 실제로 붙일 때는 이 ADR을 Supersedes하지 말고 **확장**한다 — `CHANNEL_IMPLEMENTATION` 값 변경 + 어댑터 추가 + 자격증명 저장 방식 ADR 신규 작성.
+
+
+---
+
+## 갱신 (2026-09-23 — 공개 전환 원자 경로 `ChatbotPublicationService` · 채널 활성화 규칙의 순수 함수 추출)
+
+운영 예약 배포(No.28, ADR-0032)가 **"공개 = 상태 `ACTIVE` AND WEB 채널 `enabled`"**(§4 공개 접근 조건)를 지정 시각에 전환한다. 이 ADR의 결정(구현 등급 · WEB만 활성화 가능 · 공개 API 403/404 · Origin 인가 · 자격증명 미저장)은 **불변**이다.
+
+1. **`channels/publication.service.ts`(`ChatbotPublicationService`) 신설** — `publish(chatbotId, { enableWebChannel })`은 `DRAFT → ACTIVE`와 WEB 채널 활성화를 **한 쓰기 트랜잭션**으로 처리하고(둘 다 적용되거나 둘 다 적용되지 않는다), `setWebChannel(chatbotId, enabled)`은 WEB 채널만 전환한다. 감사는 커밋 후 기존 형식(`STATUS_CHANGE` "상태 변경: …" · `Channel UPDATE｜CREATE` "사용 여부 변경: …") 그대로이며 예약 실행 주체를 `actorOverride`로 받는다. 이미 목표 상태면 쓰기·감사 0건(NOOP).
+2. **판정 규칙은 복제하지 않는다** — 상태 전이는 `evaluateStatusTransition()`을, `IMPLEMENTED` 채널만 활성화 가능 규칙은 `ChannelsService.upsert()`에서 **`channels/lib/channel-enable-rule.ts` 순수 함수로 이동**해 두 경로가 같은 함수를 호출한다(`upsert()` 동작 불변). 채널 행이 없을 때는 기존 `defaultChannelConfig()`로 생성한다.
+3. **관리자 즉시 경로(`PATCH …/status`, `PATCH …/channels/:type`)는 무변경**이다 — 트랜잭션 인자를 추가하지 않는다(두 메서드 모두 쓰기 직후 감사를 기록하므로 tx 인자를 받으면 "감사를 미룰지" 분기가 생긴다).
+4. `PublicAccessService`는 여전히 캐시하지 않으므로 전환은 **다음 공개 요청부터 즉시** 반영된다(무효화 호출 불필요).
+5. **후속 Phase 인계 보강**: 외부 채널을 실제로 붙일 때 예약 동작 `SET_WEB_CHANNEL`은 `SET_CHANNEL(type)`으로 **새 동작 유형을 추가**해 일반화한다(기존 동작은 호환 유지 — ADR-0032 §1 레지스트리).
 </content>

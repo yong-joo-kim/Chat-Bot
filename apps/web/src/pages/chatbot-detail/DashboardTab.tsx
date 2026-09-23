@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { DashboardSummary } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { statsApi } from '../../api/stats';
+import { deploySchedulesApi } from '../../api/deploySchedules';
 import { ApiError } from '../../api/client';
 import { MESSAGES } from '../../constants/messages';
 import { SkeletonCard, SkeletonRow } from '../../components/Skeleton';
@@ -39,6 +40,15 @@ export function DashboardTab(): JSX.Element {
   const [fetchError, setFetchError] = useState(false);
   const inFlightRef = useRef(false);
 
+  // No.28 E6 — "확인이 필요한 예약이 n건 있습니다" 상단 배너(§4.6.4). 탭 진입 시 1회만 조회한다.
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
+  useEffect(() => {
+    deploySchedulesApi
+      .list(chatbot.id, { needsAttention: true, pageSize: 1 })
+      .then((res) => setNeedsAttentionCount(res.total))
+      .catch(() => undefined);
+  }, [chatbot.id]);
+
   const fetchDashboard = useCallback(async () => {
     // AC-2-12: 연타 시 요청은 1회만 발생해야 한다.
     if (inFlightRef.current) return;
@@ -74,6 +84,12 @@ export function DashboardTab(): JSX.Element {
 
   return (
     <div className="dashboard-tab">
+      {needsAttentionCount > 0 && (
+        <p className="form-banner form-banner--warning" role="status">
+          <span aria-hidden="true">⚠</span> {MESSAGES.deploySchedules.dashboardBanner.text(needsAttentionCount)}{' '}
+          <Link to={`/chatbots/${chatbot.id}/deploy-schedules?needsAttention=true`}>{MESSAGES.deploySchedules.dashboardBanner.link}</Link>
+        </p>
+      )}
       <div className="dashboard-toolbar">
         <PeriodSelector
           preset={preset}

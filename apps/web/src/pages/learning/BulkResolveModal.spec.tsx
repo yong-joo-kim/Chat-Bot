@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type { UnansweredQuestionListItem } from '@chat-bot/shared-types';
+import { makeDeployScheduleMeta } from '../../test/fixtures';
+import { resetDeployScheduleMetaCacheForTests } from '../../lib/useDeployScheduleMeta';
 import { BulkResolveModal } from './BulkResolveModal';
 import type { IntentOption } from './ResolveModal';
 
@@ -16,6 +19,16 @@ const mockIntentsList = vi.fn();
 vi.mock('../../api/dialogue', () => ({
   intentsApi: {
     list: (...args: unknown[]) => mockIntentsList(...args),
+  },
+}));
+
+// No.28 M-2 — BulkResolveModal이 ScheduleConflictBanner(내부에 <Link>)를 렌더하므로 Router 컨텍스트가 필요하다.
+const mockNotice = vi.fn();
+const mockMeta = vi.fn();
+vi.mock('../../api/deploySchedules', () => ({
+  deploySchedulesApi: {
+    notice: (...args: unknown[]) => mockNotice(...args),
+    meta: (...args: unknown[]) => mockMeta(...args),
   },
 }));
 
@@ -44,15 +57,17 @@ function renderModal(overrides: Partial<Parameters<typeof BulkResolveModal>[0]> 
   const onClose = vi.fn();
   const onResult = vi.fn();
   const utils = render(
-    <BulkResolveModal
-      isOpen
-      chatbotId={CHATBOT_ID}
-      questions={[makeQuestion()]}
-      intentOptions={INITIAL_OPTIONS}
-      onClose={onClose}
-      onResult={onResult}
-      {...overrides}
-    />,
+    <MemoryRouter>
+      <BulkResolveModal
+        isOpen
+        chatbotId={CHATBOT_ID}
+        questions={[makeQuestion()]}
+        intentOptions={INITIAL_OPTIONS}
+        onClose={onClose}
+        onResult={onResult}
+        {...overrides}
+      />
+    </MemoryRouter>,
   );
   return { ...utils, onClose, onResult };
 }
@@ -66,6 +81,11 @@ describe('BulkResolveModal — 디바운스 서버 검색', () => {
   beforeEach(() => {
     mockBulkResolve.mockReset();
     mockIntentsList.mockReset();
+    mockNotice.mockReset();
+    mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
+    mockMeta.mockReset();
+    mockMeta.mockResolvedValue(makeDeployScheduleMeta());
+    resetDeployScheduleMetaCacheForTests();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -203,6 +223,23 @@ describe('BulkResolveModal — 제출/오류 처리', () => {
   beforeEach(() => {
     mockBulkResolve.mockReset();
     mockIntentsList.mockReset();
+    mockNotice.mockReset();
+    mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
+    mockMeta.mockReset();
+    mockMeta.mockResolvedValue(makeDeployScheduleMeta());
+    resetDeployScheduleMetaCacheForTests();
+  });
+
+  it('No.28 M-2 — 예약된 복원이 있으면 ScheduleConflictBanner가 표시되고 반영은 여전히 가능하다', async () => {
+    mockNotice.mockResolvedValue({
+      upcomingRestore: { scheduleId: 'sched-1', scheduledAt: new Date('2027-11-01T00:00:00.000Z'), status: 'PENDING', targetVersionNo: 30, chainLength: 1 },
+      activeCount: 1,
+    });
+    renderModal();
+
+    expect(await screen.findByText(/이 챗봇에 예약된 복원이 있습니다/)).toBeInTheDocument();
+    expect(mockNotice).toHaveBeenCalledWith(CHATBOT_ID);
+    expect(screen.getByRole('button', { name: '반영' })).toBeInTheDocument();
   });
 
   it('초기 목록에 일치하는 의도가 있으면 intentId로 bulkResolve를 호출한다', async () => {

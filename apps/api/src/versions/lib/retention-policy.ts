@@ -34,10 +34,20 @@ function byVersionNoAsc(a: VersionMeta, b: VersionMeta): number {
   return a.versionNo - b.versionNo;
 }
 
-export function selectVersionsToPrune(metas: readonly VersionMeta[], policy: RetentionPolicy, justCreatedId: string): RetentionResult {
+/**
+ * [신규 2026-09-23 No.28] `externallyProtectedIds`(선택 4번째 인자, §9.3) — 운영 예약 배포가 참조하는
+ * 버전(활성 `RESTORE_VERSION` 예약의 대상)을 보존 정리 대상에서 제외한다(FR-D4-1(상태 변경), AC-D5-1).
+ * 기존 호출부(3-인자)는 무변경 — 기본값이 빈 집합이라 동작이 바뀌지 않는다.
+ */
+export function selectVersionsToPrune(
+  metas: readonly VersionMeta[],
+  policy: RetentionPolicy,
+  justCreatedId: string,
+  externallyProtectedIds: ReadonlySet<string> = new Set(),
+): RetentionResult {
   const mostRecentBeforeRestore = [...metas].filter((m) => m.trigger === 'BEFORE_RESTORE').sort(byVersionNoDesc)[0];
 
-  const protectedIds = new Set<string>([justCreatedId]);
+  const protectedIds = new Set<string>([justCreatedId, ...externallyProtectedIds]);
   if (mostRecentBeforeRestore) protectedIds.add(mostRecentBeforeRestore.id);
   for (const m of metas) if (m.pinned) protectedIds.add(m.id);
 

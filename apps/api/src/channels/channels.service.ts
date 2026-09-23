@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CHANNEL_IMPLEMENTATION, CHANNEL_TYPE_LABELS } from '@chat-bot/shared-types';
+import { CHANNEL_TYPE_LABELS } from '@chat-bot/shared-types';
 import type { ChannelListItem, ChannelType, UpdateChannelDto } from '@chat-bot/shared-types';
 import { channelConfigSchemaFor } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,7 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { buildChannelCatalog, toChannelListItem } from './lib/channel-catalog';
 import { defaultChannelConfig, parseChannelConfig } from './lib/channel-config';
+import { assertChannelEnableAllowed } from './lib/channel-enable-rule';
 
 /**
  * 채널 배포 설정(No.11 J-2). 자격증명은 저장하지 않는다(NFR-S7).
@@ -30,13 +31,7 @@ export class ChannelsService {
   async upsert(chatbotId: string, type: ChannelType, dto: UpdateChannelDto): Promise<ChannelListItem> {
     await this.scope.assertWritable(chatbotId);
 
-    if (dto.enabled === true && CHANNEL_IMPLEMENTATION[type] !== 'IMPLEMENTED') {
-      throw new ApiException(
-        'CHANNEL_NOT_IMPLEMENTED',
-        409,
-        '이 채널은 아직 연동을 제공하지 않습니다. 설정만 미리 저장할 수 있습니다.',
-      );
-    }
+    if (dto.enabled === true) assertChannelEnableAllowed(type, true);
 
     const existing = await this.prisma.channel.findUnique({ where: { chatbotId_type: { chatbotId, type } } });
 

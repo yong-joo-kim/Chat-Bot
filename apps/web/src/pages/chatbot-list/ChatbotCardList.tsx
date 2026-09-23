@@ -7,15 +7,17 @@ import { SkeletonCard } from '../../components/Skeleton';
 import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
 import type { ChatbotRowAction } from './ChatbotTable';
+import { NeedsAttentionBadgeCell } from './NeedsAttentionBadgeCell';
 
 export interface ChatbotCardListProps {
   items: ChatbotListItem[];
   loading: boolean;
   onAction: (action: ChatbotRowAction, chatbot: ChatbotListItem) => void;
+  needsAttentionByChatbot?: Record<string, number>;
 }
 
 /** 모바일 카드 목록(<640px, ui-spec §8). 테이블과 동일한 정보를 라벨+값 스택으로 표시한다. */
-export function ChatbotCardList({ items, loading, onAction }: ChatbotCardListProps): JSX.Element {
+export function ChatbotCardList({ items, loading, onAction, needsAttentionByChatbot = {} }: ChatbotCardListProps): JSX.Element {
   const navigate = useNavigate();
 
   if (loading) {
@@ -53,6 +55,7 @@ export function ChatbotCardList({ items, loading, onAction }: ChatbotCardListPro
               <dd>{formatDateTime(chatbot.updatedAt)}</dd>
             </div>
           </dl>
+          <NeedsAttentionBadgeCell chatbotId={chatbot.id} count={needsAttentionByChatbot[chatbot.id] ?? 0} />
           <div className="chatbot-card-actions">
             <KebabMenu
               label={MESSAGES.chatbot.actionsLabel(chatbot.name)}

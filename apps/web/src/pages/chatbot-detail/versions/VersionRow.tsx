@@ -32,6 +32,8 @@ export interface VersionRowProps {
   onLabelSaved: () => void;
   onDeleted: () => void;
   onRestoreRequested: () => void;
+  /** No.28 E1 — "예약 복원" 진입점(`scheduled-deploy-ui-spec.md` §4.5.1). 권한은 `canRestore`와 동일. */
+  onScheduleRestoreRequested: () => void;
 }
 
 /** L1 버전 1행(접힌 상태 + 행 확장 시 메타 상세) — `version-history-ui-spec.md` §4.1.2/§4.1.3. */
@@ -46,6 +48,7 @@ export function VersionRow({
   onLabelSaved,
   onDeleted,
   onRestoreRequested,
+  onScheduleRestoreRequested,
 }: VersionRowProps): JSX.Element {
   const msg = MESSAGES.versions;
 
@@ -60,6 +63,7 @@ export function VersionRow({
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
+  const [deleteReferencedBySchedule, setDeleteReferencedBySchedule] = useState(false);
 
   const [detail, setDetail] = useState<ChatbotVersionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -133,6 +137,7 @@ export function VersionRow({
 
   async function handleDeleteConfirm(): Promise<void> {
     setDeleteError(undefined);
+    setDeleteReferencedBySchedule(false);
     try {
       await versionsApi.remove(chatbotId, item.id);
       setDeleteConfirmOpen(false);
@@ -140,6 +145,10 @@ export function VersionRow({
     } catch (e) {
       if (e instanceof ApiError && e.code === 'VERSION_PINNED') {
         setDeleteError(msg.deletePinnedError);
+      } else if (e instanceof ApiError && e.code === 'VERSION_REFERENCED_BY_SCHEDULE') {
+        // No.28: 이 버전을 대상으로 하는 예약이 있으면 삭제할 수 없다(`scheduled-deploy-ui-spec.md` §5.7).
+        setDeleteError(msg.deleteReferencedByScheduleError);
+        setDeleteReferencedBySchedule(true);
       } else {
         setDeleteError(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
         setDeleteConfirmOpen(false);
@@ -205,6 +214,11 @@ export function VersionRow({
           {canRestore && (
             <button type="button" className="btn btn-primary" onClick={onRestoreRequested}>
               {msg.restoreButton}
+            </button>
+          )}
+          {canRestore && (
+            <button type="button" className="btn btn-secondary" onClick={onScheduleRestoreRequested}>
+              {msg.scheduleRestoreButton}
             </button>
           )}
         </div>
@@ -291,6 +305,12 @@ export function VersionRow({
           {deleteError && (
             <p className="field-error" role="alert">
               {deleteError}
+              {deleteReferencedBySchedule && (
+                <>
+                  {' '}
+                  <Link to={`/chatbots/${chatbotId}/deploy-schedules`}>{msg.deleteReferencedByScheduleLink}</Link>
+                </>
+              )}
             </p>
           )}
         </ConfirmDialog>

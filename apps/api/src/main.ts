@@ -14,6 +14,9 @@ async function bootstrap(): Promise<void> {
   // Nest 기본 파서 등록을 막고, json/urlencoded 파서를 여유 있게(2MB) 직접 등록한다.
   // 파일 업로드 라우트(`FileInterceptor`, faqs/intents/keywords)는 multer가 별도로 처리하므로 영향받지 않는다.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  // 운영 예약 배포(No.28) §7.9 — SIGTERM에서 onModuleDestroy가 불리도록 한다(엔진 정지 + Prisma 종료
+  // 훅). 정합성은 이것에 의존하지 않는다(강제 종료·정전도 임대가 최종 방어선으로 처리한다).
+  app.enableShutdownHooks();
   app.useBodyParser('json', { limit: '2mb' });
   app.useBodyParser('urlencoded', { limit: '2mb', extended: true });
 

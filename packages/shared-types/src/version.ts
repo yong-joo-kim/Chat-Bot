@@ -55,6 +55,9 @@ export const VersionTriggerContextSchema = z.object({
   resourceType: z.enum(['INTENT', 'KEYWORD', 'FAQ']).optional(),
   targetId: z.string().uuid().optional(),
   itemCount: z.number().int().nonnegative().optional(),
+  /** 운영 예약 배포(No.28) 그룹 추가 — 이 BEFORE_RESTORE 백업이 어느 예약 실행에서 생겼는지
+   * (기동 시 임대 만료 회수 판정의 근거, scheduled-deploy-설계.md §7.8). 기존 행은 전부 유효(선택 필드). */
+  deployScheduleId: z.string().uuid().optional(),
 });
 export type VersionTriggerContext = z.infer<typeof VersionTriggerContextSchema>;
 

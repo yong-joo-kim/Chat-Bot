@@ -12,6 +12,7 @@ import { Pagination } from '../../components/Pagination';
 import { KebabMenu } from '../../components/KebabMenu';
 import { ConfirmDialog } from '../../components/Modal';
 import { AutoSnapshotPreNotice } from '../../components/AutoSnapshotPreNotice';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 import { MESSAGES } from '../../constants/messages';
 import { FaqCategoryBadge } from './badges';
 import { FaqEditModal } from './components/FaqEditModal';
@@ -139,6 +140,7 @@ export function FaqsPage(): JSX.Element {
 
   return (
     <div>
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <div className="dialogue-toolbar">
         <fieldset className="status-filter">
           <legend className="sr-only">{msg.categoryFilterLabel}</legend>

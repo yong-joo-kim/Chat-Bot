@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import type { ChatbotVersion as PrismaChatbotVersion } from '@prisma/client';
 import type { RestoreBlocker, RestorePreviewResponse, RestoreRequestDto, RestoreResponse, VersionAssetKind } from '@chat-bot/shared-types';
 import { SNAPSHOT_SCHEMA_VERSION } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApiException } from '../../common/api.exception';
+import { isBusyError } from '../../common/prisma/busy-error';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
+import type { ScheduledInvocation } from '../../audit-logs/audit-log.service';
 import { DialogueBundleService } from '../../dialogue-common/dialogue-bundle.service';
 import { AnswerSettingsCacheService } from '../../answer-settings/answer-settings-cache.service';
 import { ReindexQueueService } from '../../embedding/index/reindex-queue.service';
@@ -24,12 +25,6 @@ import { findCrossChatbotIdConflicts } from './cross-chatbot-check';
 
 const NOT_FOUND_MESSAGE = '요청하신 버전을 찾을 수 없습니다.';
 const ACTIVE_JOB_STATUSES = ['QUEUED', 'RUNNING'];
-
-function isBusyError(e: unknown): boolean {
-  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2034') return true;
-  const message = e instanceof Error ? e.message : '';
-  return /SQLITE_BUSY|database is locked/i.test(message);
-}
 
 /** 미리보기·확정 오케스트레이션, 잠금, 후속 처리, 감사(§8). */
 @Injectable()
@@ -149,7 +144,13 @@ export class VersionRestoreService {
     };
   }
 
-  async restore(chatbotId: string, versionId: string, dto: RestoreRequestDto): Promise<RestoreResponse> {
+  /**
+   * `invocation`(선택 4번째 인자, §9.2)이 있으면 예약 실행기(`deploy-schedules/executors/restore-version.executor.ts`)
+   * 경유다 — 감사 주체를 `actorOverride`로 남기고 summary에 접두어를 붙이며, `BEFORE_RESTORE` 백업의
+   * `createdBy*`도 예약자로 남긴다(타이머 경로에서 요청 컨텍스트가 없어 `null`이 되는 문제 방지).
+   * 미지정(관리자 요청 핸들러 경로)이면 **바이트 단위로 기존과 동일**하다(AC-D5-4).
+   */
+  async restore(chatbotId: string, versionId: string, dto: RestoreRequestDto, invocation?: ScheduledInvocation): Promise<RestoreResponse> {
     const chatbot = await this.assertScope(chatbotId);
     if (chatbot.status === 'ARCHIVED') throw new ApiException('CHATBOT_ARCHIVED', 409, '보관된 챗봇은 복원할 수 없습니다.');
     if (chatbot.status === 'ACTIVE' && dto.acknowledgeActive !== true) {
@@ -230,6 +231,8 @@ export class VersionRestoreService {
               trigger: 'BEFORE_RESTORE',
               restoredFromVersionId: versionRow.id,
               restoredFromVersionNo: versionRow.versionNo,
+              actor: invocation?.actor?.id ? { id: invocation.actor.id, email: invocation.actor.email } : undefined,
+              triggerContext: invocation?.triggerContext,
             });
 
             const plan = planRestore(currentData.envelope, targetLoad.envelope);
@@ -254,7 +257,13 @@ export class VersionRestoreService {
       } catch (e) {
         if (e instanceof ApiException) throw e;
         if (isBusyError(e)) {
-          throw new ApiException('RESTORE_PREVIEW_STALE', 409, '동시에 변경이 있었습니다. 미리보기를 다시 확인해 주세요.');
+          // §9.1 — BUSY 경합(재시도 가능)과 해시 불일치(재시도 무의미)를 코드로 분리한다.
+          // 해시 불일치는 여전히 RESTORE_PREVIEW_STALE이다(위 트랜잭션 안 명시적 throw).
+          throw new ApiException(
+            'RESTORE_BUSY',
+            409,
+            '다른 변경과 동시에 처리되어 복원하지 못했습니다. 변경 사항은 저장되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+          );
         }
         throw e;
       }
@@ -291,7 +300,8 @@ export class VersionRestoreService {
           backupVersionNo: backupVersionRow.versionNo,
           counts: Object.fromEntries(Object.entries(summary).map(([k, v]) => [k, v])),
         },
-        summary: `v${versionRow.versionNo}로 복원 (백업 v${backupVersionRow.versionNo})`,
+        summary: `${invocation?.auditSummaryPrefix ?? ''}v${versionRow.versionNo}로 복원 (백업 v${backupVersionRow.versionNo})`,
+        ...(invocation ? { actorOverride: invocation.actor } : {}),
       });
 
       await this.retention.pruneBestEffort(chatbotId, backupVersionRow.id);

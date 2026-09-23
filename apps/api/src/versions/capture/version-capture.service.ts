@@ -40,6 +40,9 @@ export interface PersistMeta {
   memo?: string;
   restoredFromVersionId?: string;
   restoredFromVersionNo?: number;
+  /** [신규 2026-09-23 No.28] 지정 시 `currentActorSnapshot()`(ALS) 대신 이 값을 쓴다 — 예약 실행기처럼
+   * 요청 컨텍스트가 없는 경로에서 `BEFORE_RESTORE` 백업의 `createdBy*`가 `null`이 되지 않게 한다(§9.2). */
+  actor?: { id: string; email: string };
 }
 
 /** 자동 스냅샷 5종 중 `MANUAL`·`BEFORE_RESTORE`를 제외한 나머지(§6.4 훅 8지점이 넘기는 트리거). */
@@ -166,7 +169,7 @@ export class VersionCaptureService {
       create: { chatbotId, lastVersionNo: 1 },
       update: { lastVersionNo: { increment: 1 } },
     });
-    const actor = this.auditLogService.currentActorSnapshot();
+    const actor = meta.actor ?? this.auditLogService.currentActorSnapshot();
 
     const versionRow = await tx.chatbotVersion.create({
       data: {

@@ -76,6 +76,7 @@ describe('FAQ/의도 매칭 고도화 통합 테스트', () => {
     const testDatabaseUrl = `file:${dbPath}`;
 
     process.env.DATABASE_URL = testDatabaseUrl;
+    process.env.DEPLOY_SCHEDULE_ENABLED = 'false'; // [No.28] 실행 엔진 비활성 — 기존 그룹 통합 시험은 폴링 없이 수행(§7.10)
     process.env.WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'http://localhost:5174';
     process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
     // AC-N4-1 — 신규 환경변수를 하나도 설정하지 않는다(EMBEDDING_BASE_URL/RAG_BASE_URL 등).

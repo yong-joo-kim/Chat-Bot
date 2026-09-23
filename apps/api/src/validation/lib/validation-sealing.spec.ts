@@ -82,7 +82,15 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
   it('2) validation.module.ts의 imports에 금지 모듈 6종이 0건이다(ADR-0025 봉인 L1과 동일 방식)', () => {
     const moduleFile = validationFileContents.find(({ f }) => f.replace(/\\/g, '/').endsWith('validation/validation.module.ts'));
     expect(moduleFile).toBeDefined();
-    const forbidden = ['IntentsModule', 'KeywordsModule', 'FaqModule', 'DialogNodesModule', 'ConversationModule', 'AugmentationModule'];
+    const forbidden = ['IntentsModule', 'KeywordsModule', 'FaqsModule', 'DialogNodesModule', 'ConversationModule', 'AugmentationModule'];
+    // 이름이 틀리면 이 검사는 항상 통과하는 빈 검사가 된다(실제로 'FaqModule' 오타로 그랬다) —
+    // 금지 목록의 모든 이름이 apps/api/src에 실제로 선언된 모듈 클래스인지 먼저 단언한다.
+    const apiSrcFiles: string[] = [];
+    walk(resolve(REPO_ROOT, 'apps/api/src'), ['.module.ts'], apiSrcFiles);
+    const declared = new Set(
+      apiSrcFiles.flatMap((f) => [...readFileSync(f, 'utf-8').matchAll(/export class (\w+Module)/g)].map((m) => m[1])),
+    );
+    expect(forbidden.filter((name) => !declared.has(name))).toEqual([]);
     for (const name of forbidden) {
       expect(nonCommentOccurrences(moduleFile!.content, new RegExp(`\\b${name}\\b`, 'g'))).toBe(0);
     }

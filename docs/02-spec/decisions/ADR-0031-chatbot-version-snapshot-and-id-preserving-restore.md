@@ -128,3 +128,16 @@
 - **No.40 착수** → 이 ADR의 캡처·무결성 검사를 **ID 재매핑 적재**와 결합해 환경 간 승격의 부품으로 쓴다. §8의 경계(라벨 무의미·타 챗봇 복원 없음)는 No.40 ADR이 명시적으로 대체하기 전까지 유지된다.
 - **조직 통제상 복원 승인이 필요해짐**(No.36/45) → 2인 승인 워크플로우 또는 `chatbot:restore` 신설.
 - **분류기가 대화 경로에 편입됨**(ADR-0027 트리거) → 복원 시 "삭제"가 아니라 모델 버전 연동을 재검토.
+
+
+---
+
+## 갱신 (2026-09-23 — No.28 예약 실행기가 `restore()`의 두 번째 호출부가 된다 · `RESTORE_BUSY` 분리)
+
+운영 예약 배포(No.28, **ADR-0032**)가 §8에서 "만들지 않는다"고 적은 **예약 복원(No.28)** 을 도입한다. **이 ADR의 복원 의미론(스냅샷 범위 · ID 보존 차이 적용 · 해시 재확인·백업·교체·사후 검증의 단일 트랜잭션 · 파생 데이터 처리 · No.40 경계)은 한 줄도 바뀌지 않는다** — 예약은 `restore()`를 **지정 시각에 호출**할 뿐이다. `Chatbot.status` 변경은 여전히 복원이 하지 않으며, 공개 전환은 별도 동작(`ChatbotPublicationService`)이다.
+
+1. **봉인 문구 개정**: "복원은 관리자 요청 핸들러 1곳"을 다음으로 바꾼다 — **대화 자산을 쓰는 유일 경로(`VersionRestoreApplier`)는 `VersionRestoreService.restore()` 안에서만 호출되며, `restore()`의 호출부는 ① 관리자 요청 핸들러 ② 관리자가 미리보기로 확인하고 해시에 묶어 생성한 예약의 실행기 2곳뿐이다.** 구조 보장: `VersionsModule`은 `VersionRestoreService`·`VersionDiffService`만 export하고 **applier는 export하지 않는다**(주입 불가) · `restore(` 호출 파일 정확히 2개(`deploy-schedule-sealing.spec.ts`) · `version-sealing.spec.ts` V-1~V-3(applier 1파일) 불변.
+2. **§6 BUSY 매핑 변경**: 복원 트랜잭션의 `P2034`·`SQLITE_BUSY` 계열은 **`409 RESTORE_BUSY`**(재시도 가능)로 매핑하고, **`RESTORE_PREVIEW_STALE`은 해시 불일치 전용**이 된다. BUSY 후 재시도는 트랜잭션 안 해시 재확인이 실제 변경을 다시 판정하므로 항상 안전하다. 즉시 복원의 정상 경로 응답은 불변이며, 경합 시에만 코드가 세분화된다(프런트 분기 1줄 — 같은 UX). Postgres 전환 시 `Serializable` 직렬화 실패도 `RESTORE_BUSY`다.
+3. **`restore()` 선택 4번째 인자 `ScheduledInvocation { actor, auditSummaryPrefix, triggerContext? }`** — 있으면 `RESTORE` 감사의 주체를 예약자(`actorOverride`)로, summary에 `[예약 실행 #…]` 접두를, `BEFORE_RESTORE` 백업의 `createdBy*`를 예약자로, 백업 `triggerContext.deployScheduleId`를 기록한다(임대 만료 후 "이 예약이 복원을 커밋했는가"의 판정 근거). 없으면 기존과 바이트 단위로 동일하다.
+4. **보존 정책 보호 집합 확장**: 활성(`PENDING`/`HELD`/`RUNNING`) 예약이 참조하는 버전은 정리에서 제외하고, 수동 삭제는 `409 VERSION_REFERENCED_BY_SCHEDULE`이다. 알고리즘은 불변이며 순수 함수 입력(보호 id 집합)만 늘어난다. 판정은 정리·삭제 트랜잭션 안에서 한다(예약 생성과의 경합 방어).
+5. **재검토 트리거 추가**: No.40 착수 시 예약 엔진에 "포인터 전환" 동작을 추가하는 것이 이 ADR §8 경계와 No.40의 접점이다(ADR-0032 재검토 트리거).

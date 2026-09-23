@@ -57,4 +57,50 @@ describe('retention-policy — §6.6 selectVersionsToPrune', () => {
     const result = selectVersionsToPrune([], { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 1000 }, 'x');
     expect(result).toEqual({ pruneIds: [], stillOverLimit: false });
   });
+
+  // 새 테스트 — 구현·리뷰 단계 공백 보강(2026-09-24, No.28 시험 회차). §9.3 — 운영 예약 배포가
+  // 참조하는 버전을 보호 집합에 추가하는 4번째 인자(`externallyProtectedIds`, 선택·기본 빈 집합)는
+  // 이전까지 전용 케이스가 없었다(AC-D5-1의 순수 함수 절반).
+  describe('externallyProtectedIds(§9.3, AC-D5-1) — 운영 예약 배포가 참조하는 버전 보호', () => {
+    it('자동 30건 한도를 넘어도 예약이 참조하는 버전은 정리 대상에서 제외된다', () => {
+      const metas: VersionMeta[] = [];
+      for (let i = 1; i <= 35; i += 1) metas.push(meta(`auto-${i}`, 'BEFORE_IMPORT', i));
+
+      // 보호 없이는 auto-1(가장 오래된 것)이 정리 대상에 포함된다.
+      const withoutProtection = selectVersionsToPrune(metas, { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 1_000_000_000 }, 'auto-35');
+      expect(withoutProtection.pruneIds).toContain('auto-1');
+
+      // 같은 입력에 auto-1을 외부 보호 집합으로 지정하면 정리 대상에서 빠진다.
+      const withProtection = selectVersionsToPrune(
+        metas,
+        { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 1_000_000_000 },
+        'auto-35',
+        new Set(['auto-1']),
+      );
+      expect(withProtection.pruneIds).not.toContain('auto-1');
+    });
+
+    it('보호로 인해 총량 상한을 넘으면 기존 stillOverLimit 규약을 그대로 따른다(정리 중단)', () => {
+      const metas: VersionMeta[] = [
+        meta('protected-1', 'BEFORE_IMPORT', 1, false, 900_000),
+        meta('auto-2', 'BEFORE_IMPORT', 2, false, 500_000),
+      ];
+      const result = selectVersionsToPrune(
+        metas,
+        { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 800_000 },
+        'auto-2',
+        new Set(['protected-1']),
+      );
+      expect(result.pruneIds).not.toContain('protected-1');
+      expect(result.stillOverLimit).toBe(true);
+    });
+
+    it('기본값(4번째 인자 생략)은 빈 집합과 동일하게 동작한다(기존 호출 무회귀)', () => {
+      const metas: VersionMeta[] = [];
+      for (let i = 1; i <= 35; i += 1) metas.push(meta(`auto-${i}`, 'BEFORE_IMPORT', i));
+      const withEmptySet = selectVersionsToPrune(metas, { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 1_000_000_000 }, 'auto-35', new Set());
+      const withoutArg = selectVersionsToPrune(metas, { retentionAuto: 30, retentionManual: 30, totalMaxBytes: 1_000_000_000 }, 'auto-35');
+      expect(withEmptySet).toEqual(withoutArg);
+    });
+  });
 });

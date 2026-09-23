@@ -63,6 +63,8 @@ model Chatbot {
   /// [신규 2026-09-23 No.25] 역참조만(Prisma 양방향 관계 요건) — DB 컬럼 변화 0.
   versions                ChatbotVersion[]
   versionSequence         ChatbotVersionSequence?
+  /// [신규 2026-09-23 No.28] 역참조만(Prisma 양방향 관계 요건) — DB 컬럼 변화 0.
+  deploySchedules         DeploySchedule[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -846,3 +848,88 @@ model ChatbotVersionSequence {
 
   @@map("chatbot_version_sequences")
 }
+
+/// [신규 2026-09-23 No.28 운영 예약 배포] 1회성 운영 예약 배포(ADR-0032). 1행 = 동작 1개 = 실행 최대
+/// 1회(재시도는 카운터). 상태 전이 쓰기 지점은 `deploy-schedule.service.ts`(생성·수정·취소·재개·확인)와
+/// `engine/deploy-schedule.repository.ts`(선점·종결·재시도·MISSED·HELD 전파·임대 회수) 2파일뿐이다(§16 D-1).
+/// ⚠ 이 테이블에는 스키마에 표현되지 않는 부분 유니크 인덱스가 2개 있다 — 파일 하단 경고 주석 참고.
+model DeploySchedule {
+  id                    String    @id @default(uuid())
+  chatbotId             String
+  chatbot               Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// RESTORE_VERSION | PUBLISH | SET_WEB_CHANNEL — shared-types DeployScheduleAction가 단일 소스
+  action                String
+  /// JSON — 동작별 params(zod). 식별자·불리언만. 동작 추가 시 마이그레이션 불필요(NFR-DM2)
+  params                String
+  /// RESTORE_VERSION 전용 비정규화 — 보존 보호·삭제 409의 조회 키. FK 없음(§4.4 — Restrict라면 종단
+  /// 예약이 참조하는 버전이 영원히 지워지지 않는다)
+  targetVersionId       String?
+  /// 표시용 스냅샷(대상 버전이 사라져도 "v31 복원" 표기 유지 — AuditLog.targetName 규약)
+  targetVersionNo       Int?
+  /// 대상 버전의 정규 해시(업캐스트 반영 — 미리보기의 targetContentHash). 체인 후속의 기준값
+  targetContentHash     String?
+  /// 실행 시 restore()의 expectedCurrentHash로 전달(J-4/J-5)
+  expectedContentHash   String?
+  /// 기준 해시를 결정한 선행 복원 예약(null = 생성 시점 현재 상태 기준). FK 없음
+  predecessorScheduleId String?
+  /// 생성 시 ACTIVE(또는 공개 예정) 확인 여부(FR-D2-4)
+  acknowledgeActive     Boolean   @default(false)
+  /// G3(선택) — 성공 직후 실행할 TC 세트. FK 없음(세트 삭제는 정당한 동작 — 실행 시 SKIPPED)
+  postRunTestSetId      String?
+  /// UTC 순간, 초·밀리초 0(FR-D2-9)
+  scheduledAt           DateTime
+  /// PENDING | RUNNING | SUCCEEDED | FAILED | MISSED | HELD | CANCELLED
+  status                String    @default("PENDING")
+  /// 선점 토큰(uuid) — 종결·임대 회수의 CAS 조건
+  claimToken            String?
+  claimedAt             DateTime?
+  attemptCount          Int       @default(0)
+  lastAttemptAt         DateTime?
+  /// DB_BUSY | ACTIVE_JOB | RESTORE_LOCKED — PENDING(재시도 대기)일 때만 의미
+  lastTransientReason   String?
+  /// 첫 선점 시각 · 종결 시각
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  /// 첫 선점(또는 MISSED 판정) 시점의 지연(초)
+  delaySeconds          Int?
+  /// APPLIED | NOOP | RECOVERED (SUCCEEDED일 때만)
+  outcome               String?
+  failureReason         String?
+  /// JSON DeployScheduleResultSummary — number/boolean/uuid/enum만(원문 없음, NFR-DS4)
+  resultSummary         String?
+  heldReason            String?
+  heldByScheduleId      String?
+  heldAt                DateTime?
+  /// G3로 시작된 TestRun. FK 없음(실행 보존 정리로 사라질 수 있다)
+  testRunId             String?
+  /// 관리자 메모(≤200 코드 포인트). API 응답에는 포함, 서버 로그에는 금지(FR-0-87)
+  memo                  String?
+  /// 예약자 스냅샷 — FK 없음(AuditLog.actorId 규약). 실행 시 재검증의 키(FR-D3-12)
+  createdById           String
+  createdByEmail        String
+  createdByRole         String
+  cancelledAt           DateTime?
+  cancelledById         String?
+  cancelledByEmail      String?
+  /// "확인 필요" 해제(FR-D6-2). 표시 상태일 뿐 감사하지 않는다
+  acknowledgedAt        DateTime?
+  acknowledgedById      String?
+  acknowledgedByEmail   String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([chatbotId, scheduledAt])
+  @@index([chatbotId, status])
+  @@index([targetVersionId, status])
+  @@map("deploy_schedules")
+}
+
+// [신규 2026-09-23 No.28] deploy_schedules에는 이 스키마에 표현되지 않는 부분 유니크 인덱스가 2개
+// 더 있다(scheduled-deploy-설계.md §4.2, test_runs_chatbotId_active_key 선례와 같은 방식) —
+// ① 같은 챗봇의 활성(PENDING/HELD/RUNNING) 예약은 같은 분(scheduledAt)에 2건 이상 존재할 수 없다
+// ② 한 챗봇에서 RUNNING은 최대 1건. Prisma 스키마 언어는 WHERE 절이 있는 부분 인덱스를 표현할 수
+// 없어 마이그레이션 SQL에 raw로만 존재한다(prisma/migrations/<이 그룹 마이그레이션>/migration.sql
+// 참고). 이후 `prisma migrate dev`로 deploy_schedules 관련 마이그레이션을 새로 생성할 때, diff가
+// 이 인덱스 2개(그리고 test_runs_chatbotId_active_key)를 삭제하는 구문을 끼워 넣지 않는지 반드시
+// 확인할 것 — 삭제된다면 해당 라인을 새 마이그레이션에서 제거하고 인덱스 자체는 유지해야 한다.

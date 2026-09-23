@@ -13,6 +13,7 @@ import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { ArchivedBanner } from './ArchivedBanner';
 import { FormActions } from './FormActions';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 
 interface SettingsFormState {
   name: string;
@@ -156,6 +157,7 @@ export function SettingsTab(): JSX.Element {
   return (
     <div className="settings-tab">
       <ArchivedBanner visible={isArchived} />
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <form onSubmit={handleSubmit} noValidate>
         <fieldset disabled={isArchived} className="settings-fieldset">
           <legend className="sr-only">{MESSAGES.settings.title}</legend>

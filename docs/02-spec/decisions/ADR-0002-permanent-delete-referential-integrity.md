@@ -70,3 +70,13 @@
 - **영구삭제는 여전히 불가역이다.** `ChatbotVersion`·`ChatbotVersionPayload`·`ChatbotVersionSequence`는 **"하위 데이터 제거" 분류**로 영구삭제 트랜잭션에서 **동반 삭제**된다(사전 검사 409 대상이 아니다 — 스냅샷이 영구삭제를 막으면 보관 챗봇을 영원히 지울 수 없다). 따라서 영구삭제 후에는 스냅샷도 남지 않는다. 오프사이트 백업은 No.45의 몫이다.
 - **보관(`ARCHIVED`) 중에는 스냅샷이 보존**되며 보관 해제 후 복원할 수 있다.
 - **복원은 이 ADR이 말하는 "복구 불가능한 파괴적 동작"이 아니다** — 복원 직전 상태를 같은 트랜잭션에서 자동 백업하므로 가역이다. 그래서 `chatbot:purge`(ADMIN 전용)와 같은 등급을 요구하지 않고 `dialogue:write` + `chatbot:write`(EDITOR 이상)로 둔다.
+
+
+---
+
+## 갱신 (2026-09-23 — No.28 `DeploySchedule` 동반 삭제)
+
+운영 예약 배포(No.28, ADR-0032)의 **`DeploySchedule`은 "하위 데이터 제거" 분류**로 영구삭제 트랜잭션에서 **동반 삭제**된다(13 → 14테이블, `tx.chatbot.delete` 직전 `deleteMany` 1건). 사전 검사(409) 대상이 아니다 — 예약이 영구삭제를 막으면 보관 챗봇을 영원히 지울 수 없다. **이 ADR의 결정(cascade 금지 · 2단계 삭제 · 사전 검사 409 · `confirmName` 재검증)은 불변**이다.
+
+- 예약의 `targetVersionId` 등 참조 컬럼에는 **FK를 걸지 않는다** — `Restrict`면 종단 예약이 참조하는 버전이 보존 정리로 영원히 지워지지 않는다. 대신 **활성 예약이 참조하는 버전의 수동 삭제는 서비스 계층에서 `409 VERSION_REFERENCED_BY_SCHEDULE`** 로 거부한다(이 ADR의 "사전 검사는 UX, 최종 방어선은 트랜잭션 안 재확인" 원칙 그대로).
+- `ARCHIVED` 챗봇의 남은 예약은 실행 시 `FAILED(CHATBOT_ARCHIVED)`가 되며, 보관 중에도 **취소·조회는 허용**한다.

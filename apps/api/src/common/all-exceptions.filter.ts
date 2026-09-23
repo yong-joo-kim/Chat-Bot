@@ -106,6 +106,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: '이미 등록된 이메일입니다.',
       };
     }
+    // 운영 예약 배포(No.28) 그룹 추가(code-review M1 방어선) — 부분 유니크 인덱스 2개(schema.prisma
+    // 하단 경고 주석 참고)는 `deploy-schedule.service.ts`/`engine/deploy-schedule.repository.ts`가
+    // 항상 먼저 잡아 도메인 코드로 변환하므로 이 분기까지 오면 안 되지만, 혹시 새 호출부가 놓쳐도
+    // "이미 사용 중인 고유 URL"(DUPLICATE_SLUG)이라는 오분류 메시지가 노출되지 않게 한다.
+    if (target.includes('deploy_schedules')) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        code: 'DEPLOY_SCHEDULE_INVALID_TIME',
+        message: '같은 챗봇의 활성 예약과 시각이 겹칩니다. 다른 시각을 입력해 주세요.',
+      };
+    }
     return {
       statusCode: HttpStatus.CONFLICT,
       code: 'DUPLICATE_SLUG',

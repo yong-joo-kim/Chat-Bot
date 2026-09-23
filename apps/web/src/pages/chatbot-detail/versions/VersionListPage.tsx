@@ -6,6 +6,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/Toast';
 import { ApiError } from '../../../api/client';
 import { versionsApi } from '../../../api/versions';
+import { useDeployScheduleMeta } from '../../../lib/useDeployScheduleMeta';
 import { MESSAGES } from '../../../constants/messages';
 import { SkeletonRow } from '../../../components/Skeleton';
 import { ErrorState } from '../../../components/ErrorState';
@@ -16,6 +17,7 @@ import { CreateVersionModal } from './CreateVersionModal';
 import { VersionRow } from './VersionRow';
 import { RestoreDialog } from './restore/RestoreDialog';
 import { RestoreResultPanel } from './restore/RestoreResultPanel';
+import { ScheduleDeployDialog } from '../deploy-schedules/ScheduleDeployDialog';
 
 const PAGE_SIZE = 20;
 type FilterValue = 'ALL' | VersionTriggerGroup;
@@ -47,6 +49,9 @@ export function VersionListPage(): JSX.Element {
   const [createOpen, setCreateOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<{ id: string; versionNo: number } | null>(null);
   const [restoreResult, setRestoreResult] = useState<RestoreResponse | null>(null);
+  // No.28 E1 — "예약 복원" 진입점(`scheduled-deploy-ui-spec.md` §4.5.1).
+  const [scheduleRestoreTarget, setScheduleRestoreTarget] = useState<{ id: string; versionNo: number } | null>(null);
+  const deployMeta = useDeployScheduleMeta();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,6 +198,7 @@ export function VersionListPage(): JSX.Element {
                   void load();
                 }}
                 onRestoreRequested={() => setRestoreTarget({ id: item.id, versionNo: item.versionNo })}
+                onScheduleRestoreRequested={() => setScheduleRestoreTarget({ id: item.id, versionNo: item.versionNo })}
               />
             ))}
           </ul>
@@ -216,6 +222,23 @@ export function VersionListPage(): JSX.Element {
       )}
 
       {restoreResult && <RestoreResultPanel chatbotId={chatbot.id} result={restoreResult} onClose={() => setRestoreResult(null)} />}
+
+      {deployMeta && scheduleRestoreTarget && (
+        <ScheduleDeployDialog
+          chatbotId={chatbot.id}
+          isOpen={scheduleRestoreTarget !== null}
+          onClose={() => setScheduleRestoreTarget(null)}
+          onCreated={(label) => {
+            setScheduleRestoreTarget(null);
+            showToast(MESSAGES.deploySchedules.dialog.createSuccess(label));
+          }}
+          timezone={deployMeta.timezone}
+          chatbotStatus={chatbot.status}
+          initialAction="RESTORE_VERSION"
+          versionId={scheduleRestoreTarget.id}
+          versionNo={scheduleRestoreTarget.versionNo}
+        />
+      )}
     </div>
   );
 }

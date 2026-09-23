@@ -48,5 +48,8 @@ import { TestRunCompareService } from './compare/test-run-compare.service';
     TestRunCancelRegistry,
     TestRunCompareService,
   ],
+  // [신규 2026-09-23 No.28] 운영 예약 배포의 G3(실행 직후 TC) 1파일(`post-run-test.starter.ts`)만
+  // 재사용한다. imports는 무변경 — validation-sealing.spec.ts 무수정 통과(§11).
+  exports: [TestRunService],
 })
 export class ValidationModule {}

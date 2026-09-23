@@ -6,6 +6,7 @@ import { FileUploadField } from '../../../components/FileUploadField';
 import { ImportValidationReportTable } from '../../../components/ImportValidationReportTable';
 import { AutoSnapshotPreNotice } from '../../../components/AutoSnapshotPreNotice';
 import { AutoSnapshotNotice } from '../../../components/AutoSnapshotNotice';
+import { ScheduleConflictBanner } from '../../../components/ScheduleConflictBanner';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { intentsApi, keywordsApi, faqsApi } from '../../../api/dialogue';
@@ -161,7 +162,12 @@ export function BulkImportModal({
 
       {step === 1 && (
         <div>
-          {resourceType !== 'TEST_CASE' && <AutoSnapshotPreNotice text={msg.autoSnapshotPreNotice} />}
+          {resourceType !== 'TEST_CASE' && (
+            <>
+              <AutoSnapshotPreNotice text={msg.autoSnapshotPreNotice} />
+              <ScheduleConflictBanner chatbotId={chatbotId} />
+            </>
+          )}
           <p>{msg.templateIntro}</p>
           <div className="dialogue-toolbar-actions" style={{ marginBottom: 16 }}>
             <a className="btn btn-secondary" href={api.templateUrl(chatbotId, 'csv')}>

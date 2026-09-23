@@ -158,6 +158,9 @@ describe('챗봇 복원/버전 이력관리(No.25) 정적 검사 — version-his
       'embeddingVector',
       'channel',
       'bannedWord',
+      // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §9.4 #5) — 버전 모듈은 예약을
+      // 읽기만 한다(보존 보호·삭제 409의 활성 참조 조회, version-retention.service.ts).
+      'deploySchedule',
     ];
     const writeVerbs = '(create|createMany|update|updateMany|upsert|delete|deleteMany)';
 

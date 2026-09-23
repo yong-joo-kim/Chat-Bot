@@ -47,6 +47,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §12) — 수동 생성/라벨·메모/고정/
   // 삭제 감사. `RESTORE`는 요약 액션이라 이 화이트리스트를 거치지 않는다(AuditLogService.isBulkSummary).
   ChatbotVersion: ['versionNo', 'trigger', 'label', 'memo', 'pinned', 'sizeBytes'],
+  // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §8.4) — 생성/수정/취소/재개 감사.
+  // params는 매퍼가 평탄화한 enableWebChannel/enabled를 number/boolean으로만 추가한다(원문 없음).
+  DeploySchedule: ['action', 'status', 'scheduledAt', 'targetVersionNo', 'memo', 'enableWebChannel', 'enabled'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

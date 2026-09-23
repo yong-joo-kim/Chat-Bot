@@ -149,6 +149,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
     embeddingServer = await startMockEmbeddingServer(MODEL_ID, DIMENSION);
 
     process.env.DATABASE_URL = testDatabaseUrl;
+    process.env.DEPLOY_SCHEDULE_ENABLED = 'false'; // [No.28] 실행 엔진 비활성 — 기존 그룹 통합 시험은 폴링 없이 수행(§7.10)
     process.env.WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'http://localhost:5174';
     process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
     process.env.EMBEDDING_BASE_URL = embeddingServer.url;
@@ -409,6 +410,7 @@ describe('학습 고도화 — 기동 시 고아 Job 정리(EX-L2-7)', () => {
     const testDatabaseUrl = `file:${dbPath}`;
 
     process.env.DATABASE_URL = testDatabaseUrl;
+    process.env.DEPLOY_SCHEDULE_ENABLED = 'false'; // [No.28] 실행 엔진 비활성 — 기존 그룹 통합 시험은 폴링 없이 수행(§7.10)
     process.env.WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'http://localhost:5174';
     process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
     delete process.env.EMBEDDING_BASE_URL;

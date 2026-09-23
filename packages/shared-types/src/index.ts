@@ -20,3 +20,4 @@ export * from './learning';
 export * from './output-view';
 export * from './contrast';
 export * from './validation';
+export * from './deploy-schedule';

@@ -6,6 +6,7 @@ import { KebabMenu } from '../../components/KebabMenu';
 import { SkeletonRow } from '../../components/Skeleton';
 import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
+import { NeedsAttentionBadgeCell } from './NeedsAttentionBadgeCell';
 
 export type ChatbotRowAction = 'copy' | 'move' | 'archive' | 'permanentDelete';
 
@@ -13,10 +14,12 @@ export interface ChatbotTableProps {
   items: ChatbotListItem[];
   loading: boolean;
   onAction: (action: ChatbotRowAction, chatbot: ChatbotListItem) => void;
+  /** No.28 E5 — `GET /deploy-schedules/summary`에서 만든 `chatbotId → count` 맵(§4.6.3). */
+  needsAttentionByChatbot?: Record<string, number>;
 }
 
-/** 데스크톱 테이블(ui-spec §3.1). 컬럼: 아바타/이름/slug/상태/소속그룹/수정일시/액션. */
-export function ChatbotTable({ items, loading, onAction }: ChatbotTableProps): JSX.Element {
+/** 데스크톱 테이블(ui-spec §3.1). 컬럼: 아바타/이름/slug/상태/확인필요/소속그룹/수정일시/액션. */
+export function ChatbotTable({ items, loading, onAction, needsAttentionByChatbot = {} }: ChatbotTableProps): JSX.Element {
   const navigate = useNavigate();
 
   return (
@@ -27,6 +30,7 @@ export function ChatbotTable({ items, loading, onAction }: ChatbotTableProps): J
           <th scope="col">{MESSAGES.chatbot.columnName}</th>
           <th scope="col">{MESSAGES.chatbot.columnSlug}</th>
           <th scope="col">{MESSAGES.chatbot.columnStatus}</th>
+          <th scope="col">{MESSAGES.chatbot.columnNeedsAttention}</th>
           <th scope="col">{MESSAGES.chatbot.columnGroup}</th>
           <th scope="col">{MESSAGES.chatbot.columnUpdatedAt}</th>
           <th scope="col">{MESSAGES.chatbot.columnActions}</th>
@@ -36,7 +40,7 @@ export function ChatbotTable({ items, loading, onAction }: ChatbotTableProps): J
         {loading
           ? Array.from({ length: 5 }).map((_, i) => (
               <tr key={i}>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <SkeletonRow />
                 </td>
               </tr>
@@ -52,6 +56,9 @@ export function ChatbotTable({ items, loading, onAction }: ChatbotTableProps): J
                 <td>{chatbot.slug}</td>
                 <td>
                   <StatusBadge status={chatbot.status} size="sm" />
+                </td>
+                <td>
+                  <NeedsAttentionBadgeCell chatbotId={chatbot.id} count={needsAttentionByChatbot[chatbot.id] ?? 0} />
                 </td>
                 <td>{chatbot.groupName}</td>
                 <td>{formatDateTime(chatbot.updatedAt)}</td>

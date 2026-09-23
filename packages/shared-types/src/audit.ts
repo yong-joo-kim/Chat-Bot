@@ -63,6 +63,9 @@ export const AuditTargetType = z.enum([
   'TestCaseSet',
   // 챗봇 복원/버전 이력관리(No.25) 그룹 추가 — 수동 생성/라벨·메모/고정/삭제/복원 감사 대상(§12).
   'ChatbotVersion',
+  // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §8.4) — 생성/수정/취소/재개 감사 대상.
+  // 실행 자체는 기존 액션(RESTORE·STATUS_CHANGE·UPDATE|CREATE, targetType Chatbot|Channel)으로 남는다.
+  'DeploySchedule',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -81,6 +84,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   Session: '세션',
   TestCaseSet: '검증 세트',
   ChatbotVersion: '챗봇 버전',
+  DeploySchedule: '배포 예약',
 };
 
 /**

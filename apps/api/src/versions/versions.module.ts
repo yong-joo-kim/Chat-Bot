@@ -24,5 +24,8 @@ import { RestoreLockRegistry } from './restore/restore-lock.registry';
   imports: [ChatbotsModule, DialogueCommonModule, AnswerSettingsModule, EmbeddingModule, BannedWordsModule, VersionCaptureModule],
   controllers: [VersionsController],
   providers: [VersionService, VersionPayloadReader, VersionDiffService, VersionRestoreService, VersionRestoreApplier, RestoreWarningsService, RestoreLockRegistry],
+  // [신규 2026-09-23 No.28] 운영 예약 배포 모듈이 재사용한다(§2.2). applier는 export하지 않는다
+  // (구조적 봉인 — §9.4 #1, §16 D-15).
+  exports: [VersionRestoreService, VersionDiffService],
 })
 export class VersionsModule {}

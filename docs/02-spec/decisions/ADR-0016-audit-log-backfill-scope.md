@@ -201,3 +201,16 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 4. **자동 스냅샷 생성과 보존 정리, 복원 직전 백업 생성은 기록하지 않는다** — 자동 생성은 이미 감사되는 본 동작(`IMPORT`·`BULK_DELETE`·`Intent UPDATE`)의 부수 효과이고, 정리는 시스템 동작이며, 백업 번호는 `RESTORE` 요약에 포함된다. 기록하면 대량 작업마다 감사가 2배가 된다(FR-15-35·ADR-0029 §5와 같은 판단).
 5. **`AuditLogService.currentActorSnapshot(): { id, email, role } | null` 공개 메서드를 추가**한다. 스냅샷 메타의 `createdById`/`createdByEmail`은 이 메서드로만 얻는다 — **`RequestContextService.get()` 호출 지점은 여전히 `AuditLogService` 1곳**이다(§결과 code-reviewer 점검 ③ 유지).
 6. 버전 이력은 감사로그를 **복제하지 않는다** — "두 버전 사이의 감사 레코드"는 `(chatbotId, createdAt)` 인덱스로 **건수만** 세고 이력관리 화면으로 필터 링크를 건다(`audit:read` 전용 경로). **§6의 `(targetType, targetId, createdAt)` 인덱스 재검토 트리거는 발동하지 않는다** — No.25는 `targetId`로 조회하지 않으며, 항목별 변경 이력 화면은 1차 범위 밖이고 만들더라도 **스냅샷 차이**로 구현한다.
+
+
+---
+
+## 갱신 (2026-09-23 — `DeploySchedule` 대상 · 예약 실행의 주체 = 예약자(`actorOverride`))
+
+운영 예약 배포(No.28, ADR-0032)가 다음을 추가한다. **감사로그의 결정(append-only · 커밋 후 기록 · 화이트리스트 부분 스냅샷 · ALS actor 전달 · `RequestContextService.get()` 호출 지점 1곳)은 전부 불변**이다.
+
+1. **`AuditTargetType`에 `DeploySchedule`(라벨 `'배포 예약'`, 14 → 15종)** — 예약 생성 `CREATE` · 시각/메모 수정 `UPDATE` · 취소(`summary: "예약 취소"`)·보류 해제(`"보류 해제"`) `STATUS_CHANGE`. `AUDIT_FIELDS.DeploySchedule = ['action','status','scheduledAt','targetVersionNo','memo']`. **`AuditAction`은 추가하지 않는다.**
+2. **예약 실행은 기존 액션으로 기록한다** — 복원 `RESTORE`(요약 액션 그대로) · 공개 `STATUS_CHANGE` · 채널 `UPDATE｜CREATE`. summary에 `[예약 실행 #<id 앞 8자>]` 접두를 붙인다.
+3. **주체 = 예약자.** 예약 실행은 요청 밖(타이머)이라 ALS에 actor가 없다 — 그대로 두면 `actorEmail: 'system'`이 되어 **누가 반영했는지가 사라진다**. 실행 직전 재검증을 통과한 예약자를 `actorOverride`로 넘긴다. `actorOverride`의 용도는 "인증되지 않은 주체를 기록해야 하는 auth 경로"에서 **"요청 컨텍스트가 없는 경로의 명시 주체 전달(auth · 예약 실행기)"** 로 넓어진다. ALS를 읽는 곳은 여전히 `AuditLogService` 1곳이며, 예약 실행기는 ALS를 흉내 내지 않고 **인자로** 주체를 넘긴다. `ip`/`userAgent`는 `null`이다.
+4. **기록하지 않는 것**: 예약의 NOOP(이미 그 상태) · FAILED · MISSED · HELD 전이 · 임대 만료 회수 판정 · "확인 필요" 해제 — 쓰기가 없거나 시스템 동작이다(자동 스냅샷·보존 정리 비감사와 같은 판단). 결과는 예약 행과 서버 경고 로그에 남는다. 규제 고객이 "실행되지 않은 사실"의 감사를 요구하면 No.45에서 재검토한다.
+5. **커밋 직후~감사 기록 전 크래시 시 누락 가능성**은 §4의 "커밋 후 별도 쓰기"가 원래 갖는 성질이며 예약 실행도 같다 — 임대 회수가 감사를 사후 보정하지 않는다(공개 전환은 "우리가 썼는가"를 증명할 수단이 없어 보정하면 잘못된 주체를 남길 수 있다).

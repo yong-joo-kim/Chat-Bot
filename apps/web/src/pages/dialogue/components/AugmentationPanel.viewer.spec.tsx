@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import type { AugmentationListResponse } from '@chat-bot/shared-types';
 import { ToastProvider } from '../../../components/Toast';
+import { makeDeployScheduleMeta } from '../../../test/fixtures';
+import { resetDeployScheduleMetaCacheForTests } from '../../../lib/useDeployScheduleMeta';
 import { AugmentationPanel } from './AugmentationPanel';
 
 /**
@@ -28,6 +31,15 @@ vi.mock('../../../api/augmentation', () => ({
 vi.mock('../../../api/trainingJobs', () => ({
   trainingJobsApi: {
     get: vi.fn(),
+  },
+}));
+
+const mockNotice = vi.fn();
+const mockMeta = vi.fn();
+vi.mock('../../../api/deploySchedules', () => ({
+  deploySchedulesApi: {
+    notice: (...args: unknown[]) => mockNotice(...args),
+    meta: (...args: unknown[]) => mockMeta(...args),
   },
 }));
 
@@ -61,18 +73,44 @@ function makeListResponse(overrides: Partial<AugmentationListResponse> = {}): Au
 
 function renderPanel(): void {
   render(
-    <ToastProvider>
-      <AugmentationPanel
-        chatbotId="chatbot-1"
-        intentId="intent-1"
-        currentExampleCount={1}
-        onExamplesAccepted={vi.fn()}
-      />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <AugmentationPanel
+          chatbotId="chatbot-1"
+          intentId="intent-1"
+          currentExampleCount={1}
+          onExamplesAccepted={vi.fn()}
+        />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
 describe('AugmentationPanel — VIEWER 렌더 게이팅(FR-L3-9, AC-L3-4)', () => {
+  beforeEach(() => {
+    mockNotice.mockReset();
+    mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
+    mockMeta.mockReset();
+    mockMeta.mockResolvedValue(makeDeployScheduleMeta());
+    resetDeployScheduleMetaCacheForTests();
+  });
+
+  it('No.28 M-2 — 펼친 패널에 예약된 복원이 있으면 ScheduleConflictBanner가 표시된다', async () => {
+    mockUseAuth.mockReturnValue({ can: () => true });
+    mockList.mockResolvedValue(makeListResponse({ items: [], total: 0, sufficientExamples: false }));
+    mockNotice.mockResolvedValue({
+      upcomingRestore: { scheduleId: 'sched-1', scheduledAt: new Date('2027-11-01T00:00:00.000Z'), status: 'PENDING', targetVersionNo: 30, chainLength: 1 },
+      activeCount: 1,
+    });
+
+    renderPanel();
+    const toggle = screen.getAllByRole('button')[0];
+    toggle.click();
+
+    expect(await screen.findByText(/이 챗봇에 예약된 복원이 있습니다/)).toBeInTheDocument();
+    expect(mockNotice).toHaveBeenCalledWith('chatbot-1');
+  });
+
   it('VIEWER(dialogue:write 없음)는 생성 버튼이 렌더되지 않는다', async () => {
     mockUseAuth.mockReturnValue({ can: () => false });
     mockList.mockResolvedValue(makeListResponse({ items: [], total: 0, sufficientExamples: false }));

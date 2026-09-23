@@ -160,6 +160,20 @@ export function makeAuditLogListItem(overrides: Partial<AuditLogListItem> = {}):
   };
 }
 
+/* ── 운영 예약 배포(No.28) 픽스처 ── */
+import type { DeployScheduleMeta } from '@chat-bot/shared-types';
+
+/** `useDeployScheduleMeta`/`ScheduleConflictBanner` 등 meta를 필요로 하는 컴포넌트 테스트 공용 픽스처. */
+export function makeDeployScheduleMeta(overrides: Partial<DeployScheduleMeta> = {}): DeployScheduleMeta {
+  return {
+    timezone: 'Asia/Seoul',
+    timezoneFallback: false,
+    engine: { enabledOnThisInstance: true, pollIntervalMs: 1000, misfireGraceMinutes: 10, retryWindowMinutes: 15, leaseMinutes: 5, overduePendingCount: 0 },
+    limits: { minLeadMinutes: 5, maxHorizonDays: 90, minSpacingMinutes: 1, maxActivePerChatbot: 5, memoMaxCodePoints: 200, longHorizonWarnDays: 30, listPageSizeDefault: 20, listPageSizeMax: 100 },
+    ...overrides,
+  };
+}
+
 export function makeAuditLogDetail(overrides: Partial<AuditLogDetail> = {}): AuditLogDetail {
   const item = makeAuditLogListItem(overrides);
   return {

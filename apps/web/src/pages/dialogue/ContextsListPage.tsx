@@ -13,6 +13,7 @@ import { KebabMenu } from '../../components/KebabMenu';
 import { ConfirmDialog } from '../../components/Modal';
 import { MESSAGES } from '../../constants/messages';
 import { DeleteBlockedBanner } from './components/DeleteBlockedBanner';
+import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 
 /** D4 — 컨텍스트(멀티턴·슬롯필링) 목록(ui-spec §4.6). */
 export function ContextsListPage(): JSX.Element {
@@ -69,6 +70,7 @@ export function ContextsListPage(): JSX.Element {
 
   return (
     <div>
+      <ScheduleConflictBanner chatbotId={chatbot.id} />
       <div className="dialogue-toolbar">
         <div className="dialogue-search-row">
           <label htmlFor="context-search" className="sr-only">

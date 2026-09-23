@@ -123,6 +123,13 @@ export const ApiErrorCode = z.enum([
   'RESTORE_BLOCKED_BY_ACTIVE_JOB',
   'RESTORE_IN_PROGRESS',
   'RESTORE_NO_CHANGES',
+  // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §13.4, FR-0-84) — 6종.
+  'DEPLOY_SCHEDULE_INVALID_TIME',
+  'DEPLOY_SCHEDULE_LIMIT_EXCEEDED',
+  'DEPLOY_SCHEDULE_NOT_MODIFIABLE',
+  'DEPLOY_SCHEDULE_PRECONDITION_FAILED',
+  'VERSION_REFERENCED_BY_SCHEDULE',
+  'RESTORE_BUSY',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

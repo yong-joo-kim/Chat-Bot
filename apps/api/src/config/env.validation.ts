@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envBoolean } from './lib/env-boolean';
 
 /**
  * 부팅 시 필수 환경변수를 검증한다(NFR-M1, EX-4-3).
@@ -104,6 +105,13 @@ const EnvSchema = z.object({
   VERSION_SNAPSHOT_MAX_BYTES: z.coerce.number().int().min(1_048_576).default(20_971_520),
   VERSION_TOTAL_MAX_BYTES_PER_CHATBOT: z.coerce.number().int().min(1_048_576).default(314_572_800),
   VERSION_TX_TIMEOUT_MS: z.coerce.number().int().min(5000).default(30000),
+  // 운영 예약 배포(No.28) 그룹 추가 — 전부 선택(기본값 있음, FR-0-83). 하나도 설정하지 않아도
+  // 정상 기동·동작한다(폴링 30초·유예 10분·재시도 창 15분·임대 5분). ml-worker 변수 추가는 0건이다.
+  DEPLOY_SCHEDULE_ENABLED: envBoolean(true),
+  DEPLOY_SCHEDULE_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
+  DEPLOY_SCHEDULE_MISFIRE_GRACE_MINUTES: z.coerce.number().int().min(0).max(1440).default(10),
+  DEPLOY_SCHEDULE_RETRY_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  DEPLOY_SCHEDULE_LEASE_MINUTES: z.coerce.number().int().min(1).default(5),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -135,6 +143,27 @@ export function validate(config: Record<string, unknown>): EnvConfig {
   if (result.data.VERSION_TOTAL_MAX_BYTES_PER_CHATBOT < result.data.VERSION_SNAPSHOT_MAX_BYTES) {
     // eslint-disable-next-line no-console
     console.warn('VERSION_TOTAL_MAX_BYTES_PER_CHATBOT이 VERSION_SNAPSHOT_MAX_BYTES보다 작습니다. 값을 다시 확인해 주세요.');
+  }
+
+  // 운영 예약 배포(No.28) §7.8 — 임대(lease)는 실행 최장 시간(준비 + 복원 트랜잭션 2×timeout + 여유
+  // 60초)보다 길어야 한다. 미달이면 기동 실패로 만들지 않고 하한으로 상향 보정한다(경고만).
+  const leaseFloorMs = 2 * result.data.VERSION_TX_TIMEOUT_MS + 60_000;
+  if (result.data.DEPLOY_SCHEDULE_LEASE_MINUTES * 60_000 < leaseFloorMs) {
+    const floorMinutes = Math.ceil(leaseFloorMs / 60_000);
+    // eslint-disable-next-line no-console
+    console.warn(
+      `DEPLOY_SCHEDULE_LEASE_MINUTES(${result.data.DEPLOY_SCHEDULE_LEASE_MINUTES}분)가 실행 최장 시간 기준 하한(${floorMinutes}분) 미만이라 자동 보정합니다.`,
+    );
+    result.data.DEPLOY_SCHEDULE_LEASE_MINUTES = floorMinutes;
+  }
+
+  // 운영 예약 배포(No.28) J-12 — STATS_TIMEZONE이 Intl이 거부하는 값이면 기동 실패가 아니라 경고만
+  // 남긴다. 예약 표시는 요청 시점에 'Asia/Seoul'로 폴백한다(GET /deploy-schedules/meta.timezoneFallback).
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: result.data.STATS_TIMEZONE });
+  } catch {
+    // eslint-disable-next-line no-console
+    console.warn(`STATS_TIMEZONE(${result.data.STATS_TIMEZONE})이 유효한 IANA 시간대가 아닙니다. 예약 표시는 Asia/Seoul로 대체됩니다.`);
   }
 
   return result.data;

@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '../../../components/Toast';
 import { ApiError } from '../../../api/client';
+import { makeDeployScheduleMeta } from '../../../test/fixtures';
+import { resetDeployScheduleMetaCacheForTests } from '../../../lib/useDeployScheduleMeta';
 import { BulkImportModal } from './BulkImportModal';
 
 const mockImportValidate = vi.fn();
@@ -17,6 +19,15 @@ vi.mock('../../../api/dialogue', () => ({
   },
   keywordsApi: { importValidate: vi.fn(), importCommit: vi.fn(), templateUrl: vi.fn() },
   faqsApi: { importValidate: vi.fn(), importCommit: vi.fn(), templateUrl: vi.fn() },
+}));
+
+const mockNotice = vi.fn();
+const mockMeta = vi.fn();
+vi.mock('../../../api/deploySchedules', () => ({
+  deploySchedulesApi: {
+    notice: (...args: unknown[]) => mockNotice(...args),
+    meta: (...args: unknown[]) => mockMeta(...args),
+  },
 }));
 
 function renderModal(onCommitted = vi.fn()): ReturnType<typeof render> {
@@ -42,6 +53,24 @@ describe('BulkImportModal — 대량 업로드 3단계 플로우', () => {
   beforeEach(() => {
     mockImportValidate.mockReset();
     mockImportCommit.mockReset();
+    mockNotice.mockReset();
+    mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
+    mockMeta.mockReset();
+    mockMeta.mockResolvedValue(makeDeployScheduleMeta());
+    resetDeployScheduleMetaCacheForTests();
+  });
+
+  it('No.28 M-2 — 1단계에 예약된 복원이 있으면 ScheduleConflictBanner가 표시되고 저장을 막지 않는다', async () => {
+    mockNotice.mockResolvedValue({
+      upcomingRestore: { scheduleId: 'sched-1', scheduledAt: new Date('2027-11-01T00:00:00.000Z'), status: 'PENDING', targetVersionNo: 30, chainLength: 1 },
+      activeCount: 1,
+    });
+    renderModal();
+
+    expect(await screen.findByText(/이 챗봇에 예약된 복원이 있습니다/)).toBeInTheDocument();
+    expect(mockNotice).toHaveBeenCalledWith('bot-1');
+    // 배너가 있어도 1단계 액션(검증하기)은 여전히 조작 가능하다.
+    expect(screen.getByRole('button', { name: '검증하기' })).toBeInTheDocument();
   });
 
   it('1단계: 파일을 선택하고 "검증하기"를 누르면 importValidate가 호출되고 2단계 리포트로 전환된다', async () => {

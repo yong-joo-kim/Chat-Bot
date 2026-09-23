@@ -149,6 +149,22 @@ describe('RestoreDialog', () => {
     expect(screen.getByRole('button', { name: 'v27로 복원' })).toBeInTheDocument();
   });
 
+  it('409 RESTORE_BUSY면 RESTORE_PREVIEW_STALE과 동일하게 다이얼로그를 유지한 채 배너를 띄우고 미리보기를 자동 재호출한다(No.28 §4.6.1)', async () => {
+    const user = userEvent.setup();
+    mockRestorePreview.mockResolvedValue(basePreview());
+    mockRestore.mockRejectedValue(new ApiError(409, '다른 변경과 동시에 처리되었습니다.', 'RESTORE_BUSY'));
+    const onClose = vi.fn();
+    renderDialog(vi.fn(), onClose);
+
+    const confirmButton = await screen.findByRole('button', { name: 'v27로 복원' });
+    await user.click(confirmButton);
+
+    await screen.findByText('미리보기 이후 자산이 변경되었습니다. 최신 내용으로 다시 확인합니다.');
+    expect(mockRestorePreview).toHaveBeenCalledTimes(2);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'v27로 복원' })).toBeInTheDocument();
+  });
+
   it('409 RESTORE_IN_PROGRESS면 다이얼로그를 닫고 안내 토스트를 띄운다', async () => {
     const user = userEvent.setup();
     mockRestorePreview.mockResolvedValue(basePreview());

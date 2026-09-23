@@ -38,6 +38,9 @@ import { TestRunComparePage } from './pages/chatbot-detail/validation/compare/Te
 import { VersionListPage } from './pages/chatbot-detail/versions/VersionListPage';
 import { VersionDiffPage } from './pages/chatbot-detail/versions/diff/VersionDiffPage';
 import { VersionContentPage } from './pages/chatbot-detail/versions/content/VersionContentPage';
+import { DeployScheduleListPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleListPage';
+import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleDetailPage';
+import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -99,6 +102,8 @@ export function App(): JSX.Element {
             <Route path="answer-settings" element={<AnswerSettingsTab />} />
             <Route path="simulator" element={<SimulatorTab />} />
             <Route path="channels" element={<ChannelsTab />} />
+            <Route path="deploy-schedules" element={<DeployScheduleListPage />} />
+            <Route path="deploy-schedules/:scheduleId" element={<DeployScheduleDetailPage />} />
             <Route path="dialogue" element={<DialogueShell />}>
               <Route index element={<Navigate to="nodes" replace />} />
               <Route path="nodes" element={<NodesListPage />} />
@@ -141,6 +146,14 @@ export function App(): JSX.Element {
             element={
               <RequirePermission permission="audit:read" menuName={MESSAGES.systemSettings.auditLogs}>
                 <AuditLogsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/settings/deploy-schedules"
+            element={
+              <RequirePermission permission="chatbot:read" menuName={MESSAGES.systemSettings.deploySchedules}>
+                <DeploySchedulesPage />
               </RequirePermission>
             }
           />

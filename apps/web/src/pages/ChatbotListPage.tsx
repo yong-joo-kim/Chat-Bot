@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { ChatbotGroupWithCount, ChatbotListItem, ChatbotStatus } from '@chat-bot/shared-types';
 import { groupsApi } from '../api/groups';
 import { chatbotsApi } from '../api/chatbots';
+import { deploySchedulesApi } from '../api/deploySchedules';
 import { useToast } from '../components/Toast';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
@@ -66,6 +67,19 @@ export function ChatbotListPage(): JSX.Element {
   const [chatbotsError, setChatbotsError] = useState(false);
 
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
+
+  // No.28 E5 — "확인 필요" 배지(§4.6.3). 목록 진입 시 1회만 조회(별도 데이터라 필터/페이지 변경과 무관).
+  const [needsAttentionByChatbot, setNeedsAttentionByChatbot] = useState<Record<string, number>>({});
+  useEffect(() => {
+    deploySchedulesApi
+      .summary()
+      .then((res) => {
+        const map: Record<string, number> = {};
+        for (const c of res.needsAttention.byChatbot) map[c.chatbotId] = c.count;
+        setNeedsAttentionByChatbot(map);
+      })
+      .catch(() => undefined);
+  }, []);
 
   function updateParams(patch: Record<string, string | undefined>, resetPage = true): void {
     const next = new URLSearchParams(searchParams);
@@ -200,8 +214,8 @@ export function ChatbotListPage(): JSX.Element {
         ) : (
           <>
             <p className="result-count-badge">{MESSAGES.common.totalCount(total)}</p>
-            <ChatbotTable items={chatbots} loading={chatbotsLoading} onAction={handleRowAction} />
-            <ChatbotCardList items={chatbots} loading={chatbotsLoading} onAction={handleRowAction} />
+            <ChatbotTable items={chatbots} loading={chatbotsLoading} onAction={handleRowAction} needsAttentionByChatbot={needsAttentionByChatbot} />
+            <ChatbotCardList items={chatbots} loading={chatbotsLoading} onAction={handleRowAction} needsAttentionByChatbot={needsAttentionByChatbot} />
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => updateParams({ page: String(p) }, false)} />
           </>
         )}
