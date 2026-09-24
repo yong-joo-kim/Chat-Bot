@@ -8,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
  * 통합 테스트가 전부 `401`이 되는 것을 막는다. 세션을 직접 INSERT하는 우회는 쓰지 않는다 —
  * 실제 `POST /auth/login` 경로를 타야 인증 경로 자체의 회귀도 함께 검증된다.
  */
-export type TestRole = 'ADMIN' | 'EDITOR' | 'VIEWER';
+export type TestRole = 'ADMIN' | 'EDITOR' | 'VIEWER' | 'AGENT';
 
 export const TEST_PASSWORD = 'Test-Password#1';
 
@@ -16,6 +16,8 @@ const TEST_USER_EMAILS: Record<TestRole, string> = {
   ADMIN: 'integration-test-admin@chat-bot.local',
   EDITOR: 'integration-test-editor@chat-bot.local',
   VIEWER: 'integration-test-viewer@chat-bot.local',
+  // [신규 No.24] 상담원 — ADR-0036 §7.
+  AGENT: 'integration-test-agent@chat-bot.local',
 };
 
 /** ADMIN/EDITOR/VIEWER 3계정을 생성한다. 해시는 1회만 계산해 재사용한다(3계정 × 1회 ≈ 300ms). */

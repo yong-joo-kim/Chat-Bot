@@ -15,6 +15,7 @@ import type { RagAnswerService } from '../rag/rag-answer.service';
 import type { PendingAnswerStore } from '../rag/pending-answer.store';
 import type { LegacyApiService } from '../legacy-api/legacy-api.service';
 import type { SurveyResponseService } from '../survey-responses/survey-response.service';
+import type { HandoffGateService } from '../handoff/handoff-gate.service';
 
 /** `startPendingRagAnswer()` 입력 중 이 회귀 테스트에서 값이 중요하지 않은 필드들을 채운다. */
 function makeSettings(): ChatbotAnswerSetting {
@@ -85,6 +86,7 @@ function makeService(overrides: { createThrows?: unknown; maskThrows?: unknown }
     config,
     {} as LegacyApiService,
     {} as SurveyResponseService,
+    {} as HandoffGateService,
   );
 
   return { service, pendingStore, bannedWordFilter, ragGate, ragAnswer };

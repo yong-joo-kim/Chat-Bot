@@ -94,3 +94,13 @@
 3. **표시**: 결과 행 `surveyPreviewA/B`로 설문이 개입한 TC에 `설문 미리보기 판정` 배지를 붙인다. v2 `SURVEY`는 `일부 아웃풋 미실행` 배지 대상에서 빠진다(v1은 유지).
 4. **해시 불연속(ADR-0029 버전 축)**: v2 `SURVEY`를 포함한 TC는 No.27 이전(미지원 안내)과 이후(문항 출력)의 응답 해시가 다르다 — 실행 비교 화면은 한쪽만 설문 판정이 관여했을 때 안내를 1회 표시한다(No.26 목 안내와 통합 문단).
 5. **질의 임베딩 캐시**(§2): 설문이 입력을 소비할 턴은 공개 대화·시뮬레이터 모두 의미 점수 계산을 생략하므로 설문 답이 운영 질의 LRU 캐시를 오염시키지 않는다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.24: 상담 모듈은 실행·비교·시뮬레이터의 DI 그래프에 없다 · 힌트의 질의 캐시 공유는 격리 대상이 아니다)
+
+하이브리드 CS(No.24, ADR-0036).
+
+1. **상담 스레드 읽기·쓰기 0**: `HandoffModule`은 공개 게이트·폴링 서비스 2개만 export하고 import처는 `ConversationModule` 1곳이다 — `validation`·`simulation`·`versions`·`deploy-schedules`·`stats`·`learning`이 `handoff/`·`canned-responses/`를 import하지 않음을 `handoff-sealing.spec.ts` H-12와 `validation-sealing.spec.ts` 금지 import 목록이 단언한다. 엔진이 상담을 모르므로 TC·비교 결과는 불변이다.
+2. **질의 임베딩 캐시**(§2): 응답힌트는 운영 `QueryEmbeddingService` LRU를 **공유한다** — 입력이 실제 사용자 발화(마스킹본)이고 발화당 1회로 상한이라 대량 TC와 달리 오염이 아니다.

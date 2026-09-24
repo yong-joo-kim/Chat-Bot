@@ -30,6 +30,7 @@ import { ConnectionStatusBadge } from './ConnectionStatusBadge';
 import { ConnectionCheckButton } from './ConnectionCheckButton';
 import { NoDestructiveActionsNotice } from './NoDestructiveActionsNotice';
 import { AnswerSettingsPreviewPanel } from './AnswerSettingsPreviewPanel';
+import { HandoffSettingsSection } from './HandoffSettingsSection';
 
 interface FormState {
   semanticEnabled: boolean;
@@ -473,6 +474,13 @@ export function AnswerSettingsPage({
 
         {canWrite && <FormActions dirty={dirty} saving={saving} onCancel={handleCancel} />}
       </form>
+
+      {/*
+        [No.24] HS1 — 상담 연계 설정 3번째 섹션. ★ 별도 API(`/handoff-settings`)라 위 `<form>`과
+        요청을 합치지 않는다(`ChatbotHandoffSetting`은 버전 스냅샷·복원 대상 밖의 별도 행,
+        hybrid-cs-설계.md §26 D-1) — 독립된 `<form>`·저장 버튼을 갖는다.
+      */}
+      <HandoffSettingsSection chatbotId={chatbotId} isArchived={isArchived} />
 
       <AnswerSettingsPreviewPanel
         onPreview={(message) => answerSettingsApi.preview(chatbotId, { message })}

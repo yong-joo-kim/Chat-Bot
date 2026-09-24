@@ -94,14 +94,14 @@ describe('검증/품질 고도화(No.19/20) 통합 테스트', () => {
     delete process.env.EMBEDDING_BASE_URL; // 규칙 매칭만 — 이 그룹은 자체 GPU를 쓰지 않는다(§4.5).
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

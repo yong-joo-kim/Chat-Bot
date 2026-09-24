@@ -147,14 +147,14 @@ describe('통합 통계(No.29) 원천 보존 봉인 정적 검사 — ADR-0033 �
     expect(/tx\.unansweredQuestion\s*\.\s*(delete|deleteMany)\b/.test(txBlock)).toBe(false);
   });
 
-  it('R-7) $queryRaw 보유 파일이 정확히 3개다(stats.service.ts·integrated-session.query.ts·health.controller.ts) · $queryRawUnsafe 등 0건', () => {
+  it('R-7) $queryRaw 보유 파일이 정확히 4개다(stats.service.ts·integrated-session.query.ts·health.controller.ts·handoff-secure-delete.query.ts) · $queryRawUnsafe 등 0건', () => {
     const rawSqlPattern = /\$queryRaw\b/;
     const owners = fileContents.filter(({ content }) => rawSqlPattern.test(content)).map(({ f }) => f.replace(/\\/g, '/'));
-    const expected = ['stats/stats.service.ts', 'stats/integrated/integrated-session.query.ts', 'health/health.controller.ts'];
+    const expected = ['stats/stats.service.ts', 'stats/integrated/integrated-session.query.ts', 'health/health.controller.ts', 'handoff/handoff-secure-delete.query.ts'];
     for (const suffix of expected) {
       expect(owners.some((o) => o.endsWith(suffix))).toBe(true);
     }
-    expect(owners.length).toBe(3);
+    expect(owners.length).toBe(4);
 
     const statsFiles = fileContents.filter(({ f }) => f.replace(/\\/g, '/').includes('/src/stats/'));
     const unsafePattern = /\$(queryRawUnsafe|executeRaw|executeRawUnsafe)\b/;

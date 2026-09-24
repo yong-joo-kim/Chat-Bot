@@ -1,5 +1,10 @@
-import { Body, Controller, Get, Header, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
+  HANDOFF_SESSION_HEADER,
+  HANDOFF_TOKEN_HEADER,
+  HandoffPollQuery,
+  HandoffPollQuerySchema,
+  HandoffPollResponse,
   PendingAnswerPollResponse,
   PublicChatbotConfig,
   PublicMessageRequestDto,
@@ -12,17 +17,23 @@ import { PublicRateBucket } from '../common/rate-limit/public-rate-bucket.decora
 import { PublicRateLimitGuard } from './guards/public-rate-limit.guard';
 import { PublicOriginGuard } from './guards/public-origin.guard';
 import { PublicConversationService } from './public-conversation.service';
+import { HandoffPublicPollService } from '../handoff/handoff-public-poll.service';
+import { ApiException } from '../common/api.exception';
+import { isUuid } from './lib/is-uuid';
 
 /**
  * 공개 대화 API(No.11, 인증 없음). 관리자 API와 컨트롤러·DTO·오류 메시지를 공유하지 않는다(FR-0-17).
  * 가드 순서는 레이트리밋 → Origin이다 — Origin 판정의 DB 조회 전에 폭주 트래픽을 자른다(§8.3).
- * `@Public()`은 핸들러 단위로 **3곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
- * DD-45. 보류 답변 폴링이 3번째로 추가됐다 — ADR-0023 §2, `@Public()` 전체 개수는 5→6).
+ * `@Public()`은 핸들러 단위로 **4곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
+ * DD-45. 상담 폴링이 4번째로 추가됐다 — ADR-0036 §2, `@Public()` 전체 개수는 6→7).
  */
 @UseGuards(PublicRateLimitGuard, PublicOriginGuard)
 @Controller('public/chatbots/:slug')
 export class PublicConversationController {
-  constructor(private readonly publicConversationService: PublicConversationService) {}
+  constructor(
+    private readonly publicConversationService: PublicConversationService,
+    private readonly handoffPoll: HandoffPublicPollService,
+  ) {}
 
   @Get('config')
   @Public()
@@ -38,8 +49,9 @@ export class PublicConversationController {
   sendMessage(
     @Param('slug') slug: string,
     @Body(new ZodValidationPipe(PublicMessageRequestSchema)) dto: PublicMessageRequestDto,
+    @Headers(HANDOFF_TOKEN_HEADER) handoffToken?: string,
   ): Promise<PublicMessageResponse> {
-    return this.publicConversationService.sendMessage(slug, dto);
+    return this.publicConversationService.sendMessage(slug, dto, { handoffToken });
   }
 
   /**
@@ -57,5 +69,34 @@ export class PublicConversationController {
   @PublicRateBucket({ kind: 'POLL', key: { from: 'param', name: 'messageId', ns: 'msg' }, perKeyLimit: 60 })
   pollMessage(@Param('slug') slug: string, @Param('messageId') messageId: string): Promise<PendingAnswerPollResponse> {
     return this.publicConversationService.pollMessage(slug, messageId);
+  }
+
+  /**
+   * 상담 전용 짧은 폴링(`@Public()` 7번째, ADR-0036 §2·§7) — 세션·토큰은 헤더로만 받는다(URL·본문
+   * 금지). 폴링 전용 버킷(`poll-ip` 600/분 + `poll-key:handoff:{sessionId}` 40/분)만 소비한다.
+   */
+  @Get('handoff')
+  @Public()
+  @Header('Cache-Control', 'no-store')
+  @PublicRateBucket({
+    kind: 'POLL',
+    key: { from: 'header', name: HANDOFF_SESSION_HEADER, ns: 'handoff' },
+    perKeyLimit: { env: 'PUBLIC_HANDOFF_POLL_RATE_LIMIT_SESSION_PER_MIN', fallback: 40 },
+  })
+  pollHandoff(
+    @Param('slug') slug: string,
+    @Headers(HANDOFF_SESSION_HEADER) sessionId: string | undefined,
+    @Headers(HANDOFF_TOKEN_HEADER) token: string | undefined,
+    @Query(new ZodValidationPipe(HandoffPollQuerySchema)) query: HandoffPollQuery,
+  ): Promise<HandoffPollResponse> {
+    if (!sessionId) {
+      throw new ApiException('VALIDATION_FAILED', 400, `${HANDOFF_SESSION_HEADER} 헤더가 필요합니다.`);
+    }
+    // [코드리뷰 1회차 Low] 헤더는 zod 파이프를 타지 않으므로 형식을 직접 검증한다(본문 sessionId는
+    // PublicMessageRequestSchema.uuid()가 이미 검증한다).
+    if (!isUuid(sessionId)) {
+      throw new ApiException('VALIDATION_FAILED', 400, `${HANDOFF_SESSION_HEADER} 헤더는 UUID 형식이어야 합니다.`);
+    }
+    return this.handoffPoll.poll(slug, sessionId, token, query);
   }
 }

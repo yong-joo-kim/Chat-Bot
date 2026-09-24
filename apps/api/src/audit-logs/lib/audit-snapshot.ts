@@ -69,6 +69,12 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 설문관리(No.27) 그룹 추가(survey-management-설계.md §12) — 문항 문구·선택지·소개·완료 문구·
   // 취소어 본문을 담지 않는다(`DialogNode.outputs` 제외 선례).
   Survey: ['name', 'status', 'activeFrom', 'activeTo', 'questionCount', 'structureVersion', 'sessionTimeoutMinutes'],
+  // 하이브리드 CS(No.24) 그룹 추가(hybrid-cs-설계.md §16, ADR-0036 §6) — 원문(`rawText`)·전체
+  // `sessionId`·`sessionRef`·토큰은 화이트리스트에 없다(§18 H-15). `alias`는 서비스가 조립해 넣는
+  // 파생 필드(원문 없는 표시용 식별자)다.
+  HandoffSession: ['status', 'endReason', 'assignedUserName', 'alertLevelAtStart', 'alias'],
+  // 본문(body) 제외 — FAQ 답변 제외 선례와 동일.
+  CannedResponse: ['title', 'category', 'shortcut', 'enabled', 'sortOrder', 'bodyLength'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

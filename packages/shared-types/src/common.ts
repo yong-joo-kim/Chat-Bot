@@ -138,6 +138,14 @@ export const ApiErrorCode = z.enum([
   'SURVEY_IN_USE',
   'SURVEY_HAS_RESPONSES',
   'SURVEY_STRUCTURE_LOCKED',
+  // 하이브리드 CS(No.24) 그룹 추가(hybrid-cs-설계.md §17.3, ADR-0036) — 7종.
+  'HANDOFF_ALREADY_ASSIGNED',
+  'HANDOFF_NOT_ACTIVE',
+  'HANDOFF_SESSION_NOT_LIVE',
+  'HANDOFF_NOT_FOUND',
+  'HANDOFF_DISABLED',
+  'HANDOFF_NOT_ASSIGNEE',
+  'HANDOFF_UNAVAILABLE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

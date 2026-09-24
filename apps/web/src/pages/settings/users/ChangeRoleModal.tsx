@@ -70,6 +70,8 @@ export function ChangeRoleModal({
                 </option>
               ))}
             </select>
+            {/* [No.24] U1-ext — 선택된 역할 설명(security-audit-ui-spec.md §3.7 기존 위치·형식 계승). */}
+            {newRole && <p className="field-hint">{MESSAGES.users.roleDescriptions[newRole]}</p>}
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>

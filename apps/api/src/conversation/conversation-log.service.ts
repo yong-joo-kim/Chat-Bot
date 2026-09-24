@@ -33,6 +33,9 @@ export interface RecordConversationLogParams {
   apiNotice?: boolean;
   /** [No.27] 이번 턴 입력을 설문 세션이 소비했는가(FR-SV5-8) — 질문 순위·미응답 수집·RAG에서 제외하는 근거. 기본 false. */
   surveyTurn?: boolean;
+  /** [No.24] 상담 구간(개입 중·검증된 발신) 사용자 턴인가(ADR-0036 §1) — 질문 순위·미응답 수집에서
+   * 제외, 응답출처 OTHER 불변. 기본 false. */
+  handoffTurn?: boolean;
 }
 
 /**
@@ -85,6 +88,8 @@ export class ConversationLogService {
           dayBucket,
           hourBucket,
           surveyTurn: params.surveyTurn ?? false,
+          handoffTurn: params.handoffTurn ?? false,
+          apiNotice: params.apiNotice ?? false,
         },
       });
 
@@ -99,6 +104,7 @@ export class ConversationLogService {
         inputKind: params.inputKind,
         apiNotice: params.apiNotice ?? false,
         surveyTurn: params.surveyTurn ?? false,
+        handoffTurn: params.handoffTurn ?? false,
       });
     } catch (e) {
       // 경고 로그에도 메시지 본문을 넣지 않는다(chatbotId/sessionId/오류코드만, NFR-S4).

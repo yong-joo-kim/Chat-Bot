@@ -99,14 +99,14 @@ describe('챗봇 복원/버전 이력관리(No.25) 통합 테스트', () => {
     process.env.VERSION_PINNED_MAX = '2';
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     // `ConfigModule.forRoot({ validate })`는 모듈이 실제로 인스턴스화되는 시점의 process.env를

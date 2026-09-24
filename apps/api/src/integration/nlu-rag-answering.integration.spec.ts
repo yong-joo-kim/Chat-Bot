@@ -82,14 +82,14 @@ describe('FAQ/의도 매칭 고도화 통합 테스트', () => {
     // AC-N4-1 — 신규 환경변수를 하나도 설정하지 않는다(EMBEDDING_BASE_URL/RAG_BASE_URL 등).
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

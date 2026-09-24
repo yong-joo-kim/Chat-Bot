@@ -30,7 +30,10 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors((req: import('express').Request, callback) => {
     if (isPublicSurface(req.url ?? '')) {
-      callback(null, { origin: '*', credentials: false });
+      // [No.24, ADR-0036 §2·§7.1] 상담 폴링이 커스텀 헤더(x-cb-session-id/x-cb-handoff-token)를
+      // 쓰기 시작해 프리플라이트가 생긴다 — 브라우저가 최대 10분(600초) 캐시하게 한다.
+      // 공개 경로 판정·origin:'*'·무자격증명은 불변이다.
+      callback(null, { origin: '*', credentials: false, maxAge: 600 });
       return;
     }
     const origin = req.headers.origin;

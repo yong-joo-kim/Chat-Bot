@@ -17,6 +17,8 @@ export interface CollectUnansweredQuestionParams {
   apiNotice?: boolean;
   /** [No.27] 설문이 소비한 턴(FR-SV5-8) — 기본 false. */
   surveyTurn?: boolean;
+  /** [No.24] 상담 구간(개입 중) 턴(ADR-0036 §1) — 기본 false. */
+  handoffTurn?: boolean;
 }
 
 /**
@@ -46,6 +48,7 @@ export class UnansweredCollectorService {
         maxLength,
         apiNotice: input.apiNotice,
         surveyTurn: input.surveyTurn,
+        handoffTurn: input.handoffTurn,
       });
       if (!decision.collect) return;
 

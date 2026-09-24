@@ -1,8 +1,9 @@
 import type { ButtonActionView, OutputView } from '@chat-bot/shared-types/output-view';
-import type { PendingAnswerSource } from '@chat-bot/shared-types';
+import type { ButtonItem, PendingAnswerSource } from '@chat-bot/shared-types';
 import { planPauseSchedule } from '../core/pause-schedule';
 import { renderOutputView, type ButtonGroupOptions } from './renderers';
 import { renderSourceList } from './renderers/sources';
+import { renderButtonGroup } from './renderers/button';
 import { createPendingIndicator, removePendingIndicator as removePendingIndicatorDom } from './renderers/pending-indicator';
 import { MESSAGES } from '../constants/messages';
 
@@ -22,6 +23,18 @@ export interface MessageListController {
   addUserText(text: string): void;
   addSystemText(text: string): void;
   addErrorText(text: string, onRetry?: () => void): void;
+  /**
+   * [No.24] 상담원 메시지 — 기존 `wrapMessage`/`bubble` 패턴을 확장한다(ADR-0036 §4.2·§4.3, 새 DOM
+   * 체계 없음). 보이는 텍스트 라벨 "상담원"을 말풍선 안에 함께 렌더한다(색상 단독 구분 금지, NFR-CSA5).
+   * `textContent`만 삽입한다(URL 자동 링크 없음, FR-CS5-2).
+   */
+  addAgentText(text: string): void;
+  /**
+   * [No.24] 상담 종료 시 서버가 스냅샷으로 전달한 "종료 후 버튼"(`action.kind==='NODE'`)을 기존
+   * `BUTTON` 렌더러로 그린다(새 버튼 종류 0건, FR-CS9-6). 클릭하면 일반 `NODE` 버튼과 동일하게
+   * `onButtonAction`으로 위임한다 — 엔진이 정상 진행한다(상담은 이미 끝난 뒤이므로 노드가 실행된다).
+   */
+  addSystemAction(action: { label: string; nodeId: string }, onButtonAction: (action: ButtonActionView) => void): void;
   /**
    * `PAUSE` 아웃풋만큼 지연 후 다음 아웃풋을 렌더한다(FR-W-7). `onTyping`으로 대기 상태를 알린다.
    * `buttonGroupOptions`는 이 호출로 렌더되는 `BUTTON` 아웃풋 전부에 적용된다(예: 인사말 퀵리플라이는
@@ -64,7 +77,7 @@ export function createMessageList(): MessageListController {
     root.scrollTop = root.scrollHeight;
   }
 
-  function wrapMessage(role: 'bot' | 'user' | 'system' | 'error'): HTMLElement {
+  function wrapMessage(role: 'bot' | 'user' | 'system' | 'error' | 'agent'): HTMLElement {
     const el = document.createElement('div');
     el.className = `cb-msg cb-msg-${role}`;
     return el;
@@ -141,6 +154,28 @@ export function createMessageList(): MessageListController {
     },
     removePendingIndicator(messageId) {
       removePendingIndicatorDom(root, messageId);
+    },
+    addAgentText(text) {
+      const el = wrapMessage('agent');
+      const b = bubble();
+      b.classList.add('cb-bubble-agent');
+      const label = document.createElement('span');
+      label.className = 'cb-agent-label';
+      label.textContent = MESSAGES.agentLabel;
+      b.appendChild(label);
+      b.appendChild(renderPlainText(text));
+      el.appendChild(b);
+      root.appendChild(el);
+      scrollToEnd();
+    },
+    addSystemAction(action, onButtonAction) {
+      const el = wrapMessage('bot');
+      const b = bubble();
+      const item: ButtonItem = { label: action.label, action: 'NODE', value: action.nodeId };
+      b.appendChild(renderButtonGroup([item], onButtonAction));
+      el.appendChild(b);
+      root.appendChild(el);
+      scrollToEnd();
     },
   };
 }

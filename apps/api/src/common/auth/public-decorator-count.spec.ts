@@ -23,6 +23,21 @@ import { AnswerSettingsController } from '../../answer-settings/answer-settings.
 import { EmbeddingController } from '../../embedding/embedding.controller';
 import { ApiConnectionsController } from '../../api-connections/api-connections.controller';
 import { ApiCallLogsController } from '../../legacy-api/api-call-logs.controller';
+// [1차 코드리뷰 지적 보강 — E-1, No.24] 전수 스캔에서 빠져 있던 4개 그룹 컨트롤러를 추가한다
+// (기존 결함 — surveys·versions·validation·deploy-schedules 컨트롤러가 목록에 없었다).
+import { SurveysController } from '../../surveys/surveys.controller';
+import { VersionsController } from '../../versions/versions.controller';
+import { TestCasesController } from '../../validation/test-cases.controller';
+import { TestRunsController } from '../../validation/test-runs.controller';
+import { TestSetsController } from '../../validation/test-sets.controller';
+import { DeploySchedulesController } from '../../deploy-schedules/deploy-schedules.controller';
+import { DeploySchedulesGlobalController } from '../../deploy-schedules/deploy-schedules-global.controller';
+// [신규 No.24] 하이브리드 CS 컨트롤러 5개 — 상담 폴링(공개 7번째)을 제외하면 전부 @Public() 0건이다.
+import { LiveSessionsController } from '../../handoff/live-sessions.controller';
+import { HandoffsController } from '../../handoff/handoffs.controller';
+import { HandoffSettingsController } from '../../handoff/handoff-settings.controller';
+import { HandoffConsoleController } from '../../handoff/handoff-console.controller';
+import { CannedResponsesController } from '../../canned-responses/canned-responses.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -40,18 +55,19 @@ function routeHandlerNames(prototype: object): string[] {
 }
 
 /**
- * `@Public()`은 정확히 6곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 5→6, 근거는
- * `docs/02-spec/decisions/ADR-0023-async-pending-answer-delivery.md` §2 및 `nlu-rag-answering-설계.md`
- * §11.1). 6번째는 보류 답변 폴링(`PublicConversationController#pollMessage`)이다. 인가 우회는
- * "추가된 코드"가 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가 놓쳐도
- * CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
+ * `@Public()`은 정확히 7곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 6→7, 근거는
+ * `docs/02-spec/decisions/ADR-0036-hybrid-cs-handoff-thread-short-polling-and-transient-raw-text.md`
+ * §2 및 `hybrid-cs-설계.md` §7.1). 7번째는 상담 폴링(`PublicConversationController#pollHandoff`)이다.
+ * 인가 우회는 "추가된 코드"가 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가
+ * 놓쳐도 CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
  */
 describe('@Public() 부착 개수 — AC-C-4', () => {
-  it('정확히 6곳(health, 공개 대화 2곳, 보류 답변 폴링, 로그인, 로그아웃)에만 부착되어 있다', () => {
+  it('정확히 7곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 로그인, 로그아웃)에만 부착되어 있다', () => {
     expect(isPublic(HealthController.prototype, 'check')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'getConfig')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'sendMessage')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'pollMessage')).toBe(true);
+    expect(isPublic(PublicConversationController.prototype, 'pollHandoff')).toBe(true);
     expect(isPublic(AuthController.prototype, 'login')).toBe(true);
     expect(isPublic(AuthController.prototype, 'logout')).toBe(true);
   });
@@ -72,7 +88,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 21개 컨트롤러 전체에서 @Public() 총개수가 정확히 6건이다', () => {
+  it('전수 스캔: 등록된 32개 컨트롤러 전체에서 @Public() 총개수가 정확히 7건이다', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -97,6 +113,20 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       // [No.26 레거시 API 연동] 신규 컨트롤러 2개 — 둘 다 @Public() 0건(FR-0-100).
       ApiConnectionsController,
       ApiCallLogsController,
+      // [기존 결함 보강 — E-1] 이전까지 이 목록에서 빠져 있던 4개 그룹.
+      SurveysController,
+      VersionsController,
+      TestCasesController,
+      TestRunsController,
+      TestSetsController,
+      DeploySchedulesController,
+      DeploySchedulesGlobalController,
+      // [신규 No.24 하이브리드 CS] 5개 — 상담 폴링은 PublicConversationController#pollHandoff로 이미 포함.
+      LiveSessionsController,
+      HandoffsController,
+      HandoffSettingsController,
+      HandoffConsoleController,
+      CannedResponsesController,
     ];
 
     const publicHandlers: string[] = [];
@@ -117,6 +147,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
         'PublicConversationController#getConfig',
         'PublicConversationController#sendMessage',
         'PublicConversationController#pollMessage',
+        'PublicConversationController#pollHandoff',
       ].sort(),
     );
   });

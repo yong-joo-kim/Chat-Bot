@@ -156,6 +156,16 @@ export class ReferenceCheckService {
         referencing.slice(0, 5),
       );
     }
+
+    // [No.24] 상담 연계 설정의 "종료 후 버튼" 노드 참조 검사(FR-CS1-3, ADR-0036 §8) — 조회 1회.
+    // `ChatbotHandoffSetting`은 챗봇당 1행이라 findUnique 비용이 작다.
+    const handoffSetting = await this.prisma.chatbotHandoffSetting.findUnique({
+      where: { chatbotId },
+      select: { endButtonNodeId: true },
+    });
+    if (handoffSetting?.endButtonNodeId === nodeId) {
+      this.conflict('NODE_IN_USE', '이 노드는 상담 연계 설정의 종료 후 버튼에서 사용 중입니다. 먼저 설정을 정리해 주세요.', []);
+    }
   }
 
   /**

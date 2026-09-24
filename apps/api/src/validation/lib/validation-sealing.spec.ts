@@ -138,7 +138,13 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
     expect(offenders).toEqual([]);
   });
 
-  it('7) @Public() 핸들러 수는 저장소 전체에서 정확히 6개다(변동 없음 — 이 그룹은 공개 경로를 하나도 추가하지 않는다, FR-0-66)', () => {
+  it('10) validation/**에 handoff/·canned-responses/ import가 0건이다(하이브리드 CS No.24, FR-0-123 — DI 격리)', () => {
+    const importRe = /from\s+['"][^'"]*(handoff|canned-responses)\//;
+    const offenders = validationFileContents.filter(({ content }) => importRe.test(content)).map(({ f }) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it('7) @Public() 핸들러 수는 저장소 전체에서 정확히 7개다(이 그룹은 추가하지 않는다 — No.24 상담 폴링이 6→7로 올렸다, FR-0-66)', () => {
     const controllerFiles = collectAllApiControllerFiles();
     expect(controllerFiles.length).toBeGreaterThan(10);
     let total = 0;
@@ -146,6 +152,6 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
       const content = readFileSync(file, 'utf8');
       total += nonCommentOccurrences(content, /@Public\(\)/g);
     }
-    expect(total).toBe(6);
+    expect(total).toBe(7);
   });
 });

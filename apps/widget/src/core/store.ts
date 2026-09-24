@@ -13,12 +13,13 @@ import type { PublicChatbotConfig } from '@chat-bot/shared-types';
 export type WidgetStatus = 'CLOSED' | 'OPENING' | 'OPEN' | 'SENDING' | 'AWAITING_ANSWER' | 'ERROR' | 'DISABLED';
 export type WidgetErrorKind = 'NETWORK' | 'RATE_LIMITED' | 'UNKNOWN';
 
-export interface WidgetMessage {
+/** [No.24] `'agent'` — 상담원 메시지(ADR-0036 §14.2). `message-list.ts`의 기존 `wrapMessage`/`bubble` 확장으로 렌더한다. */
+export type WidgetMessage = {
   id: string;
-  role: 'user' | 'bot' | 'system' | 'error';
+  role: 'user' | 'bot' | 'system' | 'error' | 'agent';
   text?: string;
   outputs?: OutputView[];
-}
+};
 
 export interface WidgetState {
   status: WidgetStatus;
@@ -26,6 +27,11 @@ export interface WidgetState {
   messages: WidgetMessage[];
   error?: { kind: WidgetErrorKind; message: string };
   greetingShown: boolean;
+  /**
+   * [No.24, 신규 선택 필드] 기존 7상태와 **직교**한다 — 입력창을 잠그지 않는다(FR-CS9-2).
+   * `createInitialState()`의 반환값은 이 키가 없는 상태로 **불변**이다(ADR-0036 §14.1).
+   */
+  handoff?: { mode: 'WATCHING' | 'CONNECTED' };
 }
 
 export type WidgetAction =
@@ -41,7 +47,15 @@ export type WidgetAction =
   /** PENDING 응답 수신 — 입력을 잠그지 않는 대기 상태로 전환한다(§4.4.1). */
   | { type: 'PENDING_STARTED' }
   /** 폴링 종료(READY/FAILED/EXPIRED/TIMEOUT 전부 포함) — 최종 말풍선은 호출부가 별도로 추가한다. */
-  | { type: 'PENDING_RESOLVED' };
+  | { type: 'PENDING_RESOLVED' }
+  /** [No.24] 관찰 창(WATCHING) 시작 — 화면 변화 없음, 순수 백그라운드 폴링(FR-CS9-2). */
+  | { type: 'HANDOFF_WATCH_STARTED' }
+  /** [No.24] 폴링이 토큰을 받아 상담 연결됨을 확인 — 최대 1회 연결 안내(§4.5). */
+  | { type: 'HANDOFF_CONNECTED' }
+  /** [No.24] 상담원/시스템 메시지 도착 — 렌더는 `ui/message-list.ts`가 직접 수행하므로 상태 전이는 없다. */
+  | { type: 'HANDOFF_MESSAGES' }
+  /** [No.24] 상담 종료(또는 `pollAfterMs:null`) — 폴링 중단, `handoff` 키를 다시 제거한다. */
+  | { type: 'HANDOFF_ENDED' };
 
 export function createInitialState(): WidgetState {
   return { status: 'CLOSED', config: null, messages: [], greetingShown: false };
@@ -105,6 +119,16 @@ export function reducer(state: WidgetState, action: WidgetAction): WidgetState {
       return { ...state, status: 'AWAITING_ANSWER', error: undefined };
     case 'PENDING_RESOLVED':
       return { ...state, status: state.status === 'DISABLED' ? 'DISABLED' : 'OPEN' };
+    case 'HANDOFF_WATCH_STARTED':
+      return { ...state, handoff: { mode: 'WATCHING' } };
+    case 'HANDOFF_CONNECTED':
+      return { ...state, handoff: { mode: 'CONNECTED' } };
+    case 'HANDOFF_MESSAGES':
+      return state;
+    case 'HANDOFF_ENDED': {
+      const { handoff: _handoff, ...rest } = state;
+      return rest;
+    }
     default:
       return state;
   }

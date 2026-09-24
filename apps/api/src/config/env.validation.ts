@@ -127,6 +127,16 @@ const EnvSchema = z.object({
   LEGACY_API_MAX_RESPONSE_BYTES: z.coerce.number().int().min(1024).max(1048576).default(262144),
   LEGACY_API_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).default(5),
   LEGACY_API_CIRCUIT_OPEN_MS: z.coerce.number().int().min(1000).default(60000),
+  // 하이브리드 CS(No.24) 그룹 추가 — 전부 선택(기본값 있음, FR-0-128). 기동 조건 아님(ADR-0036 §3.4).
+  // 원문 절대 상한(HANDOFF_RAW_TEXT_MAX_AGE_MS)·정리 루프 주기·보류 답변 키 버킷 상한은 코드
+  // 상수다(환경변수 아님 — 설계서 §3.4).
+  PUBLIC_HANDOFF_POLL_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(40),
+  HANDOFF_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
+  HANDOFF_WATCH_WINDOW_MS: z.coerce.number().int().positive().default(180000),
+  HANDOFF_WATCH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  // [코드리뷰 2회차 M-1] 정리 루프(60초) 자동 기동 스위치 — `DEPLOY_SCHEDULE_ENABLED` 선례와 동일한
+  // 형식. 운영 기본값은 true, 시험 기본값은 jest.isolate-env.js가 false로 고정한다.
+  HANDOFF_SWEEPER_ENABLED: envBoolean(true),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

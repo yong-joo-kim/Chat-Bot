@@ -24,4 +24,17 @@ export const MESSAGES = {
     /** 폴링 중단(FAILED/404/TTL 만료/90초 초과) 공통 정리 문구 — 오류로 표시하지 않는다(S-15). */
     timeoutFallback: '지금은 답변을 준비하지 못했어요.',
   },
+  /**
+   * 하이브리드 CS(No.24) 상담 모드 문구(ADR-0036 §14, §4.5·§10.1). **연결·종료·연결 실패 안내는
+   * 서버 설정값이 원천**이며(`HandoffMessage`의 `SYSTEM` 텍스트로 도착) 아래 상수는 네트워크 실패
+   * 등으로 서버 문구를 받기 전 `#cb-status` 영역에 즉시 표시하는 폴백일 뿐이다.
+   */
+  agentLabel: '상담원',
+  handoffConnectAnnounce: '상담원이 연결되었어요. 잠시만 기다려 주세요.',
+  handoffEndAnnounce: '상담이 종료되었어요. 이제 챗봇이 도와드릴게요.',
+  handoffFailAnnounce: '지금은 상담원 연결이 어려워요. 챗봇이 계속 도와드릴게요.',
+  handoffUnverified: '지금은 메시지를 보낼 수 없어요. 잠시 후 다시 시도해 주세요.',
+  handoffPollUnstable: '연결이 원활하지 않아요',
+  handoffRestoreNotice: '이전 챗봇 대화는 다시 표시되지 않아요',
+  handoffNodeSelectionPrefix: (label: string) => `[선택] ${label}`,
 } as const;

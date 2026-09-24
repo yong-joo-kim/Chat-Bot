@@ -33,6 +33,9 @@ async function seedUsers(): Promise<void> {
   await upsertUser({ email: bootstrapEmail, name: '시스템 관리자', role: 'ADMIN', password: bootstrapPassword, mustChangePassword: true });
   await upsertUser({ email: 'editor@chat-bot.local', name: '챗봇 편집자', role: 'EDITOR', password: 'Editor!2026', mustChangePassword: false });
   await upsertUser({ email: 'viewer@chat-bot.local', name: '운영 모니터', role: 'VIEWER', password: 'Viewer!2026', mustChangePassword: false });
+  // [신규 No.24 하이브리드 CS] 데모 상담원 계정 — 부트스트랩 ADMIN과 같은 규약(임시 비밀번호 ·
+  // mustChangePassword 강제, §3.3).
+  await upsertUser({ email: 'agent@chat-bot.local', name: '상담원 데모 계정', role: 'AGENT', password: bootstrapPassword, mustChangePassword: true });
 }
 
 /** 금지어 3~5건(NFR-M5) — 실제 비속어 대신 중립 문자열을 쓴다(저장소에 비속어 사전을 커밋하지 않는다). */
@@ -522,16 +525,19 @@ async function main(): Promise<void> {
     },
     { key: randomUUID(), type: 'TEXT', prompt: '자유롭게 의견을 남겨주세요. (개인정보는 입력하지 마세요)', required: false, maxLength: 300 },
   ];
-  const satisfactionSurvey = await prisma.survey.create({
-    data: {
-      chatbotId: supportBot.id,
-      name: '배송 만족도',
-      nameNormalized: normalizeText('배송 만족도'),
-      status: 'OPEN',
-      completionMessage: '설문에 참여해 주셔서 감사합니다.',
-      questions: JSON.stringify(satisfactionQuestions),
-    },
-  });
+  // 멱등: 이미 있으면 재사용한다. 응답이 쌓인 설문은 FK(Restrict)로 삭제할 수 없어 deleteMany 패턴을 쓰지 않는다.
+  const satisfactionSurvey =
+    (await prisma.survey.findFirst({ where: { chatbotId: supportBot.id, nameNormalized: normalizeText('배송 만족도') } })) ??
+    (await prisma.survey.create({
+      data: {
+        chatbotId: supportBot.id,
+        name: '배송 만족도',
+        nameNormalized: normalizeText('배송 만족도'),
+        status: 'OPEN',
+        completionMessage: '설문에 참여해 주셔서 감사합니다.',
+        questions: JSON.stringify(satisfactionQuestions),
+      },
+    }));
   const surveyNode = await prisma.dialogNode.create({
     data: {
       chatbotId: supportBot.id,
@@ -698,6 +704,33 @@ async function main(): Promise<void> {
       config: JSON.stringify({ note: '2분기 오픈빌더 심사 예정' }),
     },
   });
+
+  // [신규 No.24 하이브리드 CS] 데모 상담 연계 설정(기본 꺼짐, §3.3) + 자주 쓰는 문장 3건.
+  await prisma.chatbotHandoffSetting.upsert({
+    where: { chatbotId: supportBot.id },
+    update: {},
+    create: { chatbotId: supportBot.id, enabled: false },
+  });
+  await prisma.cannedResponse.deleteMany({ where: { chatbotId: supportBot.id } });
+  const cannedDefs = [
+    { title: '인사', body: '안녕하세요! 상담원입니다. 무엇을 도와드릴까요?', category: '인사', shortcut: 'hi' },
+    { title: '배송 안내', body: '배송 조회는 주문 상세 페이지에서 확인하실 수 있어요. 잠시만 기다려 주세요.', category: '배송', shortcut: 'ship' },
+    { title: '환불 안내', body: '환불은 영업일 기준 3~5일 내 처리됩니다. 계좌 정보를 확인해 주세요.', category: '환불', shortcut: 'refund' },
+  ];
+  for (let i = 0; i < cannedDefs.length; i += 1) {
+    const def = cannedDefs[i];
+    await prisma.cannedResponse.create({
+      data: {
+        chatbotId: supportBot.id,
+        title: def.title,
+        titleNormalized: normalizeText(def.title),
+        body: def.body,
+        category: def.category,
+        shortcut: def.shortcut,
+        sortOrder: i + 1,
+      },
+    });
+  }
 
   // 트랙 B: 로그 0건 — 빈 상태(AC-2-5, AC-2-6) 및 DRAFT 임베드 주의문구(AC-4-10) 검증용
   const emptyBot = await upsertChatbot({

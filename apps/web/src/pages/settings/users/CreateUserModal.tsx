@@ -116,6 +116,8 @@ export function CreateUserModal({
                 </option>
               ))}
             </select>
+            {/* [No.24] U1-ext — 선택된 역할 설명(security-audit-ui-spec.md §3.7 기존 위치·형식 계승). */}
+            {role && <p className="field-hint">{MESSAGES.users.roleDescriptions[role]}</p>}
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>

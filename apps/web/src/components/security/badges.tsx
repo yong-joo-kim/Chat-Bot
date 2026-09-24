@@ -15,6 +15,8 @@ const ROLE_CONFIG: Record<RoleName, { icon: string; bg: string; fg: string }> = 
   ADMIN: { icon: '★', bg: '#EDE9FE', fg: '#5B21B6' },
   EDITOR: { icon: '✎', bg: '#DBEAFE', fg: '#1D4ED8' },
   VIEWER: { icon: '◎', bg: '#F3F4F6', fg: '#374151' },
+  /** [신규 No.24] 상담원 — 청록 + 헤드셋 아이콘(hybrid-cs-ui-spec.md §2.1). */
+  AGENT: { icon: '🎧', bg: '#CCFBF1', fg: '#0F766E' },
 };
 
 /** `ROLE_LABELS`(shared-types) 문자열을 그대로 표시한다 — 컴포넌트가 재정의하지 않는다(F-3). */
@@ -57,6 +59,8 @@ const AUDIT_ACTION_COLOR: Record<AuditAction, { bg: string; fg: string }> = {
   PERMISSION_DENIED: { bg: '#FEF3C7', fg: '#92400E' },
   /** [신규 2026-09-23 No.25] 복원(FR-0-73, `RESTORE`) — 파괴적 동작 목록에 포함(ADR-0016). */
   RESTORE: { bg: '#FFEDD5', fg: '#9A3412' },
+  /** [신규 No.24] 원문 열람(`RAW_VIEW`) — 하이브리드 CS 상담 중 원문 토글 감사(hybrid-cs-설계.md §16). */
+  RAW_VIEW: { bg: '#E0E7FF', fg: '#3730A3' },
 };
 
 /** 파괴적 동작 3종은 굵게+좌측 강조선으로 한 번 더 구분한다(FR-13-21). */

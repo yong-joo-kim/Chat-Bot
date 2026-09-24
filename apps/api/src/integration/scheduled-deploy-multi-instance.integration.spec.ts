@@ -111,14 +111,14 @@ describe('운영 예약 배포(No.28) 다중 인스턴스 통합 테스트 — A
     delete process.env.EMBEDDING_BASE_URL;
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     const { AppModule } = await import('../app.module');

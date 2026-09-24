@@ -22,6 +22,9 @@ export const AuditAction = z.enum([
   'PERMISSION_DENIED',
   // 챗봇 복원/버전 이력관리(No.25) 그룹 추가(version-history-설계.md §12, ADR-0031 §7) — 요약 액션.
   'RESTORE',
+  // 하이브리드 CS(No.24) 그룹 추가(hybrid-cs-설계.md §16, ADR-0036 §6) — 이 프로젝트 최초의
+  // 열람(읽기) 감사. (상담, 열람자)당 1건만 기록한다(§9.4).
+  'RAW_VIEW',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -39,6 +42,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   LOGOUT: '로그아웃',
   PERMISSION_DENIED: '권한거부',
   RESTORE: '복원',
+  RAW_VIEW: '원문 열람',
 };
 
 /** 파괴적 동작(시각적 구분 대상, FR-13-21). 복원은 백업이 있어 가역이지만 대화 자산 전체를
@@ -70,6 +74,10 @@ export const AuditTargetType = z.enum([
   'ApiConnection',
   // 설문관리(No.27) 그룹 추가(survey-management-설계.md §12) — 정의 CRUD·상태·복제 감사 대상.
   'Survey',
+  // 하이브리드 CS(No.24) 그룹 추가(hybrid-cs-설계.md §16) — 개입/종료/인수/원문열람(HandoffSession),
+  // 자주 쓰는 문장 CRUD·이동(CannedResponse) 감사 대상.
+  'HandoffSession',
+  'CannedResponse',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -91,6 +99,8 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   DeploySchedule: '배포 예약',
   ApiConnection: 'API 연결',
   Survey: '설문',
+  HandoffSession: '상담',
+  CannedResponse: '자주 쓰는 문장',
 };
 
 /**

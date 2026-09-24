@@ -42,6 +42,10 @@ const CHILD_COUNT_LABELS: Record<string, string> = {
   unansweredQuestions: '미응답 질문',
   surveys: '설문',
   surveyResponses: '설문 응답',
+  // [No.24] 하이브리드 CS — 영구삭제 사전검사 11 → 13종(ADR-0036 §8). 상담 스레드·자주 쓰는
+  // 문장은 원천 기록·대화 자산 성격이라 동반 삭제 대상이 아니다(§18 H-8).
+  handoffSessions: '상담',
+  cannedResponses: '자주 쓰는 문장',
 };
 
 const NOT_FOUND_MESSAGE = '요청하신 대상을 찾을 수 없습니다.';
@@ -314,6 +318,8 @@ export class ChatbotsService {
       unansweredQuestions,
       surveys,
       surveyResponses,
+      handoffSessions,
+      cannedResponses,
     ] = await Promise.all([
       this.prisma.intent.count({ where: { chatbotId: id } }),
       this.prisma.keyword.count({ where: { chatbotId: id } }),
@@ -327,6 +333,10 @@ export class ChatbotsService {
       // [No.27] 영구삭제 사전검사 9 → 11종(ADR-0002 §7.8 갱신) — 동반 삭제 트랜잭션에는 추가하지 않는다.
       this.prisma.survey.count({ where: { chatbotId: id } }),
       this.prisma.surveyResponse.count({ where: { chatbotId: id } }),
+      // [No.24] 영구삭제 사전검사 11 → 13종(ADR-0036 §8) — 상담 기록·자주 쓰는 문장은 삭제 대상이
+      // 아니라 사전검사 대상이다(삭제 코드 0건, §18 H-1/H-8).
+      this.prisma.handoffSession.count({ where: { chatbotId: id } }),
+      this.prisma.cannedResponse.count({ where: { chatbotId: id } }),
     ]);
 
     const counts: Record<string, number> = {
@@ -341,6 +351,8 @@ export class ChatbotsService {
       unansweredQuestions,
       surveys,
       surveyResponses,
+      handoffSessions,
+      cannedResponses,
     };
     const nonZero = Object.entries(counts).filter(([, count]) => count > 0);
     if (nonZero.length > 0) {
@@ -363,6 +375,10 @@ export class ChatbotsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.embeddingVector.deleteMany({ where: { chatbotId: id } });
       await tx.chatbotAnswerSetting.deleteMany({ where: { chatbotId: id } });
+      // [No.24] ChatbotHandoffSetting은 ChatbotAnswerSetting과 같은 설정 데이터라 동반 삭제
+      // 대상이다(ADR-0036 §8) — 상담 기록(HandoffSession/HandoffMessage)·자주 쓰는 문장은 위 사전
+      // 검사(409)가 막는다(이 트랜잭션에 handoffSession|handoffMessage|cannedResponse 삭제 0건, §18 H-8).
+      await tx.chatbotHandoffSetting.deleteMany({ where: { chatbotId: id } });
       await tx.ragCallLog.deleteMany({ where: { chatbotId: id } });
       // [No.26] ApiCallLog는 FK가 없다(로그 규약) — 챗봇 영구삭제 시 서비스가 직접 동반 삭제한다(FR-L6-6).
       await tx.apiCallLog.deleteMany({ where: { chatbotId: id } });

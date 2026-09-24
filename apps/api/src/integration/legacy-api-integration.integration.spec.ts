@@ -293,14 +293,14 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
     process.env.LEGACY_API_SECRET__ERPTEST = SECRET_VALUE;
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     const { AppModule } = (await import('../app.module')) as { AppModule: typeof AppModuleType };

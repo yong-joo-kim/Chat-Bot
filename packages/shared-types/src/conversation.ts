@@ -12,6 +12,7 @@ import { ButtonActionSchema, ConversationStateSchema, DialogueResolutionSchema, 
 import { ChatbotSkinSchema } from './chatbot';
 import { ThresholdPreviewCandidateSchema } from './answering';
 import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from './legacy-api';
+import { queryBoolean } from './common';
 
 /**
  * 대화 1턴 처리(시뮬레이션/비교/공개 대화) 계약 — `quality-channel-설계.md` §4.2.
@@ -226,6 +227,8 @@ export const PublicMessageRequestSchema = z
     buttonAction: ButtonActionSchema.optional(),
     // ⚠ state.ts와 동일한 이유로 엄격 검증하지 않는다(FR-11-26 → FR-10-4 규칙 상속).
     state: z.unknown().optional(),
+    /** [신규 No.24] 위젯 기능 선언(ADR-0036 §2) — `'handoff-v1'`이 없으면 구버전 취급(편승 격하). */
+    features: z.array(z.string().min(1).max(32)).max(5).optional(),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -239,6 +242,26 @@ export const PublicMessageRequestSchema = z
     }
   });
 export type PublicMessageRequestDto = z.infer<typeof PublicMessageRequestSchema>;
+
+/**
+ * [신규 No.24] 상담 상태 조각(ADR-0036 §2·§5.1) — `PublicMessageResponseSchema.handoff`와 상담
+ * 폴링 응답(`HandoffPollResponseSchema`)이 함께 쓴다. `PublicMessageResponseSchema`보다 먼저
+ * 선언해야 한다(같은 모듈 평가 순서 — 참조 시점에 이미 초기화되어 있어야 한다).
+ */
+export const PublicHandoffStateSchema = z.object({
+  status: z.enum(['NONE', 'CONNECTED', 'ENDED']),
+  /** 이 응답에서 1회만 실린다(§6.2) — 서버 로그·감사·오류 응답 어디에도 없다. */
+  token: z.string().optional(),
+  pollAfterMs: z.number().int().nonnegative().optional(),
+  watch: z
+    .object({
+      windowMs: z.number().int().positive(),
+      pollAfterMs: z.number().int().positive(),
+      trigger: z.enum(['NOW', 'IF_PENDING_FAILS']),
+    })
+    .optional(),
+});
+export type PublicHandoffState = z.infer<typeof PublicHandoffStateSchema>;
 
 /** `stateReset`이 유일하게 허용된 "내부 사정" 노출이다. 폐기 사유는 내부 구조를 드러내므로 제외한다(FR-0-18). */
 export const PublicMessageResponseSchema = z.object({
@@ -259,6 +282,9 @@ export const PublicMessageResponseSchema = z.object({
       expiresAt: z.coerce.date(),
     })
     .optional(),
+  /** [신규 No.24] 상담 켜진 챗봇의 미응답·보류·상담 턴에만 존재한다(ADR-0036 §2·§5.1). 없으면
+   * 바이트 단위로 현행과 동일하다(`pendingAnswer` 선례). */
+  handoff: PublicHandoffStateSchema.optional(),
 });
 export type PublicMessageResponse = z.infer<typeof PublicMessageResponseSchema>;
 
@@ -280,3 +306,42 @@ export const PendingAnswerPollResponseSchema = z.object({
   sources: z.array(PendingAnswerSourceSchema).optional(),
 });
 export type PendingAnswerPollResponse = z.infer<typeof PendingAnswerPollResponseSchema>;
+
+/* ------------------------------------------------------------------------------------------------
+ * 하이브리드 CS(No.24) — 상담 전용 짧은 폴링. `GET /public/chatbots/:slug/handoff`(`@Public()` 7번째,
+ * ADR-0036 §2·§7). 세션·토큰은 헤더로만 전달한다(URL·본문 금지 — §6.1).
+ * ---------------------------------------------------------------------------------------------- */
+
+/** 위젯이 `POST …/messages` 요청 본문 `features`에 싣는 기능 선언 문자열. */
+export const WIDGET_FEATURE_HANDOFF_V1 = 'handoff-v1';
+export const HANDOFF_SESSION_HEADER = 'x-cb-session-id';
+export const HANDOFF_TOKEN_HEADER = 'x-cb-handoff-token';
+
+export const HandoffPollQuerySchema = z.object({
+  after: z.coerce.number().int().min(0).default(0),
+  /** 새로고침 복구 — 자기 USER 메시지(마스킹본)도 함께 반환한다(FR-CS9-7). */
+  restore: queryBoolean(),
+});
+export type HandoffPollQuery = z.infer<typeof HandoffPollQuerySchema>;
+
+export const HandoffPollMessageSchema = z.object({
+  seq: z.number().int().positive(),
+  /** `USER`는 `restore=true`일 때만 실린다. */
+  sender: z.enum(['USER', 'AGENT', 'SYSTEM']),
+  /** ★ 항상 마스킹본이다 — `rawText` 키는 이 스키마에 타입상 존재하지 않는다(§9.7). */
+  text: z.string(),
+  sentAt: z.coerce.date(),
+  action: z.object({ kind: z.literal('NODE'), nodeId: z.string().uuid(), label: z.string() }).optional(),
+});
+export type HandoffPollMessage = z.infer<typeof HandoffPollMessageSchema>;
+
+export const HandoffPollResponseSchema = z.object({
+  status: z.enum(['NONE', 'CONNECTED', 'ENDED']),
+  token: z.string().optional(),
+  messages: z.array(HandoffPollMessageSchema),
+  /** 이번 응답이 훑은 최대 seq(내부 SYSTEM 포함 — 재요청 방지). */
+  cursor: z.number().int().min(0),
+  /** `null` = 폴링 중단(`ENDED`). */
+  pollAfterMs: z.number().int().positive().nullable(),
+});
+export type HandoffPollResponse = z.infer<typeof HandoffPollResponseSchema>;

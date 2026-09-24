@@ -105,6 +105,7 @@ export const WIDGET_STYLES = `
 .cb-msg-user { align-self: flex-end; }
 .cb-msg-system { align-self: center; color: #6b7280; font-size: 12px; text-align: center; }
 .cb-msg-error { align-self: flex-start; }
+.cb-msg-agent { align-self: flex-start; }
 
 .cb-bubble {
   background: #fff;
@@ -114,6 +115,10 @@ export const WIDGET_STYLES = `
 }
 .cb-msg-user .cb-bubble { background: var(--cb-primary, #4f46e5); color: var(--cb-header-text, #fff); border-color: transparent; }
 .cb-msg-error .cb-bubble { background: #fef2f2; border-color: #fecaca; color: #b91c1c; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* [No.24] 상담원 말풍선 — 색상 단독 구분이 아니라 보이는 텍스트 라벨과 함께 구분한다(NFR-CSA5). */
+.cb-bubble-agent { background: #ecfdf5; border-color: #6ee7b7; }
+.cb-agent-label { display: block; font-size: 11px; font-weight: 700; color: #047857; margin-bottom: 2px; }
 
 .cb-msg-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 

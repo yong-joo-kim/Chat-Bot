@@ -76,6 +76,10 @@ model Chatbot {
   /// [신규 No.27] 역참조만 — DB 컬럼 변화 0.
   surveys                 Survey[]
   surveyResponses         SurveyResponse[]
+  /// [신규 No.24] 역참조만 — DB 컬럼 변화 0(ADR-0036).
+  handoffSetting          ChatbotHandoffSetting?
+  handoffSessions         HandoffSession[]
+  cannedResponses         CannedResponse[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -420,11 +424,21 @@ model ConversationLog {
   /// 노출 턴·타임아웃 후 일반 처리 턴은 false. 질문 순위·미응답 수집에서 제외하는 근거(파생 불가).
   /// 쓰기 주체 = record() 1곳. 인덱스 없음(answeredByRag 선례). 백필 불필요(기존 행 = false가 사실).
   surveyTurn      Boolean  @default(false)
+  /// [신규 No.24] 상담 구간(개입 중·검증된 발신)의 사용자 턴 — 질문 순위·미응답 수집에서 제외,
+  /// 턴·세션·응답률은 포함, 응답출처 OTHER 불변(ADR-0036 §1). 쓰기 주체 = record() 1곳. 인덱스 없음.
+  /// 백필 불필요(기존 행 = false가 사실).
+  handoffTurn     Boolean  @default(false)
+  /// [신규 No.24] 외부 API 고정 문구로 끝난 턴(No.26 FR-L4-13 — 지금까지 record() 파라미터로만 존재).
+  /// 진행 중 목록의 "마지막 미응답 사유 = 연동 실패"의 유일한 근거(파생 불가). 인덱스 없음.
+  /// 기존 행은 false(사유 미상 → "답변 못함" 표시, K-14).
+  apiNotice       Boolean  @default(false)
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
   @@index([groupId, dayBucket])
   @@index([dayBucket])
+  /// [신규 No.24] 세션 1개 전문 조회(FR-CS3-6, 대화 보기) — 기존 인덱스로는 챗봇 전체를 훑는다.
+  @@index([chatbotId, sessionId, createdAt])
   @@map("conversation_logs")
 }
 
@@ -1153,3 +1167,152 @@ model SurveyAnswer {
   @@index([surveyId, questionKey, dayBucket])
   @@map("survey_answers")
 }
+
+/// [신규 No.24] 챗봇별 상담 연계 설정(1:1). ★ ChatbotAnswerSetting에 동거시키지 않는다 — 버전 복원이
+/// 답변 설정 행을 DELETE/UPSERT하므로(restore-plan.ts) 동거하면 복원이 상담 설정을 지우거나 되돌린다
+/// (ADR-0031 갱신). 스냅샷 대상이 아니다. 쓰기 주체 = handoff-settings.service.ts 1파일. 행이 없으면
+/// 전부 기본값(꺼짐).
+model ChatbotHandoffSetting {
+  chatbotId           String   @id
+  chatbot             Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  enabled             Boolean  @default(false)
+  /// 끈 시점에 활성 상담이 있으면 true — 게이트가 계속 조회해 진행 중 상담을 끝까지 유지한다(FR-CS1-4).
+  /// 활성 0건이 되면 정리 루프가 false로 되돌린다.
+  draining            Boolean  @default(false)
+  cautionThreshold    Int      @default(2)
+  warningThreshold    Int      @default(3)
+  activeWindowMinutes Int      @default(10)
+  userIdleMinutes     Int      @default(10)
+  agentNoReplyMinutes Int      @default(5)
+  connectNotice       String   @default("상담원이 연결되었어요. 잠시만 기다려 주세요.")
+  endNotice           String   @default("상담이 종료되었어요. 이제 챗봇이 도와드릴게요.")
+  failNotice          String   @default("지금은 상담원 연결이 어려워요. 챗봇이 계속 도와드릴게요.")
+  /// 종료 후 버튼(선택) — 둘 다 있거나 둘 다 없다. 노드 참조는 FK 없음(앱 레벨 409 NODE_IN_USE).
+  endButtonLabel      String?
+  endButtonNodeId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("chatbot_handoff_settings")
+}
+
+/// [신규 No.24] 세션 1개의 상담 1건(개입 ~ 종료). ★ 쓰기 주체 = handoff-thread.service.ts 1파일 ·
+/// 삭제 코드 0건(§18 H-1).
+/// ⚠ 이 테이블에는 스키마에 표현되지 않는 부분 유니크 인덱스가 1개 있다 — 파일 하단 경고 주석 참고.
+model HandoffSession {
+  id                           String    @id @default(uuid())
+  chatbotId                    String
+  chatbot                      Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 개입 당시 챗봇 소속 그룹 스냅샷 — FK 없음 · 불변(ADR-0033 §4 선례, FR-CS10-4)
+  groupId                      String
+  /// 위젯 난수. ★ 관리자 API·콘솔·감사·로그에 싣지 않는다(DTO에 필드 자체가 없다 — §18 H-17)
+  sessionId                    String
+  /// computeSessionRef(chatbotId, sessionId) — 16 hex. 관리자 경로 식별자·별칭의 원천
+  sessionRef                   String
+  channelType                  String    @default("WEB")
+  /// CONNECTING | CONNECTED | ENDED
+  status                       String    @default("CONNECTING")
+  /// AGENT_ENDED | USER_IDLE | AGENT_NO_REPLY | NOT_DELIVERED | CHANNEL_CLOSED
+  endReason                    String?
+  /// MODERN(토큰) | LEGACY(편승 격하) — 첫 접촉 시 확정, 그 전 null
+  clientMode                   String?
+  /// 담당자 — FK 없음(사실 기록, DeploySchedule.createdById 규약) · 이름은 표시용 스냅샷
+  assignedUserId               String
+  assignedUserName             String
+  startedById                  String
+  startedByName                String
+  /// 개입 당시 경고 판정 스냅샷(NORMAL|CAUTION|WARNING) — 이력 표시(FR-CS10-1)
+  alertLevelAtStart            String
+  consecutiveUnansweredAtStart Int
+  /// sha256(token) hex. ★ 토큰 원문 컬럼은 존재하지 않는다(NFR-CSS1)
+  tokenHash                    String?   @unique
+  tokenIssuedAt                DateTime?
+  unverifiedAttemptCount       Int       @default(0)
+  /// 스레드 내 seq 발급기(원자 증가) · 구버전 위젯 편승 전달 커서
+  lastSeq                      Int       @default(0)
+  legacyDeliveredSeq           Int       @default(0)
+  userMessageCount             Int       @default(0)
+  agentMessageCount            Int       @default(0)
+  startedAt                    DateTime
+  connectedAt                  DateTime?
+  firstAgentReplyAt            DateTime?
+  lastUserMessageAt            DateTime?
+  lastAgentMessageAt           DateTime?
+  endedAt                      DateTime?
+  endedById                    String?
+  endedByName                  String?
+  /// KST 개입일 — 적재 시점 확정·불변(ADR-0017)
+  dayBucket                    String
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  messages HandoffMessage[]
+
+  @@index([chatbotId, sessionId, startedAt])   // 게이트·폴링: 세션의 최신 상담 1건
+  @@index([chatbotId, sessionRef])             // 관리자 경로 sessionRef 역해석
+  @@index([chatbotId, status])                 // 진행 중 목록의 활성 상담 조회
+  @@index([chatbotId, dayBucket])              // 이력 기간 필터·요약
+  @@index([status, startedAt])                 // 정리 루프: 전 챗봇 활성 상담
+  @@index([assignedUserId, status])            // 내 상담 수
+  @@map("handoff_sessions")
+}
+
+/// [신규 No.24] 상담 구간 메시지(append-only). ★ 쓰기 주체 = handoff-thread.service.ts 1파일 ·
+/// 삭제 코드 0건. 행이 생긴 뒤의 유일한 갱신은 원문 소거(rawText·rawExpiresAt → null)다(§18 H-3).
+model HandoffMessage {
+  id                String         @id @default(uuid())
+  handoffSessionId  String
+  handoffSession    HandoffSession @relation(fields: [handoffSessionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 비정규화(조인 없는 조회) — FK 없음
+  chatbotId         String
+  seq               Int
+  /// USER | AGENT | SYSTEM
+  sender            String
+  /// SYSTEM 전용: CONNECTED | ENDED | FAILED | TAKEOVER(내부 — 공개 폴링에 내보내지 않는다)
+  systemKind        String?
+  senderUserId      String?
+  senderUserName    String?
+  /// ★ 금지어 → PII 마스킹 후 값만(영구)
+  text              String
+  /// ★ [P-9] 사용자 원문 — USER 메시지 · 활성 상담 중 · 마스킹본과 다를 때만 값이 있다. 종료 트랜잭션·
+  /// 60초 정리 루프·절대 상한(rawExpiresAt)으로 null이 된다(행 삭제 아님). 인덱스 없음.
+  rawText           String?
+  /// createdAt + 60분(HANDOFF_RAW_TEXT_MAX_AGE_MS). rawText와 함께 null이 된다.
+  rawExpiresAt      DateTime?
+  /// USER 턴의 ConversationLog.id(= messageId) — FK 없음
+  conversationLogId String?
+  /// SYSTEM ENDED 전용 JSON { kind:'NODE', nodeId, label } — 종료 시점 설정 스냅샷
+  action            String?
+  createdAt         DateTime       @default(now())
+
+  @@unique([handoffSessionId, seq])
+  @@index([rawExpiresAt])                      // 정리 루프: 만료 원문(값이 있는 행만 소수)
+  @@map("handoff_messages")
+}
+
+/// [신규 No.24] 챗봇별 공용 자주 쓰는 문장(P-11). 대화 번들·스냅샷·엔진 밖. 쓰기 주체 =
+/// canned-responses.service.ts 1파일.
+model CannedResponse {
+  id              String   @id @default(uuid())
+  chatbotId       String
+  chatbot         Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  title           String
+  titleNormalized String
+  body            String
+  category        String?
+  shortcut        String?
+  sortOrder       Int
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([chatbotId, titleNormalized])
+  @@unique([chatbotId, shortcut])              // SQLite·Postgres 모두 NULL은 서로 다름 — 단축어 없는 행 다수 허용
+  @@index([chatbotId, sortOrder])
+  @@map("canned_responses")
+}
+
+// [신규 No.24] handoff_sessions에는 이 스키마에 표현되지 않는 부분 유니크 인덱스가 1개 더 있다 —
+// (chatbotId, sessionId) WHERE status IN ('CONNECTING','CONNECTED') — 세션당 활성 상담 최대 1건(P-8).
+// test_runs_chatbotId_active_key·deploy_schedules 선례와 같이 마이그레이션 SQL에 raw로만 존재한다.
+// `prisma migrate dev` diff가 이 인덱스(와 기존 3개)를 삭제하는 구문을 끼워 넣지 않는지 반드시 확인할 것.

@@ -145,7 +145,7 @@ describe('레거시 API 연동(No.26) — LEGACY_API_ENABLED=false(AC-L4-8)', ()
 
     let app: NestExpressApplication | undefined;
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',

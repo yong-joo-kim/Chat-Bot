@@ -207,3 +207,16 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - **참여 통계·응답 목록·자유 텍스트 목록·CSV = `chatbot:read`**(세 역할) — 통계와 같은 도메인. VIEWER는 마스킹본만 본다(VIEWER가 이미 `chatbot:read`로 마스킹된 질문 원문을 질문 순위에서 보는 것과 같은 등급).
 - 시뮬레이터 설문 미리보기 = 기존 `simulation:read` — 응답을 저장하지 않으므로 VIEWER 허용이 안전하다.
 - 설문 목록(`dialogue:read`)에 최근 30일 노출/완료 수를 싣는다 — 세 역할 모두 `chatbot:read`를 가져 노출 차이가 0이다(그룹별 접근 제한 도입 시 재검토 — No.45).
+
+
+---
+
+## 갱신 (2026-09-25 — No.24 하이브리드 CS: 역할 3 → 4(`AGENT`) · 권한 15 → 17(`cs:read`·`cs:write`))
+
+하이브리드 CS(No.24, **ADR-0036 §7**)는 **"역할 3종 고정" 원칙의 의도적 갱신**이다(PM 확정 P-7). 역할→권한 매핑이 코드 상수라는 결정·`Role`/`Permission` 테이블 미도입·fail-closed 전역 가드·판정 순서는 **불변**이다.
+
+- **왜 기존 역할에 얹지 않는가**: EDITOR에 개입권을 주면 상담원에게 대화 자산 편집권(`dialogue:write` 등)이 따라가고(과권한), VIEWER("운영 모니터")에 주면 읽기 전용 역할이 고객에게 말하게 된다(성격 붕괴). "고객에게 사람으로서 말하기"는 어떤 기존 권한과도 다른 위험이다.
+- **매핑**: `AGENT` = `chatbot:read`+`cs:read`+`cs:write` · EDITOR += `cs:read`(모니터링·이력 보기만) · ADMIN += `cs:read`+`cs:write` · VIEWER 불변. 기존 역할의 기존 권한은 바뀌지 않는다(추가만). `AGENT`는 계층형이 아니다(`dialogue:read` 없음 — 대화 자산 화면 불가).
+- **서비스 재검증**: 전송 = 담당자 본인 · 종료 = 담당자·ADMIN · 강제 인수 = 역할 ADMIN · 원문 열람 = `cs:write` ∧ (담당자 ∨ ADMIN) ∧ 상담 중. 권한 문자열은 여전히 가드가 강제하는 기준선이다.
+- **OR 판정은 여전히 지원하지 않는다** — 자주 쓰는 문장 목록은 경로를 둘로 나눠(`dialogue:read` 관리 · `cs:read` 콘솔 검색) 각각 AND 가드를 건다.
+- 역할은 전역이다 — 챗봇별 상담원 배정·부서 분리는 멀티테넌시(No.22·45) 재검토 트리거에 합류한다. `@Public()` 6 → 7(상담 폴링 — 인증 대상이 아니라 토큰 보상 통제).

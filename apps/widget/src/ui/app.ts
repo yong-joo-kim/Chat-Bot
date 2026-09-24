@@ -1,11 +1,24 @@
 import { toOutputViews, isSafeHttpUrl, type ButtonActionView } from '@chat-bot/shared-types/output-view';
 import { evaluateHeaderContrast } from '@chat-bot/shared-types/contrast';
-import type { ButtonAction, PendingAnswerPollResponse, PublicChatbotConfig } from '@chat-bot/shared-types';
+import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, PublicChatbotConfig } from '@chat-bot/shared-types';
 import { MESSAGES } from '../constants/messages';
 import { createPublicClient, PublicApiError, type PublicApiErrorKind } from '../api/public-client';
 import { getOrCreateSessionId, loadConversationState, saveConversationState } from '../core/session';
 import { createInitialState, reducer, type WidgetAction, type WidgetErrorKind } from '../core/store';
 import { createPendingPollConfig, decideNextPollAction, nextPollDelayMs, type PendingPollResultKind } from '../core/pending-poll';
+import {
+  createHandoffPollState,
+  isPollingUnstable,
+  nextDelayMs as nextHandoffDelayMs,
+  onPendingResult,
+  onPollFailure,
+  onPollRateLimited,
+  onPollResponse,
+  onSendResponse,
+  shouldPoll,
+  type HandoffPollState,
+} from '../core/handoff-poll';
+import { clearHandoffToken, loadHandoffToken, saveHandoffToken } from '../core/handoff-storage';
 import type { WidgetMount } from './shadow-root';
 import { createLauncher } from './launcher';
 import { createPanel } from './panel';
@@ -45,6 +58,16 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   // PENDING 폴링 세대 카운터(EX-N2-11) — 도중 새 질문을 보내면 증가시켜 이전 폴링 루프를 폐기한다.
   let pollGeneration = 0;
 
+  // [No.24] 상담 전용 짧은 폴링(ADR-0036 §14) — 보류 답변 폴링과 **독립된** 세대 카운터·타이머를 쓴다.
+  let handoffPollState: HandoffPollState = createHandoffPollState();
+  let handoffPollGeneration = 0;
+  let handoffPollTimer: number | undefined;
+  let handoffPollActive = false;
+  // true인 동안은 "대기 중"(아직 fetch를 시작하지 않음) — 가시성 전환 시 이 구간에서만 안전하게
+  // 재예약한다. fetch가 진행 중일 때 재예약하면 요청이 중첩된다(요청은 한 번에 하나만, §14.4).
+  let handoffPollTimerPending = false;
+  let handoffRestoreAttempted = false;
+
   const cbRoot = document.createElement('div');
   cbRoot.className = 'cb-root';
   cbRoot.dataset.state = 'closed';
@@ -67,8 +90,149 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
       void handleSend({ message: text });
       return;
     }
-    // NODE — FR-W-6: 서버 전송만 한다(사용자 말풍선 추가는 규격에 없음).
+    // NODE — FR-W-6: 평소에는 서버 전송만 한다(사용자 말풍선 추가는 규격에 없음). 상담 중(CONNECTED)에는
+    // 노드가 실행되지 않고 텍스트로 전달만 되므로(ADR-0036 §5.3 EX-CS-9), 사용자 자신의 말풍선으로
+    // "[선택] {라벨}"을 보여준다(설계서 §4.5 — 서버로는 여전히 같은 buttonAction을 보낸다).
+    if (handoffPollState.mode === 'CONNECTED') {
+      panel.messages.addUserText(MESSAGES.handoffNodeSelectionPrefix(action.label));
+    }
     void handleSend({ buttonAction: { kind: 'NODE', nodeId: action.nodeId as string, label: action.label } });
+  }
+
+  /**
+   * [No.24] 상담 폴링 응답의 메시지를 렌더한다(ADR-0036 §14.2·§4.2). `AGENT`는 상담원 말풍선,
+   * `SYSTEM`은 기존 `system` 역할(연결·종료·연결 실패 안내), `USER`는 새로고침 복구(`restore=true`)
+   * 때만 온다. `action`(종료 후 버튼)은 기존 `BUTTON` 렌더러로 그린다(새 버튼 종류 0건).
+   */
+  function renderHandoffMessages(messages: HandoffPollMessage[]): void {
+    for (const m of messages) {
+      if (m.sender === 'AGENT') {
+        panel.messages.addAgentText(m.text);
+      } else if (m.sender === 'SYSTEM') {
+        panel.messages.addSystemText(m.text);
+        if (m.action?.kind === 'NODE') {
+          panel.messages.addSystemAction({ label: m.action.label, nodeId: m.action.nodeId }, handleButtonAction);
+        }
+      } else {
+        // USER(restore=true 한정) — 마스킹본, 자기 발화 복원(§14.3).
+        panel.messages.addUserText(m.text);
+      }
+    }
+  }
+
+  /**
+   * 폴링 루프를 완전히 멈춘다 — 대기 중인 타이머를 지우고 세대를 올려 이미 실행 중인(폐기 대상)
+   * 콜백이 스스로 멈추게 한다(타이머 누수 방지, §14.4). 상담 종료·토큰 무효·위젯 파괴 시 호출한다.
+   */
+  function stopHandoffPolling(): void {
+    handoffPollGeneration += 1;
+    if (handoffPollTimer !== undefined) {
+      window.clearTimeout(handoffPollTimer);
+      handoffPollTimer = undefined;
+    }
+    handoffPollTimerPending = false;
+    handoffPollActive = false;
+  }
+
+  /** 폴링 1회 시행(fetch 부수효과) — `core/handoff-poll.ts`의 순수 함수로 상태를 갱신한다. */
+  async function runHandoffPollOnce(restore: boolean): Promise<void> {
+    const sessionId = getOrCreateSessionId(options.slug);
+    try {
+      const res = await client.pollHandoff({ sessionId, token: handoffPollState.token, after: handoffPollState.cursor, restore });
+      const prevMode = handoffPollState.mode;
+      const outcome = onPollResponse(handoffPollState, res, Date.now());
+      handoffPollState = outcome.state;
+
+      if (prevMode !== 'CONNECTED' && handoffPollState.mode === 'CONNECTED') {
+        panel.setStatusText(MESSAGES.handoffConnectAnnounce);
+        dispatch({ type: 'HANDOFF_CONNECTED' });
+      }
+
+      renderHandoffMessages(res.messages);
+
+      if (handoffPollState.token) {
+        saveHandoffToken(options.slug, { token: handoffPollState.token, cursor: handoffPollState.cursor });
+      }
+
+      if (outcome.action === 'STOP') {
+        if (prevMode === 'CONNECTED') {
+          panel.setStatusText(MESSAGES.handoffEndAnnounce);
+        } else if (prevMode === 'WATCHING') {
+          panel.setStatusText(MESSAGES.handoffFailAnnounce);
+        }
+        dispatch({ type: 'HANDOFF_ENDED' });
+        clearHandoffToken(options.slug);
+        handoffPollState = createHandoffPollState();
+        stopHandoffPolling();
+        window.setTimeout(() => panel.setStatusText(''), 2000);
+      }
+    } catch (e) {
+      if (e instanceof PublicApiError && e.kind === 'NOT_FOUND') {
+        // 토큰 무효·교차·유예 경과 — 조용히 정리한다(§6.3).
+        clearHandoffToken(options.slug);
+        handoffPollState = createHandoffPollState();
+        stopHandoffPolling();
+        return;
+      }
+      // 네트워크 오류는 같은 간격으로 재시도한다(중단하지 않음, §6.5). 429(RATE_LIMITED)는 백오프한다
+      // (세션당 40/분 한도, §7.3) — 다음 폴링 간격을 강제로 늘린다.
+      handoffPollState =
+        e instanceof PublicApiError && e.kind === 'RATE_LIMITED'
+          ? onPollRateLimited(handoffPollState, Date.now())
+          : onPollFailure(handoffPollState, Date.now());
+      if (isPollingUnstable(handoffPollState, Date.now())) {
+        panel.setStatusText(MESSAGES.handoffPollUnstable);
+      }
+    }
+  }
+
+  function scheduleHandoffPoll(): void {
+    const myGeneration = handoffPollGeneration;
+    const delay = nextHandoffDelayMs(handoffPollState, document.hidden ? 'hidden' : 'visible');
+    handoffPollTimerPending = true;
+    handoffPollTimer = window.setTimeout(() => {
+      handoffPollTimerPending = false;
+      if (myGeneration !== handoffPollGeneration) return; // 폐기된 루프(EX-N2-11과 동일 패턴)
+      void runHandoffPollOnce(false).then(() => {
+        if (myGeneration !== handoffPollGeneration) return;
+        if (!shouldPoll(handoffPollState, Date.now())) {
+          handoffPollActive = false;
+          return;
+        }
+        scheduleHandoffPoll();
+      });
+    }, delay);
+  }
+
+  /** `shouldPoll()`이 참이고 아직 루프가 없을 때만 새로 시작한다(요청 중첩 방지 — 폴링은 한 번에 하나). */
+  function ensureHandoffPolling(): void {
+    if (handoffPollActive) return;
+    if (!shouldPoll(handoffPollState, Date.now())) return;
+    handoffPollActive = true;
+    scheduleHandoffPoll();
+  }
+
+  // 탭이 숨겨지면 다음 폴링 간격을 즉시 재계산한다(§14.4 — 숨김 15초로 완화). fetch가 이미 진행
+  // 중이면(대기 중이 아니면) 건드리지 않는다 — 재예약이 요청 중첩을 만들지 않게 한다.
+  document.addEventListener('visibilitychange', () => {
+    if (handoffPollActive && handoffPollTimerPending && handoffPollTimer !== undefined) {
+      window.clearTimeout(handoffPollTimer);
+      handoffPollTimerPending = false;
+      scheduleHandoffPoll();
+    }
+  });
+
+  /** 새로고침 복구(FR-CS9-7, §14.3) — 저장소에 토큰이 있으면 1회 복원 후 폴링을 재개한다. */
+  async function restoreHandoffIfAny(): Promise<void> {
+    if (handoffRestoreAttempted) return;
+    handoffRestoreAttempted = true;
+    const stored = loadHandoffToken(options.slug);
+    if (!stored) return;
+    handoffPollState = { ...createHandoffPollState(), token: stored.token, cursor: stored.cursor, mode: 'CONNECTED' };
+    dispatch({ type: 'HANDOFF_CONNECTED' });
+    panel.messages.addSystemText(MESSAGES.handoffRestoreNotice);
+    await runHandoffPollOnce(true);
+    ensureHandoffPolling();
   }
 
   const launcher = createLauncher(() => void handleOpen());
@@ -138,7 +302,10 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
       applySkin(config);
       const alreadyGreeted = state.greetingShown;
       dispatch({ type: 'CONFIG_LOADED', config });
-      if (!alreadyGreeted) renderGreeting(config);
+      if (!alreadyGreeted) {
+        renderGreeting(config);
+        void restoreHandoffIfAny();
+      }
       panel.composer.focus();
     } catch (e) {
       if (e instanceof PublicApiError && e.kind === 'DISABLED') {
@@ -208,6 +375,13 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
       dispatch({ type: 'PENDING_RESOLVED' });
       panel.composer.setDisabled(false);
 
+      // [No.24] 보류 답변이 실패로 끝나면(§5.5 `IF_PENDING_FAILS`) 관찰 창을 연다 — 사람이 도와야
+      // 할 사용자로 본다(P-6). READY면 보류만 해제한다(관찰 창을 새로 열지 않음).
+      handoffPollState = onPendingResult(handoffPollState, decision.reason, Date.now());
+      if (handoffPollState.mode === 'WATCHING') {
+        ensureHandoffPolling();
+      }
+
       if (decision.reason === 'READY' && payload) {
         panel.setStatusText(MESSAGES.pending.readyAnnounce);
         await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction);
@@ -245,11 +419,37 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     panel.composer.setDisabled(true);
     panel.setStatusText(MESSAGES.sending);
     try {
-      const res = await client.sendMessage({ sessionId, message: input.message, buttonAction: input.buttonAction, state: savedState });
+      const res = await client.sendMessage(
+        { sessionId, message: input.message, buttonAction: input.buttonAction, state: savedState },
+        { handoffToken: handoffPollState.token },
+      );
       saveConversationState(options.slug, res.state);
       if (res.stateReset) {
         panel.messages.addSystemText(MESSAGES.stateResetNotice);
       }
+
+      // [No.24] 상담 상태 조각 반영(ADR-0036 §5.3). `res.handoff`가 없으면(상담 꺼진 챗봇 등)
+      // 상태를 바꾸지 않는다 — 바이트 동일 응답에 대한 위젯 측 반영.
+      if (res.handoff?.status === 'ENDED') {
+        // G-7 — 위젯은 봇 출력을 그리기 전에 폴링 1회로 종료 안내를 먼저 그린다(§14.2 ⑥).
+        await runHandoffPollOnce(false);
+      } else {
+        const prevHandoffMode = handoffPollState.mode;
+        handoffPollState = onSendResponse(handoffPollState, res.handoff, Date.now());
+        if (handoffPollState.token) {
+          saveHandoffToken(options.slug, { token: handoffPollState.token, cursor: handoffPollState.cursor });
+        }
+        if (prevHandoffMode !== 'CONNECTED' && handoffPollState.mode === 'CONNECTED') {
+          panel.setStatusText(MESSAGES.handoffConnectAnnounce);
+          dispatch({ type: 'HANDOFF_CONNECTED' });
+        } else if (prevHandoffMode === 'IDLE' && handoffPollState.mode === 'WATCHING') {
+          dispatch({ type: 'HANDOFF_WATCH_STARTED' });
+        }
+      }
+      if (handoffPollState.mode === 'WATCHING' || handoffPollState.mode === 'CONNECTED') {
+        ensureHandoffPolling();
+      }
+
       const views = toOutputViews(res.outputs);
       if (res.pendingAnswer) {
         // PENDING — 인터림 안내 말풍선(서버가 내려준 일반 TEXT 아웃풋)만 먼저 렌더하고, 입력은
@@ -261,7 +461,11 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         void pollPendingAnswer(res.pendingAnswer.id, res.pendingAnswer.pollAfterMs);
         return;
       }
-      await panel.messages.addBotOutputs(views, handleButtonAction, (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''));
+      // [No.24] 상담 구간 검증 발화(G-4)는 `outputs: []`가 정상이다 — 봇 말풍선을 만들지 않는다
+      // (사용자 말풍선만, §14.2 ⑤). 그 밖의(핸드오프와 무관한) 빈 응답은 기존 폴백 문구를 유지한다(EX-W-6).
+      if (views.length > 0 || res.handoff?.status !== 'CONNECTED') {
+        await panel.messages.addBotOutputs(views, handleButtonAction, (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''));
+      }
       dispatch({ type: 'SEND_SUCCEEDED', botMessages: [] });
       panel.setStatusText('');
       panel.composer.setDisabled(false);

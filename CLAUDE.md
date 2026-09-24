@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
 
-**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 26(레거시 API 연동), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
 
 ### 코드 구조
 pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
 - 시험: `apps/api`는 `npx jest`, `apps/web`는 `npx vitest run`. shared-types 변경 후에는 `pnpm --filter @chat-bot/shared-types build`를 먼저 실행.
-- api 시험은 `apps/api/jest.isolate-env.js`가 `.env`에서 기동 필수 키(DATABASE_URL·WIDGET_BASE_URL·PUBLIC_API_BASE_URL)만 읽는다 — 로컬 시연용 값(EMBEDDING_BASE_URL 등)은 시험에 영향을 주지 않으며, 선택 기능은 각 spec이 앱 생성 전에 명시적으로 설정해야 한다.
+- api 시험은 `apps/api/jest.isolate-env.js`(setupFiles)가 `.env`에서 기동 필수 키(DATABASE_URL·WIDGET_BASE_URL·PUBLIC_API_BASE_URL)만 읽고, 백그라운드 루프(`DEPLOY_SCHEDULE_ENABLED`·`HANDOFF_SWEEPER_ENABLED`)는 기본 `false`로 끈다. `ConfigModule.forRoot({validate})` 스냅샷은 `AppModule`을 처음 import하는 시점에 고정되므로 **정적 import spec의 `beforeAll`에서 `process.env`를 바꿔도 반영되지 않는다** — 선택 기능을 켜야 하는 spec은 값을 먼저 설정한 뒤 `await import('../app.module')`(동적 import)로 로드하고, 루프 동작은 `tick()` 직접 호출로 검증한다. 통합 시험의 DB는 `prisma migrate deploy`로 만든다(`db push`는 마이그레이션 전용 부분 유니크 인덱스를 만들지 않는다).
 - boolean 환경변수·쿼리에는 `z.coerce.boolean()`을 쓰지 않는다("false"→true). 환경변수는 `envBoolean()`, 쿼리는 `queryBoolean()`.
 
 ### 문서 구조 (`docs/`)

@@ -7,22 +7,25 @@ import { PaginationQuerySchema, SortOrder, csvEnumArray, queryBoolean } from './
  * 테이블은 만들지 않는다 — 역할 3종 고정 + 역할→권한 매핑은 이 파일의 코드 상수가 단일 소스다(J-6).
  */
 
-/* ── 역할 ── */
-export const RoleName = z.enum(['ADMIN', 'EDITOR', 'VIEWER']);
+/* ── 역할 ── [신규 2026-09-25 No.24] `AGENT`(상담원) — 3 → 4종(ADR-0036 §7). 기존 3종 인덱스 불변. */
+export const RoleName = z.enum(['ADMIN', 'EDITOR', 'VIEWER', 'AGENT']);
 export type RoleName = z.infer<typeof RoleName>;
 
 export const ROLE_LABELS: Record<RoleName, string> = {
   ADMIN: '시스템 관리자',
   EDITOR: '챗봇 편집자',
   VIEWER: '운영 모니터',
+  AGENT: '상담원',
 };
 
-/* ── 권한 15종 유니온 (FR-0-25, FR-12-18, ADR-0029 §5) ──
+/* ── 권한 17종 유니온 (FR-0-25, FR-12-18, ADR-0029 §5, ADR-0036 §7) ──
    ⚠ 기존 75곳+의 @RequirePermission 문자열이 전부 이 목록에 존재해야 한다.
    명명 규칙: `<도메인>:<동작>`. 새 도메인이 생기면 이 규칙으로 추가한다.
    [신규 2026-09-23 검증/품질 고도화] `simulation:write`(14→15) — TC 세트/실행의 쓰기·실행·취소·고정을
    가리키는 권한이다. "읽기 simulation:read / 쓰기 dialogue:write" 조합(신규 문자열 0종)도 대안이었으나,
-   한 화면의 읽기·쓰기가 두 도메인으로 갈라지는 어색함을 피하기 위해 신설을 확정했다(ADR-0029 §5). */
+   한 화면의 읽기·쓰기가 두 도메인으로 갈라지는 어색함을 피하기 위해 신설을 확정했다(ADR-0029 §5).
+   [신규 2026-09-25 하이브리드 CS No.24] `cs:read`·`cs:write`(15→17) — 상담 스레드 조회/개입·전송·
+   종료·인수 권한. 기존 `dialogue:*`/`chatbot:*`과 위험 성격이 달라 별도 도메인으로 신설한다(ADR-0036 §7). */
 export const Permission = z.enum([
   'chatbot:read',
   'chatbot:write',
@@ -39,6 +42,8 @@ export const Permission = z.enum([
   'security:read',
   'security:write',
   'audit:read',
+  'cs:read',
+  'cs:write',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -56,7 +61,12 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
     'dialogue:write',
     'channel:write',
     'simulation:write',
+    // [No.24] EDITOR는 상담을 읽을 수만 있다(개입·전송·종료는 AGENT·ADMIN 전용, P-7).
+    'cs:read',
   ],
+  // [신규 2026-09-25 No.24] 상담원 — 챗봇 조회(마스킹본 등급) + 상담 읽기/쓰기만. `dialogue:*` 없음
+  // (대화 자산 편집 화면은 볼 수 없다) — 계층형 역할이 아니다(AGENT ⊄ VIEWER).
+  AGENT: ['chatbot:read', 'cs:read', 'cs:write'],
   ADMIN: [
     'chatbot:read',
     'dialogue:read',
@@ -73,6 +83,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
     'security:read',
     'security:write',
     'audit:read',
+    'cs:read',
+    'cs:write',
   ],
 };
 

@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { resolveTurn, willSurveyConsumeInput } from '@chat-bot/dialogue-engine';
-import { CONVERSATION_STATE_VERSION, ConversationStateSchema } from '@chat-bot/shared-types';
+import { CONVERSATION_STATE_VERSION, ConversationStateSchema, WIDGET_FEATURE_HANDOFF_V1 } from '@chat-bot/shared-types';
 import type {
   ConversationState,
   DialogOutput,
@@ -33,6 +33,7 @@ import type { PendingAnswerStore } from '../rag/pending-answer.store';
 import { shouldRunRag } from '../rag/lib/should-run-rag';
 import { LegacyApiService } from '../legacy-api/legacy-api.service';
 import { SurveyResponseService } from '../survey-responses/survey-response.service';
+import { HandoffGateService } from '../handoff/handoff-gate.service';
 
 /** 대기 안내 문구(FR-N2-34, S-4) — "RAG"·"LLM"·"벡터" 같은 내부 용어를 쓰지 않는다(FR-N2-24). */
 const RAG_WAITING_TEXT = '문서에서 찾아보고 있어요. 잠시만요.';
@@ -63,6 +64,9 @@ export class PublicConversationService {
     private readonly config: ConfigService,
     private readonly legacyApi: LegacyApiService,
     private readonly surveyResponses: SurveyResponseService,
+    // [No.27 선례를 따라 15번째 인자로 추가 — No.24] 단언 변경 0(E-7). 상담 폴링(`HandoffPublicPollService`)
+    // 은 이 서비스에 주입하지 않는다 — `pollHandoff` 핸들러가 직접 호출한다(생성자 인자 +1만 유지).
+    private readonly handoffGate: HandoffGateService,
   ) {}
 
   async getConfig(slug: string): Promise<PublicChatbotConfig> {
@@ -82,13 +86,15 @@ export class PublicConversationService {
     };
   }
 
-  async sendMessage(slug: string, dto: PublicMessageRequestDto): Promise<PublicMessageResponse> {
+  async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string }): Promise<PublicMessageResponse> {
     const { chatbot } = await this.access.resolve(slug);
     const adapter = this.adapterFactory.getAdapter('WEB');
     const inbound = adapter.normalizeInbound(dto);
 
     // ②.5 입구 금지어 필터(FR-12-38/39) — BLOCK이면 엔진을 호출하지 않는다.
     // `NODE` 버튼은 사용자 입력이 아니라 봇이 제공한 선택지라 대상이 아니다(§10.2, 항상 PASS).
+    // ★ [No.24] 이 경로는 상담이 꺼진 챗봇과 바이트 단위로 동일해야 한다 — 상담 게이트는 이 뒤(②.7)
+    // 에서만 조회한다(BLOCK이면 상담 조회도 하지 않는다, ADR-0036 §1).
     const filterableText = resolveFilterableInboundText(inbound);
     const { decision } = filterableText !== undefined ? await this.bannedWordFilter.evaluateInbound(filterableText) : { decision: 'PASS' as const };
     if (decision === 'BLOCK') {
@@ -117,6 +123,39 @@ export class PublicConversationService {
         : { version: CONVERSATION_STATE_VERSION, contextSession: null };
       return { messageId, outputs, state: preservedState, stateReset: false };
     }
+
+    // ②.7 [신규 No.24] 하이브리드 CS 게이트(ADR-0036 §1·§5) — 개입 중이면 엔진을 건너뛴다(기존 BLOCK
+    // 경로와 같은 모양). 상담 꺼진 챗봇 + 토큰 헤더 없음이면 설정 캐시 조회 1회 후 즉시 PASS다
+    // (추가 DB 조회 0 — FR-0-119).
+    const gateResult = await this.handoffGate.evaluate({
+      chatbotId: chatbot.id,
+      sessionId: dto.sessionId,
+      now: new Date(),
+      channelOpen: true, // access.resolve()가 이미 ACTIVE·WEB 활성을 확인했다(①).
+      features: dto.features,
+      tokenHeader: opts?.handoffToken,
+      inbound,
+      rawState: inbound.state,
+    });
+    if (gateResult.kind === 'HANDLED') {
+      void this.logService.record({
+        id: gateResult.response.messageId,
+        chatbotId: chatbot.id,
+        groupId: chatbot.groupId,
+        channelType: 'WEB',
+        sessionId: dto.sessionId,
+        rawUserMessage: gateResult.rawUserMessage,
+        rawBotResponse: gateResult.botResponseForLog,
+        isAnswered: true,
+        inputKind: resolveInputKind(inbound),
+        handoffTurn: true,
+      });
+      return gateResult.response;
+    }
+    inbound.state = gateResult.state;
+    // G-8(§5.3) — 구버전(LEGACY) 상담이 시간 종료로 끝나 미전달 메시지가 있으면, 이번 봇 출력
+    // 앞에 전치할 TEXT 아웃풋을 게이트가 실어 보낸다(코드리뷰 1회차 Medium #4). 없으면 빈 배열.
+    const handoffPrependOutputs = gateResult.prependOutputs ?? [];
 
     const { bundle, index } = await this.bundleService.getCached(chatbot.id);
     const settings = await this.answerSettingsCache.get(chatbot.id);
@@ -173,8 +212,10 @@ export class PublicConversationService {
 
     const rendered = adapter.renderOutbound(result.outputs);
     // ⑤.5 출구 금지어 필터(FR-12-40) — 정책 무관, 항상 마스킹만 한다(차단하지 않는다). 외부 API
-    // 값이 섞인 최종 출력 전체가 이 필터를 통과한다(FR-L4-14 · AC-L3-10).
-    const outputs = await this.bannedWordFilter.maskOutbound(rendered[0]?.outputs ?? []);
+    // 값이 섞인 최종 출력 전체가 이 필터를 통과한다(FR-L4-14 · AC-L3-10). G-8 전치 아웃풋도 같은
+    // 필터를 통과한다(이미 마스킹된 텍스트라 멱등이지만, "최종 출력 전체가 필터를 통과한다"는
+    // 규약을 예외 없이 지킨다).
+    const outputs = await this.bannedWordFilter.maskOutbound([...handoffPrependOutputs, ...(rendered[0]?.outputs ?? [])]);
     const stateReset = result.stateDiscarded.length > 0;
     const isAnswered = judgeAnswered(result.trace);
     const inputKind = resolveInputKind(inbound);
@@ -198,6 +239,8 @@ export class PublicConversationService {
         inputKind,
         nextState: result.nextState,
         stateReset,
+        features: dto.features,
+        prependOutputs: handoffPrependOutputs,
       });
     }
 
@@ -206,6 +249,9 @@ export class PublicConversationService {
       outputs,
       state: result.nextState,
       stateReset,
+      // §5.5 관찰 창 — 상담이 켜진 챗봇 + 위젯이 기능을 선언 + 이번 턴이 미응답(BLOCK 제외 — 이미
+      // 반환됨) + 활성 상담 없음(HANDLED로 반환되지 않았다는 것 자체가 활성 상담이 없었다는 뜻이다).
+      handoff: await this.buildWatchHint(chatbot.id, dto.features, isAnswered),
     };
 
     // ⑩ 로그 적재 — await 하지 않는다. 실패해도 응답은 이미 유효하다(FR-11-24, NFR-P6).
@@ -281,6 +327,9 @@ export class PublicConversationService {
     inputKind: InputKind;
     nextState: ConversationState;
     stateReset: boolean;
+    features?: string[];
+    /** G-8 전치 아웃풋(§5.3) — 보류 응답 대기 문구 앞에도 같은 규약으로 붙인다. */
+    prependOutputs?: DialogOutput[];
   }): Promise<PublicMessageResponse> {
     const ttlMs = this.config.get<number>('PENDING_ANSWER_TTL_MS') ?? 300_000;
     const expiresAt = new Date(Date.now() + ttlMs);
@@ -293,7 +342,7 @@ export class PublicConversationService {
     let waitingOutputs: DialogOutput[];
     try {
       this.pendingStore.create(input.messageId, { chatbotId: input.chatbotId, slug: input.slug, expiresAt });
-      waitingOutputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: RAG_WAITING_TEXT } }]);
+      waitingOutputs = await this.bannedWordFilter.maskOutbound([...(input.prependOutputs ?? []), { type: 'TEXT', payload: { text: RAG_WAITING_TEXT } }]);
     } catch (error) {
       this.ragGate.release();
       throw error;
@@ -322,6 +371,30 @@ export class PublicConversationService {
       state: input.nextState,
       stateReset: input.stateReset,
       pendingAnswer: { id: input.messageId, pollAfterMs: 1200, expiresAt },
+      // §5.5 — 결과를 모르는 보류 턴은 관찰 창을 바로 열지 않고, 위젯이 보류 폴링 실패/만료 시 연다
+      // (`IF_PENDING_FAILS`). 보류 답변 폴링 서버 코드·스키마는 무변경이다(ADR-0023 경로 불가침).
+      handoff: await this.buildWatchHint(input.chatbotId, input.features, false, 'IF_PENDING_FAILS'),
+    };
+  }
+
+  /** §5.5 관찰 창 힌트 조립 — `HandoffGateService.isHandoffEnabled()`만 재사용한다(새 export 0). */
+  private async buildWatchHint(
+    chatbotId: string,
+    features: string[] | undefined,
+    isAnswered: boolean,
+    trigger: 'NOW' | 'IF_PENDING_FAILS' = 'NOW',
+  ): Promise<PublicMessageResponse['handoff']> {
+    if (isAnswered) return undefined;
+    if (!(features ?? []).includes(WIDGET_FEATURE_HANDOFF_V1)) return undefined;
+    const enabled = await this.handoffGate.isHandoffEnabled(chatbotId);
+    if (!enabled) return undefined;
+    return {
+      status: 'NONE',
+      watch: {
+        windowMs: this.config.get<number>('HANDOFF_WATCH_WINDOW_MS') ?? 180_000,
+        pollAfterMs: this.config.get<number>('HANDOFF_WATCH_INTERVAL_MS') ?? 5_000,
+        trigger,
+      },
     };
   }
 }

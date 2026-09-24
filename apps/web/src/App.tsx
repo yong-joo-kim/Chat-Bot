@@ -46,6 +46,13 @@ import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedule
 import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
+import { CannedResponsesPage } from './pages/dialogue/CannedResponsesPage';
+import { HandoffChatbotPickerPage } from './pages/handoff-console/HandoffChatbotPickerPage';
+import { HandoffConsoleChatbotShell } from './pages/handoff-console/HandoffConsoleChatbotShell';
+import { LiveSessionListPage } from './pages/handoff-console/LiveSessionListPage';
+import { LiveSessionDetailPage } from './pages/handoff-console/LiveSessionDetailPage';
+import { HandoffHistoryListPage } from './pages/handoff-console/HandoffHistoryListPage';
+import { HandoffHistoryDetailPage } from './pages/handoff-console/HandoffHistoryDetailPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -127,6 +134,8 @@ export function App(): JSX.Element {
               <Route path="surveys/new" element={<SurveyFormPage />} />
               <Route path="surveys/:surveyId" element={<SurveyFormPage />} />
               <Route path="surveys/:surveyId/results" element={<SurveyResultsPage />} />
+              {/* [No.24] CR1 — 자주 쓰는 문장 관리, DialogueShell 서브내비 7번째(hybrid-cs-ui-spec.md §3.6). */}
+              <Route path="canned-responses" element={<CannedResponsesPage />} />
             </Route>
             <Route path="validation" element={<ValidationShell />}>
               <Route index element={<Navigate to="sets" replace />} />
@@ -136,6 +145,32 @@ export function App(): JSX.Element {
               <Route path="runs/:runId" element={<TestRunDetailPage />} />
               <Route path="compare" element={<TestRunComparePage />} />
             </Route>
+          </Route>
+          {/*
+            [No.24] 상담 콘솔 — `ChatbotDetailLayout`(TabNav 소속) 밖의 새 최상위 라우트 트리
+            (hybrid-cs-ui-spec.md §0.2·§1). `TabNav.tsx`(AC-C-3, 라우트 6개 고정)는 손대지 않는다.
+          */}
+          <Route
+            path="/handoff-console"
+            element={
+              <RequirePermission permission="cs:read" menuName={MESSAGES.handoffConsole.navLabel}>
+                <HandoffChatbotPickerPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/handoff-console/:chatbotId"
+            element={
+              <RequirePermission permission="cs:read" menuName={MESSAGES.handoffConsole.navLabel}>
+                <HandoffConsoleChatbotShell />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<Navigate to="live" replace />} />
+            <Route path="live" element={<LiveSessionListPage />} />
+            <Route path="live/:sessionRef" element={<LiveSessionDetailPage />} />
+            <Route path="history" element={<HandoffHistoryListPage />} />
+            <Route path="history/:handoffId" element={<HandoffHistoryDetailPage />} />
           </Route>
           <Route
             path="/settings/users"

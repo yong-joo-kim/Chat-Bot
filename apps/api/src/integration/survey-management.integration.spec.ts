@@ -10,6 +10,7 @@ import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { toKstDayBucket } from '@chat-bot/shared-types';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -82,14 +83,14 @@ describe('설문관리(No.27) 통합 테스트', () => {
     process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000/api/v1';
 
     try {
-      execSync('pnpm exec prisma db push --skip-generate --accept-data-loss', {
+      execSync('pnpm exec prisma migrate deploy', {
         cwd: API_ROOT,
         env: { ...process.env, DATABASE_URL: testDatabaseUrl },
         stdio: 'pipe',
       });
     } catch (e) {
       const err = e as { stdout?: Buffer; stderr?: Buffer };
-      throw new Error(`prisma db push 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
+      throw new Error(`prisma migrate deploy 실패:\n${err.stdout?.toString()}\n${err.stderr?.toString()}`);
     }
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -335,7 +336,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       const t2 = await anon<{ state: unknown }>('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '가격', state: t1.body.state });
       await anon('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '없음', state: t2.body.state });
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const summary = await admin<{ totals: { exposed: number; started: number; completed: number; participationRate: number | null } }>(
         'GET',
         `/chatbots/${chatbotId}/surveys/${surveyId}/stats/summary?from=${today}&to=${today}`,
@@ -362,7 +363,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       const t2 = await anon<{ state: unknown }>('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '속도', state: t1.body.state });
       await anon('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '없음', state: t2.body.state });
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const res = await admin<string>('GET', `/chatbots/${chatbotId}/surveys/${surveyId}/responses/export?kind=RESPONSES&from=${today}&to=${today}`);
       expect(res.status).toBe(200);
       expect(res.body).not.toContain(sessionId);
@@ -542,7 +543,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       expect(answer?.textValue).not.toContain(bannedWord);
       expect(answer?.textValue).not.toBe(raw);
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const textAnswers = await admin<{ items: Array<{ text: string }> }>(
         'GET',
         `/chatbots/${chatbotId}/surveys/${survey.id}/text-answers?questionKey=${answer?.questionKey ?? ''}&from=${today}&to=${today}`,
@@ -581,7 +582,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       const afterUnanswered = await prisma.unansweredQuestion.count({ where: { chatbotId } });
       expect(afterUnanswered).toBe(beforeUnanswered);
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const questions = await admin<{ topQuestions: Array<{ question: string }>; topUnansweredQuestions: Array<{ question: string }> }>(
         'GET',
         `/stats/questions?chatbotId=${chatbotId}&from=${today}&to=${today}`,
@@ -619,7 +620,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       const t0 = await anon<{ state: unknown }>('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '인젝션설문시작' });
       await anon('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '=1+1(cmd)', state: t0.body.state });
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const csv = await admin<string>('GET', `/chatbots/${chatbotId}/surveys/${survey.id}/responses/export?kind=RESPONSES&from=${today}&to=${today}`);
       expect(csv.status).toBe(200);
       expect(csv.body).not.toMatch(/[,\n]=1\+1\(cmd\)/); // 셀 선두가 원문 "="로 남아있지 않아야 한다(escapeCsvCell 방어)
@@ -628,7 +629,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
     it('한글 설문명은 Content-Disposition에 filename*(UTF-8 퍼센트 인코딩)으로 안전하게 실린다(ERR_INVALID_CHAR 회귀 방지)', async () => {
       const { chatbotId } = await createChatbotWithChannel('한글파일명');
       const survey = await createSurvey(chatbotId, { name: `한글설문명_특수/문자?포함_${Math.random().toString(36).slice(2, 6)}` });
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const res = await admin<string>('GET', `/chatbots/${chatbotId}/surveys/${survey.id}/responses/export?kind=RESPONSES&from=${today}&to=${today}`);
       expect(res.status).toBe(200);
       const disposition = res.headers['content-disposition'];
@@ -1004,7 +1005,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
     it('결과·CSV 조회는 chatbot:read다 — VIEWER도 200이다', async () => {
       const { chatbotId } = await createChatbotWithChannel('권한결과');
       const survey = await createSurvey(chatbotId);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 제품의 dayBucket(KST)과 같은 기준 — UTC로 자르면 KST 자정~09시에 날짜가 어긋난다
       const summaryRes = await viewer('GET', `/chatbots/${chatbotId}/surveys/${survey.id}/stats/summary?from=${today}&to=${today}`);
       expect(summaryRes.status).toBe(200);
       const csvRes = await viewer('GET', `/chatbots/${chatbotId}/surveys/${survey.id}/responses/export?kind=RESPONSES&from=${today}&to=${today}`);

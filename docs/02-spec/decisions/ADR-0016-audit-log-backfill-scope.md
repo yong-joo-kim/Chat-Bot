@@ -237,3 +237,15 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 1. **`AuditTargetType`에 `Survey`**(라벨 `'설문'`, 16 → 17종). 생성 `CREATE` · 수정 `UPDATE`(summary "문구만 수정"｜"구성 변경(구조 버전 N→N+1)") · 상태만 바뀐 수정 `STATUS_CHANGE` · 복제 `COPY` · 삭제 `DELETE`. **`AuditAction` 추가 0**.
 2. **화이트리스트** `AUDIT_FIELDS.Survey = ['name','status','activeFrom','activeTo','questionCount','structureVersion','sessionTimeoutMinutes']` — 문항 문구·선택지·소개·완료 문구·취소어 본문은 **담지 않는다**(`DialogNode`의 `outputs` 제외와 같은 판단 — 개수·버전만).
 3. **응답 1건 1건은 감사로그가 아니다** — 최종 사용자 행위이며 응답 테이블 자체가 기록이다. **CSV 내보내기도 기록하지 않는다**(`EXPORT` 액션 선례 없음 — PM 확정 P-13. 재검토 = No.45 감사 강화). 통계 조회는 읽기다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.24: 대상 2종 · 최초의 열람 감사 `RAW_VIEW`)
+
+하이브리드 CS(No.24, **ADR-0036 §6**).
+
+1. **`AuditTargetType`에 `HandoffSession`**(라벨 "상담")·**`CannedResponse`**(라벨 "자주 쓰는 문장") — 17 → 19종. 개입 `CREATE` · 상담원/관리자 종료 `STATUS_CHANGE` · 강제 인수 `UPDATE`(사유 포함) · 문장 CRUD(`UPDATE` summary로 순서 변경 구분). 화이트리스트 `HandoffSession = ['status','endReason','assignedUserName','alertLevelAtStart','alias']` · `CannedResponse = ['title','category','shortcut','enabled','sortOrder','bodyLength']` — **`sessionId`·토큰·메시지·문장 본문을 담지 않는다**(FAQ 답변 제외 선례).
+2. **`AuditAction`에 `RAW_VIEW`(라벨 "원문 열람") — 13 → 14종, 이 프로젝트 최초의 열람(읽기) 감사**다. PM 결정 P-9로 상담 중 원문이 생겼으므로 "누가 어느 상담의 원문을 봤는가"를 남긴다. 단위는 **원문이 실제로 응답에 실린 (상담, 열람자)당 1건**(2초 폴링마다 기록하면 신호가 사라진다), 본문 0, 파괴적 동작 목록에 넣지 않는다. 다중 인스턴스 동시 요청에서 인스턴스 수만큼 중복될 수 있다(누락보다 중복이 안전).
+3. **감사하지 않는 것**: 메시지 1건 1건(스레드가 기록) · 마스킹본 열람(대화 보기·이력 — 기존 판단 유지) · 시간 기반 종료(시스템 전이 — 스레드 `endReason`) · 토큰 발급 · 폴링.
+4. 상담 설정 저장은 답변 설정과 같은 경로(`Chatbot` `UPDATE`, summary `상담 연계 설정 변경`, 안내 문구는 길이만).

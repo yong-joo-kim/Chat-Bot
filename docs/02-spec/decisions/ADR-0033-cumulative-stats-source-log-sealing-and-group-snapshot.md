@@ -133,3 +133,17 @@ No.14와 같은 방식(DB `groupBy` + 순수 함수)을 **`where` 절만 넓혀*
 4. **결정 3 확장 — 설문 롤업 규약**: 향후 응답 삭제(No.45 보존기간·정보주체 파기)도 **단일 서비스 + 같은 트랜잭션의 수치 롤업 선적재**로만 추가한다. 설문 롤업 = `(surveyId, dayBucket, channelType)` 키의 상태·시작 여부별 건수 + 문항·선택지/값별 건수 + `groupId` 스냅샷 — **텍스트·세션 ID를 담지 않는다**.
 5. **결정 4 재사용**: `SurveyResponse.groupId` = **노출 당시** 챗봇 소속 그룹 스냅샷(FK 없음 · 적재 후 불변 · 호출부가 이미 읽은 챗봇 행에서 — 추가 조회 0). 그룹·전역 설문 통계는 1차 범위 밖이지만 후속 통합이 과거를 소급 변경하지 않도록 지금 적재한다.
 6. **질문 순위의 원천 규칙 보강**: 설문이 소비한 턴(`ConversationLog.surveyTurn=true`)은 챗봇·그룹·전역 **모든 스코프의 질문 순위**에서 같은 조건 상수 1벌로 제외한다. 턴 수·세션·응답률·출처 집계는 불변이며 기존 행은 전부 false라 과거 수치가 바뀌지 않는다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.24: 봉인 대상에 상담 스레드 2모델 · 원문은 행 삭제가 아니라 필드 소거 · 질문 순위 규칙 보강 · R-7 원시 SQL 4번째 파일)
+
+하이브리드 CS(No.24, **ADR-0036 §8**). 결정 1~8은 불변이다.
+
+1. **L1 DB**: `HandoffSession → Chatbot`, `HandoffMessage → HandoffSession` FK `onDelete: Restrict`.
+2. **L2 서비스**: 챗봇 영구삭제 사전검사에 `handoffSessions`('상담')·`cannedResponses`('자주 쓰는 문장') 추가(11 → 13종, 동반 삭제 목록에 넣지 않는다 — `ChatbotHandoffSetting`만 설정 데이터로 동반 삭제).
+3. **L3 정적 검사**(`handoff-sealing.spec.ts`): 두 모델의 `delete`/`deleteMany`/원시 `DELETE` **0건** · 쓰기 파일 1개 · **`HandoffMessage`의 유일한 갱신은 원문 필드(`rawText`·`rawExpiresAt`)의 `null` 소거**. PM 결정 P-9의 원문 파기는 **행 삭제가 아니라 필드 소거**로 설계되어 이 봉인과 충돌하지 않는다.
+4. **질문 순위의 원천 규칙 보강**: 상담 구간 턴(`ConversationLog.handoffTurn=true`)도 설문 턴과 같은 상수 1벌로 **모든 스코프의 질문 순위**에서 제외한다. 턴 수·세션·응답률·출처(`OTHER`) 불변, 기존 행 false.
+5. **R-7 갱신**: 원시 SQL 보유 파일 3 → **4**(`handoff/handoff-secure-delete.query.ts` — `PRAGMA secure_delete` 1줄, 원문 소거 트랜잭션의 SQLite 페이지 잔존 제거). `$executeRaw` 계열 0건은 유지한다.
+6. **롤업 규약**: 향후 상담 기록 삭제(No.45 보존기간)도 단일 서비스 + 같은 트랜잭션의 수치 롤업 선적재로만 추가한다 — 상담 롤업 = `(chatbotId, dayBucket)` 키의 건수·종료 사유·첫 응답/상담 시간 합계 + `groupId` 스냅샷(텍스트·세션 ID 없음).

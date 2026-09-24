@@ -15,6 +15,10 @@ import { ApiException } from '../common/api.exception';
  * legacy-api-integration-설계.md §2.5 FR-L6-6).
  * SQLite 실제 롤백 검증은 통합 테스트(`integration/chatbot-operations.integration.spec.ts`)가
  * 다루지 못하는 부분 실행 방지를 이 유닛 테스트로 보완한다.
+ *
+ * [No.24] 하이브리드 CS 그룹이 사전검사에 `handoffSessions`·`cannedResponses` 2건을 추가하고
+ * (11 → 13종), 동반 삭제 트랜잭션에 `chatbotHandoffSetting.deleteMany` 1건을 추가했다
+ * (15 → 16테이블, ADR-0036 §8) — 상담 스레드·문장 자체는 삭제 대상이 아니다(§18 H-8).
  */
 
 const ARCHIVED_CHATBOT = {
@@ -47,6 +51,7 @@ function buildTxMock() {
     chatbotVersion: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbotVersionSequence: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     deploySchedule: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    chatbotHandoffSetting: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
 }
@@ -68,6 +73,8 @@ function buildPrismaMock(tx: ReturnType<typeof buildTxMock>) {
     unansweredQuestion: { count: jest.fn().mockResolvedValue(0) },
     survey: { count: jest.fn().mockResolvedValue(0) },
     surveyResponse: { count: jest.fn().mockResolvedValue(0) },
+    handoffSession: { count: jest.fn().mockResolvedValue(0) },
+    cannedResponse: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb(tx)),
   };
 }
@@ -77,7 +84,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('15개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다', async () => {
+  it('16개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -101,6 +108,7 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.chatbotVersion.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbotVersionSequence.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.deploySchedule.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.chatbotHandoffSetting.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는
