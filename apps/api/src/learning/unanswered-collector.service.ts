@@ -15,6 +15,8 @@ export interface CollectUnansweredQuestionParams {
   inputKind: InputKind;
   /** [No.26] 외부 API 고정 문구 턴(§6.1) — 기본 false. */
   apiNotice?: boolean;
+  /** [No.27] 설문이 소비한 턴(FR-SV5-8) — 기본 false. */
+  surveyTurn?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export class UnansweredCollectorService {
         questionText: input.questionText,
         maxLength,
         apiNotice: input.apiNotice,
+        surveyTurn: input.surveyTurn,
       });
       if (!decision.collect) return;
 

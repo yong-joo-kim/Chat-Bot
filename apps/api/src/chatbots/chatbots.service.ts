@@ -40,6 +40,8 @@ const CHILD_COUNT_LABELS: Record<string, string> = {
   channels: '채널',
   conversationLogs: '대화로그',
   unansweredQuestions: '미응답 질문',
+  surveys: '설문',
+  surveyResponses: '설문 응답',
 };
 
 const NOT_FOUND_MESSAGE = '요청하신 대상을 찾을 수 없습니다.';
@@ -310,6 +312,8 @@ export class ChatbotsService {
       channels,
       conversationLogs,
       unansweredQuestions,
+      surveys,
+      surveyResponses,
     ] = await Promise.all([
       this.prisma.intent.count({ where: { chatbotId: id } }),
       this.prisma.keyword.count({ where: { chatbotId: id } }),
@@ -320,6 +324,9 @@ export class ChatbotsService {
       this.prisma.channel.count({ where: { chatbotId: id } }),
       this.prisma.conversationLog.count({ where: { chatbotId: id } }),
       this.prisma.unansweredQuestion.count({ where: { chatbotId: id } }),
+      // [No.27] 영구삭제 사전검사 9 → 11종(ADR-0002 §7.8 갱신) — 동반 삭제 트랜잭션에는 추가하지 않는다.
+      this.prisma.survey.count({ where: { chatbotId: id } }),
+      this.prisma.surveyResponse.count({ where: { chatbotId: id } }),
     ]);
 
     const counts: Record<string, number> = {
@@ -332,6 +339,8 @@ export class ChatbotsService {
       channels,
       conversationLogs,
       unansweredQuestions,
+      surveys,
+      surveyResponses,
     };
     const nonZero = Object.entries(counts).filter(([, count]) => count > 0);
     if (nonZero.length > 0) {

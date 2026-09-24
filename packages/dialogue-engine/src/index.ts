@@ -28,6 +28,9 @@ export type { SemanticBand } from './semantic';
 export { executeOutputs } from './outputs';
 export type { ExecuteOutputsOptions, ExecuteOutputsResult } from './outputs';
 
+export { advanceSurveySession, startSurveySession, willSurveyConsumeInput } from './survey-session';
+export type { SurveyAdvance, SurveyTurnContext, SurveyTurnOutcome } from './survey-session';
+
 export { bindRequest, resumeAfterApiCall } from './api-call';
 export type {
   ApiBoundValue,

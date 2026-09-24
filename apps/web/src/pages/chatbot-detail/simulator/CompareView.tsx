@@ -94,6 +94,8 @@ export function CompareView({
       {result && !loading && (
         <>
           <p className="compare-summary-badge">{msg.resultSummary(result.summary.total, result.summary.different)}</p>
+          {/* [No.27] 비교(SIM2)는 항상 설문 미리보기 판정(상태·기간 무시)이다 — 1회 고정 안내(ui-spec §3.6). */}
+          <p className="field-hint">{MESSAGES.simulator.compareSurveyNotice}</p>
           <div className="compare-turn-list">
             {visibleTurns.map((turn) => (
               <CompareTurnRow key={turn.index} turn={turn} chatbotId={chatbotId} />

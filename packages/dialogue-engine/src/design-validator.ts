@@ -1,15 +1,17 @@
-import type { DesignIssue, DesignValidationReport, DialogNode, DialogueBundle } from '@chat-bot/shared-types';
-import { UNSUPPORTED_OUTPUT_TYPES, isApiConditionV2 } from '@chat-bot/shared-types';
+import type { DesignIssue, DesignValidationReport, DialogNode, DialogueBundle, Survey } from '@chat-bot/shared-types';
+import { isApiConditionV2, isSurveyV2, isUnsupportedOutput } from '@chat-bot/shared-types';
 
 /**
- * 노드가 다른 노드를 가리키는 참조(이동/버튼/[No.26] API 분기) — 순환 검사·고아 노드 판정·
- * `incomingCount` 산출·삭제 409·스냅샷 무결성 4곳이 공용으로 쓴다(J-17, 규칙 1벌).
+ * 노드가 다른 노드를 가리키는 참조(이동/버튼/[No.26] API 분기/[No.27] 설문 완료 후 이동) — 순환 검사·
+ * 고아 노드 판정·`incomingCount` 산출·삭제 409·스냅샷 무결성 4곳이 공용으로 쓴다(J-17, 규칙 1벌).
  * `apiTargets` = `API_CONDITION`(v1·v2 모두)의 `conditions[].nextNodeId` + (v2) `defaultNodeId`·`failureNodeId`.
+ * `surveyTargets` = v2 `SURVEY`의 `onCompleteNodeId`(v1은 노드를 참조하지 않는다).
  */
-export function getOutgoingNodeRefs(node: DialogNode): { moveTargets: string[]; buttonTargets: string[]; apiTargets: string[] } {
+export function getOutgoingNodeRefs(node: DialogNode): { moveTargets: string[]; buttonTargets: string[]; apiTargets: string[]; surveyTargets: string[] } {
   const moveTargets: string[] = [];
   const buttonTargets: string[] = [];
   const apiTargets: string[] = [];
+  const surveyTargets: string[] = [];
   for (const output of node.outputs) {
     if (output.type === 'DIALOG_MOVE') moveTargets.push(output.payload.targetNodeId);
     if (output.type === 'BUTTON') {
@@ -25,16 +27,19 @@ export function getOutgoingNodeRefs(node: DialogNode): { moveTargets: string[]; 
         if (output.payload.failureNodeId) apiTargets.push(output.payload.failureNodeId);
       }
     }
+    if (output.type === 'SURVEY' && isSurveyV2(output.payload) && output.payload.onCompleteNodeId) {
+      surveyTargets.push(output.payload.onCompleteNodeId);
+    }
   }
-  return { moveTargets, buttonTargets, apiTargets };
+  return { moveTargets, buttonTargets, apiTargets, surveyTargets };
 }
 
-/** "이 노드로 들어오는 참조" 개수(FR-5-11 `incomingCount`, ORPHAN_NODE 판정 공용). API 분기 참조도 포함한다(AC-L1-8). */
+/** "이 노드로 들어오는 참조" 개수(FR-5-11 `incomingCount`, ORPHAN_NODE 판정 공용). API 분기·설문 완료 후 이동 참조도 포함한다(AC-L1-8). */
 export function computeIncomingCounts(nodes: DialogNode[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const node of nodes) {
-    const { moveTargets, buttonTargets, apiTargets } = getOutgoingNodeRefs(node);
-    for (const targetId of [...moveTargets, ...buttonTargets, ...apiTargets]) {
+    const { moveTargets, buttonTargets, apiTargets, surveyTargets } = getOutgoingNodeRefs(node);
+    for (const targetId of [...moveTargets, ...buttonTargets, ...apiTargets, ...surveyTargets]) {
       counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
     }
   }
@@ -293,6 +298,107 @@ function checkApiConditionIssues(nodes: DialogNode[], nodeMap: Map<string, Dialo
   return issues;
 }
 
+/** [No.27] v2 `SURVEY` 설계 점검 6종(§5.9) — 번들의 `surveys`로 판정(추가 조회 0, 엔진 순수성 유지). */
+function checkSurveyIssues(nodes: DialogNode[], surveys: readonly Survey[], now: Date): DesignIssue[] {
+  const issues: DesignIssue[] = [];
+  const surveyMap = new Map(surveys.map((s) => [s.id, s]));
+
+  for (const node of nodes) {
+    const v2Outputs = node.outputs
+      .map((o, index) => ({ o, index }))
+      .filter((x) => x.o.type === 'SURVEY' && isSurveyV2(x.o.payload));
+    const hasContextForm = node.outputs.some((o) => o.type === 'CONTEXT_FORM');
+
+    // ① 뒤에 아웃풋 있음
+    for (const { index } of v2Outputs) {
+      if (index !== node.outputs.length - 1) {
+        issues.push({
+          code: 'SURVEY_OUTPUT_NOT_LAST',
+          severity: 'WARNING',
+          resourceType: 'NODE',
+          resourceId: node.id,
+          resourceName: node.name,
+          message: `노드 "${node.name}"의 설문이 시작되면 뒤 아웃풋은 실행되지 않습니다(설문을 진행할 수 없을 때만 실행됩니다).`,
+        });
+      }
+    }
+    // ② 종결자 충돌 — v2 SURVEY 2개 이상, 또는 v2 SURVEY + CONTEXT_FORM
+    if (v2Outputs.length > 1 || (v2Outputs.length > 0 && hasContextForm)) {
+      issues.push({
+        code: 'SURVEY_TERMINATOR_CONFLICT',
+        severity: 'ERROR',
+        resourceType: 'NODE',
+        resourceId: node.id,
+        resourceName: node.name,
+        message: `노드 "${node.name}"에 종결자(설문·컨텍스트 폼)가 2개 이상 있습니다. 첫 종결자만 의미가 있습니다.`,
+      });
+    }
+    // ④ 노드 출력이 v2 SURVEY뿐
+    if (v2Outputs.length > 0 && node.outputs.length === v2Outputs.length) {
+      issues.push({
+        code: 'SURVEY_ONLY_OUTPUT',
+        severity: 'INFO',
+        resourceType: 'NODE',
+        resourceId: node.id,
+        resourceName: node.name,
+        message: `노드 "${node.name}"은(는) 설문을 진행할 수 없을 때 고정 안내 문구가 나갑니다.`,
+      });
+    }
+    // ⑤ v1 형식(기존 UNSUPPORTED_OUTPUT INFO와 함께 — AC-SV1-3)
+    if (node.outputs.some((o) => o.type === 'SURVEY' && !isSurveyV2(o.payload))) {
+      issues.push({
+        code: 'SURVEY_LEGACY_FORMAT',
+        severity: 'WARNING',
+        resourceType: 'NODE',
+        resourceId: node.id,
+        resourceName: node.name,
+        message: `노드 "${node.name}"의 설문 연결이 이전 형식입니다. 설문을 선택해 전환하세요.`,
+      });
+    }
+
+    for (const { o } of v2Outputs) {
+      if (o.type !== 'SURVEY' || !isSurveyV2(o.payload)) continue;
+      const survey = surveyMap.get(o.payload.surveyId);
+      if (!survey) {
+        issues.push({
+          code: 'BROKEN_REFERENCE',
+          severity: 'ERROR',
+          resourceType: 'NODE',
+          resourceId: node.id,
+          resourceName: node.name,
+          message: `노드 "${node.name}"이(가) 존재하지 않는 설문을 참조합니다.`,
+        });
+        continue;
+      }
+      // ⑥ 문항 0개
+      if (survey.questions.length === 0) {
+        issues.push({
+          code: 'SURVEY_EMPTY',
+          severity: 'ERROR',
+          resourceType: 'NODE',
+          resourceId: node.id,
+          resourceName: node.name,
+          message: `노드 "${node.name}"이(가) 참조하는 설문 "${survey.name}"에 문항이 없습니다.`,
+        });
+      }
+      // ③ 참여 불가(DRAFT/CLOSED/기간 종료)
+      const periodOver = survey.activeTo ? now.getTime() >= survey.activeTo.getTime() : false;
+      if (survey.status !== 'OPEN' || periodOver) {
+        issues.push({
+          code: 'SURVEY_NOT_AVAILABLE',
+          severity: 'WARNING',
+          resourceType: 'NODE',
+          resourceId: node.id,
+          resourceName: node.name,
+          message: `노드 "${node.name}"이(가) 참조하는 설문 "${survey.name}"은(는) 지금 참여할 수 없는 상태입니다.`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
 /**
  * 대화그래프 설계 점검(FR-5-16~18, DD-17). `ERROR`가 있어도 저장/상태전환을 막지 않는다(FR-5-17).
  * [No.26] `context`(선택)로 API 연결 의존 항목(§5.9 ⑧~⑪)을 함께 점검한다. 엔진 자체는 여전히
@@ -359,8 +465,8 @@ export function validateDialogueDesign(
         message: `노드 "${node.name}"이(가) 존재하지 않는 컨텍스트(${node.contextVariableId})를 참조합니다.`,
       });
     }
-    const { moveTargets, buttonTargets, apiTargets } = getOutgoingNodeRefs(node);
-    for (const targetId of [...moveTargets, ...buttonTargets, ...apiTargets]) {
+    const { moveTargets, buttonTargets, apiTargets, surveyTargets } = getOutgoingNodeRefs(node);
+    for (const targetId of [...moveTargets, ...buttonTargets, ...apiTargets, ...surveyTargets]) {
       if (!nodeMap.has(targetId)) {
         issues.push({
           code: 'BROKEN_REFERENCE',
@@ -398,10 +504,9 @@ export function validateDialogueDesign(
       });
     }
 
-    // ⑧ 실행 미지원 아웃풋
-    const unsupportedTypes = node.outputs
-      .map((o) => o.type)
-      .filter((t): t is (typeof UNSUPPORTED_OUTPUT_TYPES)[number] => (UNSUPPORTED_OUTPUT_TYPES as readonly string[]).includes(t));
+    // ⑧ 실행 미지원 아웃풋 — [No.27, 숨은 결함 ①·§22 D-12] 상수를 직접 보지 않고 `isUnsupportedOutput()`을
+    // 쓴다. `API_CONDITION`은 제외한다(단순 교체 시 v1 API_CONDITION이 이 INFO에 되살아나 No.26을 회귀시킨다).
+    const unsupportedTypes = node.outputs.filter((o) => isUnsupportedOutput(o) && o.type !== 'API_CONDITION').map((o) => o.type);
     if (unsupportedTypes.length > 0) {
       issues.push({
         code: 'UNSUPPORTED_OUTPUT',
@@ -482,6 +587,8 @@ export function validateDialogueDesign(
 
   // [No.26] API 조건분기 설계 점검 10종(§5.9)
   issues.push(...checkApiConditionIssues(nodes, nodeMap, context));
+  // [No.27] 설문 설계 점검 6종(§5.9)
+  issues.push(...checkSurveyIssues(nodes, bundle.surveys ?? [], now));
 
   const summary = {
     error: issues.filter((i) => i.severity === 'ERROR').length,

@@ -1,7 +1,16 @@
-import { DialogOutputSchema, isApiConditionV2, renderApiTokens } from '@chat-bot/shared-types';
-import type { ContextSessionState, DialogOutput, DialogOutputType, DialogueBundle, TraceStep } from '@chat-bot/shared-types';
-import { DEFAULT_FALLBACK_RESPONSE, HOP_LIMIT, SESSION_SWITCH_MESSAGE, UNSUPPORTED_OUTPUT_NOTICE, API_FAILURE_NOTICE } from './constants';
+import { DialogOutputSchema, evaluateSurveyAvailability, isApiConditionV2, isSurveyV2, renderApiTokens } from '@chat-bot/shared-types';
+import type { ContextSessionState, DialogOutput, DialogOutputType, DialogueBundle, Survey, SurveyEvent, SurveySessionState, SurveySkipReason, TraceStep } from '@chat-bot/shared-types';
+import {
+  API_FAILURE_NOTICE,
+  DEFAULT_FALLBACK_RESPONSE,
+  HOP_LIMIT,
+  SESSION_SWITCH_MESSAGE,
+  SURVEY_ALREADY_RESPONDED_NOTICE,
+  SURVEY_UNAVAILABLE_NOTICE,
+  UNSUPPORTED_OUTPUT_NOTICE,
+} from './constants';
 import { promptOutputsForSlot, startContextSession } from './context-session';
+import { startSurveySession } from './survey-session';
 import { bindRequest } from './api-call';
 import type { ApiSuspensionRequest, CompletedFormInfo } from './api-call';
 
@@ -72,6 +81,8 @@ export interface ExecuteOutputsOptions {
   apiCallsRemaining?: number;
   /** [No.26] 있으면 텍스트 필드 `{api.*}` 치환(§8). */
   apiVariables?: Record<string, string>;
+  /** [No.27] 설문 참여 가능 판정 입력(§5.2). 미지정 = `{ [], false }`. */
+  survey?: { completedSurveyIds: readonly string[]; preview: boolean };
 }
 
 export interface ExecuteOutputsResult {
@@ -83,6 +94,10 @@ export interface ExecuteOutputsResult {
   suspended?: ApiSuspensionRequest;
   /** [No.26] 최종 hop. */
   hops: number;
+  /** [No.27] v2 `SURVEY`가 시작됐을 때만 채워진다. */
+  surveyStarted?: { session: SurveySessionState; event: SurveyEvent };
+  /** [No.27] 이번 실행에서 건너뛴 설문 사유 목록(0건 폴백 문구 선택용). */
+  surveySkips?: SurveySkipReason[];
 }
 
 interface QueueItem {
@@ -112,6 +127,8 @@ export function executeOutputs(
   let nextSession: ContextSessionState | null = null;
   let hops = opts.initialHops ?? 0;
   let suspended: ApiSuspensionRequest | undefined;
+  let surveyStarted: { session: SurveySessionState; event: SurveyEvent } | undefined;
+  const surveySkips: SurveySkipReason[] = [];
   const sourceNodeId = opts.sourceNodeId ?? '';
   let queue: QueueItem[] = startOutputs.map((output, index) => ({ output, nodeId: sourceNodeId, index }));
 
@@ -178,10 +195,36 @@ export function executeOutputs(
       }
 
       case 'SCENARIO':
-      case 'SURVEY':
         unsupported.push(o.type);
         trace.push({ stage: 'OUTPUT', code: 'UNSUPPORTED_OUTPUT', targetId: o.type });
         break;
+
+      case 'SURVEY': {
+        // v1(자유 문자열 키) — 기존과 바이트 동일한 미지원 처리(AC-SV1-1).
+        if (!isSurveyV2(o.payload)) {
+          unsupported.push(o.type);
+          trace.push({ stage: 'OUTPUT', code: 'UNSUPPORTED_OUTPUT', targetId: o.type });
+          break;
+        }
+        const survey: Survey | undefined = bundle.surveys?.find((s) => s.id === o.payload.surveyId);
+        const surveyOpts = opts.survey ?? { completedSurveyIds: [], preview: false };
+        const availability = evaluateSurveyAvailability(survey, now, surveyOpts.completedSurveyIds, surveyOpts.preview);
+        if (!availability.ok || !survey) {
+          const reason = availability.ok ? 'NOT_FOUND' : availability.reason;
+          trace.push({ stage: 'SURVEY', code: 'SURVEY_SKIPPED', targetId: o.payload.surveyId, message: reason });
+          surveySkips.push(reason);
+          break;
+        }
+        if (opts.existingSession && opts.existingSession.status === 'IN_PROGRESS') {
+          out.push(textOutput(SESSION_SWITCH_MESSAGE));
+          trace.push({ stage: 'OUTPUT', code: 'SESSION_CANCELLED' });
+        }
+        const started = startSurveySession(survey, item.nodeId || null, item.index, now);
+        out.push(...started.outputs);
+        trace.push({ stage: 'SURVEY', code: 'SURVEY_STARTED', targetId: survey.id, targetName: survey.name });
+        surveyStarted = started;
+        break outer;
+      }
 
       case 'API_CONDITION': {
         if (!isApiConditionV2(o.payload)) {
@@ -220,8 +263,25 @@ export function executeOutputs(
 
   if (!suspended && out.length === 0) {
     trace.push({ stage: 'OUTPUT', code: 'EMPTY_OUTPUT' });
-    out.push(textOutput(unsupported.length > 0 ? UNSUPPORTED_OUTPUT_NOTICE : DEFAULT_FALLBACK_RESPONSE));
+    const fallbackText =
+      unsupported.length > 0
+        ? UNSUPPORTED_OUTPUT_NOTICE
+        : surveySkips.length > 0
+          ? surveySkips.includes('ALREADY_RESPONDED')
+            ? SURVEY_ALREADY_RESPONDED_NOTICE
+            : SURVEY_UNAVAILABLE_NOTICE
+          : DEFAULT_FALLBACK_RESPONSE;
+    out.push(textOutput(fallbackText));
   }
 
-  return { outputs: out, unsupportedOutputs: unsupported, nextSession, trace, suspended, hops };
+  return {
+    outputs: out,
+    unsupportedOutputs: unsupported,
+    nextSession,
+    trace,
+    suspended,
+    hops,
+    ...(surveyStarted ? { surveyStarted } : {}),
+    ...(surveySkips.length > 0 ? { surveySkips } : {}),
+  };
 }

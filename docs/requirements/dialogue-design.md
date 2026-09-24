@@ -305,7 +305,7 @@
 | FR-E-4 | **기존 `simulate(input, intents, faqs)`의 시그니처는 하위호환을 위해 유지**하고 내부에서 `resolveResponse`에 위임하도록 리팩터링한다(기존 테스트가 깨지지 않아야 한다). 단, 현행 `simulate`는 FAQ를 의도보다 먼저 보므로, **노드 우선 규칙(FR-E-3 ③ > ④)** 도입으로 동작이 달라지는 지점을 테스트로 명시한다. |
 | FR-E-5 | `DIALOG_MOVE` 실행: 대상 노드의 outputs를 이어붙이며, 한 요청당 최대 10회 이동(FR-5-18). 초과 시 이동을 중단하고 `trace`에 `HOP_LIMIT_EXCEEDED`를 남긴다. |
 | FR-E-6 | `CONTEXT_FORM` 실행: 해당 컨텍스트의 첫 슬롯 `prompt`를 출력하고 `nextSession`을 `IN_PROGRESS`로 반환한다. |
-| FR-E-7 | 실행 미지원 타입(`SCENARIO`/`SURVEY`/`API_CONDITION`)은 출력에서 제외하고 `unsupportedOutputs`에 담는다(FR-5-15). 예외를 던지지 않는다. |
+| FR-E-7 | 실행 미지원 타입(`SCENARIO`/`SURVEY`/`API_CONDITION`)은 출력에서 제외하고 `unsupportedOutputs`에 담는다(FR-5-15). 예외를 던지지 않는다. **[갱신 No.26·No.27]** 미지원 대상은 이제 `SCENARIO` · v1(이전 형식) `API_CONDITION` · v1(이전 형식) `SURVEY`뿐이다 — 판정은 타입이 아니라 형태(`isUnsupportedOutput()`) |
 | FR-E-8 | `trace`(단계별 판정 근거: 평가한 노드·점수·탈락 사유)를 항상 생성한다. No.10 시뮬레이터가 "왜 이 응답이 나왔는지"를 보여주는 데 쓰며, 이번 Phase에서는 API 응답 스키마로만 정의한다. |
 | FR-E-9 | 엔진은 **손상된 데이터에 대해 예외를 던지지 않는다**. 끊어진 참조 ID, 파싱 실패 JSON, 빈 배열은 무시하고 `trace`에 경고를 남긴다(가용성 우선). 데이터 품질은 FR-0-16/FR-5-16이 책임진다. |
 | FR-E-10 | 성능: 의도 1,000건·예문 20,000건·노드 500건·FAQ 2,000건 기준 `resolveResponse` **P95 200ms 이내**(`개발명세서.md` §5). 매 호출마다 전체 예문을 선형 스캔하는 현행 방식이 이 기준을 넘기면 정규화 결과 **사전 인덱싱(예문→의도 Map)** 을 도입한다. |
@@ -521,7 +521,7 @@
 - **AC-5-4** Given 존재하지 않는 `intentId`를 조건에 지정, When 저장하면, Then `404`와 문제된 ID가 `details`에 포함된다.
 - **AC-5-5** Given `IMAGE` 아웃풋에 `altText` 미입력, When 저장하면, Then `400`(`OUTPUT_PAYLOAD_INVALID`)과 대체 텍스트 필수 안내가 반환된다.
 - **AC-5-6** Given `LINK` 아웃풋의 `url`에 `javascript:alert(1)`, When 저장하면, Then `400`이 반환된다.
-- **AC-5-7** Given `SURVEY` 아웃풋을 포함한 노드, When 저장하면, Then `201`로 저장되고 편집 화면에 "이번 버전에서는 실행되지 않습니다" 배지가 표시된다.
+- **AC-5-7** Given `SURVEY` 아웃풋을 포함한 노드, When 저장하면, Then `201`로 저장되고 편집 화면에 "이번 버전에서는 실행되지 않습니다" 배지가 표시된다. **[No.27 기대값 변경 2026-09-24 — 의도된 변경]** v1(자유 문자열 `surveyId`) `SURVEY`는 이제 새로 저장할 수 없다 → **`400 SURVEY_OUTPUT_LEGACY_FORMAT`**. v2(`version: 2` + 같은 챗봇 설문)는 `201`이며 실행되므로 배지가 없다. 이미 저장된 v1은 읽기·표시되고 "이전 형식 — 실행되지 않음" 배지를 받는다(`survey-management-설계.md` §4.2·§18, ADR-0035 §9)
 - **AC-5-8** Given 아웃풋 3개를 가진 노드, When 두 번째 아웃풋의 `위로` 버튼을 키보드 Enter로 실행하면, Then 순서가 바뀌고 포커스가 해당 버튼에 유지된다.
 - **AC-5-9** Given 노드 A → B, B → A로 무조건 이동하는 설정, When 설계 점검을 실행하면, Then 순환 경로가 `WARNING`으로 검출되고 경로(A→B→A)가 표시된다.
 - **AC-5-10** Given 아웃풋이 빈 노드 2건과 끊어진 참조 1건, When 설계 점검을 실행하면, Then 각각 `WARNING`/`ERROR`로 분류되어 총 3건이 리포트되고 항목마다 편집 화면 링크가 제공된다.
@@ -646,7 +646,7 @@
 | 항목 | 제외 사유 / 이관 대상 |
 |---|---|
 | `SCENARIO`(기간계 연동)·`API_CONDITION` 아웃풋의 **실제 실행**(외부 API 호출, 응답 매핑, SSRF 방어) | No.26(레거시 API 연동). 이번엔 정의·저장·형식 검증까지 |
-| `SURVEY` 아웃풋의 **실제 설문 생성·응답 수집·통계** | No.27(설문관리). 이번엔 `surveyId` 참조 저장까지 |
+| `SURVEY` 아웃풋의 **실제 설문 생성·응답 수집·통계** | No.27(설문관리). 이번엔 `surveyId` 참조 저장까지 **[이행 2026-09-24 — `survey-management-설계.md` · ADR-0035. 기존 자유 문자열 `surveyId`(v1)는 실체가 없는 예약 자리였으므로 자동 연결하지 않고, 설문 선택(v2)으로 전환해야 실행된다]** |
 | 컨텍스트 세션의 **영속화·만료 정리 배치·분산 저장(Redis)** | 대화처리/No.10 Phase(FR-8-15). 이번엔 stateless 상태 계약만 |
 | 대화 로그(`ConversationLog`) 기록 | 대화처리 Phase. 이번 그룹은 로그를 생성하지 않는다 |
 | 의도/FAQ **자동 생성·자동 분류·LLM 초안 생성** | No.38(노코드 프롬프트 기반 시나리오 설계) |

@@ -234,3 +234,57 @@ describe('SimulatorPanel — 미저장 변경(오버레이) 배지(FR-10-24, AC-
     expect(screen.getByText(/미저장 변경 적용됨/)).toBeInTheDocument();
   });
 });
+
+// [No.27] SIM1-ext — 설문 미리보기 토글(survey-management-ui-spec.md §3.6). 기본 꺼짐이며, 요청마다
+// `surveyPreview`가 실려 나가야 한다(수정 전에는 이 필드가 누락되어 타입 오류가 있었다).
+describe('SimulatorPanel — 설문 미리보기(FR-SV9-3)', () => {
+  beforeEach(() => {
+    mockSimulate.mockReset();
+    mockDialogNodesList.mockReset().mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it('기본값은 꺼짐이며, 메시지 전송 시 surveyPreview: false가 요청에 실린다', async () => {
+    mockSimulate.mockResolvedValue(makeResponse({ input: '안녕', outputs: [textOutput('안녕하세요')] }));
+    renderPanel();
+
+    expect(screen.getByLabelText('끔(실제 상태·기간을 따름)')).toBeChecked();
+
+    await sendMessage('안녕');
+
+    expect(mockSimulate.mock.calls[0][1]).toMatchObject({ surveyPreview: false });
+  });
+
+  it('토글을 켜면 이후 요청에 surveyPreview: true가 실린다', async () => {
+    mockSimulate.mockResolvedValue(makeResponse({ input: '안녕', outputs: [textOutput('안녕하세요')] }));
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByLabelText('켬(작성 중·마감·기간 외 설문도 진행)'));
+    await sendMessage('안녕');
+
+    expect(mockSimulate.mock.calls[0][1]).toMatchObject({ surveyPreview: true });
+  });
+
+  it('응답에 surveyStep이 있으면 "설문 단계" 패널이 "저장되지 않음" 배지와 함께 나타난다', async () => {
+    mockSimulate.mockResolvedValue(
+      makeResponse({
+        input: '4점',
+        outputs: [textOutput('2/3 좋았던 점을 골라 주세요')],
+        surveyStep: {
+          surveyId: '11111111-1111-4111-8111-111111111111',
+          surveyName: '배송 만족도',
+          questionIndex: 1,
+          questionCount: 3,
+          outcomes: ['ANSWERED'],
+          preview: false,
+          saved: false,
+        },
+      }),
+    );
+    renderPanel();
+    await sendMessage('4점');
+
+    expect(await screen.findByText('설문 단계')).toBeInTheDocument();
+    expect(screen.getByText('저장되지 않음')).toBeInTheDocument();
+  });
+});

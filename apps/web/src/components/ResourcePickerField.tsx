@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { intentsApi, keywordsApi, contextsApi, dialogNodesApi, faqsApi } from '../api/dialogue';
 import { chatbotsApi } from '../api/chatbots';
 import { apiConnectionsApi } from '../api/apiConnections';
+import { surveysApi } from '../api/surveys';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { MESSAGES } from '../constants/messages';
+import { computeSurveyDisplayStatus, surveyDisplayStatusLabel } from '../lib/surveyDisplay';
 import { InlineFieldError } from './InlineFieldError';
 
 /**
@@ -19,7 +21,18 @@ import { InlineFieldError } from './InlineFieldError';
  * 이 엔드포인트는 `q` 검색을 지원하지 않으므로 클라이언트에서 이름으로 필터링한다(목록이 작다는 전제).
  * 사용 중지된 연결도 후보에 남기되 이름에 "(사용 중지)" 접미사를 붙인다(ui-spec §2.2 `ApiConnectionPickerField`).
  */
-export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq' | 'apiConnection';
+/**
+ * `survey`는 [No.27]이 추가한 8번째 타입이다. `apiConnection`과 달리 챗봇 스코프 자원이라
+ * `chatbotId`가 필요하다(`node`/`context`와 같은 모양). 후보 표시 문자열은
+ * `"{이름} · {상태 라벨} · 문항 {n}개"`(survey-management-ui-spec.md §2.2 `SurveyPickerField`) —
+ * `apiConnection`이 이름 뒤에 "(사용 중지)" 접미사를 붙이는 것과 같은 텍스트 접미 방식을 따른다.
+ */
+export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq' | 'apiConnection' | 'survey';
+
+function formatSurveyOptionName(s: { name: string; status: string; activeFrom?: unknown; activeTo?: unknown; questionCount: number }): string {
+  const displayStatus = computeSurveyDisplayStatus(s as never);
+  return `${s.name} · ${surveyDisplayStatusLabel(displayStatus)} · 문항 ${s.questionCount}개`;
+}
 
 interface Option {
   id: string;
@@ -48,6 +61,10 @@ async function searchResource(chatbotId: string, type: ResourcePickerType, q: st
         .filter((c) => c.name.toLowerCase().includes(lowered))
         .map((c) => ({ id: c.id, name: c.enabled ? c.name : `${c.name} ${MESSAGES.apiConnections.pickerDisabledSuffix}` }));
     }
+    case 'survey': {
+      const { items } = await surveysApi.list(chatbotId, { q });
+      return items.map((s) => ({ id: s.id, name: formatSurveyOptionName(s) }));
+    }
     default:
       return [];
   }
@@ -75,6 +92,10 @@ async function findOneResource(chatbotId: string, type: ResourcePickerType, id: 
         const { items } = await apiConnectionsApi.picker();
         const found = items.find((c) => c.id === id);
         return found ? { id: found.id, name: found.name } : null;
+      }
+      case 'survey': {
+        const s = await surveysApi.findOne(chatbotId, id);
+        return { id: s.id, name: formatSurveyOptionName({ ...s, questionCount: s.questions.length }) };
       }
       default:
         return null;

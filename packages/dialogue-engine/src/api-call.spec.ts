@@ -2,7 +2,7 @@ import { resolveTurn } from './turn';
 import { resumeAfterApiCall } from './api-call';
 import type { ApiCallSuspension } from './api-call';
 import { getOutgoingNodeRefs } from './design-validator';
-import { apiConditionOutputV2, makeBundle, makeNode, randomId, textOutput } from './test-fixtures';
+import { apiConditionOutputV2, makeBundle, makeNode, makeSurvey, randomId, surveyOutputV2, textOutput } from './test-fixtures';
 
 describe('No.26 레거시 API 연동 — executeOutputs 정지/재진입', () => {
   it('v2 API_CONDITION을 만나면 정지하고, resolveTurn은 실패(NOT_EXECUTED) 가정의 폴백 결과를 동봉한다', () => {
@@ -119,6 +119,82 @@ describe('No.26 레거시 API 연동 — executeOutputs 정지/재진입', () =>
     expect(resumed.apiStep?.outcome).toBe('TIMEOUT');
     expect(resumed.apiStep?.branch).toBe('NOTICE');
     expect(resumed.outputs.some((o) => o.type === 'TEXT' && o.payload.text.includes('확인할 수 없어요'))).toBe(true);
+  });
+});
+
+/**
+ * [No.27] API 분기 노드와 설문 진행의 상호작용(§5.6 · FR-0-106 ⑤ · AC-SV2-12) — resumeAfterApiCall이
+ * 다음 상태를 `{ version, contextSession: nextSession, pendingClarify: null }`로 "새로 조립"하던
+ * 기존 구조(api-call.ts:237-238)는 설문 필드를 빠뜨린다(숨은 결함 ②). resolveTurn → resumeAfterApiCall을
+ * 실제로 이어 실행해(hand-crafted stub이 아니라) 이월이 실제로 일어나는지 확인한다.
+ */
+describe('No.27 설문(No.27) — API 분기 노드에서도 설문이 시작되고 이월된다', () => {
+  const NOW = new Date('2026-09-24T10:00:00Z');
+
+  it('API 분기의 성공 대상이 SURVEY 노드면, 재진입 후 봉투에 surveySession이 실리고 EXPOSED 이벤트가 나온다(AC-SV2-12)', () => {
+    const survey = makeSurvey({ status: 'OPEN' });
+    const surveyNode = makeNode({ id: randomId(), name: '설문시작', outputs: [surveyOutputV2(survey.id)] });
+    const apiNode = makeNode({
+      id: randomId(),
+      name: 'API노드',
+      nodeType: 'START',
+      outputs: [apiConditionOutputV2({ conditions: [{ path: 'data.status', operator: 'EQ', value: 'OK', nextNodeId: surveyNode.id }] })],
+    });
+    const bundle = makeBundle({ dialogNodes: [apiNode, surveyNode], surveys: [survey] });
+
+    const suspended = resolveTurn({ buttonAction: { kind: 'NODE', nodeId: apiNode.id } }, null, bundle, NOW);
+    expect(suspended.apiCall).toBeDefined();
+
+    const resumed = resumeAfterApiCall({ ...suspended, apiCall: suspended.apiCall! }, { kind: 'SUCCESS', httpStatus: 200, json: { data: { status: 'OK' } } }, bundle, NOW);
+
+    expect(resumed.apiCall).toBeUndefined();
+    expect(resumed.nextState.surveySession).toBeDefined();
+    expect(resumed.nextState.surveySession?.surveyId).toBe(survey.id);
+    expect(resumed.nextState.surveySession?.questionIndex).toBe(0);
+    expect(resumed.surveyEvents?.some((e) => e.kind === 'EXPOSED')).toBe(true);
+    // 설문을 "시작"한 것이지 사용자가 문항에 "답한" 것이 아니므로 이번 턴은 설문이 입력을 소비하지 않았다.
+    expect(resumed.surveyTurn).toBeFalsy();
+  });
+
+  it('진입 시 봉투의 completedSurveyIds(다른 설문 완료 이력)는 API 분기 턴을 지나도 사라지지 않는다(숨은 결함 ② 회귀 방지)', () => {
+    const survey = makeSurvey({ status: 'OPEN' });
+    const surveyNode = makeNode({ id: randomId(), name: '설문시작', outputs: [surveyOutputV2(survey.id)] });
+    const apiNode = makeNode({
+      id: randomId(),
+      name: 'API노드',
+      nodeType: 'START',
+      outputs: [apiConditionOutputV2({ conditions: [{ path: 'data.status', operator: 'EQ', value: 'OK', nextNodeId: surveyNode.id }] })],
+    });
+    const bundle = makeBundle({ dialogNodes: [apiNode, surveyNode], surveys: [survey] });
+    const previouslyCompletedSurveyId = randomId();
+    const inboundState = { version: 1 as const, contextSession: null, completedSurveyIds: [previouslyCompletedSurveyId] };
+
+    const suspended = resolveTurn({ buttonAction: { kind: 'NODE', nodeId: apiNode.id } }, inboundState, bundle, NOW);
+    expect(suspended.apiCall).toBeDefined();
+
+    const resumed = resumeAfterApiCall({ ...suspended, apiCall: suspended.apiCall! }, { kind: 'SUCCESS', httpStatus: 200, json: { data: { status: 'OK' } } }, bundle, NOW);
+
+    expect(resumed.nextState.completedSurveyIds).toContain(previouslyCompletedSurveyId);
+    // 같은 턴에 새로 시작한 설문도 함께 이월된 상태와 공존해야 한다.
+    expect(resumed.nextState.surveySession?.surveyId).toBe(survey.id);
+  });
+
+  it('설문이 전혀 관여하지 않은 API 턴의 nextState는 기존 3키({version,contextSession,pendingClarify}) 그대로다(AC-L3-13 무회귀)', () => {
+    const targetNode = makeNode({ id: randomId(), name: '분기결과', outputs: [textOutput('분기결과')] });
+    const apiNode = makeNode({
+      id: randomId(),
+      name: 'API노드',
+      nodeType: 'START',
+      outputs: [apiConditionOutputV2({ conditions: [{ path: 'data.status', operator: 'EQ', value: 'OK', nextNodeId: targetNode.id }] })],
+    });
+    const bundle = makeBundle({ dialogNodes: [apiNode, targetNode] });
+
+    const suspended = resolveTurn({ buttonAction: { kind: 'NODE', nodeId: apiNode.id } }, null, bundle, NOW);
+    const resumed = resumeAfterApiCall({ ...suspended, apiCall: suspended.apiCall! }, { kind: 'SUCCESS', httpStatus: 200, json: { data: { status: 'OK' } } }, bundle, NOW);
+
+    expect(Object.keys(resumed.nextState).sort()).toEqual(['contextSession', 'pendingClarify', 'version'].sort());
+    expect(resumed.surveyEvents).toBeUndefined();
+    expect(resumed.surveyTurn).toBeUndefined();
   });
 });
 

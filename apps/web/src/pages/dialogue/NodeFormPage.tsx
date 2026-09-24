@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   CreateDialogNodeSchema,
   findLegacyApiOutputIndexes,
+  findLegacySurveyOutputIndexes,
   type DialogMatchMode,
   type DialogNodeType,
   type DialogOutput,
@@ -164,6 +165,13 @@ export function NodeFormPage(): JSX.Element {
           // [No.26] v1 카드로 스크롤·포커스를 옮기고 "연결로 전환" 버튼을 강조한다(ui-spec §3.3-5).
           setFormBanner(MESSAGES.dialogue.outputFields.saveBlockedLegacyFormat);
           const legacyIndexes = findLegacyApiOutputIndexes(outputs.map((o) => o.output));
+          if (legacyIndexes.length > 0) {
+            setLegacyHighlight({ index: legacyIndexes[0], token: Date.now() });
+          }
+        } else if (e2.code === 'SURVEY_OUTPUT_LEGACY_FORMAT') {
+          // [No.27] v1 카드로 스크롤·포커스+강조(survey-management-ui-spec.md §3.4 전환 흐름 5).
+          setFormBanner(MESSAGES.dialogue.outputFields.saveBlockedSurveyLegacyFormat);
+          const legacyIndexes = findLegacySurveyOutputIndexes(outputs.map((o) => o.output));
           if (legacyIndexes.length > 0) {
             setLegacyHighlight({ index: legacyIndexes[0], token: Date.now() });
           }

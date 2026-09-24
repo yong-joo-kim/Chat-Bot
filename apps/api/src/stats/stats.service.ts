@@ -22,6 +22,7 @@ import {
   computeVisitCount,
 } from './lib/dashboard-aggregator';
 import { buildBuckets, foldDayRows } from './lib/bucket';
+import { QUESTION_RANKING_LOG_FILTER } from './lib/question-ranking-filter';
 import { assembleByChannel, assembleBySource, assembleSummaryBuckets, computeTurnsPerSession } from './lib/summary-assembler';
 import { foldByHour, foldByWeekday, foldSessionCountsByBucket, foldSessionCountsByChannel } from './lib/usage-trend';
 import { parseGranularityOrThrow, readStatsRangeLimits, resolveStatsPeriodOrThrow, runWithAggregationTimeout } from './stats-request.helpers';
@@ -75,7 +76,9 @@ export class StatsService {
         `,
         this.prisma.conversationLog.groupBy({
           by: ['userMessage'],
-          where,
+          // [No.27] 질문 순위 오염 방지(§9.6) — 설문이 소비한 턴은 제외한다. 대시보드 전체 응답률
+          // 등(byAnswered·sessionRows)은 그대로 둔다(턴 수 집계는 설문 턴을 포함한다).
+          where: { ...where, ...QUESTION_RANKING_LOG_FILTER },
           _count: { _all: true },
           _max: { createdAt: true },
           orderBy: { _count: { userMessage: 'desc' } },
@@ -262,9 +265,11 @@ export class StatsService {
     const granularity = 'DAY' as const;
     const period = resolveStatsPeriodOrThrow(query.from, query.to, granularity, this.readRangeLimits());
 
+    // [No.27] 질문 순위(인기·미응답) 전용 — 설문이 소비한 턴 제외(§9.6).
     const where = {
       chatbotId: query.chatbotId,
       dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
+      ...QUESTION_RANKING_LOG_FILTER,
     };
 
     const [topRows, unansweredRows] = await runWithAggregationTimeout(

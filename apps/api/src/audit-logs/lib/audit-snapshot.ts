@@ -66,6 +66,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'enabled',
     'sampleCount',
   ],
+  // 설문관리(No.27) 그룹 추가(survey-management-설계.md §12) — 문항 문구·선택지·소개·완료 문구·
+  // 취소어 본문을 담지 않는다(`DialogNode.outputs` 제외 선례).
+  Survey: ['name', 'status', 'activeFrom', 'activeTo', 'questionCount', 'structureVersion', 'sessionTimeoutMinutes'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

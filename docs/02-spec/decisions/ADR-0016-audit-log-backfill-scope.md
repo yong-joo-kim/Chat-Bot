@@ -226,3 +226,14 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 2. **호출 1건 1건은 감사로그가 아니다**(§5 그대로). 연결 테스트도 감사 대상이 아니다(`ApiCallLog`에 `CONNECTION_TEST`로 남는다).
 3. **`AuditTargetType`에 `ApiConnection`**(라벨 `'API 연결'`, 15 → 16종) — 생성·수정·삭제. `AuditAction` 추가 0. `AUDIT_FIELDS.ApiConnection`은 `secretRef`를 **이름으로**, `baseUrl`을 **호스트로**, 샘플 응답을 **개수로만** 담는다(시크릿 값은 애초에 어디에도 없다).
 4. 노드 저장 감사는 불변 — `DialogNode` 화이트리스트에 `outputs`가 없어(`outputCount`만) v1 헤더 토큰이 감사로그에 들어간 적이 없다. 유지한다.
+
+
+---
+
+## 갱신 (2026-09-24 — No.27: `Survey` 대상 추가 · 응답·내보내기는 감사 대상 아님)
+
+설문관리(No.27, **ADR-0035 §12**).
+
+1. **`AuditTargetType`에 `Survey`**(라벨 `'설문'`, 16 → 17종). 생성 `CREATE` · 수정 `UPDATE`(summary "문구만 수정"｜"구성 변경(구조 버전 N→N+1)") · 상태만 바뀐 수정 `STATUS_CHANGE` · 복제 `COPY` · 삭제 `DELETE`. **`AuditAction` 추가 0**.
+2. **화이트리스트** `AUDIT_FIELDS.Survey = ['name','status','activeFrom','activeTo','questionCount','structureVersion','sessionTimeoutMinutes']` — 문항 문구·선택지·소개·완료 문구·취소어 본문은 **담지 않는다**(`DialogNode`의 `outputs` 제외와 같은 판단 — 개수·버전만).
+3. **응답 1건 1건은 감사로그가 아니다** — 최종 사용자 행위이며 응답 테이블 자체가 기록이다. **CSV 내보내기도 기록하지 않는다**(`EXPORT` 액션 선례 없음 — PM 확정 P-13. 재검토 = No.45 감사 강화). 통계 조회는 읽기다.

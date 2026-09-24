@@ -159,7 +159,10 @@ describe('레거시 API 연동(No.26) 정적 검사 — legacy-api-integration-�
   it('L-12(런타임): CONVERSATION_STATE_VERSION===1이고 ConversationStateSchema 키 집합이 불변이다(FR-0-101)', () => {
     expect(CONVERSATION_STATE_VERSION).toBe(1);
     const shape = (ConversationStateSchema as unknown as { shape: Record<string, unknown> }).shape;
-    expect(new Set(Object.keys(shape))).toEqual(new Set(['version', 'contextSession', 'pendingClarify']));
+    // [No.27 의도된 변경 — §22 D-16] 설문관리가 선택 필드 2종(surveySession·completedSurveyIds)을
+    // 더해 3 → 5키가 됐다. "응답값의 상태 이월 금지"라는 이 검사의 목적은 S-9(설문 세션 키 집합 고정)가
+    // 더 정밀하게 이어받는다 — 봉투에는 여전히 진행 포인터만 있고 응답 값은 없다.
+    expect(new Set(Object.keys(shape))).toEqual(new Set(['version', 'contextSession', 'pendingClarify', 'surveySession', 'completedSurveyIds']));
   });
 
   it('L-14(휴리스틱): legacy-api/**의 logger 호출 인자에 url·body·headers·.message 식별자가 없다', () => {

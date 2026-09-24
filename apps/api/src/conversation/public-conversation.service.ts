@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { resolveTurn } from '@chat-bot/dialogue-engine';
+import { resolveTurn, willSurveyConsumeInput } from '@chat-bot/dialogue-engine';
 import { CONVERSATION_STATE_VERSION, ConversationStateSchema } from '@chat-bot/shared-types';
 import type {
   ConversationState,
@@ -32,6 +32,7 @@ import { RagAnswerService } from '../rag/rag-answer.service';
 import type { PendingAnswerStore } from '../rag/pending-answer.store';
 import { shouldRunRag } from '../rag/lib/should-run-rag';
 import { LegacyApiService } from '../legacy-api/legacy-api.service';
+import { SurveyResponseService } from '../survey-responses/survey-response.service';
 
 /** 대기 안내 문구(FR-N2-34, S-4) — "RAG"·"LLM"·"벡터" 같은 내부 용어를 쓰지 않는다(FR-N2-24). */
 const RAG_WAITING_TEXT = '문서에서 찾아보고 있어요. 잠시만요.';
@@ -61,6 +62,7 @@ export class PublicConversationService {
     @Inject('PendingAnswerStore') private readonly pendingStore: PendingAnswerStore,
     private readonly config: ConfigService,
     private readonly legacyApi: LegacyApiService,
+    private readonly surveyResponses: SurveyResponseService,
   ) {}
 
   async getConfig(slug: string): Promise<PublicChatbotConfig> {
@@ -121,11 +123,15 @@ export class PublicConversationService {
     const now = new Date();
     const turnInput = inbound.buttonAction ? { buttonAction: inbound.buttonAction } : { message: inbound.message ?? '' };
 
+    // ③.5 [신규 No.27] 설문이 이번 입력을 소비할 것으로 예상되면 의미 점수 계산을 생략한다(§22 D-14) —
+    // 설문 답("4점"·"1,3")에 임베딩 1회·질의 LRU 캐시 오염을 쓰지 않는다.
+    const surveyExpected = willSurveyConsumeInput(inbound.state, bundle, now);
+
     // ③④ [신규] 1단계 의미 유사도 점수 주입(ADR-0020) — `NODE` 버튼(=filterableText undefined)은
     // 후보 대상이 아니다. `semanticEnabled=false`이면 엔진은 저하 모드(현행 규칙 매칭)로 동작한다.
     const semanticText = filterableText;
     const semantic =
-      settings.semanticEnabled && semanticText !== undefined
+      !surveyExpected && settings.semanticEnabled && semanticText !== undefined
         ? await this.semanticMatch.score(chatbot.id, semanticText, bundle, {
             accept: settings.acceptThreshold,
             low: settings.lowThreshold,
@@ -151,6 +157,20 @@ export class PublicConversationService {
       });
     }
 
+    // ④.6 [신규 No.27] 설문 응답 적재 — 엔진 뒤·출구 필터 앞, RAG 분기보다 앞(§7.1). 설문 턴만 await한다
+    // (다음 턴 가드가 이 턴의 적재를 전제한다 — 순서 보장). 예외를 던지지 않는다(AC-SV3-6).
+    if (result.surveyEvents && result.surveyEvents.length > 0) {
+      await this.surveyResponses.apply(result.surveyEvents, {
+        chatbotId: chatbot.id,
+        groupId: chatbot.groupId,
+        sessionId: dto.sessionId,
+        channelType: 'WEB',
+        conversationLogId: messageId,
+        now,
+        bundle,
+      });
+    }
+
     const rendered = adapter.renderOutbound(result.outputs);
     // ⑤.5 출구 금지어 필터(FR-12-40) — 정책 무관, 항상 마스킹만 한다(차단하지 않는다). 외부 API
     // 값이 섞인 최종 출력 전체가 이 필터를 통과한다(FR-L4-14 · AC-L3-10).
@@ -159,11 +179,12 @@ export class PublicConversationService {
     const isAnswered = judgeAnswered(result.trace);
     const inputKind = resolveInputKind(inbound);
     const apiNotice = result.apiStep?.branch === 'NOTICE';
+    const surveyTurn = result.surveyTurn === true;
 
     // ⑦ [신규] 2단계(외부 RAG) 분기 판정 — 9조건(FR-N2-1) + 유량 여유(회로·동시성·레이트리밋)까지
     // 전부 통과해야 PENDING으로 넘어간다. 하나라도 막히면 기존 폴백 경로로 수렴한다(FR-0-43).
     // [No.26] 외부 API가 개입한 턴은 항상 false다(FR-L4-12 · AC-L3-15).
-    const shouldTryRag = apiTurn ? false : this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind);
+    const shouldTryRag = apiTurn ? false : this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind, surveyTurn);
     if (shouldTryRag && this.ragGate.tryAcquire()) {
       return this.startPendingRagAnswer({
         slug,
@@ -202,6 +223,7 @@ export class PublicConversationService {
       isAnswered,
       inputKind,
       apiNotice,
+      surveyTurn,
     });
 
     return response;
@@ -223,6 +245,7 @@ export class PublicConversationService {
     inbound: InboundTurn,
     isAnswered: boolean,
     inputKind: InputKind,
+    surveyTurn: boolean,
   ): boolean {
     if (!this.ragHttpClient.isConfigured()) return false; // EX-N2-1 — 미설정 시 PENDING 자체가 없다.
 
@@ -242,6 +265,7 @@ export class PublicConversationService {
       normalizedLength: result.normalizedInput.length,
       fallbackPolicy: settings.fallbackPolicy,
       hasFallbackNode,
+      surveyTurn,
     });
   }
 

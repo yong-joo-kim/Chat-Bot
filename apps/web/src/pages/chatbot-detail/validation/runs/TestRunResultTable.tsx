@@ -3,6 +3,7 @@ import type { TestRunResult } from '@chat-bot/shared-types';
 import { JudgmentBadge } from '../../../../components/JudgmentBadge';
 import { Pagination } from '../../../../components/Pagination';
 import { MESSAGES } from '../../../../constants/messages';
+import { SurveyPreviewJudgmentBadge } from '../../../dialogue/components/survey/badges';
 import { OpenInSimulatorButton } from './OpenInSimulatorButton';
 
 const PREVIEW_LEN = 120;
@@ -29,6 +30,7 @@ function TestRunResultRow({ chatbotId, item }: { chatbotId: string; item: TestRu
       <td>{item.matchedNameA ?? '—'}</td>
       <td>
         <JudgmentBadge value={item.resultA} withHint />
+        {item.surveyPreviewA && <SurveyPreviewJudgmentBadge />}
       </td>
       <td>{item.bandA ? MESSAGES.simulator.matchScorePanel.bandLabel[item.bandA] : '—'}</td>
       <td>{item.top1ScoreA !== null ? item.top1ScoreA.toFixed(2) : '—'}</td>

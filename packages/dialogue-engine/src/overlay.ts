@@ -49,5 +49,9 @@ export function mergeOverlay(bundle: DialogueBundle, overlay: BundleOverlayPatch
     dialogNodes: mergeKind(bundle.dialogNodes, overlay.dialogNodes, overlay.deletedIds?.dialogNodes),
     contexts: mergeKind(bundle.contexts, overlay.contexts, overlay.deletedIds?.contexts),
     faqs: mergeKind(bundle.faqs, overlay.faqs, overlay.deletedIds?.faqs),
+    // [No.27 — 숨은 결함 ⑤ §5.7 · §22 D-13] 설문 정의 오버레이는 1차 미지원이지만, 번들의 기존
+    // 설문은 이월해야 한다 — 없으면 시뮬레이터·TC B측에서 v2 설문이 전부 NOT_FOUND로 건너뛰어진다.
+    // 키 생략 규칙(설문 없는 번들의 결과 객체 불변)을 지키기 위해 존재할 때만 키를 싣는다.
+    ...(bundle.surveys ? { surveys: bundle.surveys } : {}),
   };
 }

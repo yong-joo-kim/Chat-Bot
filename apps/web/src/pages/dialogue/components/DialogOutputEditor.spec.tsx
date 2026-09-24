@@ -83,16 +83,47 @@ describe('DialogOutputEditor — 아웃풋 타입 전환', () => {
     expect(durationInput).toHaveFocus();
   });
 
-  it('SCENARIO/SURVEY/API_CONDITION으로 전환하면 "이번 버전에서는 실행되지 않습니다" 배지가 표시된다(FR-5-15)', async () => {
+  it('SCENARIO로 전환하면 "이번 버전에서는 실행되지 않습니다" 배지가 표시된다(FR-5-15)', async () => {
     const user = userEvent.setup();
     render(<Harness initial={{ type: 'TEXT', payload: { text: '' } }} onChangeSpy={vi.fn()} />);
 
     expect(screen.queryByText(/이번 버전에서는 실행되지 않습니다/)).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText('유형'), '설문 연동');
+    await user.selectOptions(screen.getByLabelText('유형'), '시나리오 연동');
 
     expect(screen.getByText(/이번 버전에서는 실행되지 않습니다/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/설문 ID/)).toBeInTheDocument();
+  });
+
+  // [No.27] 설문(SURVEY) v1/v2 분기 — 편집기 기본값은 빈 v2 초안(`{version:2, surveyId:''}`)이므로
+  // 신규 선택 시에는 미지원 배지가 뜨지 않는다(survey-management-ui-spec.md §0-3, 의도된 기대값 변경).
+  it('TEXT → 설문으로 전환하면 v2(설문 선택) 폼이 나타나고, 미지원 배지는 뜨지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ type: 'TEXT', payload: { text: '' } }} onChangeSpy={vi.fn()} />);
+
+    await user.selectOptions(screen.getByLabelText('유형'), '설문');
+
+    expect(screen.queryByText(/이번 버전에서는 실행되지 않습니다/)).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '설문' })).toBeInTheDocument();
+  });
+
+  it('이전 형식(v1) SURVEY 데이터는 읽기 전용 카드로 표시되고 "설문 선택해 전환" 버튼을 제공한다', () => {
+    render(<Harness initial={{ type: 'SURVEY', payload: { surveyId: 'legacy-survey-key' } }} onChangeSpy={vi.fn()} />);
+
+    expect(screen.getByText(/이전 형식 — 실행되지 않습니다. 설문을 선택해 전환하세요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '설문 선택해 전환' })).toBeInTheDocument();
+  });
+
+  it('"설문 선택해 전환" 확인 시 빈 v2 초안으로 교체된다(ui-spec §3.4, 자동 연결 금지)', async () => {
+    const user = userEvent.setup();
+    const onChangeSpy = vi.fn();
+    render(<Harness initial={{ type: 'SURVEY', payload: { surveyId: 'legacy-survey-key' } }} onChangeSpy={onChangeSpy} />);
+
+    await user.click(screen.getByRole('button', { name: '설문 선택해 전환' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: '설문 선택해 전환' }));
+
+    expect(onChangeSpy).toHaveBeenCalledWith({ type: 'SURVEY', payload: { version: 2, surveyId: '' } });
+    expect(screen.queryByText(/이전 형식 — 실행되지 않습니다/)).not.toBeInTheDocument();
   });
 
   it('TEXT 글자수 카운터가 입력에 따라 실시간으로 갱신된다(UIUX §5)', async () => {

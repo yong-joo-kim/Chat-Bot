@@ -130,4 +130,3 @@ ctx.matchedIntentId = intentMatch?.intentId ?? clarified?.intentId;   // ← 확
 - `apps/widget`: `action:'NODE'` 버튼을 `buttonAction:{kind:'NODE',nodeId,label}`로 전송하고, `MESSAGE`는 텍스트로, `LINK`는 서버 호출 없이 새 탭으로 연다(FR-W-6).
 - `test-automation` 인계 — 최우선 5건: **AC-E2-4**(되묻기 종결, 현행 구현에서 깨져 있던 경로) · AC-E2-6(기존 230개 통과) · AC-E2-1/2(NODE 진입점) · AC-P-13 · AC-P-15(엔진 단일 경로 동일성).
 - seed에 `배` 동음이의어(의미 2종 + 연결 의도 + 대응 노드)와 `NODE` 버튼 노드를 추가해 두 경로가 **수동으로도 즉시 재현**되게 한다.
-</content>

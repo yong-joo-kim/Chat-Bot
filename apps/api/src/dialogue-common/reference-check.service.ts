@@ -143,8 +143,8 @@ export class ReferenceCheckService {
       if (n.id === nodeId) continue;
       try {
         const outputs = JSON.parse(n.outputs) as DialogOutput[];
-        const { moveTargets, buttonTargets, apiTargets } = getOutgoingNodeRefs({ outputs } as DialogNode);
-        if ([...moveTargets, ...buttonTargets, ...apiTargets].includes(nodeId)) referencing.push({ id: n.id, name: n.name });
+        const { moveTargets, buttonTargets, apiTargets, surveyTargets } = getOutgoingNodeRefs({ outputs } as DialogNode);
+        if ([...moveTargets, ...buttonTargets, ...apiTargets, ...surveyTargets].includes(nodeId)) referencing.push({ id: n.id, name: n.name });
       } catch {
         // 무시
       }
@@ -153,6 +153,34 @@ export class ReferenceCheckService {
       this.conflict(
         'NODE_IN_USE',
         `이 노드로 이동하도록 설정된 노드가 ${referencing.length}건 있습니다. 먼저 정리해 주세요.`,
+        referencing.slice(0, 5),
+      );
+    }
+  }
+
+  /**
+   * [No.27] 설문 삭제 사전검사(FR-SV2-7 · FR-SV3-2) — 현재 노드가 참조하는 설문만 본다(스냅샷 참조는
+   * 막지 않음, FR-SV10-3). `outputs contains surveyId` 사전 필터로 후보를 좁힌 뒤 파싱 재확인한다.
+   */
+  async assertSurveyDeletable(chatbotId: string, surveyId: string): Promise<void> {
+    const candidates = await this.prisma.dialogNode.findMany({
+      where: { chatbotId, outputs: { contains: surveyId } },
+      select: { id: true, name: true, outputs: true },
+    });
+    const referencing: RefRow[] = [];
+    for (const n of candidates) {
+      try {
+        const outputs = JSON.parse(n.outputs) as Array<{ type: string; payload?: { version?: number; surveyId?: string } }>;
+        const refers = outputs.some((o) => o.type === 'SURVEY' && o.payload?.version === 2 && o.payload?.surveyId === surveyId);
+        if (refers) referencing.push({ id: n.id, name: n.name });
+      } catch {
+        // 무시
+      }
+    }
+    if (referencing.length > 0) {
+      this.conflict(
+        'SURVEY_IN_USE',
+        `이 설문을 참조하는 대화 노드가 ${referencing.length}건 있습니다. 먼저 노드 설정을 정리해 주세요.`,
         referencing.slice(0, 5),
       );
     }

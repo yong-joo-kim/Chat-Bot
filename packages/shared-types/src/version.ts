@@ -376,6 +376,10 @@ export const RestoreWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('API_CONNECTION_MISSING'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('API_CONNECTION_DISABLED'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('API_LEGACY_FORMAT'), count: z.number().int().nonnegative() }),
+  // [No.27 신설] 설문관리 — §16. 전부 blocker 아님(설문은 스냅샷 밖 · 참조만 스냅샷, P-6).
+  z.object({ code: z.literal('SURVEY_MISSING'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('SURVEY_NOT_OPEN'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('SURVEY_LEGACY_FORMAT'), count: z.number().int().nonnegative() }),
 ]);
 export type RestoreWarning = z.infer<typeof RestoreWarningSchema>;
 

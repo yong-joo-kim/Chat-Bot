@@ -4,6 +4,7 @@
 // E(No.15 미응답 큐 검증용, 상태 3종·재발생·추천 포함) / F(채널 미설정 빈 상태).
 // 멱등: 그룹/챗봇은 name·slug 기준 upsert, 대화로그는 매 실행마다 deleteMany 후 재생성한다.
 // 자동 테스트(test-automation)는 이 시드가 아니라 자체 fixture를 쓰되 수치는 아래 표와 정렬한다.
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { normalizeEmail, normalizeText, toKstDayBucket, toKstHourOfDay } from '@chat-bot/shared-types';
 import { hashPassword } from '../src/common/auth/lib/password-hash';
@@ -500,6 +501,48 @@ async function main(): Promise<void> {
     },
   });
   await prisma.dialogNodeIntent.create({ data: { nodeId: shippingNode.id, intentId: intents['배송조회'].id } });
+
+  // [신규 No.27] 데모 설문 — OPEN·기간 없음·문항 3(척도 필수/다중 선택/자유 텍스트 선택). 기존 v1
+  // SURVEY 시드(위 shippingNode)는 그대로 둔다(AC-SV1-1 재현용).
+  const satisfactionQuestions = [
+    { key: randomUUID(), type: 'SCALE', prompt: '이번 배송에 얼마나 만족하시나요?', required: true, scale: 'STAR_5' },
+    {
+      key: randomUUID(),
+      type: 'MULTI_CHOICE',
+      prompt: '만족/불만족 이유를 모두 골라주세요. (1~3개)',
+      required: true,
+      minSelect: 1,
+      maxSelect: 3,
+      choices: [
+        { key: randomUUID(), label: '포장 상태' },
+        { key: randomUUID(), label: '배송 속도' },
+        { key: randomUUID(), label: '기사님 친절도' },
+        { key: randomUUID(), label: '기타' },
+      ],
+    },
+    { key: randomUUID(), type: 'TEXT', prompt: '자유롭게 의견을 남겨주세요. (개인정보는 입력하지 마세요)', required: false, maxLength: 300 },
+  ];
+  const satisfactionSurvey = await prisma.survey.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '배송 만족도',
+      nameNormalized: normalizeText('배송 만족도'),
+      status: 'OPEN',
+      completionMessage: '설문에 참여해 주셔서 감사합니다.',
+      questions: JSON.stringify(satisfactionQuestions),
+    },
+  });
+  const surveyNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '배송만족도_설문',
+      nameNormalized: normalizeText('배송만족도_설문'),
+      nodeType: 'NORMAL',
+      priority: 90,
+      outputs: JSON.stringify([{ type: 'SURVEY', payload: { version: 2, surveyId: satisfactionSurvey.id } }]),
+    },
+  });
+  await prisma.dialogNodeKeyword.create({ data: { nodeId: surveyNode.id, keywordId: keywords['택배사'].id } });
 
   const coffeeNode = await prisma.dialogNode.create({
     data: {

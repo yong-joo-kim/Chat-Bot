@@ -66,6 +66,8 @@ function buildPrismaMock(tx: ReturnType<typeof buildTxMock>) {
     channel: { count: jest.fn().mockResolvedValue(0) },
     conversationLog: { count: jest.fn().mockResolvedValue(0) },
     unansweredQuestion: { count: jest.fn().mockResolvedValue(0) },
+    survey: { count: jest.fn().mockResolvedValue(0) },
+    surveyResponse: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb(tx)),
   };
 }

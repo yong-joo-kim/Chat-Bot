@@ -22,7 +22,7 @@ export function buildFlowTree(bundle: DialogueBundle): FlowTree {
     const nextAncestry = new Set(ancestry);
     nextAncestry.add(node.id);
 
-    const { moveTargets, buttonTargets, apiTargets } = getOutgoingNodeRefs(node);
+    const { moveTargets, buttonTargets, apiTargets, surveyTargets } = getOutgoingNodeRefs(node);
     const children: FlowNode[] = [];
     for (const targetId of moveTargets) {
       const target = nodeMap.get(targetId);
@@ -35,6 +35,10 @@ export function buildFlowTree(bundle: DialogueBundle): FlowTree {
     for (const targetId of apiTargets) {
       const target = nodeMap.get(targetId);
       if (target) children.push(buildNode(target, 'API_BRANCH', nextAncestry));
+    }
+    for (const targetId of surveyTargets) {
+      const target = nodeMap.get(targetId);
+      if (target) children.push(buildNode(target, 'SURVEY_COMPLETE', nextAncestry));
     }
 
     return { nodeId: node.id, name: node.name, nodeType: node.nodeType, via, repeated: false, children };

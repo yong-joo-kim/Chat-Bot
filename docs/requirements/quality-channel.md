@@ -136,7 +136,7 @@
 | FR-10-7 | 아웃풋 내 버튼을 **실제로 클릭해 대화를 이어갈 수 있다**. 버튼 액션별 동작은 FR-W-6과 동일 규격을 따른다. |
 | FR-10-8 | 서버는 엔진 결과에 다음을 덧붙여 반환한다: `matchedNodeName`, `matchedIntentName`, `matchedFaqQuestion`(이름 해석 — 프런트가 ID로 재조회하지 않게), `elapsedMs`, `resolvedAt`, `assetCounts`(노드/의도/FAQ 활성 건수). |
 | FR-10-9 | **판정 근거(trace) 패널**을 제공한다. `TraceStep`의 `stage`/`code`를 한국어 레이블로 변환해 순서대로 표시하고, `targetId`가 있으면 해당 편집 화면으로 이동하는 링크(`href` 기반)를 제공한다. 기본은 접힘 상태이며 키보드로 펼칠 수 있다. |
-| FR-10-10 | `unsupportedOutputs`가 비어 있지 않으면 "이번 버전에서는 실행되지 않는 아웃풋 N종(SCENARIO/SURVEY/API_CONDITION)이 포함되어 있습니다"를 **안내(INFO)** 로 표시한다(FR-5-15 연계). |
+| FR-10-10 | `unsupportedOutputs`가 비어 있지 않으면 "이번 버전에서는 실행되지 않는 아웃풋 N종(SCENARIO/SURVEY/API_CONDITION)이 포함되어 있습니다"를 **안내(INFO)** 로 표시한다(FR-5-15 연계). **[갱신 No.26·No.27]** 대상은 `SCENARIO`·v1(이전 형식) `API_CONDITION`·v1(이전 형식) `SURVEY`뿐이다 — v2 `SURVEY`는 실행되며 시뮬레이터 결과 패널의 `설문 단계`로 표시된다(`survey-management-설계.md` §7.2) |
 | FR-10-11 | 현재 세션 상태를 우측 패널에 표시한다: 진행 중 컨텍스트명, `슬롯 n/m`, 채워진 값(값은 마스킹 없이 관리자에게만 표시), `retryCount`, 상태 배지. 세션이 없으면 "진행 중인 폼 없음". |
 | FR-10-12 | `대화 초기화` 버튼으로 메시지 목록과 상태를 모두 비운다(확인 모달 없이 즉시, 되돌리기 불필요한 로컬 동작). |
 | FR-10-13 | 입력은 최대 1,000자이며 잔여 글자 수를 실시간 표시한다. 초과 입력은 전송 버튼을 비활성화한다(엔진의 절단 동작에 의존하지 않고 클라이언트에서 먼저 막는다). |
@@ -440,7 +440,7 @@
 - **AC-10-9** Given 다른 챗봇의 `contextVariableId`를 담은 `state`, When 전송하면, Then 상태가 폐기되며 그 챗봇의 자산 정보가 응답에 노출되지 않는다.
 - **AC-10-10** Given 시뮬레이션을 10회 실행, When `ConversationLog`를 조회하면, Then **신규 행이 0건**이고 `UnansweredQuestion`도 증가하지 않는다.
 - **AC-10-11** Given 대화 자산이 0건인 챗봇, When 아무 문장이나 전송하면, Then `200`과 기본 폴백 문구가 반환되고 화면에 빈 상태 안내 + `대화설계로 이동` 링크가 표시된다.
-- **AC-10-12** Given `SURVEY` 아웃풋만 가진 노드가 매칭되는 입력, When 전송하면, Then `unsupportedOutputs`에 `SURVEY`가 담기고 화면에 미실행 안내가 표시되며 최소 1건의 대체 응답이 표시된다.
+- **AC-10-12** Given `SURVEY` 아웃풋만 가진 노드가 매칭되는 입력, When 전송하면, Then `unsupportedOutputs`에 `SURVEY`가 담기고 화면에 미실행 안내가 표시되며 최소 1건의 대체 응답이 표시된다. **[No.27 한정]** 이 기준은 **v1(이전 형식) `SURVEY`** 에 대해 그대로 유지된다(바이트 동일 — AC-SV1-1). v2 `SURVEY`는 설문을 시작하거나, 참여할 수 없으면 설문 고정 문구("지금은 참여할 수 있는 설문이 없어요." 등)로 응답한다(`unsupportedOutputs` 비어 있음 — AC-SV2-8/9)
 - **AC-10-13** Given 전송 버튼, When 빠르게 3회 클릭하면, Then 요청은 1회만 발생한다.
 - **AC-10-14** Given 시뮬레이션 전후, When DB 스냅샷을 비교하면, Then `Channel`/`ConversationLog`를 포함해 **어떤 테이블도 변경되지 않았다**.
 - **AC-10-15** Given `BUTTON` 아웃풋이 포함된 응답, When 화면의 버튼을 키보드 `Enter`로 실행하면, Then 해당 액션이 실행되고 대화가 이어진다.

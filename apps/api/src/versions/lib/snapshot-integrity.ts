@@ -93,6 +93,10 @@ export function checkSnapshotIntegrity(hydrated: HydratedSnapshot, mode: Integri
     for (const targetId of refs.apiTargets) {
       if (!nodeIds.has(targetId)) warnings.push({ rule: 'BROKEN_REFERENCE_NODE_API', kind: 'NODE', id: node.id, field: 'outputs', refId: targetId });
     }
+    // [No.27] 설문 완료 후 이동 대상(J-20) — 캡처/복원 모두 경고만(EX-H-5, FR-SV3-2 ④).
+    for (const targetId of refs.surveyTargets) {
+      if (!nodeIds.has(targetId)) warnings.push({ rule: 'BROKEN_REFERENCE_NODE_SURVEY', kind: 'NODE', id: node.id, field: 'outputs', refId: targetId });
+    }
     for (const output of node.outputs) {
       if (output.type === 'CONTEXT_FORM' && !contextIds.has(output.payload.contextVariableId)) {
         warnings.push({

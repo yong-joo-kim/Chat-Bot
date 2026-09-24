@@ -217,6 +217,23 @@ describe('NodesListPage', () => {
     expect(await screen.findByText(/이전 형식 API 조건 1개는 복사되지 않았습니다/)).toBeInTheDocument();
   });
 
+  // [No.27] v1 SURVEY도 복사에서 제외된다 — 같은 토스트에 이어 붙는다(FR-SV1-5, No.26 패턴 재사용).
+  it('복사 시 excludedLegacySurveyOutputCount > 0이면 토스트에 이전 형식 설문 연결 제외 안내가 함께 뜬다', async () => {
+    const user = userEvent.setup();
+    mockCopy.mockResolvedValue({
+      ...makeNodeItem({ name: '배송조회_응답 (사본)', enabled: false }),
+      excludedLegacyApiOutputCount: 0,
+      excludedLegacySurveyOutputCount: 1,
+    });
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '배송조회_응답 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '복사' }));
+
+    expect(await screen.findByText(/이전 형식 설문 연결 1개는 복사되지 않았습니다/)).toBeInTheDocument();
+  });
+
   it('복사 시 excludedLegacyApiOutputCount가 0이면 제외 안내 없이 기본 성공 토스트만 뜬다', async () => {
     const user = userEvent.setup();
     mockCopy.mockResolvedValue({

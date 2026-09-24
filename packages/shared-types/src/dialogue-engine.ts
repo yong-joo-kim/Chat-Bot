@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { ResourceRefSchema } from './dialogue';
 import { DialogOutputSchema, DialogOutputType, DialogNodeType } from './dialogue';
 import { IntentSchema, KeywordSchema, HomonymDictionarySchema, DialogNodeSchema, ContextVariableSchema, FaqEntrySchema } from './dialogue';
+import { SurveySchema } from './survey';
+import type { SurveyEndReason } from './survey';
+import type { SurveyAnswerValue } from './survey-logic';
 
 /**
  * `packages/dialogue-engine` 입출력 계약(FR-E-1, FR-E-2, FR-8-8).
@@ -39,6 +42,26 @@ export const PendingClarifySchema = z.object({
 export type PendingClarify = z.infer<typeof PendingClarifySchema>;
 
 /* ------------------------------------------------------------------------------------------------
+ * [No.27] 설문 진행 포인터 — ADR-0035 결정 2. 응답 값·완료 판정·서버 발급 id 필드가 존재하지 않는다
+ * (S-9가 런타임에 키 집합을 단언한다).
+ * ---------------------------------------------------------------------------------------------- */
+
+export const SurveySessionStateSchema = z.object({
+  surveyId: z.string().uuid(),
+  structureVersion: z.number().int().min(1),
+  /** 시작 아웃풋 위치 — 완료 후 이동 노드를 "현재 노드 정의"에서 다시 찾기 위한 포인터. */
+  nodeId: z.string().uuid().nullable(),
+  outputIndex: z.number().int().min(0).max(9),
+  questionIndex: z.number().int().min(0).max(19),
+  retryCount: z.number().int().min(0).max(2),
+  startedAt: z.coerce.date(),
+  lastInteractedAt: z.coerce.date(),
+});
+export type SurveySessionState = z.infer<typeof SurveySessionStateSchema>;
+/** `SurveySessionStateSchema`의 키 집합 — S-9 런타임 단언용(런타임에서 순서 무관 비교). */
+export const SURVEY_SESSION_STATE_KEYS = ['surveyId', 'structureVersion', 'nodeId', 'outputIndex', 'questionIndex', 'retryCount', 'startedAt', 'lastInteractedAt'] as const;
+
+/* ------------------------------------------------------------------------------------------------
  * 대화 상태 봉투 — FR-10-3, DD-18(ADR-0009). 클라이언트가 보관하고 매 요청에 실어 보낸다.
  * ---------------------------------------------------------------------------------------------- */
 
@@ -47,8 +70,16 @@ export const ConversationStateSchema = z.object({
   version: z.literal(CONVERSATION_STATE_VERSION),
   contextSession: ContextSessionStateSchema.nullable(),
   pendingClarify: PendingClarifySchema.nullable().optional(),
+  /** [No.27] 진행 중 설문(없으면 키 생략 — 기존 봉투와 바이트 동일). */
+  surveySession: SurveySessionStateSchema.nullable().optional(),
+  /** [No.27] 이 탭에서 완료한 설문 id(최대 20, 오래된 것부터 제거) — UX용 재노출 방지. 서버
+   * 중복 판정의 근거가 아니다. */
+  completedSurveyIds: z.array(z.string().uuid()).max(20).optional(),
 });
 export type ConversationState = z.infer<typeof ConversationStateSchema>;
+
+/** sanitize가 "설문 필드가 불량해도 컨텍스트 세션은 살리는" 분리 파싱에 쓰는 기반 스키마(§6.3 ①). */
+export const ConversationStateBaseSchema = ConversationStateSchema.omit({ surveySession: true, completedSurveyIds: true });
 
 /* ------------------------------------------------------------------------------------------------
  * 버튼 액션 — FR-11-25, FR-W-6. LINK는 클라이언트 전용이라 서버 계약에 없다.
@@ -72,6 +103,10 @@ export const StateDiscardReason = z.enum([
   'OVERSIZED',
   'UNKNOWN_HOMONYM',
   'CLARIFY_EXPIRED',
+  // [No.27] 설문 세션 필드 전용 폐기 사유(§6.3) — 컨텍스트 세션은 살린다(분리 파싱).
+  'SURVEY_STATE_INVALID',
+  'UNKNOWN_SURVEY',
+  'SURVEY_SESSION_EXPIRED',
 ]);
 export type StateDiscardReason = z.infer<typeof StateDiscardReason>;
 
@@ -86,6 +121,8 @@ export const DialogueBundleSchema = z.object({
   dialogNodes: z.array(DialogNodeSchema),
   contexts: z.array(ContextVariableSchema),
   faqs: z.array(FaqEntrySchema),
+  /** [No.27] 선택 필드(★ `.default([])`가 아니라 `.optional()` — D-17). 엔진은 `bundle.surveys ?? []`로 읽는다. */
+  surveys: z.array(SurveySchema).optional(),
 });
 export type DialogueBundle = z.infer<typeof DialogueBundleSchema>;
 
@@ -93,7 +130,7 @@ export type DialogueBundle = z.infer<typeof DialogueBundleSchema>;
  * trace — FR-E-8
  * ---------------------------------------------------------------------------------------------- */
 
-export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT', 'SEMANTIC', 'API']);
+export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT', 'SEMANTIC', 'API', 'SURVEY']);
 export type TraceStage = z.infer<typeof TraceStageEnum>;
 
 export const TraceCodeEnum = z.enum([
@@ -147,6 +184,14 @@ export const TraceCodeEnum = z.enum([
   'API_VALUE_DROPPED',
   'API_CALL_LIMIT',
   'API_MOCKED',
+  // 설문관리(No.27) 추가 코드 — §4.5. trace에 응답 값을 넣지 않는다(FR-0-111).
+  'SURVEY_STARTED',
+  'SURVEY_ANSWERED',
+  'SURVEY_RETRY',
+  'SURVEY_SKIPPED_QUESTION',
+  'SURVEY_COMPLETED',
+  'SURVEY_ABANDONED',
+  'SURVEY_SKIPPED',
 ]);
 export type TraceCode = z.infer<typeof TraceCodeEnum>;
 
@@ -221,6 +266,13 @@ export const DesignIssueCode = z.enum([
   'API_CONNECTION_INSECURE',
   'API_PERSONAL_DATA_LOOKUP',
   'API_RAW_PERSONAL_DATA',
+  // 설문관리(No.27) 추가 코드 — §5.9(⑦ BROKEN_REFERENCE는 기존 코드 재사용).
+  'SURVEY_OUTPUT_NOT_LAST',
+  'SURVEY_TERMINATOR_CONFLICT',
+  'SURVEY_NOT_AVAILABLE',
+  'SURVEY_ONLY_OUTPUT',
+  'SURVEY_LEGACY_FORMAT',
+  'SURVEY_EMPTY',
 ]);
 export type DesignIssueCode = z.infer<typeof DesignIssueCode>;
 
@@ -254,7 +306,7 @@ export interface FlowNode {
   nodeId: string;
   name: string;
   nodeType: DialogNodeType;
-  via: 'ROOT' | 'DIALOG_MOVE' | 'BUTTON_NODE' | 'API_BRANCH';
+  via: 'ROOT' | 'DIALOG_MOVE' | 'BUTTON_NODE' | 'API_BRANCH' | 'SURVEY_COMPLETE';
   repeated: boolean;
   children: FlowNode[];
 }
@@ -264,7 +316,7 @@ export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
     nodeId: z.string(),
     name: z.string(),
     nodeType: DialogNodeType,
-    via: z.enum(['ROOT', 'DIALOG_MOVE', 'BUTTON_NODE', 'API_BRANCH']),
+    via: z.enum(['ROOT', 'DIALOG_MOVE', 'BUTTON_NODE', 'API_BRANCH', 'SURVEY_COMPLETE']),
     repeated: z.boolean(),
     children: z.array(FlowNodeSchema),
   }),
@@ -303,3 +355,18 @@ export interface SemanticMatchInput {
   ranked: readonly SemanticRankedCandidate[];
   thresholds: { accept: number; low: number; margin: number };
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * 설문관리(No.27) 엔진 결과 선택 필드 — ADR-0035 결정 3.
+ * ⚠ zod 스키마가 아니라 순수 TS 타입이다(`SemanticMatchInput` 선례) — API 응답으로 직렬화되지 않는
+ * 엔진 내부 계약이며, 소비자는 공개 대화 1곳(`SurveyResponseService`)뿐이다.
+ * ---------------------------------------------------------------------------------------------- */
+
+export type SurveyAttemptRef = { surveyId: string; structureVersion: number; startedAt: Date };
+
+export type SurveyEvent =
+  | { kind: 'EXPOSED'; attempt: SurveyAttemptRef; nodeId: string | null }
+  | { kind: 'ANSWERED'; attempt: SurveyAttemptRef; questionKey: string; questionIndex: number; value: SurveyAnswerValue }
+  | { kind: 'SKIPPED'; attempt: SurveyAttemptRef; questionKey: string; questionIndex: number }
+  | { kind: 'COMPLETED'; attempt: SurveyAttemptRef }
+  | { kind: 'ABANDONED'; attempt: SurveyAttemptRef; reason: SurveyEndReason };

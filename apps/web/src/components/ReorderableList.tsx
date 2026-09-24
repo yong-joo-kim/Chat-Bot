@@ -14,6 +14,16 @@ export interface ReorderableListProps<T> {
   addLimitLabel?: string;
   onRemove?: (key: string) => void;
   removeLabel?: string;
+  /** [No.27] 구조 잠금(응답 있음) 상태에서 순서 이동 버튼만 비활성화한다(항목 내용 편집은 그대로 허용). */
+  reorderDisabled?: boolean;
+  /**
+   * [No.27 코드 리뷰 1회차 L1] 구조 잠금 시 삭제 버튼을 숨기지 않고 `disabled`로 보여 준다
+   * (순서 버튼과 같은 원칙 — 버튼이 갑자기 사라지면 "왜 삭제할 수 없는지" 이유를 알기 어렵다).
+   * `onRemove`를 계속 넘기면서 이 값만 `true`로 주면 된다.
+   */
+  removeDisabled?: boolean;
+  /** `removeDisabled`와 같은 원칙 — 추가 버튼도 숨기지 않고 `disabled`로 보여 준다(No.27 리뷰 2회차). */
+  addDisabled?: boolean;
 }
 
 /**
@@ -33,6 +43,9 @@ export function ReorderableList<T>({
   addLimitLabel,
   onRemove,
   removeLabel = '삭제',
+  reorderDisabled = false,
+  removeDisabled = false,
+  addDisabled = false,
 }: ReorderableListProps<T>): JSX.Element {
   const buttonRefs = useRef<Map<string, { up?: HTMLButtonElement; down?: HTMLButtonElement }>>(new Map());
   const pendingFocusRef = useRef<{ key: string; dir: 'up' | 'down' } | null>(null);
@@ -71,8 +84,8 @@ export function ReorderableList<T>({
                 type="button"
                 className="reorderable-btn"
                 aria-label={`${label} 위로`}
-                disabled={index === 0}
-                aria-disabled={index === 0}
+                disabled={index === 0 || reorderDisabled}
+                aria-disabled={index === 0 || reorderDisabled}
                 onClick={() => move(index, -1)}
                 ref={(el) => {
                   const entry = buttonRefs.current.get(key) ?? {};
@@ -86,8 +99,8 @@ export function ReorderableList<T>({
                 type="button"
                 className="reorderable-btn"
                 aria-label={`${label} 아래로`}
-                disabled={index === items.length - 1}
-                aria-disabled={index === items.length - 1}
+                disabled={index === items.length - 1 || reorderDisabled}
+                aria-disabled={index === items.length - 1 || reorderDisabled}
                 onClick={() => move(index, 1)}
                 ref={(el) => {
                   const entry = buttonRefs.current.get(key) ?? {};
@@ -102,7 +115,7 @@ export function ReorderableList<T>({
                   type="button"
                   className="reorderable-btn reorderable-btn--danger"
                   aria-label={`${label} ${removeLabel}`}
-                  disabled={items.length <= minItems}
+                  disabled={items.length <= minItems || removeDisabled}
                   onClick={() => onRemove(key)}
                 >
                   ⌫
@@ -114,7 +127,7 @@ export function ReorderableList<T>({
       })}
       {onAdd && (
         <div className="reorderable-add-row">
-          <button type="button" className="btn btn-secondary" onClick={onAdd} disabled={atMax}>
+          <button type="button" className="btn btn-secondary" onClick={onAdd} disabled={atMax || addDisabled}>
             {addLabel ?? '+ 추가'}
           </button>
           {atMax && addLimitLabel && <span className="field-hint">{addLimitLabel}</span>}

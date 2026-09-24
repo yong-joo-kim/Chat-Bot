@@ -461,7 +461,7 @@ FaqPublicSuggestionSchema = { id, question }     // mode=public — answer 미�
 | ⑧ | `CONTEXT_FORM` | `{ contextVariableId: uuid }` | 정의·실행(세션 시작) |
 | ⑨ | `DIALOG_MOVE` | `{ targetNodeId: uuid }` | 정의·실행(hop limit 10) |
 | ⑩ | `SCENARIO` | `{ scenarioKey: 1~100, params?: Record<string, string>(최대 20키) }` | **정의·저장·검증만** |
-| ⑪ | `SURVEY` | `{ surveyId: 1~100 }` | **정의·저장·검증만** |
+| ⑪ | `SURVEY` | `{ surveyId: 1~100 }` **[No.27 이후 = v1(이전 형식·읽기 전용) — 새 저장은 v2 `{ version: 2, surveyId: uuid, onCompleteNodeId? }`]** | **정의·저장·검증만** **[No.27: v2는 대화 내 멀티턴 실행 — `survey-management-설계.md` §4.1·§5]** |
 | ⑫ | `API_CONDITION` | `{ method: GET\|POST\|PUT\|PATCH\|DELETE, url: SafeUrl, headers?: Record<string,string>(최대 20키), bodyTemplate?: max 4000, conditions: ApiCondition[] 1~10 }` | **정의·저장·검증만** |
 
 ```
@@ -473,7 +473,7 @@ ApiConditionSchema = { path: 1~200, operator: z.enum(['EQ','NEQ','GT','GTE','LT'
                        value?: max 500, nextNodeId: uuid }
 ```
 
-- `UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO','SURVEY','API_CONDITION'] as const` 상수를 `dialogue.ts`에 두고 **엔진·API·UI 배지(FR-5-15)가 공유**한다. No.26/27 구현 시 이 상수에서 빼는 것만으로 실행이 열린다.
+- `UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO','SURVEY','API_CONDITION'] as const` 상수를 `dialogue.ts`에 두고 **엔진·API·UI 배지(FR-5-15)가 공유**한다. No.26/27 구현 시 이 상수에서 빼는 것만으로 실행이 열린다. **[정정 No.26·No.27 — 성립하지 않았다: 실행 가능 판정은 타입이 아니라 형태(`isUnsupportedOutput()`)로 하며, 상수는 `['SCENARIO']`로 줄었다. 설계 점검도 공용 함수 기반으로 교체됐다(ADR-0008 갱신 각주 2건)]**
 - `API_CONDITION.url`은 `SafeUrlSchema`로 형식만 검증한다. **SSRF 방어(사설 IP 대역 차단)는 실행 Phase(No.26)의 책임**임을 스키마 JSDoc과 §12에 명시한다(NFR-S4).
 - `API_CONDITION.headers`는 평문 저장이다. UI는 값에 `*` 마스킹을 적용하고, 암호화 저장은 No.26/No.45 과제로 기록한다(NFR-S5).
 

@@ -25,6 +25,7 @@ import type { ResolvedScope } from '../lib/scope-filter';
 import { scopeLogWhere } from '../lib/scope-filter';
 import { buildBucketDayRanges, buildBuckets, foldDayRows } from '../lib/bucket';
 import { assembleBySource, assembleByChannel, assembleSummaryBuckets, computeTurnsPerSession } from '../lib/summary-assembler';
+import { QUESTION_RANKING_LOG_FILTER } from '../lib/question-ranking-filter';
 import { foldByHour, foldByWeekday } from '../lib/usage-trend';
 import { TOP_QUESTION_CANDIDATE_LIMIT, aggregateTopQuestions, computeResponseRates, computeVisitCount, normalizeQuestion } from '../lib/dashboard-aggregator';
 import { attributeTopChatbot } from '../lib/question-attribution';
@@ -236,10 +237,12 @@ export class IntegratedStatsService {
       excludeChatbotIds = archived.map((a) => a.id);
     }
 
+    // [No.27] 질문 순위(인기·미응답) 전용 — 설문이 소비한 턴 제외(§9.6).
     const baseWhere = {
       ...scopeLogWhere(resolved),
       dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
       ...(excludeChatbotIds.length > 0 ? { chatbotId: { notIn: excludeChatbotIds } } : {}),
+      ...QUESTION_RANKING_LOG_FILTER,
     };
 
     const [topRows, unansweredRows, backfillPending] = await runWithAggregationTimeout(
@@ -283,7 +286,13 @@ export class IntegratedStatsService {
       if (variantMessages.length > 0) {
         const attributionRows = await this.prisma.conversationLog.groupBy({
           by: ['userMessage', 'chatbotId'],
-          where: { ...scopeLogWhere(resolved), dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket }, userMessage: { in: variantMessages } },
+          // [No.27] 통합 귀속도 질문 순위 조건 1벌을 쓴다(§9.6).
+          where: {
+            ...scopeLogWhere(resolved),
+            dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
+            userMessage: { in: variantMessages },
+            ...QUESTION_RANKING_LOG_FILTER,
+          },
           _count: { _all: true },
           _max: { createdAt: true },
         });

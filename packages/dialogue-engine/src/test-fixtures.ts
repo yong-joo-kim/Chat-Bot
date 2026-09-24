@@ -7,6 +7,7 @@ import type {
   HomonymDictionary,
   Intent,
   Keyword,
+  Survey,
 } from '@chat-bot/shared-types';
 
 /**
@@ -85,6 +86,11 @@ export function contextFormOutput(contextVariableId: string): DialogOutput {
   return { type: 'CONTEXT_FORM', payload: { contextVariableId } };
 }
 
+/** [No.27] v2 SURVEY 아웃풋 fixture. */
+export function surveyOutputV2(surveyId: string, onCompleteNodeId?: string): DialogOutput {
+  return { type: 'SURVEY', payload: { version: 2, surveyId, ...(onCompleteNodeId ? { onCompleteNodeId } : {}) } };
+}
+
 /** [No.26] v2 `API_CONDITION` 아웃풋 fixture. */
 export function apiConditionOutputV2(overrides: {
   connectionId?: string;
@@ -157,6 +163,24 @@ export function makeHomonym(overrides: Partial<HomonymDictionary> = {}): Homonym
       { label: '선박', contextHints: ['항구', '운항'] },
     ],
     policy: 'ASK',
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    ...overrides,
+  };
+}
+
+/** [No.27] 설문 fixture — 척도(STAR_5) 문항 1개가 기본이다. */
+export function makeSurvey(overrides: Partial<Survey> = {}): Survey {
+  return {
+    id: uuid('survey'),
+    chatbotId: 'bot-1',
+    name: '테스트설문',
+    status: 'OPEN',
+    completionMessage: '설문에 참여해 주셔서 감사합니다.',
+    cancelKeywords: ['그만', '취소', '설문 종료'],
+    sessionTimeoutMinutes: 30,
+    questions: [{ key: uuid('question'), type: 'SCALE', prompt: '만족도를 알려주세요.', required: true, scale: 'STAR_5' }],
+    structureVersion: 1,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,

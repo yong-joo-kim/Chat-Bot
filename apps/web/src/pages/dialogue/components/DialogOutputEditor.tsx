@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ButtonItem, DialogOutput, DialogOutputType } from '@chat-bot/shared-types';
-import { isApiConditionV2, isUnsupportedOutput } from '@chat-bot/shared-types';
+import { isApiConditionV2, isSurveyV2, isUnsupportedOutput } from '@chat-bot/shared-types';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ReorderableList } from '../../../components/ReorderableList';
 import { ResourcePickerField } from '../../../components/ResourcePickerField';
@@ -10,6 +10,9 @@ import { ButtonItemEditor } from './ButtonItemEditor';
 import { ApiConditionEditorV2 } from './api-condition/ApiConditionEditorV2';
 import { LegacyApiConditionReadonlyCard } from './api-condition/LegacyApiConditionReadonlyCard';
 import { ConvertLegacyApiConditionDialog } from './api-condition/ConvertLegacyApiConditionDialog';
+import { SurveyOutputEditorV2 } from './survey/SurveyOutputEditorV2';
+import { LegacySurveyReadonlyCard } from './survey/LegacySurveyReadonlyCard';
+import { ConvertLegacySurveyDialog } from './survey/ConvertLegacySurveyDialog';
 
 export interface DialogOutputEditorProps {
   value: DialogOutput;
@@ -65,7 +68,8 @@ function defaultPayloadFor(type: DialogOutputType): DialogOutput {
     case 'SCENARIO':
       return { type, payload: { scenarioKey: '' } };
     case 'SURVEY':
-      return { type, payload: { surveyId: '' } };
+      // [No.27] 신규 저장은 항상 v2(설문 선택)만 허용된다 — v1은 읽기 호환 전용(P-15).
+      return { type, payload: { version: 2, surveyId: '' } };
     case 'API_CONDITION':
       // [No.26] 신규 저장은 항상 v2(연결 레지스트리 기반)만 허용된다 — v1은 읽기 호환 전용(J-16).
       return {
@@ -109,6 +113,7 @@ export function DialogOutputEditor({
   const prevTypeRef = useRef(value.type);
   const firstFieldRef = useRef<HTMLElement | null>(null);
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
+  const [surveyConvertConfirmOpen, setSurveyConvertConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (prevTypeRef.current !== value.type) {
@@ -406,21 +411,34 @@ export function DialogOutputEditor({
         </div>
       )}
 
-      {value.type === 'SURVEY' && (
-        <div className="form-field">
-          <label htmlFor={`${idPrefix}-survey-id`}>
-            {msg.surveyId} <span className="required-mark" aria-hidden="true">*</span>
-          </label>
-          <input
-            id={`${idPrefix}-survey-id`}
-            ref={(el) => (firstFieldRef.current = el)}
-            type="text"
-            maxLength={100}
-            value={value.payload.surveyId}
-            onChange={(e) => setPayload({ type: 'SURVEY', payload: { surveyId: e.target.value } })}
+      {value.type === 'SURVEY' &&
+        (isSurveyV2(value.payload) ? (
+          <SurveyOutputEditorV2
+            value={value.payload}
+            onChange={(payload) => setPayload({ type: 'SURVEY', payload })}
+            chatbotId={chatbotId}
+            errPrefix={errorFieldPrefix}
+            fieldErrors={fieldErrors}
+            firstFieldRef={firstFieldRef}
           />
-        </div>
-      )}
+        ) : (
+          <>
+            <LegacySurveyReadonlyCard
+              value={value.payload}
+              onConvert={() => setSurveyConvertConfirmOpen(true)}
+              highlightToken={highlightLegacyToken}
+            />
+            <ConvertLegacySurveyDialog
+              isOpen={surveyConvertConfirmOpen}
+              surveyId={value.type === 'SURVEY' && !isSurveyV2(value.payload) ? value.payload.surveyId : ''}
+              onCancel={() => setSurveyConvertConfirmOpen(false)}
+              onConfirm={() => {
+                setPayload({ type: 'SURVEY', payload: { version: 2, surveyId: '' } });
+                setSurveyConvertConfirmOpen(false);
+              }}
+            />
+          </>
+        ))}
 
       {value.type === 'API_CONDITION' &&
         (isApiConditionV2(value.payload) ? (

@@ -8,6 +8,7 @@
 > **범위 경계**: 실제 React 컴포넌트 코드는 작성하지 않는다. 여기서 정의한 화면/라우트/컴포넌트/props/문구는 `frontend-implementer`가 구현 기준으로 그대로 사용한다. 드래그앤드롭 비주얼 캔버스는 요구사항 §4.5.1·§9.2에 따라 이 문서에서도 다루지 않는다(리스트/폼 기반).
 >
 > **[2026-09-24 갱신 — No.26 레거시 API 연동]** §4.2.1 ⑫행·주석과 §8 미결정 항목 1건을 갱신했다. `API_CONDITION` v2(연결 레지스트리 기반) 편집 폼은 이 문서가 아니라 `docs/03-design/legacy-api-integration-ui-spec.md` §4.2에서 정의한다 — 이 문서는 **v1(이전 형식) 노드의 읽기 전용 표시**만 계속 다룬다.
+> **[2026-09-24 갱신 — No.27 설문관리]** §0.1·§0.2·§1·§3·§4.2.1 ⑪행을 갱신했다. 서브내비에 **6번째 항목 `설문`(`surveys`)**을 추가했고, `SURVEY` v2(설문 참조 기반) 편집 폼·설문 목록/편집기/결과 화면은 이 문서가 아니라 `docs/03-design/survey-management-ui-spec.md`(§1·§3.3)에서 정의한다 — 이 문서는 **v1(이전 형식) 노드의 읽기 전용 표시**만 계속 다룬다. 최상위 탭 4개(`AC-C-3`)는 변경되지 않는다.
 
 ---
 
@@ -23,6 +24,8 @@ system-architect의 권고(요구사항 §11, 설계서 §9)를 그대로 채택
 
 **최상위 탭은 4개**가 된다: `대시보드`(dashboard) · `기본설정`(settings) · `스킨/임베드`(skin) · **`대화설계`(dialogue, 신규)**. `TabNav`(`apps/web/src/pages/chatbot-detail/TabNav.tsx`)에 4번째 `NavLink`를 추가하고, `isActive` 판정은 `/chatbots/:id/dialogue`로 시작하는 모든 경로에 대해 참이 되어야 한다(react-router `NavLink`의 `end` 옵션을 주지 않으면 접두 매칭이 기본 동작이므로 그대로 사용 가능).
 
+**[2026-09-24 추가 — No.27 설문관리]** 서브내비는 이후 **6종**으로 확장된다: 위 5종(`nodes`/`intents`/`homonyms`/`contexts`/`faqs`) + **`설문`(`surveys`)**. 설문 정의는 대화 노드(`SURVEY` 아웃풋)가 참조하는 대화 자산이라는 점에서 나머지 5종과 같은 성격이며, "대화 중 설문조사 생성·호출"(카탈로그 No.27 원문)도 노드 편집기 안에서 이뤄진다. 최상위 탭 수(`AC-C-3`, 4개)는 그대로다 — 새 세그먼트는 기존 `DialogueShell` 서브내비에만 추가된다. 배치 근거·화면 정의(목록·편집기·결과)는 `docs/03-design/survey-management-ui-spec.md` §0-3·§1을 따른다.
+
 ### 0.2 라우팅 확정
 
 ```
@@ -36,9 +39,13 @@ system-architect의 권고(요구사항 §11, 설계서 §9)를 그대로 채택
 /chatbots/:chatbotId/dialogue/contexts/new              컨텍스트 생성 폼
 /chatbots/:chatbotId/dialogue/contexts/:contextId       컨텍스트 편집 폼
 /chatbots/:chatbotId/dialogue/faqs                      FAQ 목록(+ 편집은 모달)
+/chatbots/:chatbotId/dialogue/surveys                  [No.27] 설문 목록
+/chatbots/:chatbotId/dialogue/surveys/new                [No.27] 설문 생성 폼
+/chatbots/:chatbotId/dialogue/surveys/:surveyId          [No.27] 설문 편집 폼(+ 결과 탭)
 ```
 
 - 서브내비 5종(대화그래프/의도·키워드/동음이의어/컨텍스트/FAQ)은 위 5개 최상위 세그먼트(`nodes|intents|homonyms|contexts|faqs`)와 1:1이며, 요구사항 §11이 명시한 순서(대화그래프→의도·키워드→동음이의어→컨텍스트→FAQ)와도 일치한다. **서브내비 기본 진입(랜딩)은 `nodes`** 로 한다 — 대화그래프 화면이 흐름 미리보기·설계 점검을 포함한 "허브" 성격이라 대화설계 그룹에 처음 들어온 관리자가 전체 그림을 먼저 보게 하기 위함이다.
+- **[No.27]** 6번째 세그먼트 `surveys`는 위 5종과 같은 원칙(전용 라우트 페이지, `UnsavedGuardContext` 가드)을 따른다. 세부 레이아웃·컴포넌트·상태별 UI는 이 문서가 아니라 `docs/03-design/survey-management-ui-spec.md` §3.1~§3.2(SV1 목록/SV2 편집기/SV3 결과)에서 정의한다 — 이 문서는 라우트 존재와 서브내비 위치만 고정한다.
 - 노드/컨텍스트는 필드·서브 구조가 많아(아웃풋 12종 / 슬롯 최대 20개) **모달이 아니라 전용 라우트 페이지**로 만든다(뒤로가기·새로고침으로 작성 중 상태를 잃지 않게 하려는 목적도 있음 — 단 `UnsavedGuardContext`로 이탈은 계속 가드한다).
 - 의도·키워드(`intents`)는 두 리소스가 서로의 참조 대상이라 화면을 붙여두는 것이 관리자 워크플로에 맞고(S-1~S-3), 필드 수가 적어(이름/설명/예문·동의어) 리스트+모달로 충분하다. 스킨/임베드와 같은 **클라이언트 상태 서브탭 패턴**(`?resource=` 쿼리)을 재사용한다.
 - 동음이의어·FAQ는 필드는 많지만(동음이의어는 의미 반복 블록, FAQ는 대체질문) 화면 하나에 모두 담아도 스크롤 가능한 모달 크기(`modal--lg`)로 무리가 없어 모달을 유지한다. 각 리스트 행에는 `?edit=:id` 형태의 선택적 쿼리로 딥링크할 수 있게 해 "설계 점검 → 문제 리소스로 바로가기"가 동작하게 한다(§4.1 참고).
@@ -72,6 +79,9 @@ system-architect의 권고(요구사항 §11, 설계서 §9)를 그대로 채택
 | D5 | FAQ 목록 | `/chatbots/:chatbotId/dialogue/faqs` | 페이지 | D0 서브내비 |
 | D5a | FAQ 생성/편집(+ 유사질문 추천) | 모달(D5 위, `?edit=:id` 지원) | 모달 | D5 "+ FAQ 추가"/행 편집 |
 | D5b | FAQ 대량 업로드 | 모달(D5 위, `BulkImportModal`) | 모달(3단계) | D5 "엑셀/CSV 업로드" |
+| D6 | **[No.27]** 설문 목록/편집기/결과 | `/chatbots/:chatbotId/dialogue/surveys/*` | 페이지 | D0 서브내비 6번째 "설문" |
+
+**[No.27]** D6의 세부 화면(SV1 목록·SV2 편집기·SV3 결과)·컴포넌트·상태별 UI·인터랙션 흐름은 이 문서가 아니라 `docs/03-design/survey-management-ui-spec.md` §1~§4에서 정의한다. 이 표는 라우트 존재와 진입 경로만 고정한다.
 
 ---
 
@@ -149,7 +159,7 @@ props<T>: {
 
 - **드래그앤드롭 핸들을 두지 않는다.** 각 항목 행 우측에 "▲ 위로"/"▼ 아래로" 버튼(각각 44×44px 이상, UIUX §4)만 제공한다. 첫 항목은 "위로", 마지막 항목은 "아래로"가 `disabled` + `aria-disabled="true"`.
 - **포커스 유지(AC-5-8)**: 버튼 클릭(또는 Enter/Space)으로 순서가 바뀐 뒤에도 포커스가 **이동한 항목의 같은 버튼**에 남아 있어야 한다. 구현 지침: 각 항목 버튼에 `key`(리소스 id) 기반 `ref` 맵을 두고, `onChange` 이후 `useEffect`에서 이동한 항목의 버튼에 `.focus()`를 명시적으로 호출한다(리액트가 DOM을 재배치하면서 포커스가 유실되는 것을 막기 위함).
-- 노드 아웃풋(최대 10), 아웃풋 내 버튼(최대 5)·API 조건(최대 10), 동음이의어 의미(최대 10), 컨텍스트 슬롯(최대 20)에서 전부 이 컴포넌트를 재사용한다. `maxItems` 도달 시 `onAdd` 트리거 버튼은 `disabled` + 안내 문구("최대 10개까지 추가할 수 있습니다").
+- 노드 아웃풋(최대 10), 아웃풋 내 버튼(최대 5)·API 조건(최대 10), 동음이의어 의미(최대 10), 컨텍스트 슬롯(최대 20)에서 전부 이 컴포넌트를 재사용한다. `maxItems` 도달 시 `onAdd` 트리거 버튼은 `disabled` + 안내 문구("최대 10개까지 추가할 수 있습니다"). **[No.27]** 설문 문항(최대 20)·선택지(최대 10)·취소어(최대 10)도 같은 컴포넌트를 재사용한다(`survey-management-ui-spec.md` §2.2).
 
 #### (4) `ResourcePickerField` — 검색형 리소스 선택기 (ID 직접 입력 금지, FR-5-20)
 
@@ -172,6 +182,7 @@ props: {
 - 검색 결과가 0건이면 목록 영역에 "'{입력값}'에 해당하는 항목이 없습니다."와 함께, `createHref`가 있으면 "[{리소스명} 새로 만들기 →]" 링크를 보여준다(FR-5-20 "목록에 없으면 해당 화면으로 이동하는 바로가기"). 링크는 `href` 기반(`<a>`)이라 새 탭이 아니라 현재 탭 이동이며, 클릭 시 편집 중이던 폼은 `UnsavedGuardContext`가 이탈을 확인한다.
 - `resourceType='node'`이고 `excludeIds`에 현재 편집 중인 노드 id가 없으면 편집 화면이 자기 자신을 `DIALOG_MOVE` 대상으로 선택할 수 있어야 하는가는 요구사항에 금지 규정이 없으므로 **허용**하되(엔진의 hop limit이 무한루프를 방어), 후보 목록에서 시각적으로 구분하지 않는다.
 - ID를 직접 타이핑해 넣는 텍스트 입력을 **절대 노출하지 않는다** — 이 컴포넌트가 모든 "인풋 조건 선택"의 유일한 경로다.
+- **[No.26]** `resourceType`에 `'chatbot'`·`'faq'`·`'apiConnection'`이 추가되어(각 선행 그룹 문서 참고) 현재 7종이다. **[No.27]** `'survey'`가 8번째로 추가된다 — `apiConnection`과 달리 챗봇 스코프 자원이라 `chatbotId`가 필요하다(`node`/`context`와 같은 모양). 세부는 `survey-management-ui-spec.md` §2.2(`SurveyPickerField`)를 참고.
 
 #### (5) `SeverityBadge` — 심각도 배지 (색상 + 텍스트 병기)
 
@@ -196,7 +207,7 @@ props: { severity: 'ERROR' | 'WARNING' | 'INFO'; label?: string }  // label 없�
 | `HomonymPolicyBadge` | 동음이의어 목록(`ASK`/`DEFAULT_MEANING`/`IGNORE`) | "되묻기"(ASK) / "기본의미 사용"(DEFAULT_MEANING) / "보정 안 함"(IGNORE) |
 | `FaqCategoryBadge` | FAQ 목록/필터(`FAQ`/`SMALL_TALK`/`SELF_SERVICE`/`ERROR_RESPONSE`) | "자주묻는질문" / "스몰톡" / "셀프서비스" / "오류응답" — 색상 4종 고정 배열 |
 | `ImportRowErrorBadge` | 검증 리포트 오류 코드 | `EMPTY_NAME`→"이름 없음", `EMPTY_VALUE`→"값 없음", `TOO_LONG`→"길이 초과", `INVALID_CHAR`→"허용되지 않는 문자", `DUPLICATE_IN_FILE`→"파일 내 중복", `SYNONYM_CONFLICT`→"동의어 충돌", `INVALID_CATEGORY`→"분류 오류" |
-| `UnsupportedOutputBadge` | 아웃풋 편집 폼(`SCENARIO`/`SURVEY`/**v1(이전 형식)** `API_CONDITION` — [No.26] v2는 배지 없음, 판정은 공용 `isUnsupportedOutput()`) | 고정 문구 "이번 버전에서는 실행되지 않습니다(저장·정의만 가능)" + INFO 계열 배지 스타일(FR-5-15) |
+| `UnsupportedOutputBadge` | 아웃풋 편집 폼(`SCENARIO`/**v1(이전 형식)** `SURVEY`/**v1(이전 형식)** `API_CONDITION` — [No.26·No.27] v2는 배지 없음, 판정은 공용 `isUnsupportedOutput()`) | 고정 문구 "이번 버전에서는 실행되지 않습니다(저장·정의만 가능)" + INFO 계열 배지 스타일(FR-5-15) |
 | `ConditionSummaryChips` | 노드 목록 행의 조건 요약 | `intents: ResourceRef[]`, `keywords: ResourceRef[]`, `context?: ResourceRef`를 각각 성격이 다른 칩(테두리색 구분+레이블 "의도:"/"키워드:"/"컨텍스트:")으로 표시. 조건 0개(START/FALLBACK)는 "조건 없음" 텍스트 |
 | `OutputTypeIconList` | 노드 목록 행의 아웃풋 요약 | `outputTypes: DialogOutputType[]`를 아이콘+개수 순서로 나열(예: "¶×2 ▦×1") — §5.2 아이콘표 참고 |
 | `LinkedNodeCountBadge` | 의도/키워드/컨텍스트 목록 | "노드 {n}건에서 사용 중" — 0이면 배지 자체를 흐린 회색으로(삭제 가능함을 암시하되 색상만으로 전달하지 않도록 텍스트 "미사용"도 병기) |
@@ -219,6 +230,7 @@ props: { severity: 'ERROR' | 'WARNING' | 'INFO'; label?: string }  // label 없�
 │ 동음이의어     │                                                             │
 │ 컨텍스트       │              (선택된 서브내비 화면 본문)                    │
 │ FAQ           │                                                             │
+│ 설문(No.27)   │                                                             │
 └───────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -226,10 +238,10 @@ props: { severity: 'ERROR' | 'WARNING' | 'INFO'; label?: string }  // label 없�
 
 | 컴포넌트 | props | 비고 |
 |---|---|---|
-| `DialogueSubNav` | `chatbotId`, `active: 'nodes'\|'intents'\|'homonyms'\|'contexts'\|'faqs'`, `onBeforeNavigate?` | `<nav aria-label="대화설계 메뉴">` + `<NavLink>` 5개(href 기반, UIUX §9). 각 항목에 리소스 건수 배지(선택적, 서버 목록 응답의 `total`을 각 화면 최초 로드 시 캐시해 표시하거나 생략 가능 — 필수 아님) |
+| `DialogueSubNav` | `chatbotId`, `active: 'nodes'\|'intents'\|'homonyms'\|'contexts'\|'faqs'\|'surveys'`, `onBeforeNavigate?` | `<nav aria-label="대화설계 메뉴">` + `<NavLink>` **6개**(href 기반, UIUX §9 — 5종 + `surveys`, No.27). 각 항목에 리소스 건수 배지(선택적, 서버 목록 응답의 `total`을 각 화면 최초 로드 시 캐시해 표시하거나 생략 가능 — 필수 아님) |
 | `DialogueArchivedBanner` | `visible: status==='ARCHIVED'` | 기존 `ArchivedBanner` 패턴 재사용: "보관된 챗봇입니다. 읽기 전용이며, 수정하려면 먼저 '초안으로 복구'하세요."(FR-0-11) — 모든 쓰기 버튼(추가/편집/삭제/업로드/설계 점검의 "저장" 계열)을 비활성화 |
 
-라우팅: `/chatbots/:chatbotId/dialogue`(세그먼트 없음) 접근 시 `/chatbots/:chatbotId/dialogue/nodes`로 리다이렉트. 5개 서브 라우트는 `DialogueSubNav` + `Outlet`을 감싸는 `DialogueShell` 하위에 중첩한다.
+라우팅: `/chatbots/:chatbotId/dialogue`(세그먼트 없음) 접근 시 `/chatbots/:chatbotId/dialogue/nodes`로 리다이렉트. **6개**(No.27 `surveys` 포함) 서브 라우트는 `DialogueSubNav` + `Outlet`을 감싸는 `DialogueShell` 하위에 중첩한다.
 
 ---
 
@@ -294,6 +306,7 @@ EmptyState: "아직 대화 노드가 없습니다."
 - `orphanNodes`(어떤 루트에서도 도달하지 않는 노드)는 트리 하단에 별도 목록으로 나열한다. `FALLBACK` 노드는 원래 진입 경로가 없는 것이 정상이므로 경고색을 쓰지 않는다(그 외 `NORMAL` 고아 노드는 §4.1.2 설계 점검의 `ORPHAN_NODE`가 이미 다룬다 — 이 패널은 순수 열람용, 배지 표시는 하지 않는다).
 - 빈 트리(노드 0건 또는 루트 없음)는 패널 내부에 `EmptyState`: "표시할 흐름이 없습니다."
 - **[No.26]** `API_CONDITION`(v1·v2) 조건 분기 대상은 자식 항목 `via: 'API_BRANCH'`(레이블 "API 분기")로 트리에 표시된다. 세부는 `legacy-api-integration-ui-spec.md` §4.6을 참고.
+- **[No.27]** `SURVEY` v2의 `onCompleteNodeId` 대상은 자식 항목 `via: 'SURVEY_COMPLETE'`(레이블 "설문 완료 후")로 표시된다. 세부는 `survey-management-ui-spec.md` §3.7을 참고.
 
 ### 4.1.2 설계 점검 (`DesignValidationPanel`)
 
@@ -322,6 +335,7 @@ EmptyState: "아직 대화 노드가 없습니다."
 - 로딩 중에는 패널 내부에 `SkeletonRow` 3~4개, 실패(5xx)는 `ErrorState` + "다시 시도".
 - 챗봇 상태 전이 컨트롤(`StatusTransitionControls`의 "활성화" 버튼)은 이 화면 것이 아니라 §S3 상세 헤더 소관이지만, `ERROR`/`WARNING`이 있는 상태로 "활성화"를 누르면(FR-5-17) 확인 모달에 "설계 점검에서 발견된 문제가 있습니다({error}건 오류, {warning}건 주의). 그래도 운영중으로 전환하시겠습니까?"를 추가한다 — 이 문구 삽입은 `frontend-implementer`가 기존 `StatusTransitionControls` 컴포넌트를 이 그룹의 검증 결과와 연결하는 통합 작업이 필요함을 표시만 해 둔다(선택적 개선, No.5 필수 범위는 D1 패널 표시까지).
 - **[No.26]** `API_CONDITION` 관련 신규 진단 코드 11종(`API_OUTPUT_NOT_LAST`·`API_MULTIPLE_OUTPUTS`·`API_NESTED_CALL`·`API_LEGACY_FORMAT`·`API_SLOT_BINDING_UNREACHABLE`·`API_FAILURE_BRANCH_MISSING`·`API_TOKEN_IN_URL_FIELD`·`BROKEN_REFERENCE`(연결 없음)·`API_CONNECTION_UNAVAILABLE`·`API_CONNECTION_INSECURE`·`API_PERSONAL_DATA_LOOKUP`/`API_RAW_PERSONAL_DATA`)이 이 패널에 같은 `DesignIssueRow` 형식으로 추가된다. 문구·심각도는 `legacy-api-integration-ui-spec.md` §4.6을 참고.
+- **[No.27]** `SURVEY` 관련 신규 진단 코드 6종(`SURVEY_OUTPUT_NOT_LAST`·`SURVEY_TERMINATOR_CONFLICT`·`SURVEY_NOT_AVAILABLE`·`SURVEY_ONLY_OUTPUT`·`SURVEY_LEGACY_FORMAT`·`SURVEY_EMPTY`)이 같은 `DesignIssueRow` 형식으로 추가된다. 문구·심각도는 `survey-management-ui-spec.md` §3.7을 참고.
 
 ### 상태별 UI
 
@@ -413,7 +427,7 @@ EmptyState: "아직 대화 노드가 없습니다."
 | ⑧ | 폼 시작 ☰ | `contextVariableId` → `ResourcePickerField(resourceType='context', multiple=false)` | 리소스 선택기 입력창 | 선택한 컨텍스트의 슬롯 수를 옆에 "(슬롯 3개)"로 표시 |
 | ⑨ | 노드 이동 ↪ | `targetNodeId` → `ResourcePickerField(resourceType='node', multiple=false, excludeIds=[현재노드id])` | 리소스 선택기 입력창 | 도움말: "이동 후 남은 아웃풋은 실행되지 않고, 대상 노드의 아웃풋으로 이어집니다." 순환 가능성은 저장을 막지 않고 설계 점검(D1)에서 경고 |
 | ⑩ | 시나리오 연동 ◈ | `scenarioKey`(1~100), `params?`(key-value 목록, 최대 20) | `scenarioKey` | `UnsupportedOutputBadge` 표시(FR-5-15) — **[No.26 확인]** `SCENARIO`는 이 그룹에서도 미지원으로 유지된다(요구사항 J-1) |
-| ⑪ | 설문 연동 ▥ | `surveyId`(1~100) | `surveyId` | `UnsupportedOutputBadge` 표시 |
+| ⑪ | 설문 ▥ | **[No.27 갱신, 2026-09-24]** 이 행은 이제 **v1(이전 형식) 노드의 읽기 전용 표시**만 설명한다. 필드: 설문 ID(읽기 전용, 자유 문자열). 쓰기 입력은 없다. | — (읽기 전용 카드라 포커스 이동 대상 없음) | `LegacySurveyBadge`("이전 형식 — 실행되지 않습니다. 설문을 선택해 전환하세요") + `설문 선택해 전환` 버튼. **v2(설문 참조 기반) `설문` 편집 폼은 이 표의 대상이 아니다** — 신규 폼(설문 선택기·완료 후 이동 노드·상태/기간 안내)은 `docs/03-design/survey-management-ui-spec.md` §3.3(`SurveyOutputEditorV2`)에서 정의한다. 그 폼에는 자유 문자열 입력 필드가 없다 |
 | ⑫ | API 조건분기 ⇄ | **[No.26 갱신, 2026-09-24]** 이 행은 이제 **v1(이전 형식) 노드의 읽기 전용 표시**만 설명한다. 필드: 메서드·경로 요약(수정 불가, 텍스트), 헤더 **키와 개수만**(예: "헤더 2개(값은 표시되지 않습니다)" — 서버가 응답에서 값을 `[비공개]`로 가리므로 v1 편집기에 있던 "표시/가리기" 토글은 더 이상 없다), 본문 템플릿은 `[비공개]` 고정 텍스트, 조건 목록(읽기 전용, `path`/`operator`/`value`/다음 노드 링크는 그대로 보임 — 시크릿이 아니므로). 쓰기 입력은 없다. | — (읽기 전용 카드라 포커스 이동 대상 없음) | "이전 형식 — 실행되지 않습니다. 연결을 선택해 전환하세요" 배지(§4.2.1 하단 참고) + `연결로 전환` 버튼. **v2(연결 레지스트리 기반) `API 조건분기` 편집 폼은 이 표의 대상이 아니다** — 신규 폼(연결 선택·경로/쿼리/본문 바인딩·응답 매핑·조건·기본/실패 분기·샘플 미리보기)은 `docs/03-design/legacy-api-integration-ui-spec.md` §4.2(`ApiConditionEditorV2`)에서 정의한다. 그 폼에는 URL·헤더 직접 입력 필드가 없다 |
 
 **버튼 아이템(`ButtonItemSchema`) `action`별 `value` 입력 UI**(④ 버튼, ② 카드의 `buttons`, ⑫가 아닌 공용 서브컴포넌트 `ButtonItemEditor`):
@@ -424,8 +438,9 @@ EmptyState: "아직 대화 노드가 없습니다."
 | `LINK`(링크 열기) | URL 입력(`SafeUrlSchema`) |
 | `NODE`(노드로 이동) | `ResourcePickerField(resourceType='node', multiple=false)` |
 
-- ⑩⑪ 카드는 상단에 `UnsupportedOutputBadge`("이번 버전에서는 실행되지 않습니다(저장·정의만 가능)")를 항상 노출한다(AC-5-7). 배지는 INFO 계열 색상(파랑)으로 경고가 아님을 표시하되 텍스트로 명확히 안내한다.
+- ⑩⑪ 카드는 상단에 `UnsupportedOutputBadge`("이번 버전에서는 실행되지 않습니다(저장·정의만 가능)")를 항상 노출한다(AC-5-7) — **[No.27]** ⑪은 **v1(이전 형식)일 때만** 이 배지를 노출한다. v2 `SURVEY`는 정상 실행되는 아웃풋이라 배지가 없다(§4.2.1 ⑪행 참고).
 - **[No.26]** ⑫는 **v1(이전 형식)일 때만** 위 §4.2.1 표의 읽기 전용 형태와 "이전 형식 — 실행되지 않습니다. 연결을 선택해 전환하세요" 배지(INFO가 아니라 WARNING 톤 — 일반 미지원과 달리 "전환하면 실행할 수 있다"는 차이를 배지 색으로도 구분)를 보여준다. **v2 `API_CONDITION`에는 배지가 없다**(정상적으로 실행되는 아웃풋이므로) — v2 폼과 "연결로 전환" 흐름의 전체 정의는 `legacy-api-integration-ui-spec.md` §4.2·§4.5를 따른다.
+- **[No.27]** ⑪은 **v1(이전 형식)일 때만** 위 §4.2.1 표의 읽기 전용 형태와 `LegacySurveyBadge`("이전 형식 — 실행되지 않습니다. 설문을 선택해 전환하세요")를 보여준다. **v2 `SURVEY`에는 배지가 없다.** v2 폼과 "설문 선택해 전환" 흐름의 전체 정의는 `survey-management-ui-spec.md` §3.3·§3.4를 따른다.
 - 아웃풋 카드 우측의 "⌫ 삭제" 버튼도 44×44px 이상이며, 삭제 시 확인 없이 즉시 제거(되돌리기는 저장 전까지 `Ctrl+Z` 같은 별도 기능 없음 — 단순 폼 상태이므로 "저장" 전에는 "취소"로 전체 되돌리기 가능).
 
 ### 필드-오류 매핑
@@ -886,6 +901,7 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 | `INTERNAL_ERROR` / 미분류 | 전 화면 | 공통 토스트: "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." |
 
 **[No.26]** 신규 오류 코드(`API_OUTPUT_LEGACY_FORMAT`·`API_CONNECTION_IN_USE`)와 v2 편집 폼의 오류 반응은 `legacy-api-integration-ui-spec.md` §5에서 별도로 다룬다.
+**[No.27]** 신규 오류 코드(`SURVEY_OUTPUT_LEGACY_FORMAT`·`SURVEY_IN_USE`·`SURVEY_HAS_RESPONSES`·`SURVEY_STRUCTURE_LOCKED`)와 설문 목록/편집기/결과 화면의 오류 반응은 `survey-management-ui-spec.md` §3에서 별도로 다룬다.
 
 ### 5.5 설계 점검 → 편집 이동 흐름 (D1 전용)
 
@@ -942,6 +958,7 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 | | 비표준 항목(클라이언트 전용 미리보기) | `ContextPreviewPanel` — 실제 대화형 요소가 아니라 읽기전용 시뮬레이션이므로 별도 포커스 관리 불필요(정적 콘텐츠) |
 | D5 FAQ | §5(답변 2000자, 세로 스크롤) | 답변 `TextAreaField` |
 | | §7(권고 vs 차단 구분) | `FaqSuggestPanel`(권고) vs `DUPLICATE_FAQ`(차단) |
+| D6 설문(No.27) | 전 항목 | `survey-management-ui-spec.md` §6에서 별도로 다룬다 |
 
 ### 6.3 자동화 연계
 
@@ -964,6 +981,7 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 - **`ReorderableList`의 위/아래 버튼은 모바일에서도 드래그 대체 수단으로 축소되지 않는다** — 화면 폭에 관계없이 항상 명시적 버튼 2개를 유지한다(드래그앤드롭을 "터치 친화적"이라는 이유로 모바일에만 추가하는 것도 금지 — UIUX §3 요구가 화면 크기와 무관하게 적용됨).
 - 텍스트 영역(예문 목록, 답변, 완료 문구)은 모든 폭에서 컨테이너 전체 너비를 사용한다(UIUX §5).
 - `ImportValidationReportTable`처럼 열이 많은 표는 모바일에서 가로 스크롤 컨테이너로 감싸되(무리하게 카드로 재구성하면 행 번호·열·오류코드의 대응 관계를 잃기 쉬움), 헤더는 `position: sticky`로 고정해 스크롤 중에도 열 의미를 유지한다.
+- D6(설문, No.27)의 반응형 원칙은 `survey-management-ui-spec.md` §7에서 별도로 다룬다.
 
 ---
 
@@ -971,11 +989,12 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 
 1. **선행 작업**: `apiClient`에 `postForm`(multipart) 추가(§0.3). 대량 업로드 3개 화면(D2c/D5b) 전부 이 위에서 동작한다.
 2. **의존 스키마**: 이 문서가 참조하는 모든 스키마(§0.3)는 `backend-implementer`가 `packages/shared-types`에 반영한 뒤에야 정확히 맞는다. 특히 `DialogNodeSchema.intentIds`/`keywordIds`는 API 계약상 배열로 유지되지만(ADR-0005 §5) **저장은 조인 테이블**이라는 점은 프런트 구현에 영향이 없다(mapper가 흡수).
-3. **라우트 추가**: `App.tsx`에 `/chatbots/:chatbotId/dialogue/*` 중첩 라우트 추가, `ChatbotDetailLayout.tsx`의 `Outlet`은 그대로 두고 `TabNav.tsx`에 4번째 링크만 추가한다(`ChatbotDetailContext`의 `chatbot`/`reload`/`setUnsavedGuard`는 대화설계 서브 라우트도 동일하게 `useOutletContext`로 그대로 소비할 수 있다 — 새 컨텍스트를 만들 필요 없음).
+3. **라우트 추가**: `App.tsx`에 `/chatbots/:chatbotId/dialogue/*` 중첩 라우트 추가, `ChatbotDetailLayout.tsx`의 `Outlet`은 그대로 두고 `TabNav.tsx`에 4번째 링크만 추가한다(`ChatbotDetailContext`의 `chatbot`/`reload`/`setUnsavedGuard`는 대화설계 서브 라우트도 동일하게 `useOutletContext`로 그대로 소비할 수 있다 — 새 컨텍스트를 만들 필요 없음). **[No.27]** `surveys` 서브 라우트 3개(`surveys`/`surveys/new`/`surveys/:surveyId`)도 같은 방식으로 `DialogueShell` 하위에 추가한다.
 4. **상수 파일**: 이 문서의 모든 한국어 문구는 `apps/web/src/constants/messages.ts`의 `MESSAGES.dialogue.*`(및 `MESSAGES.dialogueNode`/`MESSAGES.dialogueImport` 등 하위 네임스페이스는 자유 배치)로 옮긴다(FR-0-8).
-5. **컴포넌트 구현 우선순위 권고**(설계서 §1 구현 순서와 정합): `SeverityBadge`/`ResourcePickerField`/`ReorderableList`(공통 기반) → D2(의도·키워드, 다른 화면의 `ResourcePickerField`가 즉시 의존) → `BulkImportModal`(D2c) → D3 → D5 → D4 → D1(가장 많은 컴포넌트를 조합하므로 마지막).
+5. **컴포넌트 구현 우선순위 권고**(설계서 §1 구현 순서와 정합): `SeverityBadge`/`ResourcePickerField`/`ReorderableList`(공통 기반) → D2(의도·키워드, 다른 화면의 `ResourcePickerField`가 즉시 의존) → `BulkImportModal`(D2c) → D3 → D5 → D4 → D1(가장 많은 컴포넌트를 조합하므로 마지막) → D6(설문, No.27 — `survey-management-ui-spec.md` §9 구현 순서 권고 참고).
 6. **미결정/후속 확인 필요**
    - D1의 "활성화 시 설계 점검 경고 확인 모달" 통합(§4.1.2 말미)은 이번 문서에서 설계만 제시했고 실제 `StatusTransitionControls` 통합 시점은 `frontend-implementer` 판단에 맡긴다(No.5 필수 범위 아님, 있으면 더 좋은 개선).
    - `DialogueSubNav`의 리소스 건수 배지(각 서브내비 항목 옆 "12"처럼)는 선택 사항으로 남겼다 — 구현 시 각 목록 최초 로드의 `total`을 전역 상태(예: 챗봇 단위 캐시)로 공유할지, 별도 카운트 엔드포인트 없이 생략할지는 성능/일정에 따라 결정한다.
    - **[No.26 갱신 — 해결됨]** 과거 "노드 아웃풋의 `API_CONDITION.headers` 마스킹(표시/가리기 토글)의 구체적 시각 스펙 미정" 항목은 이번 갱신으로 해소되었다 — v1 헤더는 서버 응답 단계에서 값이 아예 `[비공개]`로 가려지므로(§4.2.1 ⑫) 클라이언트에 "표시/가리기" 토글 UI 자체가 필요 없다. v2는 헤더 필드가 없다(연결 레지스트리 기반).
+   - **[No.27 추가]** `DialogueSubNav`의 서브내비 항목 배열(`SUBNAV_ITEMS`, 현재 `apps/web/src/pages/dialogue/DialogueShell.tsx`의 `nodes|intents|homonyms|contexts|faqs`)에 `'surveys'`를 6번째로 추가하는 구현은 `survey-management-ui-spec.md` §5(권한별 UI)·§9(인계 메모)를 따른다. `TabNav.tsx`의 최상위 라우트 6개 고정(`AC-C-3`)과의 충돌 여부는 서브내비 추가이므로 이론상 없으나, 관련 시험이 서브내비 항목 수까지 단언하고 있다면 함께 갱신한다.
    - 모바일에서 `DialogueSubNav`를 바텀시트로 할지 탭 스트립으로 할지(§7)는 기존 그룹트리 모바일 구현체가 나온 뒤 그 패턴을 재사용하는 쪽으로 결정할 것을 권고한다(일관성 우선, 이 문서에서 강제하지 않음).

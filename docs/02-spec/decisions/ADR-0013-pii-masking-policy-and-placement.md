@@ -129,4 +129,15 @@ record(input: { chatbotId, channelType, sessionId, rawUserMessage, rawBotRespons
 - **연결 단위 예외(이 ADR의 첫 예외)**: `allowRawPersonalData=true`인 연결에 한해 원문을 송신한다. 전화번호·주문번호로 조회하는 레거시 연동은 마스킹된 값(`010-****-5678`)으로는 동작하지 않기 때문이다. 이 설정은 **ADMIN만**(`security:write`), **연결 이름 재입력 확인**을 거쳐, **감사로그**(`ApiConnection UPDATE` before/after)에 남고, 콘솔·설계 점검에 "원문 송신" 텍스트 배지로 항상 보인다. 기본값은 false(마스킹 송신).
 - **예외 없는 곳**: 로그·trace·`ApiCallLog`·서버 로그에는 송신 값·응답 값이 **원문이든 마스킹본이든** 남지 않는다(`personalDataMasked` 플래그만). 관리자 시뮬레이터의 응답 변수 표시도 `maskPii` 후 보여 준다(§5 "관리자 본인이 방금 입력한 값" 예외는 외부 시스템이 돌려준 값에 적용되지 않는다).
 - 외부 응답값이 치환된 봇 응답은 기존대로 `ConversationLogService.record()`의 금지어 → PII 마스킹을 거친다(§4 `botResponse` 규칙 그대로).
-</content>
+
+
+---
+
+## 갱신 (2026-09-24 — No.27: "저장" 지점의 두 번째 테이블 = 설문 자유 텍스트 응답)
+
+설문관리(No.27, **ADR-0035 §4**)의 자유 텍스트 응답이 **"저장" 지점의 두 번째 테이블**(`SurveyAnswer.textValue`)이 된다. 적용 지점의 종류(저장 · RAG 송신 · 증강 송신 · 레거시 송신)는 늘지 않으며 **함수는 여전히 1벌**이다.
+
+- **같은 함수·같은 순서**: `maskPii(await bannedWordFilter.maskPlainText(원문))` — `ConversationLogService.record()`와 동일(복제 금지). 쓰기 주체 `SurveyResponseService` 1파일. **원문 컬럼이 없다**(정적 검사).
+- 같은 턴의 입력은 `ConversationLog.userMessage`에도 마스킹본으로 저장된다 — 두 저장소가 같은 함수를 거치므로 정책 변경 시 누락이 생기지 않는다. 대화로그 쪽을 가리지 않는다("로그는 사용자가 실제로 보낸 것").
+- **§6(이름·주소 미탐)의 영향이 커진다** — 자유 텍스트는 이름·주소를 쓰기 쉬운 입력이다. 편집기(자유 텍스트 문항 추가 시)와 결과 화면에 한계를 고지하고 문항 안내 문구 "(개인정보는 입력하지 마세요)"를 기본 예시로 권장한다. 작은 표본 비공개(k-익명성)·보존기간은 No.45.
+- 선택·척도 응답은 선택지 key·정수만 저장하므로 마스킹 대상이 아니다. 응답 값은 서버 로그·trace·감사·오류 응답·시뮬레이터 응답에 **원문이든 마스킹본이든** 남지 않는다(결과 화면·CSV의 마스킹본 열람은 `chatbot:read`).

@@ -85,6 +85,8 @@ export const SimulateRequestSchema = z
     apiMode: SimulateApiMode.default('MOCK'),
     /** [No.26 신설] MOCK 모드의 응답 원천. 미지정 시 연결의 첫 번째 샘플을 쓴다. */
     mockResponse: SimulateMockResponseSchema.optional(),
+    /** [No.27 신설] 켜면 DRAFT·마감·기간 밖 설문도 진행한다(§5.1). 저장은 0건(P-14). 기본 false. */
+    surveyPreview: z.boolean().default(false),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -119,6 +121,19 @@ export const MatchTraceSchema = z.object({
 });
 export type MatchTrace = z.infer<typeof MatchTraceSchema>;
 
+/** [No.27 신설] 시뮬레이터 결과 패널의 설문 진행 요약(FR-SV9-3) — 판정 값 필드가 없다(원문 재노출 경로 0). */
+export const SurveyStepViewSchema = z.object({
+  surveyId: z.string().uuid(),
+  surveyName: z.string(),
+  questionIndex: z.number().int().nonnegative().optional(),
+  questionCount: z.number().int().nonnegative(),
+  outcomes: z.array(z.enum(['STARTED', 'ANSWERED', 'RETRY', 'SKIPPED_QUESTION', 'COMPLETED', 'ABANDONED', 'NOT_STARTED'])),
+  reason: z.string().optional(),
+  preview: z.boolean(),
+  saved: z.literal(false),
+});
+export type SurveyStepView = z.infer<typeof SurveyStepViewSchema>;
+
 export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   state: ConversationStateSchema,
   stateDiscarded: z.array(StateDiscardReason),
@@ -133,6 +148,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   matchTrace: MatchTraceSchema.optional(),
   /** [No.26 신설] 외부 API 호출이 있었던 턴에만 존재한다(§6.2). */
   apiStep: ApiStepViewSchema.optional(),
+  /** [No.27 신설] 이번 턴에 설문 세션이 관여했을 때만 존재한다(FR-SV9-3). 판정 값은 담지 않는다. */
+  surveyStep: SurveyStepViewSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 

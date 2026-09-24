@@ -31,6 +31,8 @@ export interface RecordConversationLogParams {
   answeredByRag?: boolean;
   /** [No.26] 외부 API 고정 문구로 끝난 턴인가(§6.1, FR-L4-13) — 미응답 큐에 적재하지 않는다. 기본 false. */
   apiNotice?: boolean;
+  /** [No.27] 이번 턴 입력을 설문 세션이 소비했는가(FR-SV5-8) — 질문 순위·미응답 수집·RAG에서 제외하는 근거. 기본 false. */
+  surveyTurn?: boolean;
 }
 
 /**
@@ -82,6 +84,7 @@ export class ConversationLogService {
           answeredByRag: params.answeredByRag ?? false,
           dayBucket,
           hourBucket,
+          surveyTurn: params.surveyTurn ?? false,
         },
       });
 
@@ -95,6 +98,7 @@ export class ConversationLogService {
         blockedByFilter: params.blockedByFilter ?? false,
         inputKind: params.inputKind,
         apiNotice: params.apiNotice ?? false,
+        surveyTurn: params.surveyTurn ?? false,
       });
     } catch (e) {
       // 경고 로그에도 메시지 본문을 넣지 않는다(chatbotId/sessionId/오류코드만, NFR-S4).

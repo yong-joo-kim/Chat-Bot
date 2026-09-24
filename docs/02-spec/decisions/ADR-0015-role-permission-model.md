@@ -195,3 +195,15 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - 호출 로그 = `chatbot:read`.
 - **시뮬레이터 실제 호출**: 가드는 기존 `simulation:read` 그대로 두고 서비스가 `simulation:write`를 재확인한다(`deploy-schedule.service.ts`의 `hasPermission` 선례). 불충족은 `403`이 아니라 **목으로 격하 + 사유 안내**다 — VIEWER의 시뮬레이터 사용 자체를 막지 않으면서 VIEWER발 외부 호출을 막는다.
 - VIEWER가 `dialogue:read`로 v1 `API_CONDITION`의 평문 헤더 토큰을 읽을 수 있던 노출은 권한 변경이 아니라 **응답 가림**으로 해소한다(ADR-0034 §7 — 권한을 올리면 VIEWER의 노드 조회 자체가 막힌다).
+
+
+---
+
+## 갱신 (2026-09-24 — No.27 설문관리: 신규 권한 0종)
+
+설문관리(No.27, ADR-0035 §12)는 **신규 권한을 만들지 않는다**(PM 확정 P-12). `Permission` 15종 · `ROLE_PERMISSIONS` · 공개 경로 6곳 · 판정 순서는 전부 불변이다.
+
+- **설문 정의 조회 = `dialogue:read`, 생성·수정(상태 포함)·복제·삭제 = `dialogue:write`** — 설문 문항은 최종 사용자에게 보이는 대화 문구이며 노드가 참조하는 대화 자산이다("동작이 바꾸는 자원을 기준으로").
+- **참여 통계·응답 목록·자유 텍스트 목록·CSV = `chatbot:read`**(세 역할) — 통계와 같은 도메인. VIEWER는 마스킹본만 본다(VIEWER가 이미 `chatbot:read`로 마스킹된 질문 원문을 질문 순위에서 보는 것과 같은 등급).
+- 시뮬레이터 설문 미리보기 = 기존 `simulation:read` — 응답을 저장하지 않으므로 VIEWER 허용이 안전하다.
+- 설문 목록(`dialogue:read`)에 최근 30일 노출/완료 수를 싣는다 — 세 역할 모두 `chatbot:read`를 가져 노출 차이가 0이다(그룹별 접근 제한 도입 시 재검토 — No.45).

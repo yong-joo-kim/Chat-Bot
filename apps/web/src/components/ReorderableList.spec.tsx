@@ -112,4 +112,12 @@ describe('ReorderableList — 순서변경 키보드 조작(UIUX §3, AC-5-8)', 
     await user.click(screen.getByRole('button', { name: '1번째 아웃풋(텍스트) 삭제' }));
     expect(onRemove).toHaveBeenCalledWith('a');
   });
+
+  // [No.27] 설문 구조 잠금(응답 있음) — 항목 내용 편집은 그대로 두고 순서 이동만 비활성화한다.
+  it('reorderDisabled면 위/아래 버튼이 모두 비활성화된다(항목 내용은 영향받지 않음)', () => {
+    render(<ReorderableList items={THREE_ROWS} getKey={(r) => r.key} onChange={vi.fn()} itemLabel={(r, i) => `${i + 1}번째 아웃풋(${r.label})`} renderItem={(r) => <span>{r.label}</span>} reorderDisabled />);
+
+    expect(screen.getByRole('button', { name: '2번째 아웃풋(카드) 위로' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '2번째 아웃풋(카드) 아래로' })).toBeDisabled();
+  });
 });

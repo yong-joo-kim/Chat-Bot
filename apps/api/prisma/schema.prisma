@@ -73,6 +73,9 @@ model Chatbot {
   /// 쓰기 주체 = ChatbotsService.archive()·updateStatus() 2곳(순수 함수 archivedAtPatch 공용).
   /// 통합 통계 기여 표의 "보관일" 표시 전용 — DTO 미노출.
   archivedAt              DateTime?
+  /// [신규 No.27] 역참조만 — DB 컬럼 변화 0.
+  surveys                 Survey[]
+  surveyResponses         SurveyResponse[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -413,6 +416,10 @@ model ConversationLog {
   /// 소급 변경하지 않게 — 정적 검사 R-9/R-10). `""`는 백필 미완 센티넬이다(dayBucket 선례).
   /// 백필 스크립트만 `""` → 값으로 채울 수 있다.
   groupId         String   @default("")
+  /// [신규 No.27] 이번 턴 입력을 설문 세션이 소비했는가(응답·건너뛰기·재질문·취소·재시도 초과·완료).
+  /// 노출 턴·타임아웃 후 일반 처리 턴은 false. 질문 순위·미응답 수집에서 제외하는 근거(파생 불가).
+  /// 쓰기 주체 = record() 1곳. 인덱스 없음(answeredByRag 선례). 백필 불필요(기존 행 = false가 사실).
+  surveyTurn      Boolean  @default(false)
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
@@ -791,6 +798,9 @@ model TestRunResult {
   /// "NO_SAMPLE" · 샘플 해시 앞 8자리(FR-L7-6). 원문 없음.
   apiMockA String?
   apiMockB String?
+  /// [신규 No.27] 이 TC 실행에 설문 미리보기 판정(상태·기간 무시)이 관여했는가 — "설문 미리보기 판정" 배지 근거.
+  surveyPreviewA Boolean @default(false)
+  surveyPreviewB Boolean @default(false)
   createdAt      DateTime @default(now())
 
   @@index([runId, resultA])
@@ -1028,3 +1038,118 @@ model ApiCallLog {
   @@map("api_call_logs")
 }
 // 확인할 것 — 삭제된다면 해당 라인을 새 마이그레이션에서 제거하고 인덱스 자체는 유지해야 한다.
+
+/// [신규 No.27] 챗봇별 설문 정의(ADR-0035 §2). 쓰기 주체 = SurveysService 1파일.
+/// 문항은 설문과 생사를 같이하고 항상 함께 읽히므로 JSON(ContextVariable.slots 선례).
+/// 노드 → 설문 참조는 DialogNode.outputs JSON 안(FK 없음 — 삭제 409는 앱 레벨). 스냅샷 대상이 아니다.
+model Survey {
+  id                    String   @id @default(uuid())
+  chatbotId             String
+  chatbot               Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name                  String
+  /// normalizeText(name) — 챗봇 내 유일(ADR-0006)
+  nameNormalized        String
+  description           String?
+  /// DRAFT | OPEN | CLOSED (zod SurveyStatus)
+  status                String   @default("DRAFT")
+  activeFrom            DateTime?
+  activeTo              DateTime?
+  introMessage          String?
+  completionMessage     String   @default("설문에 참여해 주셔서 감사합니다.")
+  /// JSON string[] 0~10개(각 ≤20자)
+  cancelKeywords        String   @default("[\"그만\",\"취소\",\"설문 종료\"]")
+  sessionTimeoutMinutes Int      @default(30)
+  /// JSON SurveyQuestion[] 0~20개 — 문항·선택지 key(UUID)는 생성 후 불변
+  questions             String   @default("[]")
+  /// 구조 변경 시 +1(서버 관리). 응답(답 행) 존재 후 구조 변경은 409 — 값이 사실상 동결된다
+  structureVersion      Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  responses SurveyResponse[]
+
+  @@unique([chatbotId, nameNormalized])
+  @@index([chatbotId, updatedAt])
+  @@map("surveys")
+}
+
+/// [신규 No.27] 응답 시도 1건(노출 ~ 완료/이탈). ★ 쓰기 주체 = SurveyResponseService 1파일(create·update),
+/// 삭제 코드 0건(정적 검사 S-1). IP·User-Agent·쿠키·로그인 식별자 컬럼이 존재하지 않는다(S-3).
+/// 이탈(무응답)은 행을 바꾸지 않고 조회 시점에 판정한다(ADR-0035 §6).
+model SurveyResponse {
+  id                   String   @id @default(uuid())
+  chatbotId            String
+  chatbot              Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  surveyId             String
+  survey               Survey   @relation(fields: [surveyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 노출 당시 챗봇 소속 그룹 스냅샷 — FK 없음 · 적재 후 불변(ConversationLog.groupId 선례, ADR-0033 §4)
+  groupId              String
+  /// 위젯 난수 — 응답자 키의 전부(인증 수단 아님). API 응답·CSV에 싣지 않는다
+  sessionId            String
+  channelType          String
+  structureVersion     Int
+  /// 쓰기 키 일부 — 엔진이 정한 노출 시각(봉투 surveySession.startedAt과 같은 값)
+  startedAt            DateTime
+  /// EXPOSED | IN_PROGRESS | COMPLETED | ABANDONED
+  status               String   @default("EXPOSED")
+  /// CANCELLED | RETRY_EXCEEDED | SWITCHED | TIMEOUT | DEFINITION_CHANGED | CLOSED
+  endReason            String?
+  /// 답 행(응답·건너뜀)이 1건 이상인가 — "시작" 지표의 groupBy 키
+  started              Boolean  @default(false)
+  /// 마지막으로 적재된 문항 순번(-1 = 없음) — 순서 증가 가드 · 도달 퍼널
+  lastQuestionIndex    Int      @default(-1)
+  lastInteractedAt     DateTime
+  completedAt          DateTime?
+  endedAt              DateTime?
+  missingRequiredCount Int      @default(0)
+  /// 같은 (chatbotId, sessionId, surveyId)에 먼저 완료된 시도가 있다(노출·완료 시점 판정) — 통계 기본 제외
+  isDuplicate          Boolean  @default(false)
+  /// FK 없음(사실 기록)
+  exposedNodeId        String?
+  /// 노출 턴의 messageId(= ConversationLog.id) — FK 없음
+  conversationLogId    String?
+  /// KST 노출일 — 적재 시점 확정·불변(ADR-0017)
+  dayBucket            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  answers SurveyAnswer[]
+
+  /// 쓰기 키 = 멱등(리플레이 흡수) · 선두 3열 접두가 (chatbotId, sessionId, surveyId) 중복 조회·챗봇 삭제 사전검사 count를 겸한다
+  @@unique([chatbotId, sessionId, surveyId, startedAt])
+  @@index([surveyId, dayBucket])
+  @@map("survey_responses")
+}
+
+/// [신규 No.27] 문항 응답. 선택 유형은 선택지 1개당 1행(DB groupBy로 분포 — FR-SV5-7), 문항당 대표 행(isHead) 1개.
+/// 라벨 문자열을 저장하지 않는다(키만 — 라벨 수정 허용의 근거). textValue = 마스킹본만(원문 컬럼 없음).
+/// ★ 쓰기 주체 = SurveyResponseService 1파일 · 삭제 코드 0건.
+model SurveyAnswer {
+  id            String         @id @default(uuid())
+  responseId    String
+  response      SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 비정규화(조인 없는 groupBy) — FK 없음(응답 행 FK가 보호)
+  surveyId      String
+  questionKey   String
+  questionIndex Int
+  /// ANSWERED | SKIPPED
+  kind          String
+  /// 문항당 정확히 1행 true — 응답자 수·척도 분포·건너뜀의 기준 행
+  isHead        Boolean
+  /// 선택 유형의 선택지 key, 그 외는 "" (SQLite NULL 유일성 회피 센티넬)
+  choiceKey     String         @default("")
+  /// 척도 값(정수)
+  numericValue  Int?
+  /// ★ 금지어 → PII 마스킹 후 값만
+  textValue     String?
+  /// 비정규화 3종 — 응답 행에서 복사(적재 시점). isDuplicate만 완료 시점 재판정으로 갱신될 수 있다(쓰기 주체 동일)
+  dayBucket     String
+  channelType   String
+  isDuplicate   Boolean        @default(false)
+  answeredAt    DateTime
+
+  /// 멱등 — 같은 시도·문항·선택지 두 번 적재 불가
+  @@unique([responseId, questionKey, choiceKey])
+  @@index([surveyId, questionKey, dayBucket])
+  @@map("survey_answers")
+}

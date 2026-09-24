@@ -18,6 +18,9 @@ export interface ShouldRunRagInput {
   /** [No.26 추가] 원본 결과에 `apiCall`이 있었는가(외부 API 호출이 개입한 턴). true면 항상 false를
    * 반환한다(FR-L4-12 · AC-L3-15) — 외부 API 실패는 문서 검색으로 덮을 사안이 아니다. 기본 false. */
   apiTurn?: boolean;
+  /** [No.27 추가] 이번 턴 입력을 설문 세션이 소비했는가(엔진 결과 `surveyTurn` 기준, FR-SV5-9 ⑪).
+   * true면 항상 false를 반환한다 — 설문 답을 질문으로 오인해 문서 검색을 시도하지 않는다. 기본 false. */
+  surveyTurn?: boolean;
 }
 
 /**
@@ -26,6 +29,7 @@ export interface ShouldRunRagInput {
  */
 export function shouldRunRag(input: ShouldRunRagInput): boolean {
   if (input.apiTurn) return false; // 외부 API가 개입한 턴 — 조건 ⑩(FR-L4-12).
+  if (input.surveyTurn) return false; // 설문이 소비한 턴 — 조건 ⑪(FR-SV5-9).
   if (!input.ragEnabled || !input.ragCompany) return false;
   if (input.judgeAnswered) return false; // 1단계가 이미 답했다 — 2단계로 갈 이유가 없다(폴백 도달 아님).
   if (input.blockedByFilter) return false;

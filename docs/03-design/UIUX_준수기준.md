@@ -23,6 +23,7 @@
 - 텍스트 레이블은 동사형("전송", "닫기" 등).
 - 더블클릭/연타 시 중복 실행(중복 전송) 방지 로직 필수.
 - 반응 영역: 마우스 상호작용 17×17px, 터치 상호작용 44×44px 이상. → (b) 모바일 반응형 관리자 화면에도 적용.
+- **대화형 설문 문항 표시 원칙**: 대화창 안에서 여러 턴에 걸쳐 문항을 묻는 설문(예: 만족도 조사)의 매 문항은 진행 표시("n/N")를 문항 문구보다 **먼저** 노출해 스크린리더가 "몇 번째 문항인지"를 먼저 듣게 한다. 선택형 응답 버튼은 별 기호 등 **기호만으로 의미를 전달하지 않고** 항상 텍스트 라벨을 함께 표시한다(예: "1점 매우 불만족", 양 끝 값에는 라벨을 병기). 응답 버튼이 5개를 넘으면 5개 단위로 블록을 나눠 전부 노출한다(일부 선택지가 잘려 사라지지 않게). 모든 문항에는 대화를 중단할 수 있는 "그만하기" 버튼을 상시 제공한다. → (a) 챗봇 위젯의 대화 내 설문 진행(`survey-management-ui-spec.md` §3.10).
 
 ## 5. 텍스트 입력 필드/텍스트 영역 — (a) 챗봇 메시지 입력창에 핵심
 - 레이블 필수 제공(플레이스홀더를 레이블 대체 수단으로 쓰지 말 것).
@@ -68,3 +69,4 @@
 - 슬라이더 수치입력 병행·비동기 대기 패턴(2026-09-22 추가): `docs/requirements/nlu-rag-answering.md` NFR-A4·FR-N2-39, `docs/02-spec/decisions/ADR-0023-async-pending-answer-delivery.md`
 - 제안-자산 시각적 분리 패턴(2026-09-22 추가): `docs/requirements/learning-augmentation.md` J-11, `docs/02-spec/decisions/ADR-0025-augmentation-output-and-suggestion-asset-separation.md` §5
 - 정렬 가능한 표 헤더 `aria-sort` 규칙 · 백필 대기(부분 정정 상태) 배너 패턴(2026-09-24 추가): `docs/requirements/integrated-stats.md` NFR-IA2/IA3·FR-I2-4, `docs/02-spec/decisions/ADR-0033-cumulative-stats-source-log-sealing-and-group-snapshot.md`, `docs/03-design/integrated-stats-ui-spec.md` §2
+- 대화형 설문 문항 표시 원칙(진행 표시 n/N · 텍스트 라벨 버튼 · 그만하기 상시 제공, 2026-09-24 추가): `docs/requirements/survey-management.md` NFR-SVA4·FR-SV4-8, `docs/02-spec/decisions/ADR-0035-survey-dialogue-session-and-server-response-ledger.md`, `docs/03-design/survey-management-ui-spec.md` §3.10

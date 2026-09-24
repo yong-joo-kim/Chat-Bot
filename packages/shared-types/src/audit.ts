@@ -68,6 +68,8 @@ export const AuditTargetType = z.enum([
   'DeploySchedule',
   // 레거시 API 연동(No.26) 그룹 추가(legacy-api-integration-설계.md §11) — 연결 CRUD 감사 대상.
   'ApiConnection',
+  // 설문관리(No.27) 그룹 추가(survey-management-설계.md §12) — 정의 CRUD·상태·복제 감사 대상.
+  'Survey',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -88,6 +90,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   ChatbotVersion: '챗봇 버전',
   DeploySchedule: '배포 예약',
   ApiConnection: 'API 연결',
+  Survey: '설문',
 };
 
 /**

@@ -90,6 +90,8 @@ export function toTestRunResultDto(row: PrismaTestRunResult, nameById?: Readonly
     ragSourceCount: row.ragSourceCount ?? undefined,
     apiMockA: row.apiMockA ?? null,
     apiMockB: row.apiMockB ?? undefined,
+    surveyPreviewA: row.surveyPreviewA,
+    surveyPreviewB: row.surveyPreviewB,
     createdAt: row.createdAt,
   };
 }

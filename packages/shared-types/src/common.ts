@@ -133,6 +133,11 @@ export const ApiErrorCode = z.enum([
   // 레거시 API 연동(No.26) 그룹 추가(legacy-api-integration-설계.md §12.3) — 2종.
   'API_OUTPUT_LEGACY_FORMAT',
   'API_CONNECTION_IN_USE',
+  // 설문관리(No.27) 그룹 추가(survey-management-설계.md §13.3) — 4종.
+  'SURVEY_OUTPUT_LEGACY_FORMAT',
+  'SURVEY_IN_USE',
+  'SURVEY_HAS_RESPONSES',
+  'SURVEY_STRUCTURE_LOCKED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

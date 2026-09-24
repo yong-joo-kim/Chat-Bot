@@ -609,15 +609,16 @@ describe('대화 설계(No.5~9) 통합 테스트', () => {
       expect(res.status).toBe(400);
     });
 
-    it('AC-5-7: SURVEY(미지원 아웃풋)를 포함한 노드는 201로 저장된다(실행만 제외)', async () => {
+    it('AC-5-7: [No.27 의도된 변경] v1 SURVEY(이전 형식) 저장은 400 SURVEY_OUTPUT_LEGACY_FORMAT으로 거부된다', async () => {
       const { id: chatbotId } = await createChatbot();
       const intent = await jsonRequest<{ intent: { id: string } }>('POST', `${base(chatbotId)}/intents`, { name: '설문조건' });
-      const res = await jsonRequest('POST', `${base(chatbotId)}/dialog-nodes`, {
+      const res = await jsonRequest<{ code: string }>('POST', `${base(chatbotId)}/dialog-nodes`, {
         name: '설문노드',
         intentIds: [intent.body.intent.id],
         outputs: [{ type: 'SURVEY', payload: { surveyId: 'post-satisfaction' } }],
       });
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('SURVEY_OUTPUT_LEGACY_FORMAT');
     });
 
     it('AC-5-9/5-10: DIALOG_MOVE 순환과 빈 아웃풋 노드가 설계 점검에서 검출된다', async () => {

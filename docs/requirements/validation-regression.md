@@ -331,7 +331,7 @@ ml-worker가 내려간 상태에서 실행했다. 결과 헤더에 **`⚠ 의미
 | FR-V1-28 | **응답 텍스트는 판정하지 않는다.** 대신 `serializeOutputsForDiff(outputs)`의 **해시**와 **선두 120자 미리보기**를 저장해 M1/M2의 `outputsChanged` 판정에 쓴다. 화면은 이 사실을 **"응답 내용은 변화 감지에만 사용됩니다"** 로 명시한다. |
 | FR-V1-29 | 각 결과에 **참고 지표**를 함께 저장한다: `band`(`CONFIRMED`/`AMBIGUOUS`/`FAILED`/`SKIPPED`) · `top1Score` · `top1Kind`/`top1Id` · `marginToTop2` · `unsupportedOutputCount` · `wouldUseRag` · `elapsedMs`. **`trace` 전문은 저장하지 않는다**(용량 — 2,000건 × 수십 스텝). 단건 재현은 시뮬레이터로 넘긴다(FR-V3-6). |
 | FR-V1-30 | **금지어로 차단된 응답도 정상 결과로 기록**하고 그 사실을 표시한다(S-9) — 차단은 실제 대화의 동작이며 검증 대상이다. |
-| FR-V1-31 | ⚠ **미지원 아웃풋 3종**(`SCENARIO`/`SURVEY`/`API_CONDITION`, ADR-0008)이 포함된 TC는 **매칭 판정은 정상 수행**하되 결과에 **`일부 아웃풋 미실행`** 배지를 붙인다. 응답 해시 비교에서 **거짓 차이**가 나지 않도록 미지원 아웃풋은 **해시 계산에서 동일하게 직렬화**된다(엔진이 이미 `unsupportedOutputs`로 분리하므로 추가 규칙 불필요). |
+| FR-V1-31 | ⚠ **[갱신 No.26·No.27: 배지 대상은 `SCENARIO`·v1(이전 형식) `API_CONDITION`·v1(이전 형식) `SURVEY`뿐 — v2 `SURVEY`가 개입한 TC는 대신 `설문 미리보기 판정` 배지(상태·기간 무시 판정, `survey-management-설계.md` §7.4)]** **미지원 아웃풋 3종**(`SCENARIO`/`SURVEY`/`API_CONDITION`, ADR-0008)이 포함된 TC는 **매칭 판정은 정상 수행**하되 결과에 **`일부 아웃풋 미실행`** 배지를 붙인다. 응답 해시 비교에서 **거짓 차이**가 나지 않도록 미지원 아웃풋은 **해시 계산에서 동일하게 직렬화**된다(엔진이 이미 `unsupportedOutputs`로 분리하므로 추가 규칙 불필요). |
 
 #### 4.1.6 엔티티(키워드) 검증 — J-5 결정
 

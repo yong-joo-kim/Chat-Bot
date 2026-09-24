@@ -85,6 +85,13 @@ export function warningText(warning: RestoreWarning): string {
       return msg.warnings.API_CONNECTION_DISABLED(warning.count);
     case 'API_LEGACY_FORMAT':
       return msg.warnings.API_LEGACY_FORMAT(warning.count);
+    // [No.27] 설문관리 — 복원 미리보기 경고 3종(survey-management-ui-spec.md §3.9).
+    case 'SURVEY_MISSING':
+      return msg.warnings.SURVEY_MISSING(warning.count);
+    case 'SURVEY_NOT_OPEN':
+      return msg.warnings.SURVEY_NOT_OPEN(warning.count);
+    case 'SURVEY_LEGACY_FORMAT':
+      return msg.warnings.SURVEY_LEGACY_FORMAT(warning.count);
     default:
       return '';
   }

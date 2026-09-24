@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { buildDialogueIndex } from '@chat-bot/dialogue-engine';
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
-import type { ContextSlot, DialogOutput, DialogueBundle, HomonymMeaning } from '@chat-bot/shared-types';
+import type { ContextSlot, DialogOutput, DialogueBundle, HomonymMeaning, Survey, SurveyQuestion } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import type { DialogueBundleCache } from './dialogue-bundle.cache';
 import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
@@ -81,6 +81,7 @@ export class DialogueBundleService {
     let dialogNodes: Awaited<ReturnType<typeof this.prisma.dialogNode.findMany<{ include: { intentLinks: true; keywordLinks: true } }>>>;
     let contexts: Awaited<ReturnType<typeof this.prisma.contextVariable.findMany>>;
     let faqs: Awaited<ReturnType<typeof this.prisma.faqEntry.findMany>>;
+    let surveys: Awaited<ReturnType<typeof this.prisma.survey.findMany>>;
 
     if (isTransactionClient) {
       intents = await db.intent.findMany({ where: { chatbotId } });
@@ -89,14 +90,16 @@ export class DialogueBundleService {
       dialogNodes = await db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } });
       contexts = await db.contextVariable.findMany({ where: { chatbotId } });
       faqs = await db.faqEntry.findMany({ where: { chatbotId } });
+      surveys = await db.survey.findMany({ where: { chatbotId } });
     } else {
-      [intents, keywords, homonyms, dialogNodes, contexts, faqs] = await Promise.all([
+      [intents, keywords, homonyms, dialogNodes, contexts, faqs, surveys] = await Promise.all([
         db.intent.findMany({ where: { chatbotId } }),
         db.keyword.findMany({ where: { chatbotId } }),
         db.homonymDictionary.findMany({ where: { chatbotId } }),
         db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } }),
         db.contextVariable.findMany({ where: { chatbotId } }),
         db.faqEntry.findMany({ where: { chatbotId } }),
+        db.survey.findMany({ where: { chatbotId } }),
       ]);
     }
 
@@ -167,6 +170,24 @@ export class DialogueBundleService {
         answer: row.answer,
         altQuestions: this.safeParseArray<string>(row.altQuestions, `Faq.altQuestions(${row.id})`),
         enabled: row.enabled,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+      // [No.27] 선택 필드 — 실패 시 `questions: []`로 폴백한다(FR-SV2-9, 엔진은 개별 문항 오류로 전체를 버리지 않는다).
+      surveys: surveys.map((row) => ({
+        id: row.id,
+        chatbotId: row.chatbotId,
+        name: row.name,
+        description: row.description ?? undefined,
+        status: row.status as Survey['status'],
+        activeFrom: row.activeFrom ?? undefined,
+        activeTo: row.activeTo ?? undefined,
+        introMessage: row.introMessage ?? undefined,
+        completionMessage: row.completionMessage,
+        cancelKeywords: this.safeParseArray<string>(row.cancelKeywords, `Survey.cancelKeywords(${row.id})`),
+        sessionTimeoutMinutes: row.sessionTimeoutMinutes,
+        questions: this.safeParseArray<SurveyQuestion>(row.questions, `Survey.questions(${row.id})`),
+        structureVersion: row.structureVersion,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       })),

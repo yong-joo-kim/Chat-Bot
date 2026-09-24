@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isApiConditionV2, normalizeText } from '@chat-bot/shared-types';
+import { isApiConditionV2, isSurveyV2, normalizeText } from '@chat-bot/shared-types';
 import type { RestoreWarning } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BannedWordFilterService } from '../../banned-words/banned-word-filter.service';
@@ -151,6 +151,31 @@ export class RestoreWarningsService {
       if (disabled > 0) warnings.push({ code: 'API_CONNECTION_DISABLED', count: disabled });
     }
     if (legacyFormatCount > 0) warnings.push({ code: 'API_LEGACY_FORMAT', count: legacyFormatCount });
+
+    // [No.27] 설문 참조 경고 3종(§16) — 대상 스냅샷의 v2 surveyId 집합으로 1회 조회.
+    const targetSurveyIds = new Set<string>();
+    let legacySurveyFormatCount = 0;
+    for (const node of target.assets.dialogNodes) {
+      for (const output of node.outputs) {
+        if (output.type !== 'SURVEY') continue;
+        if (isSurveyV2(output.payload)) targetSurveyIds.add(output.payload.surveyId);
+        else legacySurveyFormatCount += 1;
+      }
+    }
+    if (targetSurveyIds.size > 0) {
+      const rows = await this.prisma.survey.findMany({ where: { id: { in: [...targetSurveyIds] } }, select: { id: true, status: true } });
+      const foundMap = new Map(rows.map((r) => [r.id, r.status]));
+      let missing = 0;
+      let notOpen = 0;
+      for (const id of targetSurveyIds) {
+        const status = foundMap.get(id);
+        if (status === undefined) missing += 1;
+        else if (status !== 'OPEN') notOpen += 1;
+      }
+      if (missing > 0) warnings.push({ code: 'SURVEY_MISSING', count: missing });
+      if (notOpen > 0) warnings.push({ code: 'SURVEY_NOT_OPEN', count: notOpen });
+    }
+    if (legacySurveyFormatCount > 0) warnings.push({ code: 'SURVEY_LEGACY_FORMAT', count: legacySurveyFormatCount });
 
     return warnings;
   }

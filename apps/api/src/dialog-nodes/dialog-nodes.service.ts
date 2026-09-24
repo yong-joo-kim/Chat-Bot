@@ -14,7 +14,9 @@ import {
   Paginated,
   UpdateDialogNodeDto,
   findLegacyApiOutputIndexes,
+  findLegacySurveyOutputIndexes,
   isApiConditionV2,
+  isSurveyV2,
   normalizeText,
 } from '@chat-bot/shared-types';
 import { buildFlowTree, computeIncomingCounts, validateDialogueDesign } from '@chat-bot/dialogue-engine';
@@ -59,6 +61,19 @@ export class DialogNodesService {
         400,
         'API 조건을 연결 방식으로 전환해야 저장할 수 있습니다.',
         indexes.map((i) => ({ field: `outputs[${i}]`, message: '이전 형식 API 조건은 저장할 수 없습니다.' })),
+      );
+    }
+  }
+
+  /** [No.27] 쓰기 = v2만 — v1 `SURVEY`가 있으면 400으로 거부한다(§4.2, 기존 API 가드 뒤에 검사). */
+  private assertNoLegacySurveyOutputs(outputs: DialogOutput[]): void {
+    const indexes = findLegacySurveyOutputIndexes(outputs);
+    if (indexes.length > 0) {
+      throw new ApiException(
+        'SURVEY_OUTPUT_LEGACY_FORMAT',
+        400,
+        '설문 연결을 새 방식으로 바꿔야 저장할 수 있습니다. 설문을 선택해 주세요.',
+        indexes.map((i) => ({ field: `outputs[${i}]`, message: '이전 형식 설문 연결은 저장할 수 없습니다.' })),
       );
     }
   }
@@ -112,6 +127,7 @@ export class DialogNodesService {
     // 위치에서 참조되면 위치 수만큼 detail이 생긴다).
     const nodeTargetRefs: Array<{ id: string; field: string }> = [];
     const contextFormIds = new Set<string>();
+    const surveyRefs: Array<{ id: string; field: string }> = [];
     input.outputs.forEach((o, i) => {
       if (o.type === 'DIALOG_MOVE') nodeTargetRefs.push({ id: o.payload.targetNodeId, field: `outputs.${i}.payload.targetNodeId` });
       if (o.type === 'CONTEXT_FORM') contextFormIds.add(o.payload.contextVariableId);
@@ -135,6 +151,13 @@ export class DialogNodesService {
           if (o.payload.failureNodeId) nodeTargetRefs.push({ id: o.payload.failureNodeId, field: `outputs.${i}.payload.failureNodeId` });
         }
       }
+      // [No.27] v2 SURVEY의 surveyId(같은 챗봇 Survey 참조)·onCompleteNodeId(노드 참조, J-20).
+      if (o.type === 'SURVEY' && isSurveyV2(o.payload)) {
+        surveyRefs.push({ id: o.payload.surveyId, field: `outputs.${i}.payload.surveyId` });
+        if (o.payload.onCompleteNodeId) {
+          nodeTargetRefs.push({ id: o.payload.onCompleteNodeId, field: `outputs.${i}.payload.onCompleteNodeId` });
+        }
+      }
     });
     const nodeTargetIds = new Set(nodeTargetRefs.map((r) => r.id));
     if (nodeTargetIds.size > 0) {
@@ -147,6 +170,12 @@ export class DialogNodesService {
       const foundSet = new Set(found.map((f) => f.id));
       [...contextFormIds].filter((id) => !foundSet.has(id)).forEach((id) => details.push({ field: 'outputs.contextVariableId', message: id }));
     }
+    if (surveyRefs.length > 0) {
+      const surveyIds = new Set(surveyRefs.map((r) => r.id));
+      const found = await this.prisma.survey.findMany({ where: { chatbotId, id: { in: [...surveyIds] } }, select: { id: true } });
+      const foundSet = new Set(found.map((f) => f.id));
+      surveyRefs.filter((r) => !foundSet.has(r.id)).forEach((r) => details.push({ field: r.field, message: r.id }));
+    }
 
     if (details.length > 0) {
       throw new ApiException('INVALID_REFERENCE', 404, '선택한 항목 중 존재하지 않는 참조가 있습니다.', details);
@@ -158,6 +187,7 @@ export class DialogNodesService {
     const name = dto.name.trim();
     const nameNormalized = normalizeText(name);
     this.assertNoLegacyApiOutputs(dto.outputs);
+    this.assertNoLegacySurveyOutputs(dto.outputs);
     await this.assertNameFree(chatbotId, nameNormalized);
     await this.assertNodeTypeSingleton(chatbotId, dto.nodeType);
     await this.validateReferences(chatbotId, dto);
@@ -255,7 +285,10 @@ export class DialogNodesService {
     await this.scope.assertWritable(chatbotId);
     const current = await this.findRowOrThrow(chatbotId, id);
     // [No.26] outputs가 없으면 기존 v1을 그대로 둔다(자동 삭제 없음, P-4 · §21 D-16).
-    if (dto.outputs !== undefined) this.assertNoLegacyApiOutputs(dto.outputs);
+    if (dto.outputs !== undefined) {
+      this.assertNoLegacyApiOutputs(dto.outputs);
+      this.assertNoLegacySurveyOutputs(dto.outputs);
+    }
 
     let name = current.name;
     let nameNormalized = current.nameNormalized;
@@ -341,10 +374,13 @@ export class DialogNodesService {
 
     // [No.26] 원본의 v1 `API_CONDITION`은 사본에서 제외한다(헤더 토큰 복제 차단 — FR-L1-4). v2는
     // 시크릿이 없으므로 그대로 복사한다(FR-L3-5).
+    // [No.27] 원본의 v1 `SURVEY`도 사본에서 제외한다(FR-SV1-5 — 사본이 곧바로 저장 불가 노드가 되는 것을 막는다). v2는 그대로 복사한다.
     const originalOutputs = parseOutputs(original.outputs, id);
     const legacyIndexes = new Set(findLegacyApiOutputIndexes(originalOutputs));
-    const filteredOutputs = originalOutputs.filter((_, i) => !legacyIndexes.has(i));
+    const legacySurveyIndexes = new Set(findLegacySurveyOutputIndexes(originalOutputs));
+    const filteredOutputs = originalOutputs.filter((_, i) => !legacyIndexes.has(i) && !legacySurveyIndexes.has(i));
     const excludedLegacyApiOutputCount = legacyIndexes.size;
+    const excludedLegacySurveyOutputCount = legacySurveyIndexes.size;
 
     const row = await this.prisma.$transaction(async (tx) => {
       const created = await tx.dialogNode.create({
@@ -375,7 +411,7 @@ export class DialogNodesService {
       after: this.toAuditSnapshot(row),
     });
 
-    return { ...toDialogNodeResponse(row), excludedLegacyApiOutputCount };
+    return { ...toDialogNodeResponse(row), excludedLegacyApiOutputCount, excludedLegacySurveyOutputCount };
   }
 
   async remove(chatbotId: string, id: string): Promise<void> {

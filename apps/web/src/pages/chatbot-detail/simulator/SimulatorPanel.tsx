@@ -15,6 +15,7 @@ import { CompareView } from './CompareView';
 import { RagUsageToggle } from './RagUsageToggle';
 import { ApiModeToggle } from './ApiModeToggle';
 import { MockResponseSelector } from './MockResponseSelector';
+import { SurveyPreviewToggle } from './SurveyPreviewToggle';
 import type { SimMessage } from './types';
 
 let seq = 0;
@@ -72,6 +73,8 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
   // [No.26] SIM1-ext — 외부 API 호출 모드. 기본 MOCK(J-5 "아무 것도 설정하지 않아도 안전").
   const [apiMode, setApiMode] = useState<SimulateApiMode>('MOCK');
   const [mockResponse, setMockResponse] = useState<SimulateMockResponse | undefined>(undefined);
+  // [No.27] SIM1-ext — 설문 미리보기 토글. 기본 꺼짐(실제 상태·기간을 따름, ui-spec §3.6).
+  const [surveyPreview, setSurveyPreview] = useState(false);
   const canCallLive = can('simulation:write');
   // ⚠ 오버레이(미저장 편집) 상태에서는 LIVE를 사전 차단한다 — 최종 판정은 항상 서버지만,
   // 클라이언트에서 미리 안내해 무의미한 실패 호출을 줄인다(ui-spec §3.7, disabled는 사전 안내일 뿐).
@@ -102,6 +105,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         useRag,
         apiMode,
         mockResponse: apiMode === 'MOCK' ? mockResponse : undefined,
+        surveyPreview,
       });
       const next: SimMessage[] = [];
       if (res.stateDiscarded.length > 0) {
@@ -119,6 +123,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         unsupportedOutputs: res.unsupportedOutputs,
         matchTrace: res.matchTrace,
         apiStep: res.apiStep,
+        surveyStep: res.surveyStep,
       });
       setMessages((prev) => [...prev, ...next]);
       setState(res.state);
@@ -256,6 +261,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
             <RagUsageToggle checked={useRag} onChange={setUseRag} disabled={sending} />
             <ApiModeToggle mode={apiMode} onChange={setApiMode} liveDisabled={Boolean(liveDisabledReason)} liveDisabledReason={liveDisabledReason} />
             {apiMode === 'MOCK' && <MockResponseSelector value={mockResponse} onChange={setMockResponse} />}
+            <SurveyPreviewToggle checked={surveyPreview} onChange={setSurveyPreview} />
             <MessageComposer disabled={sending} onSend={handleSend} />
           </div>
           <SessionStatePanel state={state ?? null} />

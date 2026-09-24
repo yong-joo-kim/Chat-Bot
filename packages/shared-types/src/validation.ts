@@ -299,6 +299,9 @@ export const TestRunResultSchema = z.object({
   /** [No.26 신설] 이 TC 판정에 API 목이 관여했는가: null = 관여 없음 · "NO_SAMPLE" · 샘플 해시 앞 8자리(FR-L7-6). */
   apiMockA: z.string().nullable().optional(),
   apiMockB: z.string().nullable().optional(),
+  /** [No.27 신설] 이 TC 실행에 설문 미리보기 판정(상태·기간 무시)이 관여했는가(§7.4). */
+  surveyPreviewA: z.boolean().default(false),
+  surveyPreviewB: z.boolean().default(false),
   createdAt: z.coerce.date(),
 });
 export type TestRunResult = z.infer<typeof TestRunResultSchema>;

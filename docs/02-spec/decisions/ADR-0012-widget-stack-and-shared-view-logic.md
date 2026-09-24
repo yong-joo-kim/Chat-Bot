@@ -114,4 +114,3 @@ packages/shared-types/src/contrast.ts      # (신규) apps/web/src/lib/contrast.
 - `frontend-implementer` 인계: `core/`는 DOM 없이 단위 테스트(FR-W-16), `ui/`는 최소한의 jsdom 테스트, 접근성은 §9.5 매핑표(설계서)를 체크리스트로 사용.
 - `test-automation` 인계: AC-W 18건 중 브라우저 통합이 필요한 항목을 최소화하고, `store`/`pause-schedule`/`button-action`/`session`/`output-view`를 순수 테스트로 커버한다.
 - **배포 인계**: `widget.js` 파일명 고정 → `Cache-Control: max-age=300, must-revalidate` 권고, `/c/*` SPA fallback 필요. `docs/05-ops/자동배포.md`에 기록.
-</content>

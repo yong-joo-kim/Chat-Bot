@@ -130,9 +130,15 @@ export function NodesListPage(): JSX.Element {
   async function handleCopy(node: DialogNodeListItem): Promise<void> {
     try {
       const copy = await dialogNodesApi.copy(chatbot.id, node.id);
-      const excludedCount = copy.excludedLegacyApiOutputCount;
+      const excludedApiCount = copy.excludedLegacyApiOutputCount;
+      // [No.27] v1 SURVEY도 복사에서 제외된다 — 개수를 같은 토스트에 이어 붙인다(FR-SV1-5, No.26 패턴 재사용).
+      const excludedSurveyCount = copy.excludedLegacySurveyOutputCount;
       const baseName = copy.name.replace(' (사본)', '');
-      showToast(excludedCount > 0 ? `${msg.copySuccess(baseName)} ${MESSAGES.dialogue.outputFields.copyExcludedLegacyApi(excludedCount)}` : msg.copySuccess(baseName));
+      const noticeParts = [
+        excludedApiCount > 0 ? MESSAGES.dialogue.outputFields.copyExcludedLegacyApi(excludedApiCount) : undefined,
+        excludedSurveyCount > 0 ? MESSAGES.dialogue.outputFields.copyExcludedLegacySurvey(excludedSurveyCount) : undefined,
+      ].filter((p): p is string => Boolean(p));
+      showToast(noticeParts.length > 0 ? `${msg.copySuccess(baseName)} ${noticeParts.join(' ')}` : msg.copySuccess(baseName));
       void load();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : MESSAGES.errors.generic);

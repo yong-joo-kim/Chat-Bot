@@ -15,6 +15,7 @@ import { JudgmentBadge } from '../../../../components/JudgmentBadge';
 import { Pagination } from '../../../../components/Pagination';
 import { ResultCsvExportButton } from '../ResultCsvExportButton';
 import { ClassificationBadge } from '../compare/ClassificationBadge';
+import { SurveyPreviewJudgmentBadge } from '../../../dialogue/components/survey/badges';
 import { TestRunProgressBar } from './TestRunProgressBar';
 import { TestRunSummaryBar } from './TestRunSummaryBar';
 import { EnvFingerprintBadgeGroup } from './EnvFingerprintBadgeGroup';
@@ -280,6 +281,12 @@ export function TestRunDetailPage(): JSX.Element {
                 {MESSAGES.validation.overlayCompare.filterRegressedOnly}
               </label>
               <p className="field-hint">{MESSAGES.validation.overlayCompare.filterRegressedOnlyHint}</p>
+              {/* [No.27] 설문 실행 방식이 A/B 중 한쪽에만 개입했으면 비교 결과가 달라질 수 있음을 1회 안내(ui-spec §3.8). */}
+              {results.some((r) => Boolean(r.surveyPreviewA) !== Boolean(r.surveyPreviewB)) && (
+                <p className="form-banner form-banner--info" role="status">
+                  {MESSAGES.validation.result.surveyPreviewDivergedNotice}
+                </p>
+              )}
               <div className="compare-turn-list">
                 {results
                   .map((r) => ({ r, classification: deriveOverlayClassification(r.resultA, r.resultB, r.diffStatus) }))
@@ -292,13 +299,13 @@ export function TestRunDetailPage(): JSX.Element {
                       <div className="compare-turn-columns">
                         <div className="compare-turn-column">
                           <p className="compare-turn-column-label">{MESSAGES.validation.overlayCompare.columnA}</p>
-                          <JudgmentBadge value={r.resultA} /> {r.matchedNameA ?? '—'}
+                          <JudgmentBadge value={r.resultA} /> {r.matchedNameA ?? '—'} {r.surveyPreviewA && <SurveyPreviewJudgmentBadge />}
                         </div>
                         <div className="compare-turn-column">
                           <p className="compare-turn-column-label">{MESSAGES.validation.overlayCompare.columnB}</p>
                           {r.resultB ? (
                             <>
-                              <JudgmentBadge value={r.resultB} /> {r.matchedNameB ?? '—'}
+                              <JudgmentBadge value={r.resultB} /> {r.matchedNameB ?? '—'} {r.surveyPreviewB && <SurveyPreviewJudgmentBadge />}
                             </>
                           ) : (
                             '—'

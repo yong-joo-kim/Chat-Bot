@@ -3,7 +3,7 @@ import { normalizeText } from '@chat-bot/shared-types';
 /** 대화 파이프라인이 넘기는 입력 유형(DD-52) — `ConversationLog` 컬럼이 아니라 파라미터로 전달된다. */
 export type InputKind = 'TEXT' | 'BUTTON_NODE' | 'BUTTON_MESSAGE';
 
-export type CollectSkipReason = 'ANSWERED' | 'BLOCKED' | 'BUTTON_NODE' | 'EMPTY' | 'TOO_LONG' | 'API_NOTICE';
+export type CollectSkipReason = 'ANSWERED' | 'BLOCKED' | 'BUTTON_NODE' | 'EMPTY' | 'TOO_LONG' | 'API_NOTICE' | 'SURVEY_TURN';
 
 export type CollectDecision = { collect: true; normalized: string } | { collect: false; reason: CollectSkipReason };
 
@@ -13,6 +13,8 @@ export type CollectDecision = { collect: true; normalized: string } | { collect:
  * 만들지 않는다(DD-53). 전부 만족해야 수집한다.
  * [No.26 추가] `apiNotice`(외부 API 고정 문구 턴)는 학습 공백이 아니라 외부 장애다 — 문서 검색으로
  * 덮으면 틀린 답이 된다(ADR-0034 §5). 기본 false — 기존 호출 무변경.
+ * [No.27 추가] `surveyTurn`(설문이 소비한 턴)도 학습 공백이 아니다 — 응답자 전원이 같은 값을
+ * 반복해 미응답 큐를 오염시킨다(ADR-0019). 기본 false.
  */
 export function shouldCollect(input: {
   isAnswered: boolean;
@@ -21,8 +23,10 @@ export function shouldCollect(input: {
   questionText: string;
   maxLength: number;
   apiNotice?: boolean;
+  surveyTurn?: boolean;
 }): CollectDecision {
   if (input.apiNotice) return { collect: false, reason: 'API_NOTICE' };
+  if (input.surveyTurn) return { collect: false, reason: 'SURVEY_TURN' };
   if (input.isAnswered) return { collect: false, reason: 'ANSWERED' };
   if (input.blockedByFilter) return { collect: false, reason: 'BLOCKED' };
   if (input.inputKind === 'BUTTON_NODE') return { collect: false, reason: 'BUTTON_NODE' };

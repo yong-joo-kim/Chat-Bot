@@ -29,6 +29,9 @@ import { HomonymsPage } from './pages/dialogue/HomonymsPage';
 import { ContextsListPage } from './pages/dialogue/ContextsListPage';
 import { ContextFormPage } from './pages/dialogue/ContextFormPage';
 import { FaqsPage } from './pages/dialogue/FaqsPage';
+import { SurveysListPage } from './pages/dialogue/SurveysListPage';
+import { SurveyFormPage } from './pages/dialogue/SurveyFormPage';
+import { SurveyResultsPage } from './pages/dialogue/SurveyResultsPage';
 import { ValidationShell } from './pages/chatbot-detail/validation/ValidationShell';
 import { TestSetListPage } from './pages/chatbot-detail/validation/sets/TestSetListPage';
 import { TestSetDetailPage } from './pages/chatbot-detail/validation/sets/TestSetDetailPage';
@@ -119,6 +122,11 @@ export function App(): JSX.Element {
               <Route path="contexts/new" element={<ContextFormPage />} />
               <Route path="contexts/:contextId" element={<ContextFormPage />} />
               <Route path="faqs" element={<FaqsPage />} />
+              {/* [No.27] SV1~SV3 — 신규 최상위 라우트 0개, DialogueShell 6번째 서브내비 하위(ui-spec §1). */}
+              <Route path="surveys" element={<SurveysListPage />} />
+              <Route path="surveys/new" element={<SurveyFormPage />} />
+              <Route path="surveys/:surveyId" element={<SurveyFormPage />} />
+              <Route path="surveys/:surveyId/results" element={<SurveyResultsPage />} />
             </Route>
             <Route path="validation" element={<ValidationShell />}>
               <Route index element={<Navigate to="sets" replace />} />

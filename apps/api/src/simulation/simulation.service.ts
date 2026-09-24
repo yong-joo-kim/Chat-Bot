@@ -38,6 +38,7 @@ import { serializeOutputsForDiff } from '../common/lib/output-diff';
 import { assertOverlaySize, toBundleOverlayPatch } from './lib/overlay-convert';
 import { compareDiff } from './lib/compare-diff';
 import { computeAssetCounts, enrichNames } from './lib/resolution-enrich';
+import { buildSurveyStepView } from './lib/survey-step';
 
 /**
  * No.10 응답 테스트/시뮬레이션(FR-10-1~31). **읽기 전용** — `ConversationLogService`를 주입하지
@@ -90,7 +91,7 @@ export class SimulationService {
         : undefined;
 
     const turnInput = dto.buttonAction ? { buttonAction: dto.buttonAction } : { message: dto.message ?? '' };
-    let result: DialogueTurnResult = resolveTurn(turnInput, dto.state, bundle, now, { index, semantic });
+    let result: DialogueTurnResult = resolveTurn(turnInput, dto.state, bundle, now, { index, semantic, surveyPreview: dto.surveyPreview });
 
     let apiStep: ApiStepView | undefined;
     if (result.apiCall) {
@@ -132,6 +133,7 @@ export class SimulationService {
       overlayApplied,
       matchTrace,
       apiStep,
+      surveyStep: buildSurveyStepView(result.trace, result.surveyEvents, bundle, dto.surveyPreview),
     };
   }
 
@@ -333,11 +335,11 @@ export class SimulationService {
 
     for (let i = 0; i < dto.messages.length; i++) {
       const message = dto.messages[i];
-      let a = resolveTurn({ message }, stateA, bundleA, now, { index: indexA });
+      let a = resolveTurn({ message }, stateA, bundleA, now, { index: indexA, surveyPreview: true });
       if (a.apiCall) a = completeApiTurnSync(a, mockExecutor, bundleA, now).turn;
       stateA = a.nextState;
 
-      let b = resolveTurn({ message }, stateB, bundleB, now, { index: indexB });
+      let b = resolveTurn({ message }, stateB, bundleB, now, { index: indexB, surveyPreview: true });
       if (b.apiCall) b = completeApiTurnSync(b, mockExecutor, bundleB, now).turn;
       stateB = b.nextState;
 

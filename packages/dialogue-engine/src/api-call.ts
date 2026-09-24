@@ -11,6 +11,8 @@ import type {
   DialogueBundle,
   HomonymResolution,
   StateDiscardReason,
+  SurveyEvent,
+  SurveySessionState,
   TraceStep,
 } from '@chat-bot/shared-types';
 import { CONVERSATION_STATE_VERSION, buildApiVariables, evaluateApiConditions } from '@chat-bot/shared-types';
@@ -63,6 +65,14 @@ export interface ApiResumeState {
   /** `execResult.nextSession ?? nextSessionOverride ?? null` 규칙의 값. */
   sessionFallback: ContextSessionState | null;
   existingSession: ContextSessionState | null;
+  /** [No.27] 정지 전까지의 설문 이월분(§5.6, 숨은 결함 ②) — 없으면 undefined(설문 관여 0). */
+  survey?: {
+    completedSurveyIds: readonly string[];
+    preview: boolean;
+    eventsSoFar: SurveyEvent[];
+    consumedInput: boolean;
+    sessionFallback: SurveySessionState | null;
+  };
 }
 
 /** `executeOutputs`가 정지 시 채우는 최소 정보(§5.2) — `resumeState`는 `resolver.ts`가 뒤이어 붙인다. */
@@ -195,6 +205,7 @@ export function resumeAfterApiCall(
   let execOutputs: DialogOutput[] | undefined;
   let execUnsupported: DialogOutputType[] = [];
   let nextSessionFromExec: ContextSessionState | null | undefined;
+  let surveyStarted: { session: SurveySessionState; event: SurveyEvent } | undefined;
 
   const noticeText = branch === 'FAILURE' ? API_FAILURE_NOTICE : API_NO_MATCH_NOTICE;
   const noticeMessage = branch === 'FAILURE' ? 'FAILURE' : 'NO_MATCH';
@@ -223,11 +234,14 @@ export function resumeAfterApiCall(
           apiCallsRemaining: 0,
           apiVariables: branch === 'FAILURE' ? {} : vars,
           existingSession: resumeState.existingSession,
+          // [No.27] §5.6 — `preview`는 `options`가 아니라 `resumeState`에서 읽는다(호출부가 옵션 없이 부른다).
+          survey: resumeState.survey ? { completedSurveyIds: resumeState.survey.completedSurveyIds, preview: resumeState.survey.preview } : undefined,
         });
         trace.push(...exec.trace);
         execOutputs = exec.outputs;
         execUnsupported = exec.unsupportedOutputs;
         nextSessionFromExec = exec.nextSession;
+        surveyStarted = exec.surveyStarted;
       }
     }
   }
@@ -235,7 +249,20 @@ export function resumeAfterApiCall(
   const outputs = [...resumeState.carry, ...(execOutputs ?? [])];
   const unsupportedOutputs = [...resumeState.unsupported, ...execUnsupported];
   const nextSession = nextSessionFromExec ?? resumeState.sessionFallback;
-  const nextState: ConversationState = { version: CONVERSATION_STATE_VERSION, contextSession: nextSession, pendingClarify: null };
+
+  // [No.27] §5.6 — 설문 필드 이월(숨은 결함 ②). 없으면 키 자체를 생략한다(§5.4와 같은 규칙).
+  const survey = resumeState.survey;
+  const nextSurveySession = survey ? (surveyStarted?.session ?? survey.sessionFallback) : null;
+  const nextCompletedSurveyIds = survey ? survey.completedSurveyIds : [];
+  const nextState: ConversationState = {
+    version: CONVERSATION_STATE_VERSION,
+    contextSession: nextSession,
+    pendingClarify: null,
+    ...(nextSurveySession ? { surveySession: nextSurveySession } : {}),
+    ...(nextCompletedSurveyIds.length > 0 ? { completedSurveyIds: [...nextCompletedSurveyIds] } : {}),
+  };
+  const surveyEvents = survey ? [...survey.eventsSoFar, ...(surveyStarted ? [surveyStarted.event] : [])] : [];
+  const surveyTurn = survey?.consumedInput ?? false;
 
   const apiStep: ApiStepResult | undefined = isNotExecuted
     ? undefined
@@ -257,6 +284,7 @@ export function resumeAfterApiCall(
     outputs,
     nextSession,
     pendingClarify: null,
+    ...(surveyEvents.length > 0 || surveyTurn ? { surveyEvents, surveyTurn } : {}),
     unsupportedOutputs,
     trace,
     nextState,

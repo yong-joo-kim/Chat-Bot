@@ -430,11 +430,11 @@ export const DialogOutputType = z.enum([
 export type DialogOutputType = z.infer<typeof DialogOutputType>;
 
 /**
- * [No.26에서 축소] 정의·저장까지만 지원하고 실행하지 않는 아웃풋 "타입"(FR-5-15, FR-E-7, FR-L1-1).
- * `API_CONDITION`은 더 이상 타입만으로 미지원 여부가 갈리지 않는다 — **형태**(v1/v2)로 판정한다.
+ * [No.27에서 축소] 정의·저장까지만 지원하고 실행하지 않는 아웃풋 "타입"(FR-5-15, FR-E-7, FR-L1-1, FR-SV1-1).
+ * `API_CONDITION`·`SURVEY`는 더 이상 타입만으로 미지원 여부가 갈리지 않는다 — **형태**(v1/v2)로 판정한다.
  * 실행 미지원 여부를 판정할 때는 타입 상수를 직접 보지 말고 `isUnsupportedOutput()`을 쓴다.
  */
-export const UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO', 'SURVEY'] as const;
+export const UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO'] as const;
 
 export const ButtonItemSchema = z
   .object({
@@ -509,9 +509,28 @@ export const ScenarioOutputPayloadSchema = z.object({
   params: z.record(z.string()).optional(),
 });
 
-export const SurveyOutputPayloadSchema = z.object({
-  surveyId: z.string().trim().min(1).max(100),
+/** [No.5 원형 — 읽기 호환 전용] 자유 문자열 키. 새로 저장할 수 없다(서비스가 400 SURVEY_OUTPUT_LEGACY_FORMAT).
+ * 실행하지 않는다. @deprecated 설문을 선택해 v2로 전환하세요. */
+export const SurveyOutputPayloadV1Schema = z.object({ surveyId: z.string().trim().min(1).max(100) });
+export type SurveyOutputPayloadV1 = z.infer<typeof SurveyOutputPayloadV1Schema>;
+
+/** [No.27] 같은 챗봇 `Survey` 참조형. */
+export const SurveyOutputPayloadV2Schema = z.object({
+  version: z.literal(2),
+  surveyId: z.string().uuid(),
+  /** 완료 직후 이어서 실행할 노드 — 이탈·건너뜀에는 쓰지 않는다. */
+  onCompleteNodeId: z.string().uuid().optional(),
 });
+export type SurveyOutputPayloadV2 = z.infer<typeof SurveyOutputPayloadV2Schema>;
+
+/** 읽기 스키마 = v2 ∪ v1(v2 먼저). 이름은 기존 export를 유지하되 의미가 "합집합"으로 넓어진다. */
+export const SurveyOutputPayloadSchema = z.union([SurveyOutputPayloadV2Schema, SurveyOutputPayloadV1Schema]);
+export type SurveyOutputPayload = z.infer<typeof SurveyOutputPayloadSchema>;
+
+/** `p.version === 2`로 판별한다. v1의 `surveyId`가 우연히 UUID 형식이어도 v1이다(자동 연결 금지, P-15). */
+export function isSurveyV2(p: SurveyOutputPayload): p is SurveyOutputPayloadV2 {
+  return (p as { version?: number }).version === 2;
+}
 
 export const ApiConditionItemSchema = z.object({
   path: z.string().min(1).max(200),
@@ -709,13 +728,28 @@ export function isApiConditionV2(p: ApiConditionOutputPayload): p is ApiConditio
   return (p as { version?: number }).version === 2;
 }
 
-/** v1 `API_CONDITION` 아웃풋의 인덱스(쓰기 거부·복사 제외 공용). */
-export function findLegacyApiOutputIndexes(outputs: readonly DialogOutput[]): number[] {
-  const indexes: number[] = [];
-  outputs.forEach((o, i) => {
-    if (o.type === 'API_CONDITION' && !isApiConditionV2(o.payload)) indexes.push(i);
+/** v1(이전 형식) 아웃풋의 위치 — 쓰기 거부·복사 제외 공용(규칙 1벌, FR-SV1-5 일반화). */
+export function findLegacyOutputIndexes(outputs: readonly DialogOutput[]): Array<{ index: number; type: 'API_CONDITION' | 'SURVEY' }> {
+  const result: Array<{ index: number; type: 'API_CONDITION' | 'SURVEY' }> = [];
+  outputs.forEach((o, index) => {
+    if (o.type === 'API_CONDITION' && !isApiConditionV2(o.payload)) result.push({ index, type: 'API_CONDITION' });
+    if (o.type === 'SURVEY' && !isSurveyV2(o.payload)) result.push({ index, type: 'SURVEY' });
   });
-  return indexes;
+  return result;
+}
+
+/** v1 `API_CONDITION` 아웃풋의 인덱스(기존 export 유지 — 호출부 무변경, 내부는 `findLegacyOutputIndexes` 위임). */
+export function findLegacyApiOutputIndexes(outputs: readonly DialogOutput[]): number[] {
+  return findLegacyOutputIndexes(outputs)
+    .filter((r) => r.type === 'API_CONDITION')
+    .map((r) => r.index);
+}
+
+/** v1 `SURVEY` 아웃풋의 인덱스(쓰기 거부·복사 제외 공용, FR-SV1-5). */
+export function findLegacySurveyOutputIndexes(outputs: readonly DialogOutput[]): number[] {
+  return findLegacyOutputIndexes(outputs)
+    .filter((r) => r.type === 'SURVEY')
+    .map((r) => r.index);
 }
 
 export const DialogOutputSchema = z.discriminatedUnion('type', [
@@ -734,10 +768,11 @@ export const DialogOutputSchema = z.discriminatedUnion('type', [
 ]);
 export type DialogOutput = z.infer<typeof DialogOutputSchema>;
 
-/** 실행 미지원 = `SCENARIO`·`SURVEY`·v1 `API_CONDITION`. 엔진·설계 점검·웹 배지가 공용으로 쓴다(FR-L1-5). */
+/** 실행 미지원 = `SCENARIO`·v1 `SURVEY`·v1 `API_CONDITION`. 엔진·설계 점검·웹 배지가 공용으로 쓴다(FR-L1-5, FR-SV1-3). */
 export function isUnsupportedOutput(o: DialogOutput): boolean {
   if ((UNSUPPORTED_OUTPUT_TYPES as readonly string[]).includes(o.type)) return true;
   if (o.type === 'API_CONDITION' && !isApiConditionV2(o.payload)) return true;
+  if (o.type === 'SURVEY' && !isSurveyV2(o.payload)) return true;
   return false;
 }
 
@@ -829,9 +864,10 @@ const DialogNodeBaseSchema = z.object({
 export const DialogNodeSchema = DialogNodeBaseSchema.superRefine((val, ctx) => checkNodeConditionsAndOutputs(val, ctx));
 export type DialogNode = z.infer<typeof DialogNodeSchema>;
 
-/** 노드 복사 응답(No.26) — v1 `API_CONDITION`은 복사에서 제외되며 그 개수를 함께 돌려준다. */
+/** 노드 복사 응답(No.26·No.27) — v1 `API_CONDITION`·v1 `SURVEY`는 복사에서 제외되며 그 개수를 함께 돌려준다. */
 export const DialogNodeCopyResponseSchema = DialogNodeBaseSchema.extend({
   excludedLegacyApiOutputCount: z.number().int().nonnegative(),
+  excludedLegacySurveyOutputCount: z.number().int().nonnegative(),
 });
 export type DialogNodeCopyResponse = z.infer<typeof DialogNodeCopyResponseSchema>;
 

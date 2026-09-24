@@ -130,3 +130,13 @@ record() ─ ① 금지어 마스킹 → ② PII 마스킹 → ③ 버킷 계산
 - seed: 큐를 만드는 챗봇에 **대응 대화 로그도 함께 생성**해 "큐 있으면 로그도 있다"는 불변식(영구삭제 차단 집합 불변)을 유지한다.
 - `test-automation` 인계: ① AC-15A-2(표기 변형 3종 → 1행 `occurredCount:3`) ② **AC-15A-3/4/6(수집 제외 3종 — 금지어 차단·NODE 버튼·시뮬레이션)** ③ AC-15A-5(빈 입력 제외) ④ AC-15A-8(수집 실패해도 대화 정상 + 로그에 본문 없음) ⑤ **AC-15A-9(큐 저장값이 마스킹된 값)** ⑥ AC-15A-10(재발생 시 상태 유지 + `recurredCount` 증가) ⑦ AC-15A-11(상한 도달 시 신규 중단·기존 증가 계속) ⑧ AC-15B-14(`ignore` 후 기본 목록 제외, `status=IGNORED`로 조회) ⑨ AC-15B-16(삭제 경로 부재) ⑩ **AC-15B-19(감사 레코드에 질문 문자열 0건)**.
 - `code-reviewer` 인계: ① `prisma.unansweredQuestion` **쓰기**가 수집기·상태전이 서비스 2곳 밖에 없는지 ② 수집 경고 로그·오류 메시지에 질문 본문이 없는지 ③ `AuditTargetType`·`AUDIT_FIELDS` 무수정 ④ `conversation → learning` 단방향(역방향 의존 0건) ⑤ `suggestedIntentName` 잔존 참조 0건 ⑥ 추천 계산의 N+1 부재(의도 집합 요청당 1회 로드).
+
+
+---
+
+## 갱신 (2026-09-24 — No.27: 수집 제외 사유 `SURVEY_TURN`)
+
+설문관리(No.27, ADR-0035 §7)에서 설문 세션이 입력을 소비한 턴(응답·건너뛰기·재질문·취소·완료)은 `ConversationLog.surveyTurn=true`로 적재되고 **미응답 큐에 들어가지 않는다**.
+
+- `shouldCollect()` 입력에 `surveyTurn?`(기본 false — 기존 호출 무변경)을 더하고 `apiNotice` 다음 순서로 판정해 사유 **`SURVEY_TURN`** 을 반환한다. 설문 턴은 폴백 trace가 없어 원래 `ANSWERED`로 제외되지만, **명시적 사유**를 두어 판정 근거를 1곳에 남긴다(설문 답 "5"가 미래의 판정 변경으로 큐에 흘러드는 것을 막는다).
+- 판정식은 여전히 `judgeAnswered()` 단일 소스를 신뢰하며, `surveyTurn`은 파이프라인이 엔진 결과(`surveyTurn`)를 그대로 전달한다 — API가 추정하지 않는다. 컬럼으로 두는 이유는 수집 외에 **질문 순위 제외**가 사후 로그를 소비하기 때문이다(결정 §3의 "`inputKind`는 파라미터" 판단과 다른 점 — 소비자가 로그 조회 쪽에 있다).

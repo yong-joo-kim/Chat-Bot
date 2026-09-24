@@ -7,8 +7,12 @@ import type {
   PendingClarify,
   SemanticMatchInput,
   SemanticRankedCandidate,
+  Survey,
+  SurveyEvent,
+  SurveySessionState,
   TraceStep,
 } from '@chat-bot/shared-types';
+import { isSurveyV2 } from '@chat-bot/shared-types';
 import { normalizeText, tokenize, containsWord } from './normalize';
 import { matchIntent } from './matcher';
 import { buildClarifyOutput, resolveHomonym } from './homonym';
@@ -18,6 +22,8 @@ import type { EngineContext } from './node-matcher';
 import { matchFaqEntry } from './faq';
 import { advanceContextSession } from './context-session';
 import { executeOutputs } from './outputs';
+import { advanceSurveySession } from './survey-session';
+import type { SurveyAdvance, SurveyTurnContext, SurveyTurnOutcome } from './survey-session';
 import type { DialogueIndex } from './dialogue-index';
 import { judgeBand } from './semantic';
 import { CLARIFY_TTL_MS, DEFAULT_FALLBACK_RESPONSE, EMPTY_INPUT_RESPONSE, HOP_LIMIT, MAX_INPUT_LENGTH, intentOnlyResponse } from './constants';
@@ -40,13 +46,46 @@ export interface ResolveOptions {
    * 미지정 시 현행 동작(정확일치+부분일치)과 완전히 동일하다 — 저하 모드가 곧 현행 동작이다(AC-N1-3).
    */
   semantic?: SemanticMatchInput;
+  /** [No.27 신설] 켜면 DRAFT·마감·기간 밖 설문도 진행한다(시뮬레이터·TC — 공개 경로는 항상 false). */
+  surveyPreview?: boolean;
+  /** [No.27 신설, @internal] `resolveTurn`이 sanitize 결과로 채운다. 미지정 = 세션 없음·완료 목록 빈 배열. */
+  surveyState?: SurveyTurnContext;
 }
 
-/** [No.26] `resolveResponse`/`resolveByNodeId`의 확장 반환 타입 — 정지 시 `apiCall`이 채워진다. */
-export type EngineResolution = DialogueResolution & { apiCall?: ApiCallSuspension };
+/** [No.26] `resolveResponse`/`resolveByNodeId`의 확장 반환 타입 — 정지 시 `apiCall`이 채워진다.
+ * [No.27] `survey`(@internal) — `resolveTurn`이 `DialogueTurnResult`로 풀어 쓴 뒤 제거한다. */
+export type EngineResolution = DialogueResolution & { apiCall?: ApiCallSuspension; survey?: SurveyTurnOutcome };
 
 function textOutput(text: string): DialogOutput {
   return { type: 'TEXT', payload: { text } };
+}
+
+function emptySurveyCtx(options: ResolveOptions): SurveyTurnContext {
+  return options.surveyState ?? { session: null, completedSurveyIds: [], preview: options.surveyPreview ?? false };
+}
+
+/** 완료 목록에 추가하며 20개 상한을 넘으면 오래된 것부터 제거한다(§5.3 ⑦). */
+function pushCompletedSurveyId(ids: readonly string[], surveyId: string): string[] {
+  const deduped = ids.filter((id) => id !== surveyId);
+  deduped.push(surveyId);
+  return deduped.length > 20 ? deduped.slice(deduped.length - 20) : deduped;
+}
+
+/** [No.27] `surveyEventsSoFar` + 실행 중 새로 시작된 설문 이벤트를 합쳐 `SurveyTurnOutcome`을 만든다.
+ * 관여가 전혀 없으면 undefined(키 생략 규칙, §5.4). */
+function mergeSurveyOutcome(
+  eventsSoFar: readonly SurveyEvent[],
+  surveyCtx: SurveyTurnContext,
+  started: { session: SurveySessionState; event: SurveyEvent } | undefined,
+  consumedInput: boolean,
+): SurveyTurnOutcome | undefined {
+  if (eventsSoFar.length === 0 && !started && !consumedInput) return undefined;
+  return {
+    nextSession: started?.session ?? null,
+    completedSurveyIds: [...surveyCtx.completedSurveyIds],
+    events: [...eventsSoFar, ...(started ? [started.event] : [])],
+    consumedInput,
+  };
 }
 
 interface FallbackContext {
@@ -62,6 +101,9 @@ interface FallbackContext {
   completedForm?: CompletedFormInfo;
   matchedIntentId?: string;
   homonymResolution?: HomonymResolution;
+  /** [No.27] 설문 참여 가능 판정 입력 + 이번 턴 앞서 발생한 설문 이벤트(S0 RELEASED·버튼 SWITCHED). */
+  surveyCtx: SurveyTurnContext;
+  surveyEventsSoFar: SurveyEvent[];
 }
 
 /** [No.26] 정지 시 반환할 `EngineResolution`을 조립한다(§5.3) — 세 실행 지점(S3·S6·`resolveByNodeId`) 공용. */
@@ -79,6 +121,8 @@ function buildSuspendedResolution(params: {
   hopLimit: number;
   sessionFallback: ContextSessionState | null;
   existingSession: ContextSessionState | null;
+  /** [No.27] 정지 전까지의 설문 이월분(§5.6). */
+  survey?: ApiResumeState['survey'];
 }): EngineResolution {
   const resumeState: ApiResumeState = {
     input: params.input,
@@ -93,6 +137,7 @@ function buildSuspendedResolution(params: {
     hopLimit: params.hopLimit,
     sessionFallback: params.sessionFallback,
     existingSession: params.existingSession,
+    survey: params.survey,
   };
   return {
     input: params.input,
@@ -113,7 +158,7 @@ function buildSuspendedResolution(params: {
  * `resolveResponse`(S6)와 `resolveByNodeId`(노드 없음/비활성)가 공유하는 순수 함수다.
  */
 function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date, options: ResolveOptions): EngineResolution {
-  const { input, normalizedInput, carry, nextSessionOverride, session, trace } = fc;
+  const { input, normalizedInput, carry, nextSessionOverride, session, trace, surveyCtx, surveyEventsSoFar } = fc;
   const hopLimit = options.hopLimit ?? HOP_LIMIT;
 
   const fallbackNode = bundle.dialogNodes.find((n) => n.nodeType === 'FALLBACK' && n.enabled);
@@ -124,6 +169,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
       existingSession: session,
       sourceNodeId: fallbackNode.id,
       completedForm: fc.completedForm,
+      survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview },
     });
     trace.push(...execResult.trace);
 
@@ -142,6 +188,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
         hopLimit,
         sessionFallback: nextSessionOverride ?? null,
         existingSession: session,
+        survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
       });
     }
 
@@ -153,6 +200,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
       nextSession: execResult.nextSession ?? nextSessionOverride ?? null,
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
+      survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
     };
   }
 
@@ -169,6 +217,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
       nextSession: nextSessionOverride ?? null,
       unsupportedOutputs: [],
       trace,
+      survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
     };
   }
 
@@ -180,13 +229,84 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
     nextSession: nextSessionOverride ?? null,
     unsupportedOutputs: [],
     trace,
+    survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
+  };
+}
+
+/** [No.27] §5.3.1 — 설문 완료 후 이동. 포인터로 현재 정의를 다시 찾는다. */
+function resolveSurveyCompletion(
+  input: string,
+  norm: string,
+  survey: Survey,
+  session: SurveySessionState,
+  advance: Extract<SurveyAdvance, { kind: 'CONSUMED' }>,
+  completedSurveyIds: string[],
+  bundle: DialogueBundle,
+  now: Date,
+  options: ResolveOptions,
+  trace: TraceStep[],
+): EngineResolution {
+  const outcomeBase: SurveyTurnOutcome = { nextSession: null, completedSurveyIds, events: advance.events, consumedInput: true };
+
+  const node = session.nodeId ? bundle.dialogNodes.find((n) => n.id === session.nodeId) : undefined;
+  const output = node?.outputs[session.outputIndex];
+  const onCompleteNodeId =
+    output && output.type === 'SURVEY' && isSurveyV2(output.payload) && output.payload.surveyId === survey.id ? output.payload.onCompleteNodeId : undefined;
+
+  if (!onCompleteNodeId) {
+    return { input, normalizedInput: norm, outputs: advance.outputs, nextSession: null, unsupportedOutputs: [], trace, survey: outcomeBase };
+  }
+
+  const target = bundle.dialogNodes.find((n) => n.id === onCompleteNodeId && n.enabled);
+  if (!target) {
+    trace.push({ stage: 'OUTPUT', code: 'BROKEN_REFERENCE', targetId: onCompleteNodeId });
+    return { input, normalizedInput: norm, outputs: advance.outputs, nextSession: null, unsupportedOutputs: [], trace, survey: outcomeBase };
+  }
+
+  const hopLimit = options.hopLimit ?? HOP_LIMIT;
+  const execResult = executeOutputs(target.outputs, bundle, now, {
+    hopLimit,
+    sourceNodeId: target.id,
+    initialHops: 1,
+    survey: { completedSurveyIds, preview: options.surveyPreview ?? false },
+    existingSession: null,
+  });
+  trace.push(...execResult.trace);
+
+  if (execResult.suspended) {
+    return buildSuspendedResolution({
+      input,
+      normalizedInput: norm,
+      matchedNodeId: target.id,
+      trace,
+      carry: [...advance.outputs, ...execResult.outputs],
+      suspended: execResult.suspended,
+      execUnsupported: execResult.unsupportedOutputs,
+      hops: execResult.hops,
+      hopLimit,
+      sessionFallback: null,
+      existingSession: null,
+      survey: { completedSurveyIds, preview: options.surveyPreview ?? false, eventsSoFar: advance.events, consumedInput: true, sessionFallback: null },
+    });
+  }
+
+  const combinedEvents = [...advance.events, ...(execResult.surveyStarted ? [execResult.surveyStarted.event] : [])];
+  return {
+    input,
+    normalizedInput: norm,
+    matchedNodeId: target.id,
+    outputs: [...advance.outputs, ...execResult.outputs],
+    nextSession: execResult.nextSession ?? null,
+    unsupportedOutputs: execResult.unsupportedOutputs,
+    trace,
+    survey: { nextSession: execResult.surveyStarted?.session ?? null, completedSurveyIds, events: combinedEvents, consumedInput: true },
   };
 }
 
 /**
  * 대화 해석 파이프라인의 진입점(FR-E-2, ADR-0008). DB·NestJS 무의존 순수 함수이며 예외를 던지지 않는다.
- * 우선순위: S1 컨텍스트 세션 → S1.5 되묻기 해소(FR-E2-2) → S2 동음이의어 보정 → S3 DialogNode 매칭
- * → S4 FAQ → S5 의도 단독 → S6 폴백.
+ * 우선순위: S0 설문 세션(No.27) → S1 컨텍스트 세션 → S1.5 되묻기 해소(FR-E2-2) → S2 동음이의어 보정
+ * → S3 DialogNode 매칭 → S4 FAQ → S5 의도 단독 → S6 폴백.
  */
 export function resolveResponse(
   input: string,
@@ -225,6 +345,44 @@ export function resolveResponse(
   let pending = options.pendingClarify ?? null;
   let completedForm: CompletedFormInfo | undefined;
 
+  // S0 — 설문 세션(§5.3, S1과 상호 배타 — sanitize가 강제한다)
+  const surveyCtx = emptySurveyCtx(options);
+  let surveyEventsSoFar: SurveyEvent[] = [];
+  if (surveyCtx.session) {
+    const survey = bundle.surveys?.find((s) => s.id === surveyCtx.session!.surveyId);
+    if (survey) {
+      if (pending) {
+        trace.push({ stage: 'HOMONYM', code: 'CLARIFY_DISCARDED', message: '설문 우선' });
+        pending = null;
+      }
+      const activeSession = surveyCtx.session;
+      const advance = advanceSurveySession(activeSession, { raw, norm }, survey, now, surveyCtx.preview);
+      trace.push(...advance.trace);
+
+      if (advance.kind === 'CONSUMED') {
+        const completedSurveyIds = advance.completed
+          ? pushCompletedSurveyId(surveyCtx.completedSurveyIds, survey.id)
+          : [...surveyCtx.completedSurveyIds];
+        if (advance.completed) {
+          return resolveSurveyCompletion(input, norm, survey, activeSession, advance, completedSurveyIds, bundle, now, options, trace);
+        }
+        return {
+          input,
+          normalizedInput: norm,
+          outputs: advance.outputs,
+          nextSession: session,
+          unsupportedOutputs: [],
+          trace,
+          survey: { nextSession: advance.nextSession, completedSurveyIds, events: advance.events, consumedInput: true },
+        };
+      }
+
+      // RELEASED — 종료 안내를 carry에 싣고 일반 경로로 계속한다(FR-SV4-12).
+      carry = advance.carry;
+      surveyEventsSoFar = advance.events;
+    }
+  }
+
   // S1 — 컨텍스트 세션
   if (session && session.status === 'IN_PROGRESS') {
     if (pending) {
@@ -248,6 +406,7 @@ export function resolveResponse(
         nextSession: { ...session, status: 'CANCELLED', lastInteractedAt: now },
         unsupportedOutputs: [],
         trace,
+        survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
       };
     }
 
@@ -268,11 +427,12 @@ export function resolveResponse(
         nextSession: advance.state,
         unsupportedOutputs: [],
         trace,
+        survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
       };
     }
 
     trace.push({ stage: 'SESSION', code: 'SESSION_COMPLETED' });
-    carry = advance.outputs;
+    carry = [...carry, ...advance.outputs];
     ctx.completedContextVariableId = def.id;
     nextSessionOverride = null;
     completedForm = { contextVariableId: def.id, values: advance.state.filledValues };
@@ -344,6 +504,7 @@ export function resolveResponse(
             : null,
           unsupportedOutputs: [],
           trace,
+          survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
         };
       }
     } else if (homonymEval.resolution?.status === 'IGNORED') {
@@ -399,6 +560,7 @@ export function resolveResponse(
       existingSession: session,
       sourceNodeId: node.id,
       completedForm,
+      survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview },
     });
     trace.push(...execResult.trace);
 
@@ -417,6 +579,7 @@ export function resolveResponse(
         hopLimit,
         sessionFallback: nextSessionOverride ?? null,
         existingSession: session,
+        survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
       });
     }
 
@@ -430,6 +593,7 @@ export function resolveResponse(
       nextSession: execResult.nextSession ?? nextSessionOverride ?? null,
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
+      survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
     };
   }
 
@@ -449,6 +613,7 @@ export function resolveResponse(
         nextSession: nextSessionOverride ?? null,
         unsupportedOutputs: [],
         trace,
+        survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
       };
     }
 
@@ -466,6 +631,7 @@ export function resolveResponse(
           nextSession: nextSessionOverride ?? null,
           unsupportedOutputs: [],
           trace,
+          survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
         };
       }
       // 색인이 가리키는 FAQ가 이미 삭제/비활성화됐다 — 신뢰하지 않고 실패로 흘려보낸다(EX-N1-3과 대칭).
@@ -482,6 +648,7 @@ export function resolveResponse(
         nextSession: nextSessionOverride ?? null,
         unsupportedOutputs: [],
         trace,
+        survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
       };
     } else if (semanticBand?.kind === 'FAILED') {
       trace.push({ stage: 'SEMANTIC', code: 'SEMANTIC_BELOW_THRESHOLD' });
@@ -502,6 +669,7 @@ export function resolveResponse(
         nextSession: nextSessionOverride ?? null,
         unsupportedOutputs: [],
         trace,
+        survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
       };
     }
   }
@@ -520,6 +688,7 @@ export function resolveResponse(
       nextSession: nextSessionOverride ?? null,
       unsupportedOutputs: [],
       trace,
+      survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, undefined, false),
     };
   }
 
@@ -535,6 +704,8 @@ export function resolveResponse(
       completedForm,
       matchedIntentId: ctx.matchedIntentId,
       homonymResolution: homonymEval.resolution ?? undefined,
+      surveyCtx,
+      surveyEventsSoFar,
     },
     bundle,
     now,
@@ -581,6 +752,8 @@ function firstExampleOf(bundle: DialogueBundle, intentId: string): string | unde
  * 세션이 진행 중일 때 NODE 버튼이 오면 버튼이 이긴다 — 세션을 `CANCELLED`로 종료한 뒤
  * (전환 고지가 필요하면 `executeOutputs`가 재사용한다, EX-S-7) 노드를 실행한다.
  * [No.26] 버튼 진입에는 폼 완료 바인딩이 없다(`completedForm` 미전달 — AC-L3-12).
+ * [No.27] 설문 세션이 있으면 먼저 `ABANDONED(SWITCHED)`로 종료한다(FR-SV4-11) — 이 턴은
+ * `consumedInput = false`(사용자가 다른 흐름을 골랐다).
  */
 export function resolveByNodeId(
   nodeId: string,
@@ -602,6 +775,20 @@ export function resolveByNodeId(
     trace.push({ stage: 'SESSION', code: 'SESSION_CANCELLED' });
   }
 
+  // [No.27] 설문 세션 선(先) 종료(SWITCHED) — FR-SV4-11.
+  const surveyCtx = emptySurveyCtx(options);
+  let surveyEventsSoFar: SurveyEvent[] = [];
+  if (surveyCtx.session) {
+    trace.push({ stage: 'SURVEY', code: 'SURVEY_ABANDONED', targetId: surveyCtx.session.surveyId, message: 'SWITCHED' });
+    surveyEventsSoFar = [
+      {
+        kind: 'ABANDONED',
+        attempt: { surveyId: surveyCtx.session.surveyId, structureVersion: surveyCtx.session.structureVersion, startedAt: surveyCtx.session.startedAt },
+        reason: 'SWITCHED',
+      },
+    ];
+  }
+
   const node = options.index?.nodesById?.get(nodeId) ?? bundle.dialogNodes.find((n) => n.id === nodeId);
 
   if (node && node.enabled) {
@@ -610,6 +797,7 @@ export function resolveByNodeId(
       hopLimit: options.hopLimit,
       existingSession: session,
       sourceNodeId: node.id,
+      survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview },
     });
     trace.push(...execResult.trace);
 
@@ -626,6 +814,7 @@ export function resolveByNodeId(
         hopLimit,
         sessionFallback: cancelledSession ?? null,
         existingSession: session,
+        survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
       });
     }
 
@@ -637,12 +826,13 @@ export function resolveByNodeId(
       nextSession: execResult.nextSession ?? cancelledSession ?? null,
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
+      survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
     };
   }
 
   trace.push({ stage: 'NODE', code: 'NODE_BY_ID_NOT_FOUND', targetId: nodeId });
   return resolveFallback(
-    { input: inputLabel, normalizedInput, carry: [], nextSessionOverride: cancelledSession, session, trace },
+    { input: inputLabel, normalizedInput, carry: [], nextSessionOverride: cancelledSession, session, trace, surveyCtx, surveyEventsSoFar },
     bundle,
     now,
     options,

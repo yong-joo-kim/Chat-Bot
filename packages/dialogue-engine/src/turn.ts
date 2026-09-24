@@ -5,6 +5,7 @@ import {
   type DialogueBundle,
   type DialogueResolution,
   type StateDiscardReason,
+  type SurveyEvent,
   type TraceStep,
 } from '@chat-bot/shared-types';
 import { resolveResponse } from './resolver';
@@ -31,6 +32,10 @@ export interface DialogueTurnResult extends DialogueResolution {
   apiCall?: ApiCallSuspension;
   /** [No.26] `resumeAfterApiCall` 결과에만 채워진다. */
   apiStep?: ApiStepResult;
+  /** [No.27] 이번 턴에 설문 세션이 관여했을 때만(이벤트 발생 또는 입력 소비). 없으면 키 생략(FR-0-107). */
+  surveyEvents?: SurveyEvent[];
+  /** [No.27] 이번 턴 입력을 설문 세션이 소비했는가 — `ConversationLog.surveyTurn`·RAG 판정 근거. */
+  surveyTurn?: boolean;
 }
 
 /**
@@ -55,18 +60,27 @@ export function resolveTurn(
     clarifyTtlMs: options.clarifyTtlMs,
   });
 
+  // [No.27] sanitize 결과로 채운 설문 진행 문맥(@internal) — S0가 읽는다.
+  const surveyState = {
+    session: sanitized.surveySession,
+    completedSurveyIds: sanitized.completedSurveyIds,
+    preview: options.surveyPreview ?? false,
+  };
+
   let resolution: EngineResolution;
 
   if (turn.buttonAction && turn.buttonAction.kind === 'NODE') {
     resolution = resolveByNodeId(turn.buttonAction.nodeId, sanitized.contextSession, bundle, now, {
       ...options,
       inputLabel: turn.buttonAction.label ?? '',
+      surveyState,
     });
   } else {
     const message = turn.buttonAction && turn.buttonAction.kind === 'MESSAGE' ? turn.buttonAction.text : (turn.message ?? '');
     resolution = resolveResponse(message, sanitized.contextSession, bundle, now, {
       ...options,
       pendingClarify: sanitized.pendingClarify,
+      surveyState,
     });
   }
 
@@ -101,11 +115,27 @@ export function resolveTurn(
 
   const trace = stateTrace.length > 0 ? [...stateTrace, ...resolution.trace] : resolution.trace;
 
+  // [No.27] §5.4 — 설문 필드 키 생략 규칙. 설문이 관여하지 않은 턴(빈 입력 등)은 sanitize된 값을 그대로 이월한다.
+  const s = resolution.survey;
+  const nextSurveySession = s ? s.nextSession : sanitized.surveySession;
+  const nextCompletedSurveyIds = s ? s.completedSurveyIds : sanitized.completedSurveyIds;
+
   const nextState: ConversationState = {
     version: CONVERSATION_STATE_VERSION,
     contextSession: resolution.nextSession ?? null,
     pendingClarify: resolution.pendingClarify ?? null,
+    ...(nextSurveySession ? { surveySession: nextSurveySession } : {}),
+    ...(nextCompletedSurveyIds.length > 0 ? { completedSurveyIds: nextCompletedSurveyIds } : {}),
   };
 
-  return { ...resolution, trace, nextState, stateDiscarded: sanitized.discarded };
+  // `resolution.survey`는 @internal이라 결과에 싣지 않는다(구조 분해로 제거).
+  const { survey: _survey, ...resolutionWithoutSurvey } = resolution;
+
+  return {
+    ...resolutionWithoutSurvey,
+    trace,
+    nextState,
+    stateDiscarded: sanitized.discarded,
+    ...(s && (s.events.length > 0 || s.consumedInput) ? { surveyEvents: s.events, surveyTurn: s.consumedInput } : {}),
+  };
 }

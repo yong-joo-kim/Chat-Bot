@@ -129,4 +129,3 @@ interface ChannelAdapter {
 3. **관리자 즉시 경로(`PATCH …/status`, `PATCH …/channels/:type`)는 무변경**이다 — 트랜잭션 인자를 추가하지 않는다(두 메서드 모두 쓰기 직후 감사를 기록하므로 tx 인자를 받으면 "감사를 미룰지" 분기가 생긴다).
 4. `PublicAccessService`는 여전히 캐시하지 않으므로 전환은 **다음 공개 요청부터 즉시** 반영된다(무효화 호출 불필요).
 5. **후속 Phase 인계 보강**: 외부 채널을 실제로 붙일 때 예약 동작 `SET_WEB_CHANNEL`은 `SET_CHANNEL(type)`으로 **새 동작 유형을 추가**해 일반화한다(기존 동작은 호환 유지 — ADR-0032 §1 레지스트리).
-</content>

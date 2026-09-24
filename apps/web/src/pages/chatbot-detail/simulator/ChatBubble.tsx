@@ -4,6 +4,7 @@ import { SeverityBadge } from '../../../components/SeverityBadge';
 import { MESSAGES } from '../../../constants/messages';
 import { TracePanel } from './TracePanel';
 import { ApiStepPanel } from './ApiStepPanel';
+import { SurveyStepPanel } from './SurveyStepPanel';
 import { OverlayBadge } from './OverlayBadge';
 import type { SimMessage } from './types';
 
@@ -76,6 +77,7 @@ export function ChatBubble({
       )}
       {message.trace && <TracePanel trace={message.trace} chatbotId={chatbotId} matchTrace={message.matchTrace} />}
       {message.apiStep && <ApiStepPanel apiStep={message.apiStep} />}
+      {message.surveyStep && <SurveyStepPanel step={message.surveyStep} />}
     </div>
   );
 }

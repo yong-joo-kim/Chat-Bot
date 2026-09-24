@@ -68,6 +68,8 @@ interface SideOutcome {
   elapsedMs: number;
   /** [No.26] 마지막 턴 기준 — 샘플 해시 앞 8자리 | 'NO_SAMPLE' | null(관여 없음, FR-L7-6). */
   apiMock: string | null;
+  /** [No.27] 실행 중 한 턴이라도 설문 미리보기 판정이 관여했는가(§7.4). */
+  surveyPreview: boolean;
 }
 
 interface ResultRow {
@@ -358,6 +360,8 @@ export class TestRunExecutor {
         ragSourceCount: r.ragSourceCountA ?? null,
         apiMockA: r.a.apiMock,
         apiMockB: r.b?.apiMock ?? null,
+        surveyPreviewA: r.a.surveyPreview,
+        surveyPreviewB: r.b?.surveyPreview ?? false,
       })),
     });
     await this.prisma.testRun.update({
@@ -412,6 +416,7 @@ export class TestRunExecutor {
     let marginToTop2: number | undefined;
     let blockedByFilter = false;
     let apiMock: string | null = null;
+    let surveyPreview = false;
 
     for (const message of messages) {
       apiMock = null; // 마지막 턴 기준(FR-L7-6) — 매 턴 초기화한다.
@@ -433,7 +438,8 @@ export class TestRunExecutor {
       const vector = semanticEnabled ? embeddingMap?.get(norm) : undefined;
       const semantic = vector ? assembleSemanticInput(vector, entries, bundle, thresholds, modelId ?? '') : undefined;
 
-      let result = resolveTurn({ message }, state, bundle, now, { index, semantic });
+      let result = resolveTurn({ message }, state, bundle, now, { index, semantic, surveyPreview: true });
+      if (result.trace.some((t) => t.stage === 'SURVEY')) surveyPreview = true;
       // [No.26] 목 완결 — TC는 항상 목이다(ADR-0030 ① — 실제 호출·`ApiCallLog`·`ConversationLog` 0건).
       if (result.apiCall) {
         const { turn, mock } = completeApiTurnSync(
@@ -487,6 +493,7 @@ export class TestRunExecutor {
       blockedByFilter,
       elapsedMs: Date.now() - start,
       apiMock,
+      surveyPreview,
     };
   }
 }
