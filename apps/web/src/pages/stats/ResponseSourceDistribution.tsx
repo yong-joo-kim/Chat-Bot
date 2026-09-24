@@ -5,12 +5,15 @@ import { MESSAGES } from '../../constants/messages';
 import { formatPercent } from '../../lib/date';
 import { ChartFrame } from './ChartFrame';
 
-/** S1 응답 출처 분포(FR-14-20/21). `폴백` 조각은 학습현황으로 이동하는 딥링크를 갖는다(S-2, AC-UI-8). */
+/**
+ * S1/G0(No.29) 공용 응답 출처 분포(FR-14-20/21). `폴백` 조각은 학습현황으로 이동하는 딥링크를 갖는다(S-2, AC-UI-8).
+ * `chatbotId`가 없으면(통합 스코프, `integrated-stats-ui-spec.md` §3.5) 딥링크를 렌더하지 않는다.
+ */
 export function ResponseSourceDistribution({
   chatbotId,
   distribution,
 }: {
-  chatbotId: string;
+  chatbotId?: string;
   distribution: StatsDistribution;
 }): JSX.Element {
   const { bySource } = distribution;
@@ -64,7 +67,7 @@ export function ResponseSourceDistribution({
   return (
     <div>
       <ChartFrame title={MESSAGES.stats.sourceTitle} summary={summary} chart={chart} table={table} />
-      {fallback && (
+      {fallback && chatbotId && (
         <p className="dist-fallback-link">
           {RESPONSE_SOURCE_LABELS.FALLBACK} {formatPercent(fallback.ratio)}({fallback.count}건){' '}
           <Link to={`/chatbots/${chatbotId}/stats/learning?status=PENDING`}>{MESSAGES.stats.fallbackLinkLabel}</Link>

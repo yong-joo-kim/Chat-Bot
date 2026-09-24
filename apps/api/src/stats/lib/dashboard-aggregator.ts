@@ -18,7 +18,8 @@ export interface TopQuestionResult {
   count: number;
 }
 
-function normalizeQuestion(raw: string): string {
+/** [export 추가 No.29] 질문 귀속 병합(최다 챗봇 귀속, `lib/question-attribution.ts`)이 재사용한다 — 규칙 1벌. */
+export function normalizeQuestion(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');
 }
 

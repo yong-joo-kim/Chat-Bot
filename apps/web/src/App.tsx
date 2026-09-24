@@ -9,7 +9,7 @@ import { UsersPage } from './pages/settings/UsersPage';
 import { BannedWordsPage } from './pages/settings/BannedWordsPage';
 import { AuditLogsPage } from './pages/settings/AuditLogsPage';
 import { MESSAGES } from './constants/messages';
-import { DashboardHomePage } from './pages/DashboardHomePage';
+import { IntegratedStatsPage } from './pages/integrated-stats/IntegratedStatsPage';
 import { ChatbotListPage } from './pages/ChatbotListPage';
 import { ChatbotDetailLayout } from './pages/ChatbotDetailLayout';
 import { DashboardTab } from './pages/chatbot-detail/DashboardTab';
@@ -83,7 +83,7 @@ export function App(): JSX.Element {
       <TopBar />
       <main id="main-content" className="app-main">
         <Routes>
-          <Route path="/" element={<DashboardHomePage />} />
+          <Route path="/" element={<IntegratedStatsPage />} />
           <Route path="/chatbots" element={<ChatbotListPage />} />
           <Route path="/chatbots/:chatbotId" element={<ChatbotDetailLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />

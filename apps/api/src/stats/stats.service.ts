@@ -22,21 +22,12 @@ import {
   computeVisitCount,
 } from './lib/dashboard-aggregator';
 import { buildBuckets, foldDayRows } from './lib/bucket';
-import { classifyResponseSource } from './lib/response-source';
-import {
-  InvalidGranularityError,
-  InvalidPeriodError as StatsInvalidPeriodError,
-  StatsRangeLimits,
-  StatsRangeTooWideError,
-  parseGranularity,
-  resolveStatsPeriod,
-} from './lib/stats-period';
+import { assembleByChannel, assembleBySource, assembleSummaryBuckets, computeTurnsPerSession } from './lib/summary-assembler';
 import { foldByHour, foldByWeekday, foldSessionCountsByBucket, foldSessionCountsByChannel } from './lib/usage-trend';
+import { parseGranularityOrThrow, readStatsRangeLimits, resolveStatsPeriodOrThrow, runWithAggregationTimeout } from './stats-request.helpers';
 
 /** 정규화 병합으로 순위가 바뀔 여지를 남기면서도 응답을 예측 가능하게 유지하는 후보 상한(ADR-0004). */
 const TOP_QUESTION_CANDIDATE_LIMIT = 500;
-/** 집계 전체 타임아웃(EX-2-5). 초과 시 캐시된 과거 결과를 대신 반환하지 않는다. */
-const AGGREGATION_TIMEOUT_MS = 5000;
 
 interface SessionCountRow {
   distinctSessions: number | bigint | null;
@@ -51,18 +42,8 @@ export class StatsService {
     private readonly config: ConfigService,
   ) {}
 
-  private readRangeLimits(): StatsRangeLimits {
-    return {
-      maxRangeDays: this.config.get<number>('STATS_MAX_RANGE_DAYS') ?? 92,
-      maxRangeWeeks: this.config.get<number>('STATS_MAX_RANGE_WEEKS') ?? 53,
-      maxRangeMonths: this.config.get<number>('STATS_MAX_RANGE_MONTHS') ?? 24,
-      defaultDays: 30,
-      defaultWeeks: 12,
-      defaultMonths: 12,
-    };
-  }
-
-  /** No.2 대시보드 집계(FR-2-1~FR-2-14, ADR-0004). ARCHIVED 챗봇도 조회를 허용한다(FR-2-11). */
+  /** No.2 대시보드 집계(FR-2-1~FR-2-14, ADR-0004). ARCHIVED 챗봇도 조회를 허용한다(FR-2-11).
+   * ⚠ [No.29] 이 메서드와 원시 SQL(아래 `$queryRaw`)은 한 글자도 바꾸지 않는다(FR-0-90, 설계서 §2.5). */
   async getDashboard(query: DashboardQuery): Promise<DashboardSummary> {
     const exists = await this.chatbotsService.existsById(query.chatbotId);
     if (!exists) {
@@ -76,7 +57,7 @@ export class StatsService {
       createdAt: { gte: period.periodStart, lte: period.periodEnd },
     };
 
-    const [byAnswered, sessionRows, topQuestionRows] = await this.withTimeout(
+    const [byAnswered, sessionRows, topQuestionRows] = await runWithAggregationTimeout(
       Promise.all([
         this.prisma.conversationLog.groupBy({
           by: ['isAnswered'],
@@ -138,15 +119,15 @@ export class StatsService {
   /** No.14 기간 시계열 요약(FR-14-4~19, §7.1~7.2). ARCHIVED 챗봇도 조회를 허용한다(EX-14-10). */
   async getSummary(query: StatsQuery): Promise<StatsSummary> {
     await this.assertChatbotExists(query.chatbotId);
-    const granularity = this.parseGranularityOrThrow(query.granularity);
-    const period = this.resolveStatsPeriodOrThrow(query.from, query.to, granularity);
+    const granularity = parseGranularityOrThrow(query.granularity);
+    const period = resolveStatsPeriodOrThrow(query.from, query.to, granularity, this.readRangeLimits());
 
     const where = {
       chatbotId: query.chatbotId,
       dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
     };
 
-    const [byDay, sessionRows] = await this.withTimeout(
+    const [byDay, sessionRows] = await runWithAggregationTimeout(
       Promise.all([
         this.prisma.conversationLog.groupBy({
           by: ['dayBucket', 'isAnswered', 'blockedByFilter'],
@@ -177,43 +158,8 @@ export class StatsService {
     }));
     const sessionCountsByBucket = foldSessionCountsByBucket(sessionRowsMapped, granularity);
 
-    let totalTurn = 0;
-    let totalAnswered = 0;
-    let totalUnanswered = 0;
-    let totalBlocked = 0;
-
-    const bucketResults = buckets.map((bucket) => {
-      const rows = folded.get(bucket.key) ?? [];
-      let turnCount = 0;
-      let answeredCount = 0;
-      let blockedCount = 0;
-      for (const row of rows) {
-        turnCount += row.count;
-        if (row.isAnswered) answeredCount += row.count;
-        if (row.blockedByFilter) blockedCount += row.count;
-      }
-      const unansweredCount = turnCount - answeredCount;
-      totalTurn += turnCount;
-      totalAnswered += answeredCount;
-      totalUnanswered += unansweredCount;
-      totalBlocked += blockedCount;
-      const { responseRate } = computeResponseRates({ answeredCount, totalCount: turnCount });
-
-      return {
-        key: bucket.key,
-        label: bucket.label,
-        start: bucket.start,
-        end: bucket.end,
-        turnCount,
-        answeredCount,
-        unansweredCount,
-        blockedCount,
-        responseRate,
-        sessionCount: sessionCountsByBucket.get(bucket.key) ?? 0,
-      };
-    });
-
-    const { responseRate, noResponseRate } = computeResponseRates({ answeredCount: totalAnswered, totalCount: totalTurn });
+    // 버킷 조립·총계(FR-0-89) — 챗봇·통합 요약 공용 순수 함수(lib/summary-assembler.ts).
+    const { bucketResults, totals: bucketTotals } = assembleSummaryBuckets(buckets, folded, sessionCountsByBucket);
 
     // 기간 전체 세션수 — 기존 computeVisitCount()를 그대로 재사용해 대시보드와 정의를 한 벌로 유지한다(AC-14A-9).
     const distinctSessionIds = new Set<string>();
@@ -226,7 +172,7 @@ export class StatsService {
       distinctSessionCount: distinctSessionIds.size,
       nullSessionCount,
     });
-    const turnsPerSession = visitCount === 0 ? 0 : Math.round((totalTurn / visitCount) * 10) / 10;
+    const turnsPerSession = computeTurnsPerSession(bucketTotals.turnCount, visitCount);
 
     return {
       periodStart: period.periodStart,
@@ -234,12 +180,7 @@ export class StatsService {
       granularity,
       timezone: 'Asia/Seoul',
       totals: {
-        turnCount: totalTurn,
-        answeredCount: totalAnswered,
-        unansweredCount: totalUnanswered,
-        blockedCount: totalBlocked,
-        responseRate,
-        noResponseRate,
+        ...bucketTotals,
         sessionCount: visitCount,
         visitCountBasis,
         turnsPerSession,
@@ -252,14 +193,14 @@ export class StatsService {
   async getDistribution(query: StatsDistributionQuery): Promise<StatsDistribution> {
     await this.assertChatbotExists(query.chatbotId);
     const granularity = 'DAY' as const;
-    const period = this.resolveStatsPeriodOrThrow(query.from, query.to, granularity);
+    const period = resolveStatsPeriodOrThrow(query.from, query.to, granularity, this.readRangeLimits());
 
     const where = {
       chatbotId: query.chatbotId,
       dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
     };
 
-    const [bySourceRows, byHourRows, byWeekdayRows, sessionRows] = await this.withTimeout(
+    const [bySourceRows, byHourRows, byWeekdayRows, sessionRows] = await runWithAggregationTimeout(
       Promise.all([
         this.prisma.conversationLog.groupBy({
           by: ['matchedNodeId', 'matchedFaqId', 'isAnswered', 'answeredByRag'],
@@ -284,32 +225,21 @@ export class StatsService {
       ]),
     );
 
-    const sourceCounts = new Map<string, number>();
-    let sourceTotal = 0;
-    for (const row of bySourceRows) {
-      const source = classifyResponseSource({
+    // 출처/채널 비율 조립(FR-0-89) — 챗봇·통합 분포 공용 순수 함수(lib/summary-assembler.ts).
+    const bySource = assembleBySource(
+      bySourceRows.map((row) => ({
         matchedNodeId: row.matchedNodeId,
         matchedFaqId: row.matchedFaqId,
         isAnswered: row.isAnswered,
         answeredByRag: row.answeredByRag,
-      });
-      sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + row._count._all);
-      sourceTotal += row._count._all;
-    }
-    const bySource = (['NODE', 'FAQ', 'RAG', 'OTHER', 'FALLBACK'] as const).map((source) => {
-      const count = sourceCounts.get(source) ?? 0;
-      return { source, count, ratio: sourceTotal === 0 ? 0 : Math.round((count / sourceTotal) * 10000) / 10000 };
-    });
+        count: row._count._all,
+      })),
+    );
 
     const sessionCountsByChannel = foldSessionCountsByChannel(
       sessionRows.map((row) => ({ dayBucket: '', channelType: row.channelType, sessionId: row.sessionId, count: row._count._all })),
     );
-    const channelTotal = Array.from(sessionCountsByChannel.values()).reduce((sum, v) => sum + v, 0);
-    const byChannel = Array.from(sessionCountsByChannel.entries()).map(([channelType, sessionCount]) => ({
-      channelType,
-      sessionCount,
-      ratio: channelTotal === 0 ? 0 : Math.round((sessionCount / channelTotal) * 10000) / 10000,
-    }));
+    const byChannel = assembleByChannel(sessionCountsByChannel);
 
     const byHour = foldByHour(byHourRows.map((row) => ({ hour: row.hourBucket, count: row._count._all })));
     const byWeekday = foldByWeekday(byWeekdayRows.map((row) => ({ dayBucket: row.dayBucket, isAnswered: row.isAnswered, count: row._count._all })));
@@ -330,14 +260,14 @@ export class StatsService {
   async getQuestions(query: StatsQuestionsQuery): Promise<StatsQuestions> {
     await this.assertChatbotExists(query.chatbotId);
     const granularity = 'DAY' as const;
-    const period = this.resolveStatsPeriodOrThrow(query.from, query.to, granularity);
+    const period = resolveStatsPeriodOrThrow(query.from, query.to, granularity, this.readRangeLimits());
 
     const where = {
       chatbotId: query.chatbotId,
       dayBucket: { gte: period.fromDayBucket, lte: period.toDayBucket },
     };
 
-    const [topRows, unansweredRows] = await this.withTimeout(
+    const [topRows, unansweredRows] = await runWithAggregationTimeout(
       Promise.all([
         this.prisma.conversationLog.groupBy({
           by: ['userMessage'],
@@ -404,29 +334,8 @@ export class StatsService {
     }
   }
 
-  private parseGranularityOrThrow(raw: string | undefined) {
-    try {
-      return parseGranularity(raw);
-    } catch (e) {
-      if (e instanceof InvalidGranularityError) {
-        throw new ApiException('INVALID_GRANULARITY', 400, e.message);
-      }
-      throw e;
-    }
-  }
-
-  private resolveStatsPeriodOrThrow(from: Date | undefined, to: Date | undefined, granularity: 'DAY' | 'WEEK' | 'MONTH') {
-    try {
-      return resolveStatsPeriod({ from, to, granularity, now: new Date(), limits: this.readRangeLimits() });
-    } catch (e) {
-      if (e instanceof StatsInvalidPeriodError) {
-        throw new ApiException('INVALID_PERIOD', 400, e.message);
-      }
-      if (e instanceof StatsRangeTooWideError) {
-        throw new ApiException('STATS_RANGE_TOO_WIDE', 400, e.message);
-      }
-      throw e;
-    }
+  private readRangeLimits() {
+    return readStatsRangeLimits(this.config);
   }
 
   private resolvePeriodOrThrow(from: Date | undefined, to: Date | undefined) {
@@ -437,27 +346,6 @@ export class StatsService {
         throw new ApiException('INVALID_PERIOD', 400, e.message);
       }
       throw e;
-    }
-  }
-
-  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('AGGREGATION_TIMEOUT')), AGGREGATION_TIMEOUT_MS);
-    });
-    try {
-      return await Promise.race([promise, timeout]);
-    } catch (e) {
-      if (e instanceof Error && e.message === 'AGGREGATION_TIMEOUT') {
-        throw new ApiException(
-          'AGGREGATION_TIMEOUT',
-          503,
-          '지금은 통계를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.',
-        );
-      }
-      throw e;
-    } finally {
-      clearTimeout(timer!);
     }
   }
 }

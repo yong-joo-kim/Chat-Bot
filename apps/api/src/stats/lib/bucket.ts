@@ -10,6 +10,7 @@ import {
   mondayOf,
   monthIndex,
   parseDayBucket,
+  toKstDateOnly,
 } from './kst-date';
 
 /**
@@ -102,6 +103,26 @@ export function dayBucketToBucketKey(dayBucket: string, granularity: StatsGranul
   if (granularity === 'DAY') return dayBucket;
   if (granularity === 'WEEK') return isoWeekKey(mondayOf(kst));
   return `${kst.y}-${String(kst.m + 1).padStart(2, '0')}`;
+}
+
+export interface BucketDayRange {
+  key: string;
+  /** 버킷의 시작/끝 `dayBucket`(양끝 포함, `YYYY-MM-DD`) — SQL `CASE WHEN dayBucket BETWEEN … THEN key` 바인딩용. */
+  fromDay: string;
+  toDay: string;
+}
+
+/**
+ * [신규 No.29] 버킷별 `[시작 dayBucket, 끝 dayBucket]` 문자열 범위(§5.3, ADR-0033 §6). `buildBuckets()`와
+ * **같은 버킷 규칙**을 재사용해 주차·달력월 규칙이 TS 1벌로 유지된다(DB 날짜 함수 금지) — 그룹·전역
+ * 스코프의 세션 distinct 원시 SQL(`integrated-session.query.ts`)이 이 결과를 파라미터로 바인딩한다.
+ */
+export function buildBucketDayRanges(fromDayBucket: string, toDayBucket: string, granularity: StatsGranularity): BucketDayRange[] {
+  return buildBuckets(fromDayBucket, toDayBucket, granularity).map((bucket) => ({
+    key: bucket.key,
+    fromDay: formatDayBucket(toKstDateOnly(bucket.start)),
+    toDay: formatDayBucket(toKstDateOnly(bucket.end)),
+  }));
 }
 
 /** `dayBucket` 필드를 가진 행들을 버킷 키별로 묶는다. 빈 버킷은 `buildBuckets()`가 보장한다. */

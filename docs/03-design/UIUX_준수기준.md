@@ -17,6 +17,7 @@
 - 모든 대화형 요소(버튼/링크/입력/셀렉트/체크박스)는 Tab 순차 진입, Shift+Tab 역순 진입 보장.
 - 마우스 클릭과 키보드 Enter/Space 두 방식 모두 동일 동작을 실행해야 함. 셀렉트 확장 시 Esc로 닫히고 포커스가 컨테이너로 복귀.
 - 검증 필요: 챗봇 입력창 → 전송버튼 탭 이동, 관리자 폼 필드 간 이동.
+- **정렬 가능한 표의 헤더**는 클릭 가능한 텍스트가 아니라 `<button>`으로 제공하고(Tab 진입·Enter/Space 실행), 현재 정렬 상태를 헤더 셀의 `aria-sort`(`ascending`/`descending`/`none`)로 알린다. 정렬 변경 결과는 표 본문이 조용히 바뀌는 대신 `aria-live="polite"` 영역으로도 안내한다(색상만으로 정렬 방향을 표시하지 않음 — §1과 동일 원칙). → (b) 여러 스코프(챗봇/그룹/전역)를 한 표에서 비교하는 기여 표(`integrated-stats-ui-spec.md` §2 `SortableBreakdownTable`).
 
 ## 4. 버튼 — (a) 챗봇 전송 버튼에 핵심
 - 텍스트 레이블은 동사형("전송", "닫기" 등).
@@ -48,6 +49,7 @@
 - 완료 시 결과 개수·적용 조건 배지 등으로 "완료" 상태 구분 표시. → (b) 관리자 콘솔 필터링/정렬/테이블 조회, (a) 챗봇 "응답 생성 중" 상태에도 응용.
 - 파일 업로드 중 스피너, 실패 시 구체적 오류 메시지 필수.
 - **비동기 답변 대기 패턴**: 서버가 즉시 결과를 반환하지 못하고 백그라운드에서 계속 처리하는 경우(예: 외부 시스템 연동 응답 대기), 대기 상태는 **(1) 시각적 진행 표시**와 **(2) `aria-live`/`role="status"` 텍스트 안내**를 함께 제공한다. 애니메이션만으로 상태를 전달하지 않는다. 다른 입력을 차단하지 않는 것을 기본으로 하며, **상한 대기시간을 두고 초과 시 "지금은 처리하지 못했습니다" 류의 정리 문구로 상태를 명확히 종료**한다(무한 로딩 금지). → (a) 챗봇 위젯의 문서 기반 답변 대기(`nlu-rag-answering-ui-spec.md` §4.4), (b) 관리자 콘솔의 예문 증강 생성·분류기 재학습 진행 표시(`learning-augmentation-ui-spec.md` §3 `AsyncJobProgress`).
+- **여러 원천(스코프)을 합산해 보여주는 화면의 부분 정정 상태**: 백엔드가 아직 일부 원본 데이터를 새 집계 기준으로 옮기지 못한 상태(예: 마이그레이션 직후 백필 대기)에서는, 화면에 **수치가 실제보다 적게 보일 수 있음을 조용히 넘어가지 않고** 상시 배너로 원인과 "자동으로 해소된다"는 전망을 함께 안내한다(빈 데이터처럼 보이게 두지 않음). → (b) 관리자 콘솔 통합 통계의 `backfillPending` 안내(`integrated-stats-ui-spec.md` §2 `BackfillPendingBanner`).
 
 ## 9. 내비게이션 — (b) 관리자 콘솔에 핵심
 - 건너뛰기 링크(본문 바로가기) 제공, 페이지 최초 Tab 시 노출.
@@ -65,3 +67,4 @@
 - 로딩 상태: `uiux_checklist` 11080~11115행
 - 슬라이더 수치입력 병행·비동기 대기 패턴(2026-09-22 추가): `docs/requirements/nlu-rag-answering.md` NFR-A4·FR-N2-39, `docs/02-spec/decisions/ADR-0023-async-pending-answer-delivery.md`
 - 제안-자산 시각적 분리 패턴(2026-09-22 추가): `docs/requirements/learning-augmentation.md` J-11, `docs/02-spec/decisions/ADR-0025-augmentation-output-and-suggestion-asset-separation.md` §5
+- 정렬 가능한 표 헤더 `aria-sort` 규칙 · 백필 대기(부분 정정 상태) 배너 패턴(2026-09-24 추가): `docs/requirements/integrated-stats.md` NFR-IA2/IA3·FR-I2-4, `docs/02-spec/decisions/ADR-0033-cumulative-stats-source-log-sealing-and-group-snapshot.md`, `docs/03-design/integrated-stats-ui-spec.md` §2

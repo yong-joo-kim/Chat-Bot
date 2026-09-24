@@ -237,6 +237,7 @@ export function DeleteGroupConfirmDialog({
       danger
       confirmDisabled={submitting}
     >
+      <p className="field-hint">{MESSAGES.group.deleteConfirmStatsNotice}</p>
       {banner && (
         <div className="modal-banner modal-banner--error" role="alert">
           <p>{banner}</p>
@@ -466,6 +467,7 @@ export function MoveGroupModal({
   onSuccess: (message: string) => void;
 }): JSX.Element {
   const otherGroups = groups.filter((g) => g.id !== chatbot.groupId);
+  const currentGroupName = groups.find((g) => g.id === chatbot.groupId)?.name;
   const [targetGroupId, setTargetGroupId] = useState(otherGroups[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -505,6 +507,7 @@ export function MoveGroupModal({
               ))}
             </select>
             <InlineFieldError id="move-group-error" message={fieldErrors.groupId} />
+            {currentGroupName && <p className="field-hint">{MESSAGES.chatbot.moveStatsNotice(currentGroupName)}</p>}
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -562,6 +565,7 @@ export function ArchiveConfirmDialog({
       danger
       confirmDisabled={submitting}
     >
+      <p className="field-hint">{MESSAGES.chatbot.archiveStatsNotice}</p>
       {banner && (
         <div className="modal-banner modal-banner--error" role="alert">
           {banner}
@@ -583,6 +587,7 @@ export function PermanentDeleteModal({
   const [confirmName, setConfirmName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [banner, setBanner] = useState<string | undefined>();
+  const [bannerHasChildren, setBannerHasChildren] = useState(false);
   const [fieldError, setFieldError] = useState<string | undefined>();
 
   const matches = confirmName === chatbot.name;
@@ -591,6 +596,7 @@ export function PermanentDeleteModal({
     if (!matches) return;
     setSubmitting(true);
     setBanner(undefined);
+    setBannerHasChildren(false);
     setFieldError(undefined);
     try {
       await chatbotsApi.permanentDelete(chatbot.id, { confirmName });
@@ -600,6 +606,7 @@ export function PermanentDeleteModal({
         setFieldError(e.message);
       } else if (e instanceof ApiError && e.code === 'CHATBOT_HAS_CHILDREN') {
         setBanner(e.message);
+        setBannerHasChildren(true);
       } else {
         setBanner(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
       }
@@ -620,7 +627,8 @@ export function PermanentDeleteModal({
     >
       {banner && (
         <div className="modal-banner modal-banner--error" role="alert">
-          {banner}
+          <p>{banner}</p>
+          {bannerHasChildren && <p>{MESSAGES.chatbot.permanentDeleteStatsHint}</p>}
         </div>
       )}
       <div className="form-field">

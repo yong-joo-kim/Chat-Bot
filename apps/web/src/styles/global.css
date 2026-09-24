@@ -3350,3 +3350,118 @@ a:focus-visible {
 .auto-snapshot-pre-notice {
   margin: 8px 0;
 }
+
+/* No.29 — 통합 통계(그룹/전역 스코프, integrated-stats-ui-spec.md) */
+.integrated-stats-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.scope-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.scope-selector-options {
+  align-items: center;
+}
+.scope-selector-live-hint {
+  margin: 0;
+}
+.scope-group-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.backfill-pending-banner {
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+.integrated-kpi-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+.integrated-kpi-collection-start {
+  margin-top: -12px;
+}
+.table-scroll-container {
+  overflow-x: auto;
+}
+.breakdown-table {
+  min-width: 720px;
+}
+.breakdown-sort-button {
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  padding: 4px 8px;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.breakdown-archived-badge {
+  background: #fef3c7;
+  color: #92400e;
+}
+.breakdown-missing-badge {
+  background: #f3f4f6;
+  color: #374151;
+}
+.breakdown-current-group-badge {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.breakdown-row-link {
+  text-align: left;
+}
+.breakdown-fixed-row th,
+.breakdown-fixed-row td {
+  color: var(--color-text-muted);
+}
+.integrated-questions-panel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.integrated-questions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.questions-top-chatbot-line {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+.intent-match-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.intent-match-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.intent-denominator-toggle {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.intent-summary-line {
+  color: var(--color-text-muted);
+}
+.intent-table th,
+.intent-table td {
+  vertical-align: top;
+}

@@ -7,7 +7,8 @@ import type { AuditTargetType } from '@chat-bot/shared-types';
  * 넘겨야 한다. `User`에는 `passwordHash`가 물리적으로 들어갈 수 없다(화이트리스트에 없다).
  */
 const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
-  ChatbotGroup: ['name', 'description'],
+  // [No.29] archivedAt 추가 — 그룹 "삭제"가 보관으로 처리될 때 after 스냅샷에 보관 시각을 남긴다.
+  ChatbotGroup: ['name', 'description', 'archivedAt'],
   // FAQ/의도 매칭 고도화 그룹(nlu-rag-answering-설계.md §11.3, FR-N3-9) 추가분 — AI 답변 설정
   // 저장은 `targetType: 'Chatbot'`으로 기록하며 화이트리스트에 임계값 3종·활성화 여부·스코프
   // 3종·정책·타임아웃을 포함한다(대화 문장은 절대 포함하지 않는다, AC-N1-19).

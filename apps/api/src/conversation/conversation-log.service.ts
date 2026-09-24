@@ -11,6 +11,10 @@ export interface RecordConversationLogParams {
   /** 공개 대화 API의 `messageId`를 그대로 쓴다(§8.3) — 향후 피드백(No.44)이 이 값을 앵커로 쓸 수 있다. */
   id?: string;
   chatbotId: string;
+  /** [신규 No.29] 대화 당시 챗봇 소속 그룹 스냅샷(ADR-0033 §4). 호출부가 이미 읽은 챗봇 행에서
+   * 전달한다 — 이 서비스는 추가 조회를 하지 않는다. 세 타입(여기·ConversationLogPort·
+   * RagAnswerRunInput) 모두 필수라 누락은 컴파일 오류가 된다. */
+  groupId: string;
   channelType: ChannelType;
   sessionId: string;
   rawUserMessage: string;
@@ -63,6 +67,7 @@ export class ConversationLogService {
         data: {
           ...(params.id ? { id: params.id } : {}),
           chatbotId: params.chatbotId,
+          groupId: params.groupId,
           channelType: params.channelType,
           sessionId: params.sessionId,
           userMessage,

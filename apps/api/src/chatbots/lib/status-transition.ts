@@ -10,3 +10,13 @@ export function evaluateStatusTransition(from: ChatbotStatus, to: ChatbotStatus)
   if (from === to) return { kind: 'noop' };
   return CHATBOT_STATUS_TRANSITIONS[from].includes(to) ? { kind: 'allowed' } : { kind: 'denied' };
 }
+
+/**
+ * [신규 No.29] `Chatbot.archivedAt` 동기화 규칙(§3.5, ADR-0033) — `status='ARCHIVED'` ⇔
+ * `archivedAt != null` 불변식을 지킨다. 호출부 2곳(`archive()`·`updateStatus()`)이 공유하는 순수 함수.
+ */
+export function archivedAtPatch(prev: ChatbotStatus, next: ChatbotStatus, now: Date): { archivedAt?: Date | null } {
+  if (next === 'ARCHIVED' && prev !== 'ARCHIVED') return { archivedAt: now };
+  if (prev === 'ARCHIVED' && next !== 'ARCHIVED') return { archivedAt: null };
+  return {};
+}

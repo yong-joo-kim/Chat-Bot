@@ -50,3 +50,10 @@ No.2 대시보드의 핵심 지표 중 하나가 "접속수"다. 그러나 현�
 - `ConversationLogSchema`에 `sessionId?: string` 추가.
 - seed는 트랙 A에서 `sessionId` 40종을 채워 `'SESSION'` 경로를, 트랙 B(로그 0건)에서 빈 상태를 검증할 수 있게 한다.
 - 후속: 대화 엔진 Phase는 세션 생성/만료 정책을 정의하고 `sessionId`를 반드시 채운다. 이때 `ConversationSession` 테이블로 승격할지 재검토한다.
+
+
+---
+
+## 갱신 (2026-09-24 — No.29: 그룹·전역 스코프의 세션 = (챗봇, 세션) 쌍)
+
+통합 통계(No.29, ADR-0033 §6)는 여러 챗봇을 합산하므로 세션 distinct의 키를 **`(chatbotId, sessionId)` 쌍**으로 정의한다 — 서로 다른 챗봇의 세션은 같은 `sessionId` 문자열이라도 별개다(위젯이 슬러그별로 발급하지만 값은 클라이언트가 보내므로 정의로 보장한다). 단일 챗봇에서는 `sessionId` distinct와 동치이므로 이 ADR의 산정식(`distinct + null 행 각 1건`)·`visitCountBasis` 규칙은 **불변**이다. 결과적으로 그룹 세션 = 소속 챗봇 세션의 합이며, 주/월 세션은 여전히 일 버킷의 합집합(DD-61)이다.

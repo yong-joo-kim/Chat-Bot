@@ -19,6 +19,8 @@ const ANSWER_MAX_LENGTH = 2000;
 export interface RagAnswerRunInput {
   messageId: string;
   chatbotId: string;
+  /** [신규 No.29] 대화 당시 챗봇 소속 그룹 스냅샷(ADR-0033 §4) — 요청 시점 값. */
+  groupId: string;
   sessionId: string;
   /** 마스킹 전 원문. 이 서비스 내부에서 송신 직전 PII 마스킹을 적용한다(J-9, FR-0-47). */
   question: string;
@@ -153,6 +155,7 @@ export class RagAnswerService {
       await logPort.record({
         id: input.messageId,
         chatbotId: input.chatbotId,
+        groupId: input.groupId,
         channelType: 'WEB',
         sessionId: input.sessionId,
         rawUserMessage: maskedQuestion,
@@ -172,6 +175,7 @@ export class RagAnswerService {
     await logPort.record({
       id: input.messageId,
       chatbotId: input.chatbotId,
+      groupId: input.groupId,
       channelType: 'WEB',
       sessionId: input.sessionId,
       rawUserMessage: maskedQuestion,

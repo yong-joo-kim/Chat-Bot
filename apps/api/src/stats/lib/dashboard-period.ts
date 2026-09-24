@@ -1,5 +1,5 @@
-const KST_OFFSET_MINUTES = 540; // UTC+9, 대한민국은 서머타임이 없어 고정 오프셋으로 충분(설계서 §7.6)
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { KstDateOnly, MS_PER_DAY, kstDateOnlyToUtc, toKstDateOnly } from './kst-date';
+
 const MAX_PERIOD_DAYS = 366;
 
 export interface ResolvedPeriod {
@@ -9,22 +9,6 @@ export interface ResolvedPeriod {
 
 /** 기간 입력이 역전되었거나 366일을 초과할 때 던지는 순수 오류(서비스가 400으로 변환). */
 export class InvalidPeriodError extends Error {}
-
-interface KstDateOnly {
-  y: number;
-  m: number; // 0-based
-  d: number;
-}
-
-function toKstDateOnly(date: Date): KstDateOnly {
-  const kst = new Date(date.getTime() + KST_OFFSET_MINUTES * 60 * 1000);
-  return { y: kst.getUTCFullYear(), m: kst.getUTCMonth(), d: kst.getUTCDate() };
-}
-
-function kstDateOnlyToUtc(kst: KstDateOnly, hh: number, mm: number, ss: number, ms: number): Date {
-  const utcMs = Date.UTC(kst.y, kst.m, kst.d, hh, mm, ss, ms) - KST_OFFSET_MINUTES * 60 * 1000;
-  return new Date(utcMs);
-}
 
 /**
  * 대시보드 기간 경계 계산(FR-2-7, AC-2-7, AC-2-8, 설계서 §7.6).

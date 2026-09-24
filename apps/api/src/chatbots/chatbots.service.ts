@@ -26,7 +26,7 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { toChatbotDto, toChatbotListItemDto } from './chatbot.mapper';
 import { deriveCopyName } from './lib/copy-name.util';
 import { deriveCopySlug, SlugDerivationExhaustedError } from './lib/slug.util';
-import { evaluateStatusTransition } from './lib/status-transition';
+import { archivedAtPatch, evaluateStatusTransition } from './lib/status-transition';
 import { mergeSkin, parseSkin, serializeSkin } from './lib/skin.util';
 
 /** 영구 삭제 사전 검사 대상(ADR-0002 §7.8) — 사용자에게 보여줄 한글 라벨. */
@@ -64,7 +64,8 @@ export class ChatbotsService {
   }
 
   async create(dto: CreateChatbotDto): Promise<Chatbot> {
-    const group = await this.prisma.chatbotGroup.findUnique({ where: { id: dto.groupId } });
+    // [No.29] 보관된 그룹은 생성 대상에서 제외한다(404) — ADR-0033 §5.
+    const group = await this.prisma.chatbotGroup.findFirst({ where: { id: dto.groupId, archivedAt: null } });
     if (!group) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
 
     await this.assertSlugFree(dto.slug);
@@ -187,7 +188,11 @@ export class ChatbotsService {
       return toChatbotDto(current);
     }
 
-    const row = await this.prisma.chatbot.update({ where: { id }, data: { status: dto.status } });
+    // [No.29] status='ARCHIVED' ⇔ archivedAt != null 불변식을 같은 쓰기 안에서 유지한다(§3.5).
+    const row = await this.prisma.chatbot.update({
+      where: { id },
+      data: { status: dto.status, ...archivedAtPatch(currentStatus, dto.status, new Date()) },
+    });
     await this.auditLogService.record({
       action: 'STATUS_CHANGE',
       targetType: 'Chatbot',
@@ -203,7 +208,9 @@ export class ChatbotsService {
 
   async moveGroup(id: string, dto: MoveChatbotGroupDto): Promise<Chatbot> {
     const current = await this.findRowOrThrow(id);
-    const group = await this.prisma.chatbotGroup.findUnique({ where: { id: dto.groupId } });
+    // [No.29] 보관된 그룹은 이동 대상에서 제외한다(404) — ADR-0033 §5. 과거 로그는 이동을 따라가지
+    // 않는다(ConversationLog.groupId는 적재 시점 스냅샷, R-10) — 이동 전 대화는 이전 그룹에 남는다.
+    const group = await this.prisma.chatbotGroup.findFirst({ where: { id: dto.groupId, archivedAt: null } });
     if (!group) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
 
     const row = await this.prisma.chatbot.update({ where: { id }, data: { groupId: dto.groupId } });
@@ -225,7 +232,8 @@ export class ChatbotsService {
 
     let targetGroupId = original.groupId;
     if (dto.targetGroupId) {
-      const group = await this.prisma.chatbotGroup.findUnique({ where: { id: dto.targetGroupId } });
+      // [No.29] 보관된 그룹은 복사 대상에서 제외한다(404) — ADR-0033 §5.
+      const group = await this.prisma.chatbotGroup.findFirst({ where: { id: dto.targetGroupId, archivedAt: null } });
       if (!group) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
       targetGroupId = dto.targetGroupId;
     }
@@ -266,7 +274,11 @@ export class ChatbotsService {
   async archive(id: string): Promise<void> {
     const current = await this.findRowOrThrow(id);
     if (current.status === 'ARCHIVED') return;
-    const row = await this.prisma.chatbot.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    const currentStatus = this.parseStatusOrDraft(current.status);
+    const row = await this.prisma.chatbot.update({
+      where: { id },
+      data: { status: 'ARCHIVED', ...archivedAtPatch(currentStatus, 'ARCHIVED', new Date()) },
+    });
     await this.auditLogService.record({
       action: 'DELETE',
       targetType: 'Chatbot',

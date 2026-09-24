@@ -176,8 +176,9 @@ export function normalizeText(text: string): string {
  * KST(Asia/Seoul) 버킷 변환의 단일 소스(FR-0-31, ADR-0017). 대한민국은 서머타임이 없어
  * 고정 오프셋(540분)으로 충분하다. `apps/api`(적재·집계) · `prisma/scripts`(백필) ·
  * `prisma/seed.ts` · `apps/web`(표기) 네 소비자가 공유하는 횡단 관심사다.
- * ⚠ `apps/api/src/stats/lib/dashboard-period.ts`의 KST 헬퍼와는 **의도적으로 분리**되어 있다
- * (J-4 — 대시보드 코드 무변경). 두 구현의 동일성은 AC-14A-9로 고정한다.
+ * `apps/api/src/stats/lib/dashboard-period.ts`는 No.29에서 `stats/lib/kst-date.ts`를 import하도록
+ * 통합되었다(동작 불변) — 이 파일(적재 시점 확정)과 `kst-date.ts`(통계 내부 달력 산술)는 역할이 달라
+ * 합치지 않으며, 동치는 `stats/lib/kst-date.contract.spec.ts` 계약 테스트로 고정한다(ADR-0033 §7.10).
  */
 export const KST_OFFSET_MINUTES = 540;
 

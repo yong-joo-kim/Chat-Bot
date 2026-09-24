@@ -94,6 +94,7 @@ export class PublicConversationService {
       void this.logService.record({
         id: messageId,
         chatbotId: chatbot.id,
+        groupId: chatbot.groupId,
         channelType: 'WEB',
         sessionId: dto.sessionId,
         rawUserMessage: resolveUserMessageText(inbound),
@@ -147,6 +148,7 @@ export class PublicConversationService {
       return this.startPendingRagAnswer({
         slug,
         chatbotId: chatbot.id,
+        groupId: chatbot.groupId,
         sessionId: dto.sessionId,
         messageId,
         inbound,
@@ -169,6 +171,7 @@ export class PublicConversationService {
     void this.logService.record({
       id: messageId,
       chatbotId: chatbot.id,
+      groupId: chatbot.groupId,
       channelType: 'WEB',
       sessionId: dto.sessionId,
       rawUserMessage: resolveUserMessageText(inbound),
@@ -224,6 +227,7 @@ export class PublicConversationService {
   private async startPendingRagAnswer(input: {
     slug: string;
     chatbotId: string;
+    groupId: string;
     sessionId: string;
     messageId: string;
     inbound: InboundTurn;
@@ -254,6 +258,7 @@ export class PublicConversationService {
       {
         messageId: input.messageId,
         chatbotId: input.chatbotId,
+        groupId: input.groupId,
         sessionId: input.sessionId,
         question: resolveUserMessageText(input.inbound),
         scope: { company: input.settings.ragCompany as string, category: input.settings.ragCategory, subcategory: input.settings.ragSubcategory },

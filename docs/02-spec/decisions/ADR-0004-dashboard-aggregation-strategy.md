@@ -56,3 +56,10 @@
 - `stats/lib/dashboard-aggregator.ts`(순수), `stats/lib/dashboard-period.ts`(순수), `stats/stats.service.ts`(유일한 원시 SQL 보유처)로 분리.
 - `DashboardSummarySchema`에 `totalLogCount`, `visitCountBasis` 추가(집계 건수 배지 FR-2-12, 산정 기준 캡션 FR-2-1).
 - 후속: 대화 엔진 Phase에서 `ConversationLog.normalizedMessage` 도입을 재검토하고, 도입 시 `aggregateTopQuestions`의 정규화 단계를 우회 가능하게 한다(함수 계약은 유지).
+
+
+---
+
+## 갱신 (2026-09-24 — No.29에서도 일/주 집계 테이블 미도입)
+
+대안 표의 "일/주 단위 집계 테이블 — No.14/No.29 범위"에 대해: **No.29(통합 통계)도 집계 테이블을 도입하지 않는다**(ADR-0033 §1·§7). 그룹·전역 스코프는 이 ADR의 "DB 그룹화 + 순수 함수" 방식을 `where`만 넓혀 재사용하며, `aggregateTopQuestions`·`computeResponseRates`·`computeVisitCount`의 계약은 불변이다(`normalizeQuestion`은 질문별 최다 챗봇 귀속을 위해 **export만** 추가 — 규칙 1벌 유지). 후보 상한 500의 근사 규약은 그룹 질문 순위와 최다 챗봇 귀속에도 그대로 적용된다. 원시 SQL 격리 원칙(감수 비용 ②)은 **"`stats` 모듈의 지정 파일"** 로 범위만 넓힌다 — 대시보드 원시 SQL(`stats.service.ts`)은 무변경이고, 그룹·전역 세션 distinct 1건이 `stats/integrated/integrated-session.query.ts`에 격리된다(보유 파일 목록은 정적 검사로 고정).

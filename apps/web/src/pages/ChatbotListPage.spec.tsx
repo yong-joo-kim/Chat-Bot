@@ -22,10 +22,15 @@ vi.mock('../api/groups', () => ({
 
 const mockChatbotsList = vi.fn();
 const mockChatbotsCreate = vi.fn();
+const mockChatbotsArchive = vi.fn();
+const mockChatbotsMoveGroup = vi.fn();
 vi.mock('../api/chatbots', () => ({
   chatbotsApi: {
     list: (...args: unknown[]) => mockChatbotsList(...args),
     create: (...args: unknown[]) => mockChatbotsCreate(...args),
+    archive: (...args: unknown[]) => mockChatbotsArchive(...args),
+    moveGroup: (...args: unknown[]) => mockChatbotsMoveGroup(...args),
+    copy: vi.fn(),
     slugAvailable: vi.fn().mockResolvedValue({ slug: 'refund-bot', available: true, message: '사용 가능한 고유 URL입니다.' }),
   },
 }));
@@ -40,6 +45,7 @@ function renderPage(initialEntry = '/chatbots'): ReturnType<typeof render> {
         <Routes>
           <Route path="/chatbots" element={<ChatbotListPage />} />
           <Route path="/chatbots/:chatbotId/settings" element={<p>설정 화면(생성 직후 자동 이동)</p>} />
+          <Route path="/" element={<p>통합 통계 화면(그룹 통계 보기 이동 확인용)</p>} />
         </Routes>
       </ToastProvider>
     </MemoryRouter>,
@@ -57,6 +63,8 @@ describe('ChatbotListPage — 그룹/챗봇 CRUD 플로우', () => {
     mockGroupsRemove.mockReset();
     mockChatbotsList.mockReset();
     mockChatbotsCreate.mockReset();
+    mockChatbotsArchive.mockReset();
+    mockChatbotsMoveGroup.mockReset();
     mockGroupsList.mockResolvedValue({ items: [group], total: 1, page: 1, pageSize: 100 });
     mockChatbotsList.mockResolvedValue({ items: [chatbotItem], total: 1, page: 1, pageSize: 20 });
   });
@@ -108,6 +116,10 @@ describe('ChatbotListPage — 그룹/챗봇 CRUD 플로우', () => {
     await user.click(screen.getByRole('menuitem', { name: '그룹 삭제' }));
 
     const dialog = await screen.findByRole('dialog', { name: '그룹 삭제' });
+    // 코드리뷰 M-2 — 대상 그룹명이 대화상자 본문에 그대로 남아 있어야 한다.
+    expect(within(dialog).getByText("'고객지원 그룹' 그룹을 삭제하시겠습니까?")).toBeInTheDocument();
+    // No.29 — 보관/완전삭제 두 결과 모두를 사전에 예고하는 통계 안내 문구(§10.3).
+    expect(within(dialog).getByText(/통합 통계에는 '보관된 그룹'으로 남습니다/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: '삭제' }));
 
     expect(await within(dialog).findByText('소속 챗봇 1개를 먼저 이동하거나 삭제해 주세요.')).toBeInTheDocument();
@@ -159,6 +171,52 @@ describe('ChatbotListPage — 그룹/챗봇 CRUD 플로우', () => {
 
     await waitFor(() => expect(mockGroupsCreate).toHaveBeenCalledWith({ name: '키보드로만든그룹', description: undefined }));
     expect(await screen.findByText('그룹이 생성되었습니다.')).toBeInTheDocument();
+  });
+
+  it('No.29 — 그룹 kebab 메뉴의 "그룹 통계 보기"는 통합 통계 화면으로 스코프를 지정해 이동한다(FR-I8-2)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: '고객지원 그룹 1' });
+
+    await user.click(screen.getByRole('button', { name: '고객지원 그룹 그룹 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '그룹 통계 보기' }));
+
+    expect(await screen.findByText('통합 통계 화면(그룹 통계 보기 이동 확인용)')).toBeInTheDocument();
+  });
+
+  it('No.29 — 챗봇 보관 대화상자에는 대화 기록이 그룹 통계에 계속 포함된다는 안내 문구가 있다(FR-I1-5)', async () => {
+    const user = userEvent.setup();
+    mockChatbotsArchive.mockResolvedValue(undefined);
+    renderPage();
+    await screen.findByRole('button', { name: '고객지원 그룹 1' });
+
+    // 데스크톱 테이블 + 모바일 카드 목록이 함께 렌더되므로(반응형, CSS로만 숨김) 첫 번째 요소를 쓴다.
+    const [kebabButton] = await screen.findAllByRole('button', { name: '주문 상담봇 관리' });
+    await user.click(kebabButton);
+    await user.click(screen.getAllByRole('menuitem', { name: '삭제' })[0]);
+
+    const dialog = await screen.findByRole('dialog', { name: '챗봇 보관' });
+    expect(within(dialog).getByText('보관해도 이 챗봇의 대화 기록은 그룹 통계에 계속 포함됩니다.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(mockChatbotsArchive).toHaveBeenCalledWith('bot-1'));
+  });
+
+  it('No.29 — 그룹 이동 대화상자에는 이동 전 대화가 이전 그룹 통계에 남는다는 안내 문구가 있다(FR-I2-5)', async () => {
+    const user = userEvent.setup();
+    const group2 = makeGroup({ id: 'group-2', name: '마케팅 그룹', chatbotCount: 0 });
+    mockGroupsList.mockResolvedValue({ items: [group, group2], total: 2, page: 1, pageSize: 100 });
+    renderPage();
+    await screen.findByRole('button', { name: '고객지원 그룹 1' });
+
+    const [kebabButton] = await screen.findAllByRole('button', { name: '주문 상담봇 관리' });
+    await user.click(kebabButton);
+    await user.click(screen.getAllByRole('menuitem', { name: '그룹 이동' })[0]);
+
+    const dialog = await screen.findByRole('dialog', { name: '그룹 이동' });
+    expect(
+      within(dialog).getByText("이동 이후의 대화만 새 그룹에 집계됩니다. 이동 전 대화는 '고객지원 그룹' 통계에 남습니다."),
+    ).toBeInTheDocument();
   });
 
   it('그룹이 0개면 "+ 챗봇 만들기"가 비활성화된다(EX-1-5)', async () => {

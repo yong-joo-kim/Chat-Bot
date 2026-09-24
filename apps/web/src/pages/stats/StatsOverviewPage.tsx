@@ -15,6 +15,7 @@ import { ResponseSourceDistribution } from './ResponseSourceDistribution';
 import { ChannelDistribution } from './ChannelDistribution';
 import { HourWeekdayPanel } from './HourWeekdayPanel';
 import { TopQuestionsPanel } from './TopQuestionsPanel';
+import { IntentMatchSection } from './IntentMatchSection';
 
 interface AsyncSlice<T> {
   loading: boolean;
@@ -194,6 +195,9 @@ export function StatsOverviewPage(): JSX.Element {
           ) : null}
         </>
       )}
+
+      {/* No.29(J-13) — 기존 섹션과 무관하게 항상 렌더되는 독립 섹션(FR-0-90, FR-I8-5). */}
+      <IntentMatchSection chatbotId={chatbot.id} from={from} to={to} />
     </div>
   );
 }

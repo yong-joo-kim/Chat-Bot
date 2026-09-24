@@ -149,12 +149,14 @@ function buildTrackCLogs(now: Date): LogSeed[] {
   return logs;
 }
 
-async function replaceConversationLogs(chatbotId: string, logs: LogSeed[]): Promise<void> {
+async function replaceConversationLogs(chatbotId: string, groupId: string, logs: LogSeed[]): Promise<void> {
   await prisma.conversationLog.deleteMany({ where: { chatbotId } });
   if (logs.length === 0) return;
   await prisma.conversationLog.createMany({
     data: logs.map((log) => ({
       chatbotId,
+      // [신규 No.29] dev DB가 backfillPending으로 시작하지 않도록 시드 챗봇의 그룹을 채운다.
+      groupId,
       channelType: 'WEB',
       sessionId: log.sessionId ?? undefined,
       userMessage: log.userMessage,
@@ -225,12 +227,13 @@ function buildTrackDLogs(now: Date): StatsTrendLogSeed[] {
   return logs;
 }
 
-async function replaceStatsTrendLogs(chatbotId: string, logs: StatsTrendLogSeed[]): Promise<void> {
+async function replaceStatsTrendLogs(chatbotId: string, groupId: string, logs: StatsTrendLogSeed[]): Promise<void> {
   await prisma.conversationLog.deleteMany({ where: { chatbotId } });
   if (logs.length === 0) return;
   await prisma.conversationLog.createMany({
     data: logs.map((log) => ({
       chatbotId,
+      groupId,
       channelType: 'WEB',
       sessionId: log.sessionId ?? undefined,
       userMessage: log.userMessage,
@@ -251,7 +254,7 @@ async function replaceStatsTrendLogs(chatbotId: string, logs: StatsTrendLogSeed[
  * `PENDING`/`RESOLVED`/`IGNORED` 각 1건 이상, 반영 후 재발생 1건, 추천이 걸리는 의도
  * (`배송문의` + 예문)와 추천 0건인 질문 각 1건. ⚠ 대응 대화 로그도 함께 생성한다(§3.4 불변식).
  */
-async function seedLearningQueue(chatbotId: string, now: Date): Promise<void> {
+async function seedLearningQueue(chatbotId: string, groupId: string, now: Date): Promise<void> {
   await prisma.unansweredQuestion.deleteMany({ where: { chatbotId } });
 
   await prisma.intent.deleteMany({ where: { chatbotId } });
@@ -325,6 +328,7 @@ async function seedLearningQueue(chatbotId: string, now: Date): Promise<void> {
   // §3.4 불변식 — 큐가 있는 챗봇은 대응 대화 로그도 함께 가진다(영구삭제 차단 집합 유지).
   await replaceStatsTrendLogs(
     chatbotId,
+    groupId,
     [pendingWithSuggestion, pendingNoSuggestion, resolvedRecurred, ignoredQuestion].map((q, i) => ({
       userMessage: q,
       isAnswered: false,
@@ -352,7 +356,7 @@ async function main(): Promise<void> {
     status: 'ACTIVE',
     description: 'Phase 1 대시보드 검증용 샘플 챗봇 — 대화로그 100건',
   });
-  await replaceConversationLogs(supportBot.id, buildTrackALogs(now));
+  await replaceConversationLogs(supportBot.id, supportBot.groupId, buildTrackALogs(now));
 
   // 대화 설계 재시딩 전, 조인/노드를 먼저 비운다 — intents/keywords/contexts가 onDelete:Restrict로
   // 참조되므로 삭제 순서를 지키지 않으면 재실행 시 P2003(FK 위반)으로 실패한다.
@@ -660,7 +664,7 @@ async function main(): Promise<void> {
     status: 'DRAFT',
     description: '대화로그 0건 — 대시보드 빈 상태 검증용',
   });
-  await replaceConversationLogs(emptyBot.id, []);
+  await replaceConversationLogs(emptyBot.id, emptyBot.groupId, []);
 
   // 트랙 C: 보관 + 과거 로그 — 영구삭제 409(AC-1-11), 편집 409(AC-1-12), 보관본 조회(AC-2-10) 검증용
   const archivedBot = await upsertChatbot({
@@ -670,7 +674,7 @@ async function main(): Promise<void> {
     status: 'ARCHIVED',
     description: '보관 처리된 레거시 챗봇 — 30일 이전 로그 20건 보유',
   });
-  await replaceConversationLogs(archivedBot.id, buildTrackCLogs(now));
+  await replaceConversationLogs(archivedBot.id, archivedBot.groupId, buildTrackCLogs(now));
 
   // AC-11-1 — 채널 레코드 0건 챗봇(8종 전부 configured:false 검증용, 품질/채널-설계.md §12)
   const emptyChannelBot = await upsertChatbot({
@@ -681,7 +685,7 @@ async function main(): Promise<void> {
     description: '채널 레코드 0건 — 채널 목록 빈 상태(전부 configured:false) 검증용',
   });
   await prisma.channel.deleteMany({ where: { chatbotId: emptyChannelBot.id } });
-  await replaceConversationLogs(emptyChannelBot.id, []);
+  await replaceConversationLogs(emptyChannelBot.id, emptyChannelBot.groupId, []);
 
   // 트랙 D: No.14 시계열·분포 검증용(stats-learning-설계.md §14.1) — 최근 60일 분포 로그
   const statsTrendBot = await upsertChatbot({
@@ -691,7 +695,7 @@ async function main(): Promise<void> {
     status: 'ACTIVE',
     description: 'No.14 기간 시계열·시간대/요일 분포 검증용 — 최근 60일 분포 로그',
   });
-  await replaceStatsTrendLogs(statsTrendBot.id, buildTrackDLogs(now));
+  await replaceStatsTrendLogs(statsTrendBot.id, statsTrendBot.groupId, buildTrackDLogs(now));
 
   // 트랙 E: No.15 미응답 큐 검증용(stats-learning-설계.md §14.1)
   const learningQueueBot = await upsertChatbot({
@@ -701,7 +705,7 @@ async function main(): Promise<void> {
     status: 'ACTIVE',
     description: 'No.15 미응답 큐 검증용 — 상태 3종·재발생·추천 포함',
   });
-  await seedLearningQueue(learningQueueBot.id, now);
+  await seedLearningQueue(learningQueueBot.id, learningQueueBot.groupId, now);
 
   // eslint-disable-next-line no-console
   console.log(

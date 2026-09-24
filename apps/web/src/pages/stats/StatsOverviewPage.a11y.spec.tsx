@@ -24,13 +24,36 @@ vi.mock('../ChatbotDetailLayout', () => ({
 const mockGetSummary = vi.fn();
 const mockGetDistribution = vi.fn();
 const mockGetQuestions = vi.fn();
+const mockGetIntentStats = vi.fn();
 vi.mock('../../api/stats', () => ({
   statsApi: {
     getSummary: (...args: unknown[]) => mockGetSummary(...args),
     getDistribution: (...args: unknown[]) => mockGetDistribution(...args),
     getQuestions: (...args: unknown[]) => mockGetQuestions(...args),
+    getIntentStats: (...args: unknown[]) => mockGetIntentStats(...args),
   },
 }));
+
+function makeIntentStats(overrides: Partial<import('@chat-bot/shared-types').IntentStats> = {}): import('@chat-bot/shared-types').IntentStats {
+  return {
+    periodStart: PERIOD_META.periodStart,
+    periodEnd: PERIOD_META.periodEnd,
+    granularity: 'DAY',
+    timezone: 'Asia/Seoul',
+    chatbotId: chatbot.id,
+    generatedAt: new Date('2026-09-22T00:00:00.000Z'),
+    totalTurnCount: 100,
+    matchedTurnCount: 80,
+    unmatchedTurnCount: 20,
+    othersTurnCount: 0,
+    distinctIntentCount: 2,
+    items: [
+      { intentId: '44444444-4444-4444-8444-444444444444', name: '환급일_문의', deleted: false, turnCount: 50, answeredCount: 47, responseRate: 0.94, shareOfAll: 0.5, shareOfIntentMatched: 0.625 },
+      { intentId: '55555555-5555-4555-8555-555555555555', name: null, deleted: true, turnCount: 30, answeredCount: 15, responseRate: 0.5, shareOfAll: 0.3, shareOfIntentMatched: 0.375 },
+    ],
+    ...overrides,
+  };
+}
 
 const PERIOD_META = {
   periodStart: new Date('2026-08-24T00:00:00.000Z'),
@@ -102,16 +125,20 @@ describe('StatsOverviewPage — axe 접근성 스캔', () => {
     mockGetSummary.mockReset();
     mockGetDistribution.mockReset();
     mockGetQuestions.mockReset();
+    mockGetIntentStats.mockReset();
   });
 
-  it('정상 데이터 화면(카드+차트+분포+순위)에 구조적 접근성 위반이 없다', async () => {
+  it('정상 데이터 화면(카드+차트+분포+순위+의도별 매칭)에 구조적 접근성 위반이 없다', async () => {
     mockGetSummary.mockResolvedValue(makeSummary());
     mockGetDistribution.mockResolvedValue(makeDistribution());
     mockGetQuestions.mockResolvedValue(makeQuestions());
+    mockGetIntentStats.mockResolvedValue(makeIntentStats());
 
     const { container } = renderPage();
     await screen.findByText('세션 수');
     await screen.findByText('응답 출처 분포');
+    await screen.findByRole('heading', { name: '의도별 매칭' });
+    await screen.findByText('환급일_문의');
 
     const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(results).toHaveNoViolations();
@@ -148,9 +175,11 @@ describe('StatsOverviewPage — axe 접근성 스캔', () => {
       }),
     );
     mockGetQuestions.mockResolvedValue(makeQuestions({ topQuestions: [], topUnansweredQuestions: [] }));
+    mockGetIntentStats.mockResolvedValue(makeIntentStats({ matchedTurnCount: 0, items: [], distinctIntentCount: 0, unmatchedTurnCount: 100 }));
 
     const { container } = renderPage();
     await screen.findByText('선택한 기간에 대화 기록이 없습니다.');
+    await screen.findByText('매칭된 의도가 없습니다.');
 
     const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(results).toHaveNoViolations();

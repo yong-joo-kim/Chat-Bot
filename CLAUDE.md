@@ -8,7 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-**아직 실제 코드는 없다** (git 저장소도 아님). 현재는 문서/설계/멀티에이전트 하네스 단계이며, RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템을 목표로 한다.
+RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
+
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 28, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+
+### 코드 구조
+pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
+- 시험: `apps/api`는 `npx jest`, `apps/web`는 `npx vitest run`. shared-types 변경 후에는 `pnpm --filter @chat-bot/shared-types build`를 먼저 실행.
+- ⚠ 로컬 `apps/api/.env`의 데모용 줄(`EMBEDDING_BASE_URL`·`CLASSIFIER_ENABLED` 등)이 있으면 `learning-augmentation.integration.spec.ts` 1건이 503으로 실패한다(환경 검증이 spec의 env 덮어쓰기보다 먼저 실행됨). 전체 시험 시 해당 줄을 잠시 주석 처리할 것.
+- boolean 환경변수·쿼리에는 `z.coerce.boolean()`을 쓰지 않는다("false"→true). 환경변수는 `envBoolean()`, 쿼리는 `queryBoolean()`.
 
 ### 문서 구조 (`docs/`)
 1. `docs/00-source/` — 원본 참고 문서(ROCHA 매뉴얼/제품소개서, 정부 UIUX 가이드라인, 기능분류 초안)
@@ -18,8 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. `docs/04-test/` — 시험계획.md / 시험항목.md / 시험데이터.md / 자동시험_전략.md / 오류검출_프로세스.md
 6. `docs/05-ops/` — 버전관리.md / 자동배포.md
 
-### 제안 아키텍처 (`개발명세서.md` 기준, 미확정 — §6 참고)
-pnpm 모노레포: `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/api`(NestJS), `apps/ml-worker`(GPU 필요 딥러닝/임베딩/RAG/음성), `packages/shared-types|dialogue-engine|llm-provider`. 형제 프로젝트 `Auto QA`(pnpm+NestJS+React) 컨벤션을 재사용해 팀 내 일관성을 유지.
+기능그룹별 산출물: 요구사항 `docs/requirements/<group>.md`, 설계 `docs/02-spec/<group>-설계.md`(+ `decisions/ADR-*.md`), 화면 명세 `docs/03-design/<group>-ui-spec.md`. 형제 프로젝트 `Auto QA`(pnpm+NestJS+React) 컨벤션을 재사용해 팀 내 일관성을 유지.
 
 ### 멀티에이전트 개발 하네스 (`.claude/agents/`)
 `/new-feature <기능설명>` (`.claude/commands/new-feature.md`)로 기능 단위 개발을 다음 순서로 진행:
@@ -30,7 +37,7 @@ pnpm 모노레포: `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임�
 
 **원칙**: 코드는 항상 `docs/01-requirements`/`docs/02-spec`/`docs/03-design` 문서에 근거해 구현하며, 설계 변경은 반드시 `system-architect`를 통해 문서에 먼저 반영한다. 커밋은 사용자가 명시적으로 요청했을 때만 `git-manager`가 수행하고, CI 연동(3단계)·실 배포(4단계)는 사용자가 플랫폼/자격증명을 명시하기 전에는 착수하지 않는다(`docs/05-ops/자동배포.md` §1).
 
-**다음 단계**: `개발명세서.md` §6의 미결정 사항을 사용자와 확정한 뒤 `/new-feature`로 1차 개발 범위부터 착수한다.
+**다음 단계**: No.29(통합 통계) 착수(2026-09-24 결정). No.40~47(타사 벤치마킹 보완)은 `기능요구사항.md` §4-1의 사용자 확인 후 착수한다.
 
 It sits alongside sibling projects in `D:\2. Team Source\`:
 - `Auto QA` — pnpm monorepo (apps/api, apps/web, packages/*) — 이 프로젝트가 컨벤션을 재사용하는 대상

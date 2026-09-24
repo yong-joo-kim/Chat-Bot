@@ -14,8 +14,9 @@ import {
 /**
  * No.14 기간·단위 규약의 단일 소스(FR-14-4~12, J-3, ADR-0017).
  * DB·Nest 무의존 순수 함수 — 단위 테스트 1차 대상(NFR-M1).
- * ⚠ 기존 `dashboard-period.ts`(No.2 대시보드)는 수정하지 않는다(J-4) — **의도적 중복**이며
- * 동일성은 AC-14A-9로 고정한다.
+ * `dashboard-period.ts`(No.2 대시보드)는 No.29에서 `kst-date.ts` import로 통합되었다(동작 불변) —
+ * 이 파일은 그와 별개로 `kst-date.ts`를 직접 재사용한다. 동일성은 AC-14A-9·`kst-date.contract.spec.ts`로
+ * 고정한다.
  */
 
 /** `from > to`(기존 코드 `INVALID_PERIOD` 재사용, EX-14-4). */

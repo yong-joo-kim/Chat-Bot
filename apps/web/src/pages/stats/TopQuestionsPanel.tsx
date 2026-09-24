@@ -2,8 +2,11 @@ import { Link } from 'react-router-dom';
 import type { StatsQuestions } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../constants/messages';
 
-/** S1 질문순위(FR-14-23~27). 미응답 순위의 각 행은 학습현황 큐 항목으로 이동하는 딥링크를 갖는다(있을 때만). */
-export function TopQuestionsPanel({ chatbotId, questions }: { chatbotId: string; questions: StatsQuestions }): JSX.Element {
+/**
+ * S1 질문순위(FR-14-23~27). 미응답 순위의 각 행은 학습현황 큐 항목으로 이동하는 딥링크를 갖는다(있을 때만).
+ * `chatbotId`가 없으면(통합 스코프 재사용 대비, `integrated-stats-ui-spec.md` §0-2) 딥링크를 렌더하지 않는다.
+ */
+export function TopQuestionsPanel({ chatbotId, questions }: { chatbotId?: string; questions: StatsQuestions }): JSX.Element {
   const { topQuestions, topUnansweredQuestions, approximated, candidateLimit } = questions;
   const approxCaption = approximated ? ` ${MESSAGES.stats.approximatedCaption(candidateLimit)}` : '';
 
@@ -15,7 +18,7 @@ export function TopQuestionsPanel({ chatbotId, questions }: { chatbotId: string;
           {approxCaption}
         </h2>
         {topQuestions.length === 0 ? (
-          <p className="field-hint">데이터가 없습니다.</p>
+          <p className="field-hint">{MESSAGES.stats.noDataShort}</p>
         ) : (
           <ol className="top-questions-list">
             {topQuestions.map((q, idx) => (
@@ -32,13 +35,13 @@ export function TopQuestionsPanel({ chatbotId, questions }: { chatbotId: string;
           {approxCaption}
         </h2>
         {topUnansweredQuestions.length === 0 ? (
-          <p className="field-hint">데이터가 없습니다.</p>
+          <p className="field-hint">{MESSAGES.stats.noDataShort}</p>
         ) : (
           <ol className="top-questions-list">
             {topUnansweredQuestions.map((q, idx) => (
               <li key={`${q.question}-${idx}`}>
                 {idx + 1}. {q.question} · {MESSAGES.stats.questionCount(q.count)}
-                {q.unansweredQuestionId && (
+                {chatbotId && q.unansweredQuestionId && (
                   <>
                     {' '}
                     <Link to={`/chatbots/${chatbotId}/stats/learning?highlightId=${q.unansweredQuestionId}`}>

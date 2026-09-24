@@ -89,7 +89,7 @@ hourBucket Int    @default(-1)   // 0~23 (Asia/Seoul)
 2. **백필이 배포 절차의 일부가 된다** — 미완 상태로 API를 노출하면 과거 로그가 조용히 사라진다. ③단계 검증을 게이트로 둔다(AC-X-6).
 3. **센티넬(`""`/`-1`)이 데이터에 존재할 수 있다** — 정상 경로에서는 생기지 않으며, 생기면 집계에서 빠져 "총합이 안 맞는다"로 드러난다. 새 테스트가 센티넬을 만들지 않도록 로그 생성 헬퍼를 제공한다.
 4. **세션 distinct 쿼리의 카디널리티가 기간에 비례한다** — 기간 상한·타임아웃으로 방어하고, 초과 시 기존 원시 SQL 확장이라는 탈출구를 문서에 명시했다.
-5. **KST 헬퍼가 두 곳(`dashboard-period.ts` / `shared-types`)에 존재한다** — J-4를 지키기 위한 의도적 중복. AC-14A-9가 두 구현의 동일성을 고정하고 통합 시점을 No.29로 못 박았다.
+5. **KST 헬퍼가 두 곳(`dashboard-period.ts` / `shared-types`)에 존재한다** — J-4를 지키기 위한 의도적 중복. AC-14A-9가 두 구현의 동일성을 고정하고 통합 시점을 No.29로 못 박았다. **[해소 2026-09-24 No.29 — 문서 끝 갱신 참고]**
 
 ## 결과
 
@@ -104,3 +104,15 @@ hourBucket Int    @default(-1)   // 0~23 (Asia/Seoul)
 - **개발명세서 갱신**: §3 `ConversationLog` 설명, §3.1 인덱스 목록, §5 성능 기준(기간 시계열 P95 1초), §5.1 환경변수 4종.
 - `test-automation` 인계: ① **AC-14A-2(일/주/월 합계 보존 — `turnCount`·`answeredCount`·`unansweredCount`·`blockedCount` 4종. 세션 수는 대상 아님)** ② **AC-14A-4(KST 23:50 / 00:10이 다른 날 버킷)** ③ AC-14A-9(대시보드 vs 요약 수치 완전 일치) ④ **AC-X-6(백필 후 대시보드 수치 불변)** ⑤ AC-14B-5(byHour 24개·byWeekday 7개 고정) ⑥ AC-14A-6/7(기간 상한·미지원 단위) ⑦ AC-14A-12(5초 타임아웃 → 503, 캐시 대체 금지).
 - `code-reviewer` 인계: ① 신규 `$queryRaw` 0건 ② 버킷 계산이 `shared-types` 함수 1곳인지 ③ `dashboard-period.ts`·`getDashboard()` 무수정 ④ 통계 경로의 모든 `where`에 `chatbotId` + `dayBucket` 범위가 선행하는지 ⑤ 센티넬을 만드는 신규 쓰기 경로가 없는지.
+
+
+---
+
+## 갱신 (2026-09-24 — No.29: KST 헬퍼 중복 해소 · §4 세션 원시 SQL 탈출구 이행 · §5 재검토 트리거 갱신)
+
+통합 통계(No.29, **ADR-0033**)에 따라 다음을 갱신한다. §1~§3·§6의 결정(KST 파생 컬럼·적재 시점 확정·주/월 앱 폴딩·센티넬·백필 2+1단계)은 **불변**이다.
+
+1. **KST 헬퍼 중복 해소(감수 비용 5)**: `dashboard-period.ts`의 파일 내부 `KST_OFFSET_MINUTES`·`MS_PER_DAY`·`KstDateOnly`·`toKstDateOnly`·`kstDateOnlyToUtc` 재정의(`kst-date.ts`와 글자 수준 동일)를 삭제하고 `stats/lib/kst-date.ts`를 import한다. `resolveDashboardPeriod`의 시그니처·반환값·오류 문구·366일 상한과 대시보드의 `createdAt` 범위 필터는 **불변**(대안 표 84행의 `dayBucket` 전환 기각은 유지). `kst-date.ts`와 `shared-types`의 `toKstDayBucket`은 역할이 달라(달력 산술 / 적재 문자열 확정) 합치지 않고, **동치를 계약 테스트**(`kst-date.contract.spec.ts` — 경계 + 1,000점)로 고정한다. 통계 모듈에서 KST 헬퍼 재정의 0건을 정적 검사가 단언한다.
+2. **§4 탈출구 이행 — 범위 한정**: 챗봇 스코프(No.14)의 `groupBy(['dayBucket','channelType','sessionId'])` 앱 폴딩은 **그대로 둔다**(무회귀). **그룹·전역 스코프에서만** 세션 distinct를 원시 SQL로 계산한다 — 반환 행 수가 세션 수에 비례하는 리스크가 스코프 확대로 현실화하기 때문이다. 버킷 키는 DB 날짜 함수가 아니라 **`buildBuckets()`가 만든 버킷별 `dayBucket` 범위 목록을 `CASE WHEN "dayBucket" >= ? AND "dayBucket" <= ? THEN ?`로 바인딩**해 주차 규칙을 TS 1벌로 유지하고, 주/월 세션 = 일 버킷의 합집합(DD-61)을 DB `COUNT(DISTINCT)`로 정확히 보존한다. 세션 키 = `chatbotId || '|' || sessionId`. 격리 파일은 `stats/integrated/integrated-session.query.ts` 1개다(§4의 "원시 SQL 총 개수 1건 그대로" 예고는 **대시보드 파일 무변경**(FR-0-90)을 우선해 "지정 파일 2개 + 헬스체크"로 정정 — 보유 파일 목록은 정적 검사로 고정). 두 경로의 동치는 "챗봇 1개 그룹 = 챗봇 수치" 계약 테스트(AC-I2-1)로 고정한다.
+3. **§5 사전 집계 테이블 — 여전히 미도입, 재검토 트리거 3종으로 갱신**: No.28의 `PollingLoop`으로 "채울 주체가 없다"는 사유는 해소됐으나 재계산 경로·DD-61 재현 불가·질문 순위 원천 의존 사유는 유지된다. 트리거 = ① 로그 1,000만 행(유지) ② 그룹 스코프 성능 예산 실측 미달(커버링 인덱스 1차 완화 후) ③ **로그 삭제 경로 도입 — 삭제 전 롤업 적재 필수**(ADR-0033 §3·§7).
+4. **인덱스 추가**: `conversation_logs(groupId, dayBucket)`·`conversation_logs(dayBucket)`. §2의 "`hourBucket` 인덱스 미도입" 판단은 그룹·전역 스코프에도 그대로 적용한다.

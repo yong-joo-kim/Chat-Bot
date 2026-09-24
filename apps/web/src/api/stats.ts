@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { DashboardSummary, StatsDistribution, StatsGranularity, StatsQuestions, StatsSummary } from '@chat-bot/shared-types';
+import type { DashboardSummary, IntentStats, StatsDistribution, StatsGranularity, StatsQuestions, StatsSummary } from '@chat-bot/shared-types';
 
 export interface DashboardQueryParams {
   chatbotId: string;
@@ -44,4 +44,6 @@ export const statsApi = {
   getDistribution: (params: StatsQueryParams) => apiClient.get<StatsDistribution>(`/stats/distribution?${buildStatsQuery(params)}`),
   /** 인기질문·미응답질문 TOP N(FR-14-23~27). */
   getQuestions: (params: StatsQuestionsQueryParams) => apiClient.get<StatsQuestions>(`/stats/questions?${buildStatsQuery(params)}`),
+  /** [신규 No.29] 챗봇 스코프 의도별 매칭(J-13, `integrated-stats-ui-spec.md` §4). */
+  getIntentStats: (params: StatsQuestionsQueryParams) => apiClient.get<IntentStats>(`/stats/intents?${buildStatsQuery(params)}`),
 };

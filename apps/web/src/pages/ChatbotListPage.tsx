@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ChatbotGroupWithCount, ChatbotListItem, ChatbotStatus } from '@chat-bot/shared-types';
 import { groupsApi } from '../api/groups';
 import { chatbotsApi } from '../api/chatbots';
@@ -45,6 +45,7 @@ type ModalState =
 /** S1 그룹/챗봇 목록(ui-spec §3.1). 필터 상태는 쿼리스트링에 반영해 새로고침·공유·뒤로가기를 지원한다. */
 export function ChatbotListPage(): JSX.Element {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const groupId = searchParams.get('groupId') ?? undefined;
@@ -165,6 +166,7 @@ export function ChatbotListPage(): JSX.Element {
         selectedGroupId={groupId}
         onSelect={(gid) => updateParams({ groupId: gid })}
         onCreate={() => setModal({ type: 'createGroup' })}
+        onViewStats={(group) => navigate(`/?scope=GROUP&groupId=${group.id}`)}
         onEdit={(group) => setModal({ type: 'editGroup', group })}
         onCopy={(group) => setModal({ type: 'copyGroup', group })}
         onDelete={(group) => setModal({ type: 'deleteGroup', group })}

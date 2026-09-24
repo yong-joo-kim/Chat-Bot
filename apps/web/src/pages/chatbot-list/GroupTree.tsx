@@ -7,6 +7,8 @@ export interface GroupTreeProps {
   selectedGroupId?: string;
   onSelect: (groupId: string | undefined) => void;
   onCreate: () => void;
+  /** No.29 — 그룹 kebab 메뉴 최상단 "그룹 통계 보기"(읽기 동작, FR-I8-2). */
+  onViewStats: (group: ChatbotGroupWithCount) => void;
   onEdit: (group: ChatbotGroupWithCount) => void;
   onCopy: (group: ChatbotGroupWithCount) => void;
   onDelete: (group: ChatbotGroupWithCount) => void;
@@ -19,6 +21,7 @@ export function GroupTree({
   selectedGroupId,
   onSelect,
   onCreate,
+  onViewStats,
   onEdit,
   onCopy,
   onDelete,
@@ -61,6 +64,7 @@ export function GroupTree({
               <KebabMenu
                 label={MESSAGES.group.kebabLabel(group.name)}
                 items={[
+                  { label: MESSAGES.group.menuStats, onSelect: () => onViewStats(group) },
                   { label: MESSAGES.group.menuEdit, onSelect: () => onEdit(group) },
                   { label: MESSAGES.group.menuCopy, onSelect: () => onCopy(group) },
                   { label: MESSAGES.group.menuDelete, onSelect: () => onDelete(group) },

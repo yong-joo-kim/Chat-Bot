@@ -2,6 +2,7 @@ import {
   BannedWordListQuerySchema,
   ChatbotListQuerySchema,
   DialogNodeListQuerySchema,
+  IntegratedQuestionsQuerySchema,
   TestCaseListQuerySchema,
 } from '@chat-bot/shared-types';
 
@@ -28,5 +29,24 @@ describe('shared-types queryBoolean — 목록 쿼리 boolean 파싱', () => {
 
   it('허용되지 않은 값은 검증 실패다(조용히 true로 바뀌지 않는다)', () => {
     expect(DialogNodeListQuerySchema.safeParse({ enabled: 'yes' }).success).toBe(false);
+  });
+
+  /**
+   * No.29 — `IntegratedQuestionsQuerySchema.includeArchivedChatbots`(기본 true, P-5)도 같은
+   * `queryBoolean()`을 쓴다. `scope=GROUP`을 함께 넘겨 `refineScope`의 groupId 필수 검사를 통과시킨다.
+   */
+  it('includeArchivedChatbots=false는 false로 파싱된다(No.29 AC-I5-2, §14 "문자열 파싱")', () => {
+    const groupId = '00000000-0000-0000-0000-000000000001';
+    expect(
+      IntegratedQuestionsQuerySchema.parse({ scope: 'GROUP', groupId, includeArchivedChatbots: 'false' }).includeArchivedChatbots,
+    ).toBe(false);
+    expect(
+      IntegratedQuestionsQuerySchema.parse({ scope: 'GROUP', groupId, includeArchivedChatbots: '0' }).includeArchivedChatbots,
+    ).toBe(false);
+    expect(
+      IntegratedQuestionsQuerySchema.parse({ scope: 'GROUP', groupId, includeArchivedChatbots: 'true' }).includeArchivedChatbots,
+    ).toBe(true);
+    // 미지정 시 기본값 true(P-5 — 보관 챗봇 질문은 기본 포함).
+    expect(IntegratedQuestionsQuerySchema.parse({ scope: 'GROUP', groupId }).includeArchivedChatbots).toBe(true);
   });
 });

@@ -26,6 +26,10 @@ model ChatbotGroup {
   chatbots    Chatbot[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  /// [신규 No.29] 대화로그가 귀속된 그룹을 "삭제"하면 물리 삭제 대신 이 값을 채운다(ADR-0033 §5).
+  /// 보관 그룹은 목록·챗봇 생성/이동/복사·그룹 수정/복사 대상에서 제외되고(404), 통합 통계에만
+  /// "보관된 그룹"으로 남는다. 쓰기 주체 = ChatbotGroupsService.remove() 1곳. 되살리기 경로는 1차 범위 밖.
+  archivedAt  DateTime?
 
   @@map("chatbot_groups")
 }
@@ -65,6 +69,10 @@ model Chatbot {
   versionSequence         ChatbotVersionSequence?
   /// [신규 2026-09-23 No.28] 역참조만(Prisma 양방향 관계 요건) — DB 컬럼 변화 0.
   deploySchedules         DeploySchedule[]
+  /// [신규 No.29] 가장 최근 보관 시각. status='ARCHIVED' ⇔ archivedAt != null(불변식).
+  /// 쓰기 주체 = ChatbotsService.archive()·updateStatus() 2곳(순수 함수 archivedAtPatch 공용).
+  /// 통합 통계 기여 표의 "보관일" 표시 전용 — DTO 미노출.
+  archivedAt              DateTime?
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -399,9 +407,17 @@ model ConversationLog {
   /// 전부 false가 사실과 일치한다(과거에는 2단계가 존재하지 않았다).
   answeredByRag   Boolean  @default(false)
   createdAt       DateTime @default(now())
+  /// [신규 No.29] 대화 **당시** 챗봇의 소속 그룹 스냅샷(ADR-0033 §4). **FK를 걸지 않는다** — 그룹 행
+  /// 정리와 로그 보존을 분리한다(matchedIntentId·AuditLog.chatbotId와 같은 의도적 예외). 쓰기 주체 =
+  /// ConversationLogService.record() 1곳이며 **적재 후 변경하지 않는다**(그룹 이동이 과거 누적을
+  /// 소급 변경하지 않게 — 정적 검사 R-9/R-10). `""`는 백필 미완 센티넬이다(dayBucket 선례).
+  /// 백필 스크립트만 `""` → 값으로 채울 수 있다.
+  groupId         String   @default("")
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
+  @@index([groupId, dayBucket])
+  @@index([dayBucket])
   @@map("conversation_logs")
 }
 

@@ -10,6 +10,8 @@ export interface ConversationLogPort {
   record(params: {
     id: string;
     chatbotId: string;
+    /** [신규 No.29] 대화 당시 챗봇 소속 그룹 스냅샷(ADR-0033 §4) — 필수, 추가 조회 0. */
+    groupId: string;
     channelType: 'WEB';
     sessionId: string;
     rawUserMessage: string;
