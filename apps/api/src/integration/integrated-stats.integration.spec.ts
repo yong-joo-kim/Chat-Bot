@@ -833,6 +833,167 @@ describe('통합 통계(No.29) 통합 테스트', () => {
   });
 
   // ================================================================================================
+  // [신규 2026-09-24 test-automation 회차] §4.9/§9.8 미자동화 목록 보강 — AC-I1-2 · EX-I-6 · EX-I-9 ·
+  // EX-I-14 · EX-I-18. EX-I-6은 전역 센티넬(groupId='')을 만들고 백필 스크립트를 직접 실행하므로,
+  // AC-I3-3/AC-I3-4(맨 마지막, 전역 부작용 격리)보다 반드시 앞에 두어 잔여 센티넬을 남기지 않는다.
+  // ================================================================================================
+
+  it('AC-I1-2: 보관된 챗봇은 기존과 같이 CHATBOT_HAS_CHILDREN 409로 영구삭제가 막히고 안내에 통계 보존 문구(대화로그)가 포함되며, 그룹 누적은 불변이다', async () => {
+    const groupId = await createGroup('AC-I1-2 그룹');
+    const chatbotId = await createChatbot(groupId);
+    for (let i = 0; i < 3; i += 1) {
+      await createConversationLog(prisma, { chatbotId, groupId, userMessage: `보존확인질문${i}`, isAnswered: true });
+    }
+
+    const archiveRes = await jsonRequest('DELETE', `${baseUrl}/chatbots/${chatbotId}`);
+    expect(archiveRes.status).toBe(204);
+
+    const before = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+
+    // createChatbot() 헬퍼가 항상 같은 이름('통합통계 테스트봇')으로 만들므로 confirmName은 그대로 재사용한다.
+    const purgeRes = await jsonRequest<{ code: string; message: string }>('POST', `${baseUrl}/chatbots/${chatbotId}/permanent-delete`, {
+      confirmName: '통합통계 테스트봇',
+    });
+    expect(purgeRes.status).toBe(409);
+    expect(purgeRes.body.code).toBe('CHATBOT_HAS_CHILDREN');
+    expect(purgeRes.body.message).toContain('대화로그'); // 통계 보존 문구(안내에 대화로그 보유 사실이 드러난다)
+
+    const after = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+    expect(after.totals.turnCount).toBe(before.totals.turnCount);
+    expect(after.chatbotCounts.archived).toBe(before.chatbotCounts.archived);
+  });
+
+  it('EX-I-9: 보관 챗봇을 복구(ARCHIVED→DRAFT)해도 통계 수치는 변하지 않는다(상태만 바뀐다)', async () => {
+    const groupId = await createGroup('EX-I-9 그룹');
+    const chatbotId = await createChatbot(groupId);
+    for (let i = 0; i < 2; i += 1) {
+      await createConversationLog(prisma, { chatbotId, groupId, userMessage: `복구확인질문${i}`, isAnswered: true });
+    }
+
+    const beforeArchive = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+
+    const archiveRes = await jsonRequest('DELETE', `${baseUrl}/chatbots/${chatbotId}`);
+    expect(archiveRes.status).toBe(204);
+    const afterArchive = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+    expect(afterArchive.totals.turnCount).toBe(beforeArchive.totals.turnCount);
+    expect(afterArchive.chatbotCounts.archived).toBe(beforeArchive.chatbotCounts.archived + 1);
+
+    const restoreRes = await jsonRequest('PATCH', `${baseUrl}/chatbots/${chatbotId}/status`, { status: 'DRAFT' });
+    expect(restoreRes.status).toBe(200);
+
+    const afterRestore = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+    // 배지(상태)만 원래대로 돌아갈 뿐 누적 수치는 archive 전/후 내내 그대로다.
+    expect(afterRestore.totals.turnCount).toBe(beforeArchive.totals.turnCount);
+    expect(afterRestore.chatbotCounts.archived).toBe(beforeArchive.chatbotCounts.archived);
+    expect(afterRestore.chatbotCounts.draft).toBe(beforeArchive.chatbotCounts.draft);
+  });
+
+  it('EX-I-14: 금지어로 차단된 턴은 차단 수(blockedCount)로 집계되지만 그룹 질문 순위 중 미응답 목록(topUnansweredQuestions)에서는 제외된다', async () => {
+    const groupId = await createGroup('EX-I-14 그룹');
+    const chatbotId = await createChatbot(groupId);
+    await createConversationLog(prisma, { chatbotId, groupId, userMessage: 'EX-I-14 금지어차단질문', isAnswered: false, blockedByFilter: true });
+    await createConversationLog(prisma, { chatbotId, groupId, userMessage: 'EX-I-14 일반미응답질문', isAnswered: false, blockedByFilter: false });
+
+    const summaryRes = await jsonRequest('GET', `${baseUrl}/stats/integrated/summary?scope=GROUP&groupId=${groupId}&granularity=DAY`);
+    expect(summaryRes.status).toBe(200);
+    const summary = IntegratedSummarySchema.parse(summaryRes.body);
+    expect(summary.totals.blockedCount).toBe(1); // 차단 수로는 집계된다(No.14 규칙 승계)
+
+    const questionsRes = await jsonRequest('GET', `${baseUrl}/stats/integrated/questions?scope=GROUP&groupId=${groupId}`);
+    expect(questionsRes.status).toBe(200);
+    const questions = IntegratedQuestionsSchema.parse(questionsRes.body);
+    // 전체 질문 순위(topQuestions)에는 차단된 턴도 나타난다 — 미응답 전용 목록에서만 제외된다.
+    expect(questions.topQuestions.some((q) => q.question.includes('EX-I-14 금지어차단질문'))).toBe(true);
+    expect(questions.topUnansweredQuestions.some((q) => q.question.includes('EX-I-14 금지어차단질문'))).toBe(false);
+    expect(questions.topUnansweredQuestions.some((q) => q.question.includes('EX-I-14 일반미응답질문'))).toBe(true);
+  });
+
+  it('EX-I-18: 시스템 시계 조작으로 생긴 미래 dayBucket 로그는 기간 필터 밖에서 제외되지만, 누적 KPI에는 포함되고 firstDayBucket(최솟값) 판단에는 영향이 없다', async () => {
+    const groupId = await createGroup('EX-I-18 그룹');
+    const chatbotId = await createChatbot(groupId);
+    const now = new Date();
+    await createConversationLog(prisma, { chatbotId, groupId, userMessage: 'EX-I-18 현재질문', isAnswered: true, createdAt: now });
+    // 약 400일 뒤(NTP 오조정 등으로 시스템 시계가 미래로 튄 상황을 재현) — 기본 조회 기간(오늘까지로 보정)
+    // 밖에 위치하도록 충분히 멀리 잡는다.
+    const future = new Date(now.getTime() + 400 * 24 * 60 * 60 * 1000);
+    await createConversationLog(prisma, { chatbotId, groupId, userMessage: 'EX-I-18 미래시계질문', isAnswered: true, createdAt: future });
+
+    const overview = IntegratedOverviewSchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+    );
+    expect(overview.totals.turnCount).toBe(2); // 기간 필터가 없는 누적 KPI에는 미래 로그도 포함된다(J-8 계열)
+    expect(overview.firstDayBucket).toBe(toKstDayBucket(now)); // MIN이라 미래 로그가 집계 시작일 판단을 흐리지 않는다
+
+    const summary = IntegratedSummarySchema.parse(
+      (await jsonRequest('GET', `${baseUrl}/stats/integrated/summary?scope=GROUP&groupId=${groupId}&granularity=DAY`)).body,
+    );
+    // 기본 기간은 "오늘까지"로 보정되므로(EX-14-6과 동일 규약) 미래 로그는 요약 집계에서 빠진다.
+    expect(summary.totals.turnCount).toBe(1);
+  });
+
+  it(
+    'EX-I-6: 백필 이전에 이미 그룹 이동이 있었던 챗봇은, 감사 이력(소속 그룹 이동)이 실제로 존재해도 과거 로그가 소급 재구성되지 않고 현재 그룹에만 귀속된다',
+    async () => {
+      const groupA = await createGroup('EX-I-6 그룹A(과거)');
+      const groupB = await createGroup('EX-I-6 그룹B(현재)');
+      const chatbotId = await createChatbot(groupA);
+
+      // 마이그레이션 이전 시대의 로그(백필 미완 센티넬) — 실제로는 챗봇이 그룹A 소속이던 시점에 쌓였다.
+      const now = new Date();
+      await prisma.conversationLog.create({
+        data: {
+          chatbotId,
+          groupId: '',
+          channelType: 'WEB',
+          userMessage: 'EX-I-6 과거로그',
+          botResponse: '안내해 드리겠습니다.',
+          isAnswered: true,
+          dayBucket: toKstDayBucket(now),
+          hourBucket: toKstHourOfDay(now),
+          createdAt: now,
+        },
+      });
+
+      // 실제로 그룹 이동이 일어난다 — 감사로그에 "소속 그룹 이동" 흔적이 남는다(소급 재구성용 재료는 실존한다).
+      const moveRes = await jsonRequest('PATCH', `${baseUrl}/chatbots/${chatbotId}/group`, { groupId: groupB });
+      expect(moveRes.status).toBe(200);
+      const auditRows = await prisma.auditLog.findMany({ where: { chatbotId, summary: '소속 그룹 이동' } });
+      expect(auditRows.length).toBeGreaterThan(0);
+
+      execSync('pnpm exec ts-node -r tsconfig-paths/register prisma/scripts/backfill-conversation-group.ts', {
+        cwd: API_ROOT,
+        env: { ...process.env },
+        stdio: 'pipe',
+      });
+
+      const backfilled = await prisma.conversationLog.findFirst({ where: { chatbotId, userMessage: 'EX-I-6 과거로그' } });
+      // 감사 이력(그룹A 소속이었던 시점)을 재구성하지 않고 현재 소속(그룹B)으로만 채운다는 한계를 그대로 증명한다.
+      expect(backfilled?.groupId).toBe(groupB);
+      expect(backfilled?.groupId).not.toBe(groupA);
+
+      const overviewA = IntegratedOverviewSchema.parse(
+        (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupA}`)).body,
+      );
+      const overviewB = IntegratedOverviewSchema.parse(
+        (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupB}`)).body,
+      );
+      expect(overviewA.totals.turnCount).toBe(0); // 실제로는 그룹A 시절 로그였지만 반영되지 않는다(문서화된 한계 재현)
+      expect(overviewB.totals.turnCount).toBe(1);
+    },
+    30_000, // execSync로 ts-node 스크립트를 기동한다 — 모노레포 병렬 실행(pnpm -r test 등) 시 기본 5초를 넘길 수 있다(AC-I3-3/AC-I3-4 선례와 동일)
+  );
+
+  // ================================================================================================
   // AC-I3-3 / AC-I3-4 — backfillPending 전환과 백필 스크립트 멱등성(맨 마지막 — 전역 센티넬 부작용 격리)
   // ================================================================================================
   it(

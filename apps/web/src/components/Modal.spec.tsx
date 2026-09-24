@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { ConfirmDialog, Modal } from './Modal';
+
+expect.extend(toHaveNoViolations);
 
 /**
  * ui-spec §2.2 / UIUX §3 / AC-5-5 검증:
@@ -144,5 +147,27 @@ describe('ConfirmDialog', () => {
     await user.click(screen.getByRole('button', { name: '삭제' }));
 
     expect(screen.getByText('확인됨: true')).toBeInTheDocument();
+  });
+
+  it('description이 aria-describedby로 다이얼로그에 연결된다', async () => {
+    const user = userEvent.setup();
+    render(<TriggerAndConfirmDialog />);
+    await user.click(screen.getByRole('button', { name: '삭제 트리거' }));
+
+    const dialog = screen.getByRole('dialog', { name: '삭제 확인' });
+    const describedById = dialog.getAttribute('aria-describedby');
+    expect(describedById).toBeTruthy();
+    const descriptionEl = document.getElementById(describedById as string);
+    expect(descriptionEl).toHaveTextContent('정말 삭제하시겠습니까?');
+  });
+
+  it('description이 연결된 ConfirmDialog는 axe 접근성 위반이 없다', async () => {
+    const user = userEvent.setup();
+    render(<TriggerAndConfirmDialog />);
+    await user.click(screen.getByRole('button', { name: '삭제 트리거' }));
+
+    const dialog = screen.getByRole('dialog', { name: '삭제 확인' });
+    const results = await axe(dialog, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect(results).toHaveNoViolations();
   });
 });

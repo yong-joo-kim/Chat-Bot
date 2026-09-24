@@ -105,6 +105,7 @@ describe('운영 예약 배포(No.28) 통합 테스트', () => {
   let versionRetention: VersionRetentionService;
   let clock: FakeClock;
   let editorCookie = '';
+  let adminCookie = '';
 
   beforeAll(async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'scheduled-deploy-test-'));
@@ -149,6 +150,7 @@ describe('운영 예약 배포(No.28) 통합 테스트', () => {
 
     await seedTestUsers(prisma);
     editorCookie = await loginAs(baseUrl, 'EDITOR');
+    adminCookie = await loginAs(baseUrl, 'ADMIN');
   }, 60_000);
 
   afterAll(async () => {
@@ -160,11 +162,17 @@ describe('운영 예약 배포(No.28) 통합 테스트', () => {
     return jsonRequest(method, `${baseUrl}${path}`, body, { Cookie: editorCookie });
   }
 
-  async function createChatbot(namePrefix: string): Promise<{ id: string }> {
+  /** [신규 2026-09-24 test-automation 회차] AC-D5-3(영구삭제, chatbot:purge)에 필요 — EDITOR는 이 권한이 없다. */
+  function admin<T = unknown>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
+    return jsonRequest(method, `${baseUrl}${path}`, body, { Cookie: adminCookie });
+  }
+
+  async function createChatbot(namePrefix: string): Promise<{ id: string; name: string }> {
     const groupRes = await editor<{ id: string }>('POST', '/chatbot-groups', { name: `${namePrefix} 그룹` });
     const suffix = Math.random().toString(36).slice(2, 10);
-    const res = await editor<{ id: string }>('POST', '/chatbots', { groupId: groupRes.body.id, name: `${namePrefix}-${suffix}`, slug: `sd-${suffix}` });
-    return { id: res.body.id };
+    const name = `${namePrefix}-${suffix}`;
+    const res = await editor<{ id: string }>('POST', '/chatbots', { groupId: groupRes.body.id, name, slug: `sd-${suffix}` });
+    return { id: res.body.id, name };
   }
 
   /** 공개 대화 API(슬러그 기준) 확인용 — id뿐 아니라 slug도 함께 반환한다. */
@@ -906,4 +914,135 @@ describe('운영 예약 배포(No.28) 통합 테스트', () => {
       expect(afterCount).toBeLessThan(beforeCount + 35);
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────────────────────────
+  // [2026-09-24 test-automation 회차 — 신규] §8.7 미자동화 목록 보강 — AC-D2-6(체인 실행 순서) ·
+  // AC-D3-7(BUSY 고유 경로) · AC-D5-3(영구삭제 동반 삭제). AC-D2-9(유휴 tick 쿼리 계측)는 "예약이
+  // 전혀 없는 상태"가 전제라 이 파일의 공유 DB·공유 시계(다른 테스트가 남긴 PENDING/RUNNING 행)와
+  // 격리해야 해 별도 파일(`scheduled-deploy-idle-tick.integration.spec.ts`)로 뺐다.
+  // ──────────────────────────────────────────────────────────────────────────────────────────
+
+  describe('AC-D2-6: 체인 실행 순서(다운타임 후 기동 시 여러 예약이 이른 시각부터 순서대로 실행된다)', () => {
+    it('복원(08:55 대응)과 공개(09:00 대응) 예약이 같은 tick에서 함께 도래해도 먼저 예정된 복원이 먼저 실행된다', async () => {
+      const { id: chatbotId, slug } = await createChatbotWithSlug('체인순서');
+      const intentId = await createIntent(chatbotId, '체인순서기준의도');
+      const base = await saveVersion(chatbotId, '체인순서기준');
+      await createIntent(chatbotId, '체인순서예약생성시점편집');
+
+      const restoreAt = new Date(clock.now().getTime() + 10 * 60_000); // "08:55"에 대응
+      const restoreSchedule = await createRestoreSchedule(chatbotId, base.id, restoreAt);
+
+      const publishAt = new Date(restoreAt.getTime() + 5 * 60_000); // "09:00"에 대응(최소 간격 1분 이상 확보)
+      const publishCreateRes = await editor<{ schedule: { id: string } }>('POST', `/chatbots/${chatbotId}/deploy-schedules`, {
+        action: 'PUBLISH',
+        enableWebChannel: true,
+        scheduledAt: publishAt.toISOString(),
+      });
+      expect(publishCreateRes.status).toBe(201);
+
+      // 서버가 두 예정 시각을 모두 지나칠 때까지 다운됐다가 기동(08:50~09:02 유형) — 한 번의 tick
+      // "폴링 사이클"이 시작될 때 둘 다 이미 도래해 있다.
+      clock.advance(publishAt.getTime() - clock.now().getTime() + 2 * 60_000);
+      await engine.tick();
+
+      // tick-planner.ts는 챗봇당 **최대 1개**의 결정만 만든다(§8.7 항목 2) — 그래서 같은 챗봇에 두
+      // 예약이 함께 도래해도 한 번의 tick()은 그중 하나(가장 이른 것)만 처리한다. 복원이 먼저(그리고
+      // 오직 복원만) 처리됐어야 한다 — 이 단언 자체가 "이른 시각부터" 순서의 1차 증거다.
+      const restoreRowAfterFirstTick = await prisma.deploySchedule.findUnique({ where: { id: restoreSchedule.id } });
+      expect(restoreRowAfterFirstTick?.status).toBe('SUCCEEDED');
+      expect(restoreRowAfterFirstTick?.outcome).toBe('APPLIED');
+      const publishRowAfterFirstTick = await prisma.deploySchedule.findUnique({ where: { id: publishCreateRes.body.schedule.id } });
+      expect(publishRowAfterFirstTick?.status).toBe('PENDING'); // 아직 처리되지 않았다(같은 챗봇 — 다음 tick으로 미룬다)
+
+      // 다음 폴링 주기 — 이번에는 공개 예약만 남아 처리된다.
+      clock.advance(30_000);
+      await engine.tick();
+
+      const restoreRow = await prisma.deploySchedule.findUnique({ where: { id: restoreSchedule.id } });
+      // 복원이 공개보다 먼저 실행됐어야만 acknowledgeActive 없이도 SUCCEEDED(APPLIED)일 수 있다 — 순서가
+      // 뒤집혀 공개(DRAFT→ACTIVE)가 먼저 실행됐다면, 복원 실행기는 ACTIVE 상태에서 acknowledgeActive
+      // 없이 실행되어 STATE_CHANGED로 실패했을 것이다(restore-version.executor.ts §5.3 사전 확인).
+      // 즉 이 단언 자체가 실행 순서의 행위 기반 증거다(2차 증거 — 최종 결과로도 순서를 재확인).
+      expect(restoreRow?.status).toBe('SUCCEEDED');
+      expect(restoreRow?.outcome).toBe('APPLIED');
+
+      const publishRow = await prisma.deploySchedule.findUnique({ where: { id: publishCreateRes.body.schedule.id } });
+      expect(publishRow?.status).toBe('SUCCEEDED');
+      expect(publishRow?.outcome).toBe('APPLIED');
+
+      // 복원 결과(기준 의도만 남음)가 실제로 반영된 채로 공개됐는지까지 확인한다.
+      const intents = await editor<{ items: Array<{ id: string }> }>('GET', `/chatbots/${chatbotId}/intents`);
+      expect(intents.body.items.map((i) => i.id)).toEqual([intentId]);
+
+      const publicRes = await jsonRequest('GET', `${baseUrl}/public/chatbots/${slug}/config`);
+      expect(publicRes.status).toBe(200);
+    });
+  });
+
+  describe('AC-D3-7: DB BUSY 경합은 해시 불일치(STATE_CHANGED)와 구분되는 재시도 대상으로 분류된다(FR-D3-9)', () => {
+    it('$transaction에서 SQLITE_BUSY를 1회 주입하면 PENDING(재시도, lastTransientReason=DB_BUSY)로 되돌아가고 다음 tick에 정상 성공한다', async () => {
+      const { id: chatbotId } = await createChatbot('BUSY재시도');
+      const intentId = await createIntent(chatbotId, 'BUSY기준의도');
+      const base = await saveVersion(chatbotId, 'BUSY기준');
+      await createIntent(chatbotId, 'BUSY예약생성시점편집');
+
+      const scheduledAt = new Date(clock.now().getTime() + 10 * 60_000);
+      const schedule = await createRestoreSchedule(chatbotId, base.id, scheduledAt);
+
+      // isBusyError()는 메시지 패턴(SQLITE_BUSY|database is locked)으로 판별한다(common/prisma/busy-error.ts).
+      // 복원 트랜잭션(version-restore.service.ts)의 $transaction 호출 1회만 실패시키고, 이어지는
+      // repository.finalize()의 $transaction 호출부터는 실제 구현으로 정상 동작해야 한다.
+      const busySpy = jest.spyOn(prisma, '$transaction').mockImplementationOnce(() => {
+        throw new Error('SQLITE_BUSY: database is locked');
+      });
+
+      clock.advance(10 * 60_000 + 5_000);
+      await engine.tick();
+      busySpy.mockRestore();
+
+      const afterFirstTick = await prisma.deploySchedule.findUnique({ where: { id: schedule.id } });
+      expect(afterFirstTick?.status).toBe('PENDING');
+      expect(afterFirstTick?.attemptCount).toBe(1);
+      // ACTIVE_JOB(AC-D3-5)과 다른 원인 코드로 분류되어야 한다 — 이 값이 곧 "구분"의 증거다.
+      expect(afterFirstTick?.lastTransientReason).toBe('DB_BUSY');
+
+      // BUSY는 1회성 경합 신호였으므로 다음 폴링에서는 정상적으로 성공해야 한다(재현 실패가 아니다).
+      clock.advance(30_000);
+      await engine.tick();
+
+      const afterSecondTick = await prisma.deploySchedule.findUnique({ where: { id: schedule.id } });
+      expect(afterSecondTick?.status).toBe('SUCCEEDED');
+      expect(afterSecondTick?.outcome).toBe('APPLIED');
+
+      const intents = await editor<{ items: Array<{ id: string }> }>('GET', `/chatbots/${chatbotId}/intents`);
+      expect(intents.body.items.map((i) => i.id)).toEqual([intentId]);
+    });
+  });
+
+  describe('AC-D5-3: 챗봇 영구삭제 시 DeploySchedule이 동반 삭제되고 예약 때문에 409로 막히지 않는다(No.25 AC-H4-7과 동일 계열)', () => {
+    it('PENDING 예약이 있는 챗봇도 보관 후 영구삭제하면 DeploySchedule이 전부 제거된다(사전검사 409 대상이 아니다)', async () => {
+      const { id: chatbotId, name } = await createChatbot('예약동반삭제');
+      // 영구삭제 사전검사(CHATBOT_HAS_CHILDREN)를 피하려고 의도·버전 등은 만들지 않는다 —
+      // PUBLISH는 버전·의도 없이도 예약을 만들 수 있다(§5.4, AC-D2-3 선례와 동일).
+      const scheduledAt = new Date(clock.now().getTime() + 10 * 60_000);
+      const createRes = await editor<{ schedule: { id: string } }>('POST', `/chatbots/${chatbotId}/deploy-schedules`, {
+        action: 'PUBLISH',
+        enableWebChannel: false,
+        scheduledAt: scheduledAt.toISOString(),
+      });
+      expect(createRes.status).toBe(201);
+      expect(await prisma.deploySchedule.count({ where: { chatbotId } })).toBe(1);
+
+      const archiveRes = await editor('DELETE', `/chatbots/${chatbotId}`);
+      expect(archiveRes.status).toBe(204);
+
+      // 영구삭제는 chatbot:purge 권한이 필요하다 — EDITOR가 아니라 ADMIN으로 호출한다.
+      const purgeRes = await admin('POST', `/chatbots/${chatbotId}/permanent-delete`, { confirmName: name });
+      expect(purgeRes.status).toBe(204); // 예약이 남아 있어도 409로 막히지 않는다
+
+      expect(await prisma.deploySchedule.count({ where: { chatbotId } })).toBe(0);
+      expect(await prisma.chatbot.findUnique({ where: { id: chatbotId } })).toBeNull();
+    });
+  });
+
 });

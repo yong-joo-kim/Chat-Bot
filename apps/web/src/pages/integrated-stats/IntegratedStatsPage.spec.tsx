@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -293,6 +294,45 @@ describe('IntegratedStatsPage', () => {
 
     expect(screen.getByText('운영 9 · 초안 0 · 보관 0')).toBeInTheDocument();
     expect(screen.queryByText('운영 99 · 초안 0 · 보관 0')).not.toBeInTheDocument();
+  });
+
+  it('그룹 목록 요청도 순번 가드를 거친다 — 늦게 도착한 이전 응답이 최신 결과를 덮어쓰지 않는다', async () => {
+    mockAllSuccess();
+    let resolveStaleGroups: (value: IntegratedGroupOptions) => void = () => undefined;
+    const staleGroupsPromise = new Promise<IntegratedGroupOptions>((resolve) => {
+      resolveStaleGroups = resolve;
+    });
+    mockGetGroupOptions
+      .mockImplementationOnce(() => staleGroupsPromise) // 1차 마운트 이펙트 호출(StrictMode 등으로 중복 실행될 수 있다) — 응답이 늦게 온다.
+      .mockImplementationOnce(() =>
+        Promise.resolve(
+          makeGroupOptions({
+            items: [{ id: 'group-2', name: '최신 그룹', createdAt: new Date('2026-03-01T00:00:00.000Z'), archivedAt: null, chatbotCount: 1 }],
+          }),
+        ),
+      ); // 2차 호출 — 먼저 도착.
+
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/?scope=GROUP']}>
+          <Routes>
+            <Route path="/" element={<IntegratedStatsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    // 2차 호출 응답(최신 그룹)이 먼저 반영된다.
+    const select = await screen.findByLabelText('그룹 선택');
+    await waitFor(() => expect(Array.from((select as HTMLSelectElement).options).map((o) => o.textContent)).toContain('최신 그룹'));
+
+    // 뒤늦게 도착한 1차 호출 응답(오래된 그룹 목록)은 무시되어야 한다.
+    resolveStaleGroups(makeGroupOptions({ items: [{ id: 'group-1', name: '오래된 그룹', createdAt: new Date('2026-01-01T00:00:00.000Z'), archivedAt: null, chatbotCount: 3 }] }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const optionLabels = Array.from((screen.getByLabelText('그룹 선택') as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(optionLabels).toContain('최신 그룹');
+    expect(optionLabels).not.toContain('오래된 그룹');
   });
 
   it('AC-I6-6: 집계 타임아웃(503 AGGREGATION_TIMEOUT)은 일반 오류와 다른 안내 문구를 보여준다', async () => {

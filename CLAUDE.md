@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
 
-**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 28, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
 
 ### 코드 구조
 pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
 - 시험: `apps/api`는 `npx jest`, `apps/web`는 `npx vitest run`. shared-types 변경 후에는 `pnpm --filter @chat-bot/shared-types build`를 먼저 실행.
-- ⚠ 로컬 `apps/api/.env`의 데모용 줄(`EMBEDDING_BASE_URL`·`CLASSIFIER_ENABLED` 등)이 있으면 `learning-augmentation.integration.spec.ts` 1건이 503으로 실패한다(환경 검증이 spec의 env 덮어쓰기보다 먼저 실행됨). 전체 시험 시 해당 줄을 잠시 주석 처리할 것.
+- api 시험은 `apps/api/jest.isolate-env.js`가 `.env`에서 기동 필수 키(DATABASE_URL·WIDGET_BASE_URL·PUBLIC_API_BASE_URL)만 읽는다 — 로컬 시연용 값(EMBEDDING_BASE_URL 등)은 시험에 영향을 주지 않으며, 선택 기능은 각 spec이 앱 생성 전에 명시적으로 설정해야 한다.
 - boolean 환경변수·쿼리에는 `z.coerce.boolean()`을 쓰지 않는다("false"→true). 환경변수는 `envBoolean()`, 쿼리는 `queryBoolean()`.
 
 ### 문서 구조 (`docs/`)
@@ -37,7 +37,7 @@ pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘�
 
 **원칙**: 코드는 항상 `docs/01-requirements`/`docs/02-spec`/`docs/03-design` 문서에 근거해 구현하며, 설계 변경은 반드시 `system-architect`를 통해 문서에 먼저 반영한다. 커밋은 사용자가 명시적으로 요청했을 때만 `git-manager`가 수행하고, CI 연동(3단계)·실 배포(4단계)는 사용자가 플랫폼/자격증명을 명시하기 전에는 착수하지 않는다(`docs/05-ops/자동배포.md` §1).
 
-**다음 단계**: No.29(통합 통계) 착수(2026-09-24 결정). No.40~47(타사 벤치마킹 보완)은 `기능요구사항.md` §4-1의 사용자 확인 후 착수한다.
+**다음 단계**(2026-09-24 사용자 지시 — 남은 작업 단계적 진행): ① 후속 정리(시험 격리·통계 화면 요청 경합 가드·미자동화 시험·운영 문서) → ② GPU 1~2 기능 No.26 → No.27 → No.24 → No.22 → No.44 순. No.40~47(타사 벤치마킹 보완)은 `기능요구사항.md` §4-1의 사용자 확인 후, GPU 고사양 기능(No.17·21·31~38)은 인프라 결정 후 착수한다.
 
 It sits alongside sibling projects in `D:\2. Team Source\`:
 - `Auto QA` — pnpm monorepo (apps/api, apps/web, packages/*) — 이 프로젝트가 컨벤션을 재사용하는 대상

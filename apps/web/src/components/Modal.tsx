@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 const FOCUSABLE_SELECTOR =
@@ -13,13 +13,15 @@ export interface ModalProps {
   closeOnEsc?: boolean;
   /** 모달이 열릴 때 포커스를 옮길 요소의 셀렉터(기본: 첫 상호작용 요소). */
   initialFocusSelector?: string;
+  /** 다이얼로그 설명(본문 요지)을 가리키는 요소 id. 지정 시 `aria-describedby`로 연결한다. */
+  describedBy?: string;
 }
 
 /**
  * 공통 모달(ui-spec §2.2). 열릴 때 포커스 이동, 닫히면 트리거로 복귀,
  * `Esc` 닫기 + 포커스 트랩(Tab이 모달 밖으로 나가지 않음)을 보장한다(UIUX §3, AC-5-5).
  */
-export function Modal({ isOpen, title, onClose, children, closeOnEsc = true, initialFocusSelector }: ModalProps): JSX.Element | null {
+export function Modal({ isOpen, title, onClose, children, closeOnEsc = true, initialFocusSelector, describedBy }: ModalProps): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2)}`).current;
@@ -72,7 +74,14 @@ export function Modal({ isOpen, title, onClose, children, closeOnEsc = true, ini
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={dialogRef}>
+      <div
+        className="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={describedBy}
+        ref={dialogRef}
+      >
         <div className="modal-header">
           <h2 id={titleId} className="modal-title">
             {title}
@@ -114,9 +123,19 @@ export function ConfirmDialog({
   confirmDisabled = false,
   children,
 }: ConfirmDialogProps): JSX.Element | null {
+  const descriptionId = useId();
+  const hasDescription = description !== null && description !== undefined && description !== false && description !== '';
   return (
-    <Modal isOpen={isOpen} title={title} onClose={onCancel} initialFocusSelector='[data-autofocus="cancel"]'>
-      <p className="modal-description">{description}</p>
+    <Modal
+      isOpen={isOpen}
+      title={title}
+      onClose={onCancel}
+      initialFocusSelector='[data-autofocus="cancel"]'
+      describedBy={hasDescription ? descriptionId : undefined}
+    >
+      <p className="modal-description" id={hasDescription ? descriptionId : undefined}>
+        {description}
+      </p>
       {children}
       <div className="modal-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} data-autofocus="cancel">

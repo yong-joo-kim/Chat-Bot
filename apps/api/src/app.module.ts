@@ -42,7 +42,8 @@ import { validate } from './config/env.validation';
 // 여기 한 번만 import한다(개발명세서 §2.1).
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate }),
+    // 시험(jest.isolate-env.js)은 `.env` 자동 로드를 끈다 — 로컬 시연용 값이 spec 설정을 덮지 않게.
+    ConfigModule.forRoot({ isGlobal: true, validate, ignoreEnvFile: process.env.CHATBOT_API_IGNORE_ENV_FILE === '1' }),
     PrismaModule,
     RequestContextModule,
     RateLimitModule,

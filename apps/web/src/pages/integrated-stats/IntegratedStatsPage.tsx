@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   IntegratedBreakdown,
@@ -27,6 +27,7 @@ import { BackfillPendingBanner } from './BackfillPendingBanner';
 import { CumulativeKpiCards } from './CumulativeKpiCards';
 import { SortableBreakdownTable } from './SortableBreakdownTable';
 import { IntegratedQuestionsPanel } from './IntegratedQuestionsPanel';
+import { useLatestRequest } from '../../lib/useLatestRequest';
 
 interface AsyncSlice<T> {
   loading: boolean;
@@ -83,21 +84,25 @@ export function IntegratedStatsPage(): JSX.Element {
 
   // 스코프를 빠르게 전환할 때 늦게 도착한 이전 요청이 최신 결과를 덮어쓰지 않도록 하는 순번 가드
   // (요청 시작 시 증가시키고, 응답 시점에 "그때의 번호"와 "지금의 번호"가 같을 때만 반영한다).
-  const overviewReqRef = useRef(0);
-  const summaryReqRef = useRef(0);
-  const distributionReqRef = useRef(0);
-  const breakdownReqRef = useRef(0);
-  const questionsReqRef = useRef(0);
+  const groupsGuard = useLatestRequest();
+  const overviewGuard = useLatestRequest();
+  const summaryGuard = useLatestRequest();
+  const distributionGuard = useLatestRequest();
+  const breakdownGuard = useLatestRequest();
+  const questionsGuard = useLatestRequest();
 
   const loadGroups = useCallback(async () => {
+    const reqId = groupsGuard.next();
     setGroupsSlice((s) => ({ ...s, loading: true, error: false }));
     try {
       const data = await integratedStatsApi.getGroupOptions();
+      if (groupsGuard.isStale(reqId)) return;
       setGroupsSlice({ loading: false, error: false, data });
     } catch {
+      if (groupsGuard.isStale(reqId)) return;
       setGroupsSlice({ loading: false, error: true, data: null });
     }
-  }, []);
+  }, [groupsGuard]);
 
   useEffect(() => {
     void loadGroups();
@@ -105,71 +110,71 @@ export function IntegratedStatsPage(): JSX.Element {
 
   const fetchOverview = useCallback(async () => {
     if (!scopeReady) return;
-    const reqId = ++overviewReqRef.current;
+    const reqId = overviewGuard.next();
     setOverviewSlice((s) => ({ ...s, loading: true, error: false }));
     setScopeNotFound(false);
     try {
       const data = await integratedStatsApi.getOverview({ scope, groupId });
-      if (reqId !== overviewReqRef.current) return; // 늦게 도착한 응답 — 무시
+      if (overviewGuard.isStale(reqId)) return; // 늦게 도착한 응답 — 무시
       setOverviewSlice({ loading: false, error: false, data });
     } catch (e) {
-      if (reqId !== overviewReqRef.current) return;
+      if (overviewGuard.isStale(reqId)) return;
       if (e instanceof ApiError && (e.status === 404 || e.code === 'NOT_FOUND')) setScopeNotFound(true);
       setOverviewSlice({ loading: false, error: true, data: null, errorTitle: errorTitleFor(e) });
     }
-  }, [scope, groupId, scopeReady]);
+  }, [scope, groupId, scopeReady, overviewGuard]);
 
   const fetchSummary = useCallback(async () => {
     if (!scopeReady) return;
-    const reqId = ++summaryReqRef.current;
+    const reqId = summaryGuard.next();
     setSummarySlice((s) => ({ ...s, loading: true, error: false, periodError: undefined }));
     try {
       const data = await integratedStatsApi.getSummary({ scope, groupId, granularity, from: from || undefined, to: to || undefined });
-      if (reqId !== summaryReqRef.current) return;
+      if (summaryGuard.isStale(reqId)) return;
       setSummarySlice({ loading: false, error: false, data });
     } catch (e) {
-      if (reqId !== summaryReqRef.current) return;
+      if (summaryGuard.isStale(reqId)) return;
       if (e instanceof ApiError && e.code === 'STATS_RANGE_TOO_WIDE') {
         setSummarySlice((s) => ({ ...s, loading: false, periodError: e.message }));
       } else {
         setSummarySlice({ loading: false, error: true, data: null, errorTitle: errorTitleFor(e) });
       }
     }
-  }, [scope, groupId, granularity, from, to, scopeReady]);
+  }, [scope, groupId, granularity, from, to, scopeReady, summaryGuard]);
 
   const fetchDistribution = useCallback(async () => {
     if (!scopeReady) return;
-    const reqId = ++distributionReqRef.current;
+    const reqId = distributionGuard.next();
     setDistributionSlice((s) => ({ ...s, loading: true, error: false }));
     try {
       const data = await integratedStatsApi.getDistribution({ scope, groupId, from: from || undefined, to: to || undefined });
-      if (reqId !== distributionReqRef.current) return;
+      if (distributionGuard.isStale(reqId)) return;
       setDistributionSlice({ loading: false, error: false, data });
     } catch (e) {
-      if (reqId !== distributionReqRef.current) return;
+      if (distributionGuard.isStale(reqId)) return;
       setDistributionSlice({ loading: false, error: true, data: null, errorTitle: errorTitleFor(e) });
     }
-  }, [scope, groupId, from, to, scopeReady]);
+  }, [scope, groupId, from, to, scopeReady, distributionGuard]);
 
   const fetchBreakdown = useCallback(async () => {
     if (!scopeReady) return;
-    const reqId = ++breakdownReqRef.current;
+    const reqId = breakdownGuard.next();
     setBreakdownSlice((s) => ({ ...s, loading: true, error: false }));
     try {
       // ⚠ `/stats/integrated/breakdown`은 `IntegratedBreakdownQuery`(scope/groupId/from/to만) 계약이다 —
       // granularity를 보내지 않는다(코드리뷰 L-2, 설계 변경분).
       const data = await integratedStatsApi.getBreakdown({ scope, groupId, from: from || undefined, to: to || undefined });
-      if (reqId !== breakdownReqRef.current) return;
+      if (breakdownGuard.isStale(reqId)) return;
       setBreakdownSlice({ loading: false, error: false, data });
     } catch (e) {
-      if (reqId !== breakdownReqRef.current) return;
+      if (breakdownGuard.isStale(reqId)) return;
       setBreakdownSlice({ loading: false, error: true, data: null, errorTitle: errorTitleFor(e) });
     }
-  }, [scope, groupId, from, to, scopeReady]);
+  }, [scope, groupId, from, to, scopeReady, breakdownGuard]);
 
   const fetchQuestions = useCallback(async () => {
     if (!scopeReady) return;
-    const reqId = ++questionsReqRef.current;
+    const reqId = questionsGuard.next();
     setQuestionsSlice((s) => ({ ...s, loading: true, error: false }));
     try {
       const data = await integratedStatsApi.getQuestions({
@@ -180,13 +185,13 @@ export function IntegratedStatsPage(): JSX.Element {
         topN: 10,
         includeArchivedChatbots,
       });
-      if (reqId !== questionsReqRef.current) return;
+      if (questionsGuard.isStale(reqId)) return;
       setQuestionsSlice({ loading: false, error: false, data });
     } catch (e) {
-      if (reqId !== questionsReqRef.current) return;
+      if (questionsGuard.isStale(reqId)) return;
       setQuestionsSlice({ loading: false, error: true, data: null, errorTitle: errorTitleFor(e) });
     }
-  }, [scope, groupId, from, to, includeArchivedChatbots, scopeReady]);
+  }, [scope, groupId, from, to, includeArchivedChatbots, scopeReady, questionsGuard]);
 
   useEffect(() => {
     void fetchOverview();

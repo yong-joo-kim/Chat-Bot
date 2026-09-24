@@ -16,6 +16,7 @@ import { ChannelDistribution } from './ChannelDistribution';
 import { HourWeekdayPanel } from './HourWeekdayPanel';
 import { TopQuestionsPanel } from './TopQuestionsPanel';
 import { IntentMatchSection } from './IntentMatchSection';
+import { useLatestRequest } from '../../lib/useLatestRequest';
 
 interface AsyncSlice<T> {
   loading: boolean;
@@ -40,40 +41,55 @@ export function StatsOverviewPage(): JSX.Element {
   const [questionsSlice, setQuestionsSlice] = useState<AsyncSlice<StatsQuestions>>(initialSlice);
   const [announce, setAnnounce] = useState('');
 
+  // 기간/세분화를 빠르게 전환할 때 늦게 도착한 이전 요청이 최신 결과를 덮어쓰지 않도록 하는 순번 가드
+  // (요청 시작 시 발급받고, 응답 시점에 "그때의 번호"가 여전히 최신일 때만 반영한다). 재시도 버튼도 같은 함수를 거친다.
+  const summaryGuard = useLatestRequest();
+  const distributionGuard = useLatestRequest();
+  const questionsGuard = useLatestRequest();
+
   const fetchSummary = useCallback(async () => {
+    const reqId = summaryGuard.next();
     setSummarySlice((s) => ({ ...s, loading: true }));
     try {
       const data = await statsApi.getSummary({ chatbotId: chatbot.id, granularity, from: from || undefined, to: to || undefined });
+      if (summaryGuard.isStale(reqId)) return;
       setSummarySlice({ loading: false, error: false, data });
       setAnnounce(MESSAGES.stats.resultAnnounce(data.totals.turnCount));
     } catch (e) {
+      if (summaryGuard.isStale(reqId)) return;
       if (e instanceof ApiError && e.code === 'STATS_RANGE_TOO_WIDE') {
         setSummarySlice((s) => ({ ...s, loading: false, periodError: e.message }));
       } else {
         setSummarySlice({ loading: false, error: true, data: null });
       }
     }
-  }, [chatbot.id, granularity, from, to]);
+  }, [chatbot.id, granularity, from, to, summaryGuard]);
 
   const fetchDistribution = useCallback(async () => {
+    const reqId = distributionGuard.next();
     setDistributionSlice((s) => ({ ...s, loading: true }));
     try {
       const data = await statsApi.getDistribution({ chatbotId: chatbot.id, from: from || undefined, to: to || undefined });
+      if (distributionGuard.isStale(reqId)) return;
       setDistributionSlice({ loading: false, error: false, data });
     } catch {
+      if (distributionGuard.isStale(reqId)) return;
       setDistributionSlice({ loading: false, error: true, data: null });
     }
-  }, [chatbot.id, from, to]);
+  }, [chatbot.id, from, to, distributionGuard]);
 
   const fetchQuestions = useCallback(async () => {
+    const reqId = questionsGuard.next();
     setQuestionsSlice((s) => ({ ...s, loading: true }));
     try {
       const data = await statsApi.getQuestions({ chatbotId: chatbot.id, from: from || undefined, to: to || undefined, topN: 10 });
+      if (questionsGuard.isStale(reqId)) return;
       setQuestionsSlice({ loading: false, error: false, data });
     } catch {
+      if (questionsGuard.isStale(reqId)) return;
       setQuestionsSlice({ loading: false, error: true, data: null });
     }
-  }, [chatbot.id, from, to]);
+  }, [chatbot.id, from, to, questionsGuard]);
 
   useEffect(() => {
     void fetchSummary();
