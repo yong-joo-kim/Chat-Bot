@@ -153,3 +153,18 @@ feat: 레거시 API 연동(No.26) 기능그룹 구현
 - 신규 오류코드 2종(API_OUTPUT_LEGACY_FORMAT, API_CONNECTION_IN_USE), 신규 권한 0종, ADR-0034
 - 테스트 api 1446 / web 376 / engine 90 전부 통과, 코드리뷰 2회차 PASS
 - 배포 시 할 일: 신규 API 연결별 시크릿을 서버 env(LEGACY_API_SECRET__<REF>)에 설정, 사설 대역 호출이 필요하면 배포 환경 allowlist를 추가 구성, 기존 v1 조건분기 노드에 노출된 토큰은 교체 후 v2로 전환 권고
+
+## 2026-09-25 — a7c06a8
+
+feat: 설문관리(No.27) 기능그룹 구현
+
+- 대화 중 멀티턴 설문 실행: 엔진 순수 모듈 survey-session.ts, S0 단계, 엔진 수정 닫힌 목록 9항목, 엔진 I/O 0건. 클라이언트 봉투에는 진행 위치만 두고, 필드가 없으면 기존과 바이트 동일
+- 서버 응답 원장: 매 턴 재검증, 적재 가드 7종, 조건부 updateMany 원자성. 세션당 1회 완료 + isDuplicate 표시. 자유 텍스트는 금지어→PII 마스킹. 응답 삭제 경로 0건(정적 봉인 S-1~S-14)
+- 챗봇별 설문 정의(최대 50): 4유형(단일/다중/척도 별점·NPS/자유 텍스트), 상태 DRAFT/OPEN/CLOSED, 기간(종료일 배타), 첫 응답 후 구조 잠금(문구만 수정, 구조 변경은 복제), 위젯 변경 0(버튼 5개 분할, 다중 "1,3" 입력)
+- 결과: 참여·완료·이탈·문항별 분포·평균·NPS(노출일 KST, 조회 시점 이탈 판정, 일/주/월), 문항별 답을 포함한 응답 목록, 자유 텍스트 목록, CSV 2종(수식 인젝션 방어, 한글 파일명 filename*)
+- 설문 턴(ConversationLog.surveyTurn)은 질문 순위 5곳·미응답·RAG에서 제외. 기존 수치 불변
+- v1 SURVEY: 실행 안 함, 신규 저장 400(SURVEY_OUTPUT_LEGACY_FORMAT). 참조 무결성 4곳 편입, 설문 삭제 409 2종, 영구삭제 사전검사 11종, 복원 경고 3종
+- 결함 수정: API 분기 턴 설문 상태 유실(resumeAfterApiCall), 오버레이 설문 유실(mergeOverlay), 설계 점검 상수 판정, CSV 한글 헤더 ERR_INVALID_CHAR. No.26 legacy 통합 시험 간헐 실패 안정화
+- 신규 오류코드 4종, 신규 권한 0종, @Public 추가 0, ADR-0035
+- 테스트 engine 182 / api 1511 / web 417 전부 통과, 코드리뷰 2회차 PASS
+- 배포 시 할 일: 마이그레이션(20260925090000_survey_management) 적용, 기존 v1 설문 노드는 실행되지 않으므로 v2로 전환 권고
