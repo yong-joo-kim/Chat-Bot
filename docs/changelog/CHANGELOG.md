@@ -125,3 +125,15 @@ feat: 운영 예약 배포(No.28) 기능그룹 구현
 - 관리자 콘솔: 챗봇별 예약 탭(생성/목록/상세/체인 패널/결과 요약), 전역 예약 페이지(24시간 요약 바), 주의 필요 배지, 엔진 비활성 배너, 예약 충돌 배너
 - apps/api/src/validation/lib/validation-sealing.spec.ts의 금지 모듈명 오타('FaqModule'→'FaqsModule') 수정 및 금지 목록이 실제 선언된 Module 클래스인지 사전 단언하는 assertion 추가
 - 테스트 api 1228 / web 289 전건 통과, 미자동화 항목(AC-D2-6/AC-D2-9/AC-D3-7 BUSY분기/AC-D5-3, ScheduleDeployDialog axe)은 문서에 기록
+
+## 2026-09-24 — fe693fd
+
+feat: 통합 통계(No.29) 기능그룹 구현
+
+- 콘솔 홈 `/`를 통합(전역/그룹) 통계로 대체 — 누적 KPI·기간 시계열·분포·기여 표(최대잔여법, 기타/미귀속 행)·질문 순위(보관 챗봇 포함 토글), `/stats/integrated/*` 7개 엔드포인트, 챗봇 스코프 의도별 매칭(`GET /stats/intents`)
+- 누적 보존: 원천 ConversationLog 직접 집계(롤업 없음) + 로그 삭제 경로 0건 정적 검사 봉인(ADR-0033), 롤업 재검토 트리거
+- `ConversationLog.groupId` 대화 당시 그룹 스냅샷(record() 4개 호출부 필수화, 추가 조회 0) + 멱등 백필 스크립트, 비파괴 ADD COLUMN 마이그레이션
+- 그룹 삭제 시 이력 있으면 보관(`ChatbotGroup.archivedAt`), 보관 그룹 대상 지정 7지점 404, `Chatbot.archivedAt`
+- 세션 distinct 원시 SQL 격리 파일, summary-assembler 공유, dashboard-period KST 헬퍼 중복 제거, breakdown 전용 쿼리 스키마
+- 신규 권한·오류코드·환경변수 0건, 엔진 불변, 기존 통계/대시보드 무회귀
+- 테스트 api 1315(로컬 데모 .env 기인 기지 실패 1건 제외 시 전부 통과) / web 338, 코드리뷰 2회차 PASS. 배포 순서: 마이그레이션 → API → 백필 스크립트.
