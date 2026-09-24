@@ -20,6 +20,9 @@ const EnvSchema = z.object({
   // 품질/채널(No.10~11) 그룹 추가 — 전부 선택(기본값 있음), 기동 실패 조건을 늘리지 않는다(NFR-M6).
   PUBLIC_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(30),
   PUBLIC_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(120),
+  // [K-1, 하이브리드 CS 설계서 §2.6·§3.4] 폴링 전용 IP 버킷 — 보류 답변·상담 폴링 공용. 기존
+  // ip/session 버킷과 별개다(폴링이 일반 전송 버킷을 소진하지 않게 하는 것이 이 변수의 목적).
+  PUBLIC_POLL_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(600),
   TRUST_PROXY: envBoolean(false),
   DIALOGUE_BUNDLE_CACHE_TTL_MS: z.coerce.number().int().positive().default(60000),
   // 보안/이력(No.12~13) 그룹 추가 — 전부 선택(기본값 있음, FR-0-30). 부트스트랩 계정 변수는
