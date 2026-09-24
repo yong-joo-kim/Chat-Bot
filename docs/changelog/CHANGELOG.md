@@ -137,3 +137,19 @@ feat: 통합 통계(No.29) 기능그룹 구현
 - 세션 distinct 원시 SQL 격리 파일, summary-assembler 공유, dashboard-period KST 헬퍼 중복 제거, breakdown 전용 쿼리 스키마
 - 신규 권한·오류코드·환경변수 0건, 엔진 불변, 기존 통계/대시보드 무회귀
 - 테스트 api 1315(로컬 데모 .env 기인 기지 실패 1건 제외 시 전부 통과) / web 338, 코드리뷰 2회차 PASS. 배포 순서: 마이그레이션 → API → 백필 스크립트.
+
+## 2026-09-24 — 261e7b1
+
+feat: 레거시 API 연동(No.26) 기능그룹 구현
+
+- 대화 노드 API 조건분기(v2) 실행: 엔진 정지점→API 계층 1회 호출→순수 재진입(resumeAfterApiCall), 엔진 수정 닫힌 목록 5곳 + 엔진 I/O 0건 정적 검사, 응답 매핑·조건/기본/실패 분기·{api.이름} 치환(같은 턴·텍스트 필드만)
+- ADMIN 관리 전역 API 연결 레지스트리(ApiConnection), 시크릿은 DB 미저장(secretRef + env LEGACY_API_SECRET__<REF>), 연결 테스트·샘플 응답·회로차단(인프라 실패만 계수)
+- SSRF 방어: 루프백·링크로컬·메타데이터(IPv4 매핑·NAT64·6to4 포함) 절대 차단, 사설 대역은 env allowlist만, DNS 1회 해석·검증 주소 고정 접속, 리다이렉트 불추종, 256KB·JSON만, 경로 인젝션 차단, 신규 의존성 0
+- 개인정보 기본 마스킹 송신(연결별 원문 허용 예외), ApiCallLog 메타데이터만
+- v1 노드: 실행 안 함·신규 저장 400(API_OUTPUT_LEGACY_FORMAT)·응답에서 헤더 값 가림(VIEWER 평문 토큰 노출 해소)
+- 시뮬레이터 MOCK 기본/LIVE 제한(simulation:write+GET+저장본 동일성), TC 항상 목(apiMockA/B)
+- 참조 무결성: API 분기 대상 노드를 참조 검사 4곳에 편입(기존 누락 결함), 저장 시 참조 오류를 위치별 필드 경로로 보고
+- 콘솔: API 연결 관리, v2 편집기(인라인 오류·미리보기·치환 미리보기), v1 읽기전용 카드·전환, 시뮬레이터 외부 API 단계, 외부 연동 로그
+- 신규 오류코드 2종(API_OUTPUT_LEGACY_FORMAT, API_CONNECTION_IN_USE), 신규 권한 0종, ADR-0034
+- 테스트 api 1446 / web 376 / engine 90 전부 통과, 코드리뷰 2회차 PASS
+- 배포 시 할 일: 신규 API 연결별 시크릿을 서버 env(LEGACY_API_SECRET__<REF>)에 설정, 사설 대역 호출이 필요하면 배포 환경 allowlist를 추가 구성, 기존 v1 조건분기 노드에 노출된 토큰은 교체 후 v2로 전환 권고
