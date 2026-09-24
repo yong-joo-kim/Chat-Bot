@@ -168,3 +168,20 @@ feat: 설문관리(No.27) 기능그룹 구현
 - 신규 오류코드 4종, 신규 권한 0종, @Public 추가 0, ADR-0035
 - 테스트 engine 182 / api 1511 / web 417 전부 통과, 코드리뷰 2회차 PASS
 - 배포 시 할 일: 마이그레이션(20260925090000_survey_management) 적용, 기존 v1 설문 노드는 실행되지 않으므로 v2로 전환 권고
+
+## 2026-09-25 — 4f3b871 (K-1 분리 커밋 9245ede)
+
+feat: 하이브리드 CS(No.24) 기능그룹 구현
+
+- 상담 콘솔 신설: 진행 중 세션 모니터링(연속 미응답 주의2·경고3), 개입·전송(마스킹 미리보기)·종료·ADMIN 강제 인수, 응답 힌트(의미 매칭 3 + 자주 쓰는 문장 3), 이력·요약
+- 상담 스레드는 개입 세션에만 둔다(`HandoffSession`/`HandoffMessage`). 개입 분기는 엔진 호출 전(②.7)에 처리해 엔진 변경 0. 상담이 꺼진 챗봇은 응답 바이트가 동일하다
+- 원문(P-9): 상담 중 담당자·ADMIN만 토글(기본 끔)로 볼 수 있다. `HandoffMessage.rawText`만 쓰며 3중 소거(종료 트랜잭션·60초 sweeper·60분 상한) + `secure_delete`. `RAW_VIEW` 열람 감사. 영구 저장은 마스킹본만
+- 공개 폴링 `GET /public/chatbots/:slug/handoff`(`@Public` 7번째): 256비트 상담 토큰을 1회 발급하고 해시만 저장. 관리자 경로에는 `sessionRef`만 노출. 구버전 위젯 편승(G-8 전치)
+- `AGENT` 역할과 `cs:read`/`cs:write` 권한(역할 4, 권한 17). 부분 유니크 + CAS 배정, 서버에서 담당자 재검증(`isMine`)
+- 위젯 상담 모드(gzip 11.16KB): 토큰을 봉투와 분리된 sessionStorage에 보관, 헤더 병합 결함 수정
+- `ConversationLog.handoffTurn`을 질문 순위·미응답·RAG에서 제외. 영구삭제 사전검사 13종, 봉인 H-1~H-17
+- K-1(선행 분리 커밋 9245ede): 공개 폴링 경로 전용 레이트리밋 버킷 도입 — 보류 답변 폴링이 같은 IP 뒤 일반 전송 한도를 소진하던 결함 수정, 상담 폴링도 동일 장치 재사용
+- 시험 인프라 결함 수정: 통합 시험 DB를 `migrate deploy`로 생성(부분 유니크 인덱스 동시성 방어 미검증 해소), `DEPLOY_SCHEDULE_ENABLED`·`HANDOFF_SWEEPER_ENABLED` 기본 끔, 설문 spec UTC today 수정, 설문 seed 멱등화
+- 신규 오류코드 7종, ADR-0036
+- 테스트 api 1668 / web 458 / widget 95 / engine 182 통과, 코드리뷰 2회차 반영
+- 배포 시 할 일: 마이그레이션(20260925100000_hybrid_cs) 적용 → 상담원에게 AGENT 역할 부여 → 챗봇별 상담 설정 활성화 → 위젯 갱신 권장(구버전은 편승 전달로 당장 깨지지 않음)
