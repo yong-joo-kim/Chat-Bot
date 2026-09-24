@@ -56,6 +56,12 @@ export function StatsShell(): JSX.Element {
             {MESSAGES.statsShell.tabLearning} <NavPendingBadge count={learningSummary?.pendingCount ?? 0} />
           </NavLink>
         )}
+        {/* [No.26] L1 외부 연동 로그 — `chatbot:read`(세 역할 전부, legacy-api-integration-ui-spec.md §1). */}
+        {can('chatbot:read') && (
+          <NavLink to={`/chatbots/${chatbot.id}/stats/api-calls`} className={subNavClassName}>
+            {MESSAGES.apiCallLogs.tabLabel}
+          </NavLink>
+        )}
       </nav>
       <div className="stats-content">
         <Outlet context={{ ...ctx, learningSummary, refreshLearningSummary } satisfies StatsShellContext} />

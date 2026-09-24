@@ -20,7 +20,8 @@ import { advanceContextSession } from './context-session';
 import { executeOutputs } from './outputs';
 import type { DialogueIndex } from './dialogue-index';
 import { judgeBand } from './semantic';
-import { CLARIFY_TTL_MS, DEFAULT_FALLBACK_RESPONSE, EMPTY_INPUT_RESPONSE, MAX_INPUT_LENGTH, intentOnlyResponse } from './constants';
+import { CLARIFY_TTL_MS, DEFAULT_FALLBACK_RESPONSE, EMPTY_INPUT_RESPONSE, HOP_LIMIT, MAX_INPUT_LENGTH, intentOnlyResponse } from './constants';
+import type { ApiCallSuspension, ApiResumeState, ApiSuspensionRequest, CompletedFormInfo } from './api-call';
 
 export interface ResolveOptions {
   /** 사전 구축한 인덱스 재사용(FR-E-10). 미지정 시 내부적으로 원본 배열을 그대로 사용한다. */
@@ -41,6 +42,9 @@ export interface ResolveOptions {
   semantic?: SemanticMatchInput;
 }
 
+/** [No.26] `resolveResponse`/`resolveByNodeId`의 확장 반환 타입 — 정지 시 `apiCall`이 채워진다. */
+export type EngineResolution = DialogueResolution & { apiCall?: ApiCallSuspension };
+
 function textOutput(text: string): DialogOutput {
   return { type: 'TEXT', payload: { text } };
 }
@@ -54,26 +58,93 @@ interface FallbackContext {
   /** `CONTEXT_FORM` 전환 고지 판단에 쓰는 "실행 시점 세션"(EX-S-7). 보통 원본 세션이다. */
   session: ContextSessionState | null;
   trace: TraceStep[];
+  /** [No.26] 이번 턴에 완료된 폼(있으면) — FALLBACK 노드의 API 바인딩에도 적용한다. */
+  completedForm?: CompletedFormInfo;
+  matchedIntentId?: string;
+  homonymResolution?: HomonymResolution;
+}
+
+/** [No.26] 정지 시 반환할 `EngineResolution`을 조립한다(§5.3) — 세 실행 지점(S3·S6·`resolveByNodeId`) 공용. */
+function buildSuspendedResolution(params: {
+  input: string;
+  normalizedInput: string;
+  matchedNodeId?: string;
+  matchedIntentId?: string;
+  homonymResolution?: HomonymResolution;
+  trace: TraceStep[];
+  carry: DialogOutput[];
+  suspended: ApiSuspensionRequest;
+  execUnsupported: DialogueResolution['unsupportedOutputs'];
+  hops: number;
+  hopLimit: number;
+  sessionFallback: ContextSessionState | null;
+  existingSession: ContextSessionState | null;
+}): EngineResolution {
+  const resumeState: ApiResumeState = {
+    input: params.input,
+    normalizedInput: params.normalizedInput,
+    matchedNodeId: params.matchedNodeId,
+    matchedIntentId: params.matchedIntentId,
+    homonymResolution: params.homonymResolution,
+    trace: params.trace,
+    carry: params.carry,
+    unsupported: params.execUnsupported,
+    hops: params.hops,
+    hopLimit: params.hopLimit,
+    sessionFallback: params.sessionFallback,
+    existingSession: params.existingSession,
+  };
+  return {
+    input: params.input,
+    normalizedInput: params.normalizedInput,
+    matchedNodeId: params.matchedNodeId,
+    matchedIntentId: params.matchedIntentId,
+    homonymResolution: params.homonymResolution,
+    outputs: [],
+    nextSession: null,
+    unsupportedOutputs: [],
+    trace: params.trace,
+    apiCall: { ...params.suspended, resumeState },
+  };
 }
 
 /**
  * 폴백 경로(FALLBACK 노드 → `ERROR_RESPONSE` FAQ → 기본 문구)를 실행한다(FR-E-9, FR-E2-1).
  * `resolveResponse`(S6)와 `resolveByNodeId`(노드 없음/비활성)가 공유하는 순수 함수다.
- * `resolver.ts`의 기존 S6 블록을 동작 변경 없이 추출했다(§7.2 리팩터링 지시).
  */
-function resolveFallback(
-  fc: FallbackContext,
-  bundle: DialogueBundle,
-  now: Date,
-  options: ResolveOptions,
-): DialogueResolution {
+function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date, options: ResolveOptions): EngineResolution {
   const { input, normalizedInput, carry, nextSessionOverride, session, trace } = fc;
+  const hopLimit = options.hopLimit ?? HOP_LIMIT;
 
   const fallbackNode = bundle.dialogNodes.find((n) => n.nodeType === 'FALLBACK' && n.enabled);
   if (fallbackNode) {
     trace.push({ stage: 'FALLBACK', code: 'FALLBACK_NODE', targetId: fallbackNode.id, targetName: fallbackNode.name });
-    const execResult = executeOutputs(fallbackNode.outputs, bundle, now, { hopLimit: options.hopLimit, existingSession: session });
+    const execResult = executeOutputs(fallbackNode.outputs, bundle, now, {
+      hopLimit: options.hopLimit,
+      existingSession: session,
+      sourceNodeId: fallbackNode.id,
+      completedForm: fc.completedForm,
+    });
     trace.push(...execResult.trace);
+
+    if (execResult.suspended) {
+      return buildSuspendedResolution({
+        input,
+        normalizedInput,
+        matchedNodeId: fallbackNode.id,
+        matchedIntentId: fc.matchedIntentId,
+        homonymResolution: fc.homonymResolution,
+        trace,
+        carry: [...carry, ...execResult.outputs],
+        suspended: execResult.suspended,
+        execUnsupported: execResult.unsupportedOutputs,
+        hops: execResult.hops,
+        hopLimit,
+        sessionFallback: nextSessionOverride ?? null,
+        existingSession: session,
+      });
+    }
+
     return {
       input,
       normalizedInput,
@@ -123,10 +194,11 @@ export function resolveResponse(
   bundle: DialogueBundle,
   now: Date,
   options: ResolveOptions = {},
-): DialogueResolution {
+): EngineResolution {
   const trace: TraceStep[] = [];
   const maxInputLength = options.maxInputLength ?? MAX_INPUT_LENGTH;
   const clarifyTtlMs = options.clarifyTtlMs ?? CLARIFY_TTL_MS;
+  const hopLimit = options.hopLimit ?? HOP_LIMIT;
 
   let raw = input ?? '';
   if (raw.length > maxInputLength) {
@@ -151,6 +223,7 @@ export function resolveResponse(
   let carry: DialogOutput[] = [];
   let nextSessionOverride: ContextSessionState | null | undefined;
   let pending = options.pendingClarify ?? null;
+  let completedForm: CompletedFormInfo | undefined;
 
   // S1 — 컨텍스트 세션
   if (session && session.status === 'IN_PROGRESS') {
@@ -202,6 +275,7 @@ export function resolveResponse(
     carry = advance.outputs;
     ctx.completedContextVariableId = def.id;
     nextSessionOverride = null;
+    completedForm = { contextVariableId: def.id, values: advance.state.filledValues };
   }
 
   // S1.5 — 되묻기 해소(FR-E2-2, DD-27). 확정되면 S2(동음이의어 보정)를 건너뛴다.
@@ -320,8 +394,31 @@ export function resolveResponse(
     }
     trace.push({ stage: 'NODE', code: 'NODE_MATCHED', targetId: node.id, targetName: node.name });
 
-    const execResult = executeOutputs(node.outputs, bundle, now, { hopLimit: options.hopLimit, existingSession: session });
+    const execResult = executeOutputs(node.outputs, bundle, now, {
+      hopLimit: options.hopLimit,
+      existingSession: session,
+      sourceNodeId: node.id,
+      completedForm,
+    });
     trace.push(...execResult.trace);
+
+    if (execResult.suspended) {
+      return buildSuspendedResolution({
+        input,
+        normalizedInput: norm,
+        matchedNodeId: node.id,
+        matchedIntentId: ctx.matchedIntentId,
+        homonymResolution: homonymEval.resolution ?? undefined,
+        trace,
+        carry: [...carry, ...execResult.outputs],
+        suspended: execResult.suspended,
+        execUnsupported: execResult.unsupportedOutputs,
+        hops: execResult.hops,
+        hopLimit,
+        sessionFallback: nextSessionOverride ?? null,
+        existingSession: session,
+      });
+    }
 
     return {
       input,
@@ -427,7 +524,22 @@ export function resolveResponse(
   }
 
   // S6 — 폴백
-  return resolveFallback({ input, normalizedInput: norm, carry, nextSessionOverride, session, trace }, bundle, now, options);
+  return resolveFallback(
+    {
+      input,
+      normalizedInput: norm,
+      carry,
+      nextSessionOverride,
+      session,
+      trace,
+      completedForm,
+      matchedIntentId: ctx.matchedIntentId,
+      homonymResolution: homonymEval.resolution ?? undefined,
+    },
+    bundle,
+    now,
+    options,
+  );
 }
 
 const CLARIFY_BUTTON_LABEL_MAX = 40;
@@ -468,6 +580,7 @@ function firstExampleOf(bundle: DialogueBundle, intentId: string): string | unde
  * 버튼 `NODE` 액션 진입점(FR-E2-1). 노드 없음/비활성이면 예외 대신 공통 폴백 경로를 탄다.
  * 세션이 진행 중일 때 NODE 버튼이 오면 버튼이 이긴다 — 세션을 `CANCELLED`로 종료한 뒤
  * (전환 고지가 필요하면 `executeOutputs`가 재사용한다, EX-S-7) 노드를 실행한다.
+ * [No.26] 버튼 진입에는 폼 완료 바인딩이 없다(`completedForm` 미전달 — AC-L3-12).
  */
 export function resolveByNodeId(
   nodeId: string,
@@ -475,10 +588,11 @@ export function resolveByNodeId(
   bundle: DialogueBundle,
   now: Date,
   options: ResolveOptions & { inputLabel?: string } = {},
-): DialogueResolution {
+): EngineResolution {
   const trace: TraceStep[] = [];
   const inputLabel = options.inputLabel ?? '';
   const normalizedInput = normalizeText(inputLabel);
+  const hopLimit = options.hopLimit ?? HOP_LIMIT;
 
   const sessionInProgress = !!session && session.status === 'IN_PROGRESS';
   const cancelledSession: ContextSessionState | null = sessionInProgress
@@ -492,8 +606,29 @@ export function resolveByNodeId(
 
   if (node && node.enabled) {
     trace.push({ stage: 'NODE', code: 'NODE_BY_ID', targetId: node.id, targetName: node.name });
-    const execResult = executeOutputs(node.outputs, bundle, now, { hopLimit: options.hopLimit, existingSession: session });
+    const execResult = executeOutputs(node.outputs, bundle, now, {
+      hopLimit: options.hopLimit,
+      existingSession: session,
+      sourceNodeId: node.id,
+    });
     trace.push(...execResult.trace);
+
+    if (execResult.suspended) {
+      return buildSuspendedResolution({
+        input: inputLabel,
+        normalizedInput,
+        matchedNodeId: node.id,
+        trace,
+        carry: execResult.outputs,
+        suspended: execResult.suspended,
+        execUnsupported: execResult.unsupportedOutputs,
+        hops: execResult.hops,
+        hopLimit,
+        sessionFallback: cancelledSession ?? null,
+        existingSession: session,
+      });
+    }
+
     return {
       input: inputLabel,
       normalizedInput,

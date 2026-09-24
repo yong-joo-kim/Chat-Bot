@@ -71,6 +71,8 @@ function FlowNodeItem({ node, chatbotId }: { node: FlowNode; chatbotId: string }
         disabled={!hasChildren}
       >
         <span aria-hidden="true">{hasChildren ? (expanded ? '▾' : '▸') : '·'}</span>{' '}
+        {/* [No.26] API 조건분기 대상은 "API 분기 →" 접두로 표시한다(ui-spec §3.6 `ApiBranchLabel`). */}
+        {node.via === 'API_BRANCH' && <span className="flow-tree-via-label">{MESSAGES.dialogue.flow.apiBranchLabel} </span>}
         <Link to={`/chatbots/${chatbotId}/dialogue/nodes/${node.nodeId}`} onClick={(e) => e.stopPropagation()}>
           {node.name}
         </Link>

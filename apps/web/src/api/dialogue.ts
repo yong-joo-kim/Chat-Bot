@@ -13,6 +13,7 @@ import type {
   CopyDialogNodeDto,
   DesignValidationReport,
   DialogNode,
+  DialogNodeCopyResponse,
   DialogNodeListItem,
   DialogNodeListQuery,
   FaqEntry,
@@ -153,7 +154,7 @@ export const dialogNodesApi = {
     apiClient.patch<DialogNode>(`/chatbots/${chatbotId}/dialog-nodes/${id}`, dto),
   remove: (chatbotId: string, id: string) => apiClient.delete<void>(`/chatbots/${chatbotId}/dialog-nodes/${id}`),
   copy: (chatbotId: string, id: string, dto: CopyDialogNodeDto = {}) =>
-    apiClient.post<DialogNode>(`/chatbots/${chatbotId}/dialog-nodes/${id}/copy`, dto),
+    apiClient.post<DialogNodeCopyResponse>(`/chatbots/${chatbotId}/dialog-nodes/${id}/copy`, dto),
   flow: (chatbotId: string) => apiClient.get<FlowTree>(`/chatbots/${chatbotId}/dialog-nodes/flow`),
   validate: (chatbotId: string) =>
     apiClient.post<DesignValidationReport>(`/chatbots/${chatbotId}/dialog-nodes/validate`, undefined),

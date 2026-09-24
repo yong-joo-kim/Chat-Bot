@@ -47,7 +47,7 @@ export function resolveResponse(
 
 ### 4. 실행 미지원 아웃풋
 
-`UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO','SURVEY','API_CONDITION']` 상수를 `shared-types`에 두고 **엔진·API·UI 배지가 공유**한다. 엔진은 이 타입을 만나면 **출력에서 제외하고 `unsupportedOutputs[]`에 기록**하며 예외를 던지지 않는다(FR-E-7). 결과 아웃풋이 0건이 되면 안내 문구로 폴백한다(EX-D-6). No.26/27 구현 시 **이 상수에서 값을 빼는 것만으로** 실행이 열린다.
+`UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO','SURVEY','API_CONDITION']` 상수를 `shared-types`에 두고 **엔진·API·UI 배지가 공유**한다. 엔진은 이 타입을 만나면 **출력에서 제외하고 `unsupportedOutputs[]`에 기록**하며 예외를 던지지 않는다(FR-E-7). 결과 아웃풋이 0건이 되면 안내 문구로 폴백한다(EX-D-6). No.26/27 구현 시 **이 상수에서 값을 빼는 것만으로** 실행이 열린다. **[정정 2026-09-24 No.26 — 성립하지 않았다: 실행 가능 판정은 타입이 아니라 형태로 한다. 문서 끝 갱신 참고]**
 
 ### 5. `simulate` 하위호환
 
@@ -113,3 +113,17 @@ export function simulate(input, intents, faqs, now: Date = new Date()): Simulate
 - `apps/api`: `POST /homonyms/test`는 `resolveHomonym()`만, `POST /dialog-nodes/validate`는 `validateDialogueDesign()`만, `GET /dialog-nodes/flow`는 `buildFlowTree()`만 호출한다(엔진 진입점을 얇게 유지).
 - `test-automation` 인계: FR-E-3의 6단계 각각 + §8 예외 케이스 + AC-E-1~E-12를 엔진 단위 테스트로 커버(FR-E-11). 성능 테스트(AC-E-12)는 인덱스를 재사용하는 형태로 측정한다.
 - 후속(No.10): 대화 API·시뮬레이터 UI가 `resolveResponse`를 소비하고 `trace`를 화면에 표시한다. 그 시점에 `simulate`를 제거한다.
+
+
+---
+
+## 갱신 (2026-09-24 — No.26: "상수에서 빼면 열린다"는 성립하지 않았다 · 실행 가능 판정 = 형태 · 엔진 수정 닫힌 목록)
+
+레거시 API 연동(No.26, **ADR-0034**)이 `API_CONDITION`의 실행을 연다. §4의 예고("이 상수에서 값을 빼는 것만으로 실행이 열린다")는 **성립하지 않았다** — ① 엔진이 동기 순수 함수라 호출할 자리가 없고 ② No.5 저장 형태(인라인 URL·평문 헤더)는 실행하면 안 되는 형태이며 ③ 웹 배지가 이 상수를 쓰지 않고 타입을 하드코딩했다(`DialogOutputEditor.tsx:126`). 다음과 같이 갱신한다. §1~§3·§5~§8의 결정(진입점·우선순위·예외 없음·설계 점검의 엔진 배치)은 불변이다.
+
+1. **실행 가능 판정은 타입이 아니라 형태로 한다.** `UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO','SURVEY']`로 줄이고, `API_CONDITION`은 `version: 2`(연결 참조형)만 실행한다. v1은 이 ADR의 미지원 처리(출력 제외 + `unsupportedOutputs` 기록 + 0건이면 안내 문구)를 **바이트 단위 그대로** 받는다. 판정 함수 `isUnsupportedOutput()`을 `shared-types`에 두고 엔진·설계 점검·웹 배지가 공유한다(§4의 "공유" 의도를 함수로 실현).
+2. **§1 "DB·NestJS 무의존 순수 함수"는 유지된다** — 외부 호출은 엔진 밖에서 한다. 엔진은 v2 `API_CONDITION`에서 **정지**(호출 요청서 반환, 뒤 아웃풋 미실행)하고, API 계층이 1회 호출한 뒤 순수 함수 `resumeAfterApiCall()`로 재진입한다. 정지 시 `resolveTurn`은 "호출 실패" 가정의 폴백 결과를 동봉해 §6의 "항상 최소 1건 응답"을 지킨다.
+3. **엔진 수정은 닫힌 목록**이다: `executeOutputs` 분기 · 재진입 함수 · 참조 편입(`getOutgoingNodeRefs().apiTargets`) · 결과 타입 선택 필드 `apiCall?` · 폼 완료 값 전달. 엔진에 I/O·타이머·`fetch`·`process.env`·Nest·Prisma 심볼 0건을 정적 검사가 단언한다.
+4. **§6 안전장치 보강**: 턴당 외부 호출 1회(두 번째는 실패 처리) · 분기 이동은 hop 1로 이어 센다(`HOP_LIMIT` 10 공유) · 끊긴 분기 참조는 `BROKEN_REFERENCE` + 고정 문구.
+5. **§7 설계 점검**: v1은 `UNSUPPORTED_OUTPUT`(INFO) 대신 `API_LEGACY_FORMAT`(WARNING, "전환 필요")으로 보고하고 API 전용 점검 항목이 추가된다. 연결 의존 항목을 위해 `validateDialogueDesign`이 **선택 3번째 인자**(연결 설계 정보)를 받는다 — 엔진이 DB를 읽지 않는 원칙 유지.
+6. 대안 표의 "미지원 아웃풋을 저장 단계에서 차단" 기각 사유(No.26 준비 데이터)는 v1에 대해 **반대로 적용**된다 — v1은 새로 저장할 수 없다(`400 API_OUTPUT_LEGACY_FORMAT`). 이미 저장된 v1은 자동 변환·삭제하지 않는다(ADR-0034 §7).

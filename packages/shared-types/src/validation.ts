@@ -296,6 +296,9 @@ export const TestRunResultSchema = z.object({
   ragAttempted: z.boolean(),
   ragLatencyMs: z.number().nullable().optional(),
   ragSourceCount: z.number().nullable().optional(),
+  /** [No.26 신설] 이 TC 판정에 API 목이 관여했는가: null = 관여 없음 · "NO_SAMPLE" · 샘플 해시 앞 8자리(FR-L7-6). */
+  apiMockA: z.string().nullable().optional(),
+  apiMockB: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
 });
 export type TestRunResult = z.infer<typeof TestRunResultSchema>;

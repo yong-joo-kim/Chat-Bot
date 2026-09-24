@@ -29,6 +29,8 @@ export interface RecordConversationLogParams {
   inputKind: InputKind;
   /** [신규] 2단계(외부 RAG)가 답한 턴인가(J-10, DD-82). No.14 응답출처 `RAG` 조각의 유일한 근거. 기본 false. */
   answeredByRag?: boolean;
+  /** [No.26] 외부 API 고정 문구로 끝난 턴인가(§6.1, FR-L4-13) — 미응답 큐에 적재하지 않는다. 기본 false. */
+  apiNotice?: boolean;
 }
 
 /**
@@ -92,6 +94,7 @@ export class ConversationLogService {
         isAnswered: params.isAnswered,
         blockedByFilter: params.blockedByFilter ?? false,
         inputKind: params.inputKind,
+        apiNotice: params.apiNotice ?? false,
       });
     } catch (e) {
       // 경고 로그에도 메시지 본문을 넣지 않는다(chatbotId/sessionId/오류코드만, NFR-S4).

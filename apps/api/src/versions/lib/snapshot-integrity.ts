@@ -3,6 +3,7 @@ import {
   ChatbotAnswerSettingSchema,
   ChatbotSnapshotProfileSchema,
   DialogueBundleSchema,
+  isApiConditionV2,
   normalizeText,
   VERSION_LIMITS,
   type VersionIntegrityWarning,
@@ -88,6 +89,10 @@ export function checkSnapshotIntegrity(hydrated: HydratedSnapshot, mode: Integri
     for (const targetId of refs.buttonTargets) {
       if (!nodeIds.has(targetId)) warnings.push({ rule: 'BROKEN_REFERENCE_NODE_BUTTON', kind: 'NODE', id: node.id, field: 'outputs', refId: targetId });
     }
+    // [No.26] API 조건분기 분기 대상(J-17) — 캡처/복원 모두 경고만(EX-H-5).
+    for (const targetId of refs.apiTargets) {
+      if (!nodeIds.has(targetId)) warnings.push({ rule: 'BROKEN_REFERENCE_NODE_API', kind: 'NODE', id: node.id, field: 'outputs', refId: targetId });
+    }
     for (const output of node.outputs) {
       if (output.type === 'CONTEXT_FORM' && !contextIds.has(output.payload.contextVariableId)) {
         warnings.push({
@@ -97,6 +102,11 @@ export function checkSnapshotIntegrity(hydrated: HydratedSnapshot, mode: Integri
           field: 'outputs',
           refId: output.payload.contextVariableId,
         });
+      }
+      // [No.26] v1 API_CONDITION 잔존(FR-L8-3) — 캡처 모드에서 이후 목록·상세가 "이전 형식 포함"을
+      // 알 수 있게 경고로 남긴다(본문 참조 봉인 V-7 때문에 목록은 이 값을 저장해 둬야만 읽을 수 있다).
+      if (output.type === 'API_CONDITION' && !isApiConditionV2(output.payload)) {
+        warnings.push({ rule: 'API_LEGACY_FORMAT', kind: 'NODE', id: node.id, field: 'outputs' });
       }
     }
   }

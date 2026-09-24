@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ButtonActionView } from '@chat-bot/shared-types/output-view';
-import type { AssetCounts, ButtonAction, ConversationState, DialogueOverlay } from '@chat-bot/shared-types';
+import type { AssetCounts, ButtonAction, ConversationState, DialogueOverlay, SimulateApiMode, SimulateMockResponse } from '@chat-bot/shared-types';
 import { simulationApi } from '../../../api/simulation';
 import { ApiError } from '../../../api/client';
 import { contextsApi, dialogNodesApi, faqsApi, homonymsApi, intentsApi, keywordsApi } from '../../../api/dialogue';
+import { useAuth } from '../../../context/AuthContext';
 import { MESSAGES } from '../../../constants/messages';
 import { SeverityBadge } from '../../../components/SeverityBadge';
 import { ChatMessageList } from './ChatMessageList';
@@ -12,6 +13,8 @@ import { NodeJumpPicker } from './NodeJumpPicker';
 import { MessageComposer } from './MessageComposer';
 import { CompareView } from './CompareView';
 import { RagUsageToggle } from './RagUsageToggle';
+import { ApiModeToggle } from './ApiModeToggle';
+import { MockResponseSelector } from './MockResponseSelector';
 import type { SimMessage } from './types';
 
 let seq = 0;
@@ -55,6 +58,7 @@ export interface SimulatorPanelProps {
 /** SIM1/SIM1-D 본체(FR-10-1~24). 탭·드로어가 완전히 동일한 컴포넌트를 재사용한다(ui-spec §0-3). */
 export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: SimulatorPanelProps): JSX.Element {
   const msg = MESSAGES.simulator;
+  const { can } = useAuth();
   const [messages, setMessages] = useState<SimMessage[]>([]);
   const [state, setState] = useState<ConversationState | undefined>(undefined);
   const [sending, setSending] = useState(false);
@@ -64,6 +68,18 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
   const [useRag, setUseRag] = useState(false);
   const [sendingUsesRag, setSendingUsesRag] = useState(false);
   const inputWrapRef = useRef<HTMLDivElement>(null);
+
+  // [No.26] SIM1-ext — 외부 API 호출 모드. 기본 MOCK(J-5 "아무 것도 설정하지 않아도 안전").
+  const [apiMode, setApiMode] = useState<SimulateApiMode>('MOCK');
+  const [mockResponse, setMockResponse] = useState<SimulateMockResponse | undefined>(undefined);
+  const canCallLive = can('simulation:write');
+  // ⚠ 오버레이(미저장 편집) 상태에서는 LIVE를 사전 차단한다 — 최종 판정은 항상 서버지만,
+  // 클라이언트에서 미리 안내해 무의미한 실패 호출을 줄인다(ui-spec §3.7, disabled는 사전 안내일 뿐).
+  const liveDisabledReason = !canCallLive
+    ? msg.apiModeLiveDisabledNoPermission
+    : overlay
+      ? msg.apiModeLiveDisabledUnsaved
+      : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +95,14 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
     setSending(true);
     setSendingUsesRag(useRag);
     try {
-      const res = await simulationApi.simulate(chatbotId, { ...payload, state, overlay, useRag });
+      const res = await simulationApi.simulate(chatbotId, {
+        ...payload,
+        state,
+        overlay,
+        useRag,
+        apiMode,
+        mockResponse: apiMode === 'MOCK' ? mockResponse : undefined,
+      });
       const next: SimMessage[] = [];
       if (res.stateDiscarded.length > 0) {
         next.push({ id: nextId(), role: 'system', text: msg.stateDiscardedNotice });
@@ -95,6 +118,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         overlayApplied: res.overlayApplied,
         unsupportedOutputs: res.unsupportedOutputs,
         matchTrace: res.matchTrace,
+        apiStep: res.apiStep,
       });
       setMessages((prev) => [...prev, ...next]);
       setState(res.state);
@@ -160,6 +184,11 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
     setState(undefined);
   }
 
+  // 사전 차단 조건이 성립하는 동안 LIVE가 선택돼 있으면 MOCK으로 되돌린다(사전 안내 일관성 유지).
+  useEffect(() => {
+    if (liveDisabledReason && apiMode === 'LIVE') setApiMode('MOCK');
+  }, [liveDisabledReason, apiMode]);
+
   const showEmptyBanner = assetCounts !== null && assetCounts.dialogNodes === 0 && assetCounts.intents === 0 && assetCounts.faqs === 0;
 
   return (
@@ -196,7 +225,11 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
       </fieldset>
 
       {viewMode === 'compare' ? (
-        <CompareView chatbotId={chatbotId} overlay={overlay} initialState={state} />
+        <>
+          {/* [No.26] 비교 모드는 항상 목이며 A/B가 같은 목 원천을 쓴다는 사실만 1줄로 안내한다(ui-spec §3.7 흐름 3). */}
+          <p className="field-hint">{msg.compareApiMockNotice}</p>
+          <CompareView chatbotId={chatbotId} overlay={overlay} initialState={state} />
+        </>
       ) : (
         <div className="simulator-layout">
           <div className="simulator-chat-area">
@@ -221,6 +254,8 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
               <NodeJumpPicker chatbotId={chatbotId} disabled={sending} onSubmit={(nodeId) => void handleNodeJump(nodeId)} />
             </div>
             <RagUsageToggle checked={useRag} onChange={setUseRag} disabled={sending} />
+            <ApiModeToggle mode={apiMode} onChange={setApiMode} liveDisabled={Boolean(liveDisabledReason)} liveDisabledReason={liveDisabledReason} />
+            {apiMode === 'MOCK' && <MockResponseSelector value={mockResponse} onChange={setMockResponse} />}
             <MessageComposer disabled={sending} onSend={handleSend} />
           </div>
           <SessionStatePanel state={state ?? null} />

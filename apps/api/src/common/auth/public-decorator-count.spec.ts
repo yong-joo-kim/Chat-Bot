@@ -21,6 +21,8 @@ import { SimulationController } from '../../simulation/simulation.controller';
 import { StatsController } from '../../stats/stats.controller';
 import { AnswerSettingsController } from '../../answer-settings/answer-settings.controller';
 import { EmbeddingController } from '../../embedding/embedding.controller';
+import { ApiConnectionsController } from '../../api-connections/api-connections.controller';
+import { ApiCallLogsController } from '../../legacy-api/api-call-logs.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -70,7 +72,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 19개 컨트롤러 전체에서 @Public() 총개수가 정확히 6건이다', () => {
+  it('전수 스캔: 등록된 21개 컨트롤러 전체에서 @Public() 총개수가 정확히 6건이다', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -92,6 +94,9 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       StatsController,
       AnswerSettingsController,
       EmbeddingController,
+      // [No.26 레거시 API 연동] 신규 컨트롤러 2개 — 둘 다 @Public() 0건(FR-0-100).
+      ApiConnectionsController,
+      ApiCallLogsController,
     ];
 
     const publicHandlers: string[] = [];

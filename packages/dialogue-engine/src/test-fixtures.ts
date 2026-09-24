@@ -85,6 +85,34 @@ export function contextFormOutput(contextVariableId: string): DialogOutput {
   return { type: 'CONTEXT_FORM', payload: { contextVariableId } };
 }
 
+/** [No.26] v2 `API_CONDITION` 아웃풋 fixture. */
+export function apiConditionOutputV2(overrides: {
+  connectionId?: string;
+  method?: 'GET' | 'POST';
+  path?: string;
+  conditions?: Array<{ path: string; operator: 'EQ' | 'NEQ' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'CONTAINS' | 'EXISTS'; value?: string; nextNodeId: string }>;
+  defaultNodeId?: string;
+  failureNodeId?: string;
+  responseMappings?: Array<{ name: string; path: string; required?: boolean; maxLength?: number }>;
+}): DialogOutput {
+  return {
+    type: 'API_CONDITION',
+    payload: {
+      version: 2,
+      connectionId: overrides.connectionId ?? uuid('conn'),
+      method: overrides.method ?? 'GET',
+      path: overrides.path ?? '/orders/1',
+      pathParams: [],
+      query: [],
+      body: [],
+      responseMappings: overrides.responseMappings ?? [],
+      conditions: overrides.conditions ?? [],
+      defaultNodeId: overrides.defaultNodeId,
+      failureNodeId: overrides.failureNodeId,
+    },
+  } as unknown as DialogOutput;
+}
+
 export function makeNode(overrides: Partial<DialogNode> = {}): DialogNode {
   return {
     id: uuid('node'),

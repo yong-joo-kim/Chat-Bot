@@ -4,6 +4,8 @@ import type { ApiErrorCode } from '@chat-bot/shared-types';
 export interface ApiExceptionDetail {
   field: string;
   message: string;
+  /** 대상이 여러 챗봇에 걸치는 전역 자원 참조 목록에서만 채운다(`ApiErrorDetailSchema`와 동일). */
+  chatbotId?: string;
 }
 
 export interface ApiExceptionBody {

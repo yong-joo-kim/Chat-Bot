@@ -20,6 +20,10 @@ export const SESSION_EXPIRED_MESSAGE = '오랜 시간 응답이 없어 이전 �
 export const SESSION_SWITCH_MESSAGE = '진행 중이던 이전 요청은 취소하고 새 요청으로 안내할게요.';
 export const SKIP_TOKENS = ['건너뛰기', '스킵', 'skip'];
 
+/** [No.26] 외부 API 실패/불일치 고정 문구(§5.6, FR-N2-24 내부 용어 금지 규약 준수). */
+export const API_FAILURE_NOTICE = '지금은 요청하신 정보를 확인할 수 없어요. 잠시 후 다시 시도해 주세요.';
+export const API_NO_MATCH_NOTICE = '확인한 결과에 맞는 안내를 찾지 못했어요. 다른 방법으로 문의해 주세요.';
+
 /** 기존 `simulate`의 의도 단독 매칭 문구를 글자 그대로 재현하기 위한 상수 함수(ADR-0008 §5). */
 export function intentOnlyResponse(intentId: string, matchedExample: string): string {
   return `[${intentId}] 의도로 매칭되었습니다 (예문: "${matchedExample}")`;

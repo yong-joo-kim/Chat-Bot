@@ -130,7 +130,9 @@ export function NodesListPage(): JSX.Element {
   async function handleCopy(node: DialogNodeListItem): Promise<void> {
     try {
       const copy = await dialogNodesApi.copy(chatbot.id, node.id);
-      showToast(msg.copySuccess(copy.name.replace(' (사본)', '')));
+      const excludedCount = copy.excludedLegacyApiOutputCount;
+      const baseName = copy.name.replace(' (사본)', '');
+      showToast(excludedCount > 0 ? `${msg.copySuccess(baseName)} ${MESSAGES.dialogue.outputFields.copyExcludedLegacyApi(excludedCount)}` : msg.copySuccess(baseName));
       void load();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : MESSAGES.errors.generic);

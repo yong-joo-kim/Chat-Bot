@@ -47,8 +47,9 @@ function buildDeps() {
   const ragService = { attempt: jest.fn().mockResolvedValue({ wouldUseRag: false }) };
   const cancelRegistry = { isCancelled: jest.fn().mockReturnValue(false), cancel: jest.fn(), clear: jest.fn() };
   const config = { get: jest.fn().mockReturnValue(undefined) };
+  const apiConnectionCatalog = { loadMockSources: jest.fn().mockResolvedValue(new Map()) };
 
-  return { prisma, bundleService, embeddingFactory, vectorCache, answerSettingsCache, runEmbedding, overlayBuilder, ragService, cancelRegistry, config, storedResults };
+  return { prisma, bundleService, embeddingFactory, vectorCache, answerSettingsCache, runEmbedding, overlayBuilder, ragService, cancelRegistry, config, apiConnectionCatalog, storedResults };
 }
 
 describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () => {
@@ -66,6 +67,7 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.ragService as never,
       deps.cancelRegistry as never,
       deps.config as never,
+      deps.apiConnectionCatalog as never,
     );
 
     const result = await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -85,6 +87,7 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.ragService as never,
       deps.cancelRegistry as never,
       deps.config as never,
+      deps.apiConnectionCatalog as never,
     );
 
     const result = await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -110,6 +113,7 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.ragService as never,
       deps.cancelRegistry as never,
       deps.config as never,
+      deps.apiConnectionCatalog as never,
     );
 
     await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -158,6 +162,7 @@ describe('TestRunExecutor — RAG 실행당 상한 강제(FR-V2-20, AC-V3-11)', 
       deps.ragService as never,
       deps.cancelRegistry as never,
       deps.config as never,
+      deps.apiConnectionCatalog as never,
     );
 
     await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: true });

@@ -199,4 +199,37 @@ describe('NodesListPage', () => {
     expect(await screen.findByText('노드 편집 화면')).toBeInTheDocument();
     void dialog;
   });
+
+  // [No.26 1차 코드리뷰 반영] `dialogNodesApi.copy`가 `DialogNodeCopyResponse`(shared-types 정식 타입)를
+  // 반환하도록 계약이 확장됐다 — `as unknown as` 캐스팅 없이 `excludedLegacyApiOutputCount`를 읽는다.
+  it('복사 시 excludedLegacyApiOutputCount > 0이면 토스트에 이전 형식 API 조건 제외 안내가 함께 뜬다', async () => {
+    const user = userEvent.setup();
+    mockCopy.mockResolvedValue({
+      ...makeNodeItem({ name: '배송조회_응답 (사본)', enabled: false }),
+      excludedLegacyApiOutputCount: 1,
+    });
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '배송조회_응답 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '복사' }));
+
+    expect(await screen.findByText(/이전 형식 API 조건 1개는 복사되지 않았습니다/)).toBeInTheDocument();
+  });
+
+  it('복사 시 excludedLegacyApiOutputCount가 0이면 제외 안내 없이 기본 성공 토스트만 뜬다', async () => {
+    const user = userEvent.setup();
+    mockCopy.mockResolvedValue({
+      ...makeNodeItem({ name: '배송조회_응답 (사본)', enabled: false }),
+      excludedLegacyApiOutputCount: 0,
+    });
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: '배송조회_응답 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '복사' }));
+
+    expect(await screen.findByText("'배송조회_응답 (사본)'이 생성되었습니다. 새 노드는 비활성 상태입니다.")).toBeInTheDocument();
+    expect(screen.queryByText(/이전 형식 API 조건/)).not.toBeInTheDocument();
+  });
 });

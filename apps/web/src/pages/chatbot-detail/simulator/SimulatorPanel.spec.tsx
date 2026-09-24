@@ -13,6 +13,11 @@ vi.mock('../../../api/simulation', () => ({
   },
 }));
 
+// [No.26] SimulatorPanel이 `ApiModeToggle`의 `simulation:write` 판정을 위해 `useAuth()`를 새로 쓴다.
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ can: () => true }),
+}));
+
 const mockListOk = () => Promise.resolve({ items: [], total: 3 });
 const mockDialogNodesList = vi.fn();
 const mockDialogNodesFindOne = vi.fn();

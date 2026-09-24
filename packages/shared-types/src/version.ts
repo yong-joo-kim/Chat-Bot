@@ -372,6 +372,10 @@ export const RestoreWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('RAG_NOT_CONFIGURED') }),
   z.object({ code: z.literal('REINDEX_IN_PROGRESS') }),
   z.object({ code: z.literal('SCHEMA_UPCASTED'), fromVersion: z.number().int(), toVersion: z.number().int() }),
+  // [No.26 신설] 레거시 API 연동 — §15. 전부 blocker 아님(FR-L8-2 · AC-L7-1).
+  z.object({ code: z.literal('API_CONNECTION_MISSING'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('API_CONNECTION_DISABLED'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('API_LEGACY_FORMAT'), count: z.number().int().nonnegative() }),
 ]);
 export type RestoreWarning = z.infer<typeof RestoreWarningSchema>;
 

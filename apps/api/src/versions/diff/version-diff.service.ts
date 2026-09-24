@@ -1,12 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  VersionAssetKind,
-  VersionChangeKind,
-  VersionDiffItemDetail,
-  VersionDiffQuery,
-  VersionDiffResponse,
-  VersionRef,
-} from '@chat-bot/shared-types';
+import type { DialogOutput, VersionAssetKind, VersionChangeKind, VersionDiffItemDetail, VersionDiffQuery, VersionDiffResponse, VersionRef } from '@chat-bot/shared-types';
+import { redactLegacyApiOutputs } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApiException } from '../../common/api.exception';
 import { VersionCaptureService } from '../capture/version-capture.service';
@@ -108,9 +102,15 @@ export class VersionDiffService {
       }
     };
 
-    const beforeEntity = listOf(base.envelope, kind).find((e) => e.id === itemId);
-    const afterEntity = listOf(target.envelope, kind).find((e) => e.id === itemId);
+    let beforeEntity = listOf(base.envelope, kind).find((e) => e.id === itemId);
+    let afterEntity = listOf(target.envelope, kind).find((e) => e.id === itemId);
     if (!beforeEntity && !afterEntity) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
+
+    // [No.26] 응답 가림(FR-L1-6·FR-L8-3) — 버전 차이 항목 상세도 v1 API_CONDITION을 가린다.
+    if (kind === 'NODE') {
+      if (beforeEntity?.outputs) beforeEntity = { ...beforeEntity, outputs: redactLegacyApiOutputs(beforeEntity.outputs as DialogOutput[]) };
+      if (afterEntity?.outputs) afterEntity = { ...afterEntity, outputs: redactLegacyApiOutputs(afterEntity.outputs as DialogOutput[]) };
+    }
 
     const change: VersionChangeKind = !beforeEntity ? 'ADDED' : !afterEntity ? 'REMOVED' : 'MODIFIED';
     const nameOf = (e: DiffEntity | undefined): string => {

@@ -15,6 +15,9 @@ export interface ShouldRunRagInput {
   normalizedLength: number;
   fallbackPolicy: FallbackPolicy;
   hasFallbackNode: boolean;
+  /** [No.26 추가] 원본 결과에 `apiCall`이 있었는가(외부 API 호출이 개입한 턴). true면 항상 false를
+   * 반환한다(FR-L4-12 · AC-L3-15) — 외부 API 실패는 문서 검색으로 덮을 사안이 아니다. 기본 false. */
+  apiTurn?: boolean;
 }
 
 /**
@@ -22,6 +25,7 @@ export interface ShouldRunRagInput {
  * 레이트리밋·`vllm_ready`(조건 ⑨)는 상태를 갖는 `RagGateService.tryAcquire()`가 별도로 담당한다.
  */
 export function shouldRunRag(input: ShouldRunRagInput): boolean {
+  if (input.apiTurn) return false; // 외부 API가 개입한 턴 — 조건 ⑩(FR-L4-12).
   if (!input.ragEnabled || !input.ragCompany) return false;
   if (input.judgeAnswered) return false; // 1단계가 이미 답했다 — 2단계로 갈 이유가 없다(폴백 도달 아님).
   if (input.blockedByFilter) return false;

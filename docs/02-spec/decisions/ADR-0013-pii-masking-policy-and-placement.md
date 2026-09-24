@@ -117,4 +117,16 @@ record(input: { chatbotId, channelType, sessionId, rawUserMessage, rawBotRespons
 - seed: **마스킹된 값만** 넣는다. seed에 원문 PII가 있으면 AC-P-8 검증이 seed 때문에 흔들린다.
 - `test-automation` 인계(우선순위 3위): AC-P-8을 `maskPii` 단위 테스트 + 통합 테스트 양쪽으로 커버. **`completionMessage` 치환 경로**(슬롯에 전화번호를 넣고 완료 문구에 반영 → 로그의 `botResponse` 확인)를 별도 케이스로 반드시 포함한다.
 - `code-reviewer` 인계: ① `ConversationLogService` 밖의 `conversationLog.create` 호출 0건 ② 마스킹 전 원문이 `logger`·예외 메시지·`trace`에 등장하지 않는지.
+
+
+---
+
+## 갱신 (2026-09-24 — No.26: 네 번째 적용 지점 = 레거시 송신, 연결 단위 원문 예외)
+
+레거시 API 연동(No.26, **ADR-0034 §9**)의 외부 송신이 **네 번째 적용 지점**이 된다(저장 · RAG 송신 · 증강 송신 · **레거시 송신**). 정책·구현은 불변이며 **함수는 여전히 1벌**(`packages/pii-mask`)이다.
+
+- **대상**: 요청 바인딩 중 **폼 슬롯(사용자 입력) 값**만. 관리자가 작성한 상수 바인딩은 비적용(TC 문장 비적용 선례와 같은 판단).
+- **연결 단위 예외(이 ADR의 첫 예외)**: `allowRawPersonalData=true`인 연결에 한해 원문을 송신한다. 전화번호·주문번호로 조회하는 레거시 연동은 마스킹된 값(`010-****-5678`)으로는 동작하지 않기 때문이다. 이 설정은 **ADMIN만**(`security:write`), **연결 이름 재입력 확인**을 거쳐, **감사로그**(`ApiConnection UPDATE` before/after)에 남고, 콘솔·설계 점검에 "원문 송신" 텍스트 배지로 항상 보인다. 기본값은 false(마스킹 송신).
+- **예외 없는 곳**: 로그·trace·`ApiCallLog`·서버 로그에는 송신 값·응답 값이 **원문이든 마스킹본이든** 남지 않는다(`personalDataMasked` 플래그만). 관리자 시뮬레이터의 응답 변수 표시도 `maskPii` 후 보여 준다(§5 "관리자 본인이 방금 입력한 값" 예외는 외부 시스템이 돌려준 값에 적용되지 않는다).
+- 외부 응답값이 치환된 봇 응답은 기존대로 `ConversationLogService.record()`의 금지어 → PII 마스킹을 거친다(§4 `botResponse` 규칙 그대로).
 </content>

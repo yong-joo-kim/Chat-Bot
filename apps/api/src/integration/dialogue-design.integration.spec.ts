@@ -537,6 +537,56 @@ describe('대화 설계(No.5~9) 통합 테스트', () => {
       expect(err.details?.some((d) => d.message === badId)).toBe(true);
     });
 
+    it('No.26 M2-2: 아웃풋 참조가 깨지면 위치별 zod 경로(field)로 상세를 보고한다(DIALOG_MOVE/BUTTON/API_CONDITION)', async () => {
+      const { id: chatbotId } = await createChatbot();
+      const brokenA = '00000000-0000-0000-0000-0000000000a1';
+      const brokenB = '00000000-0000-0000-0000-0000000000b2';
+      const connectionId = '00000000-0000-0000-0000-0000000000c3';
+
+      const res = await jsonRequest('POST', `${base(chatbotId)}/dialog-nodes`, {
+        name: '깨진참조노드_필드경로',
+        nodeType: 'START',
+        outputs: [
+          { type: 'DIALOG_MOVE', payload: { targetNodeId: brokenA } },
+          { type: 'BUTTON', payload: { buttons: [{ label: '이동', action: 'NODE', value: brokenA }] } },
+          {
+            type: 'API_CONDITION',
+            payload: {
+              version: 2,
+              connectionId,
+              method: 'GET',
+              path: '/x',
+              pathParams: [],
+              query: [],
+              body: [],
+              responseMappings: [],
+              conditions: [{ path: 'status', operator: 'EQ', value: 'OK', nextNodeId: brokenA }],
+              defaultNodeId: brokenB,
+              failureNodeId: brokenB,
+            },
+          },
+        ],
+      });
+
+      expect(res.status).toBe(404);
+      const err = ApiErrorSchema.parse(res.body);
+      expect(err.code).toBe('INVALID_REFERENCE');
+
+      const fields = (err.details ?? []).map((d) => d.field).sort();
+      expect(fields).toEqual(
+        [
+          'outputs.0.payload.targetNodeId',
+          'outputs.1.payload.buttons.0.value',
+          'outputs.2.payload.conditions.0.nextNodeId',
+          'outputs.2.payload.defaultNodeId',
+          'outputs.2.payload.failureNodeId',
+        ].sort(),
+      );
+      // 같은 id가 여러 위치에서 참조되면 위치 수만큼 detail이 생긴다(brokenA=3곳, brokenB=2곳).
+      expect((err.details ?? []).filter((d) => d.message === brokenA)).toHaveLength(3);
+      expect((err.details ?? []).filter((d) => d.message === brokenB)).toHaveLength(2);
+    });
+
     it('AC-5-5: IMAGE 아웃풋에 altText가 없으면 400을 반환한다', async () => {
       const { id: chatbotId } = await createChatbot();
       const intent = await jsonRequest<{ intent: { id: string } }>('POST', `${base(chatbotId)}/intents`, { name: '이미지조건' });

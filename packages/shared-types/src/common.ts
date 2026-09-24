@@ -130,12 +130,17 @@ export const ApiErrorCode = z.enum([
   'DEPLOY_SCHEDULE_PRECONDITION_FAILED',
   'VERSION_REFERENCED_BY_SCHEDULE',
   'RESTORE_BUSY',
+  // 레거시 API 연동(No.26) 그룹 추가(legacy-api-integration-설계.md §12.3) — 2종.
+  'API_OUTPUT_LEGACY_FORMAT',
+  'API_CONNECTION_IN_USE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 
 export const ApiErrorDetailSchema = z.object({
   field: z.string(),
   message: z.string(),
+  /** 전역 자원(API 연결 등)의 참조 목록처럼 대상이 여러 챗봇에 걸칠 때만 채운다 — 딥링크용(No.26). */
+  chatbotId: z.string().optional(),
 });
 export type ApiErrorDetail = z.infer<typeof ApiErrorDetailSchema>;
 

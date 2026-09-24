@@ -182,3 +182,16 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - **챗봇 그룹은 조직 경계가 아니라 분류(폴더)다**(No.1). 통계 합산의 권한 문제는 "그룹별 접근 제한"이 생길 때 비로소 발생한다.
 - **재검토 트리거**: 그룹별 접근 제한/멀티테넌시 도입(No.45) 또는 고객사가 "통계만 보는 역할"을 요구할 때. 그때 통합 통계의 스코프 판정 함수(`stats/lib/scope-filter.ts` 1곳)가 "허용된 그룹 집합"을 받도록 교체한다(ADR-0033 §7 ④).
 - 감수 비용 2의 나머지(명명 불일치 2건 — `chatbot:write`로 그룹 삭제, `chatbot:read`로 대시보드)는 그대로 둔다. 그룹 삭제가 보관으로 처리되는 경우(ADR-0002 갱신)에도 권한은 `chatbot:write` 그대로다.
+
+
+---
+
+## 갱신 (2026-09-24 — No.26 레거시 API 연동: 신규 권한 0종, 연결 관리 = `security:*`)
+
+레거시 API 연동(No.26, ADR-0034 §10)은 **신규 권한을 만들지 않는다**(PM 확정 P-12). `Permission` 15종 · `ROLE_PERMISSIONS` · 공개 경로 6곳 · 판정 순서는 전부 불변이다.
+
+- **연결 CRUD·연결 테스트 = `security:write`, 연결 목록·상세 = `security:read`**(ADMIN) — "어디로 나갈 수 있는가"는 외부 송신 경계이며 금지어·로그인 정책과 같은 보안 설정 도메인이다. "동작이 바꾸는 자원을 기준으로 권한을 정한다"에 따라 자원 = 전역 보안 설정.
+- 노드 편집기의 **연결 선택 목록·목 샘플 응답 = `dialogue:read`** — URL·시크릿 참조·인증 방식을 싣지 않는다. EDITOR는 등록된 연결을 **쓰기만** 한다(노드 저장 = 기존 `dialogue:write`).
+- 호출 로그 = `chatbot:read`.
+- **시뮬레이터 실제 호출**: 가드는 기존 `simulation:read` 그대로 두고 서비스가 `simulation:write`를 재확인한다(`deploy-schedule.service.ts`의 `hasPermission` 선례). 불충족은 `403`이 아니라 **목으로 격하 + 사유 안내**다 — VIEWER의 시뮬레이터 사용 자체를 막지 않으면서 VIEWER발 외부 호출을 막는다.
+- VIEWER가 `dialogue:read`로 v1 `API_CONDITION`의 평문 헤더 토큰을 읽을 수 있던 노출은 권한 변경이 아니라 **응답 가림**으로 해소한다(ADR-0034 §7 — 권한을 올리면 VIEWER의 노드 조회 자체가 막힌다).

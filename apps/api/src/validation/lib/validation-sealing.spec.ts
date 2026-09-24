@@ -126,6 +126,12 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
     }
   });
 
+  it('8) validation/**에 legacy-api/ import가 0건이다(레거시 API 연동 No.26, FR-0-102 — TC/비교는 항상 목)', () => {
+    const importRe = /from\s+['"][^'"]*legacy-api\//;
+    const offenders = validationFileContents.filter(({ content }) => importRe.test(content)).map(({ f }) => f);
+    expect(offenders).toEqual([]);
+  });
+
   it('7) @Public() 핸들러 수는 저장소 전체에서 정확히 6개다(변동 없음 — 이 그룹은 공개 경로를 하나도 추가하지 않는다, FR-0-66)', () => {
     const controllerFiles = collectAllApiControllerFiles();
     expect(controllerFiles.length).toBeGreaterThan(10);

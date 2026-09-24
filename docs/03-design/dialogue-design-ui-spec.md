@@ -6,6 +6,8 @@
 > **준수 기준**: `docs/03-design/UIUX_준수기준.md`(전 항목, 특히 §3 드래그앤드롭 금지·키보드 동등조작)
 > **작성**: ui-designer · 2026-09-19 · **다음 단계**: `backend-implementer` → `frontend-implementer`
 > **범위 경계**: 실제 React 컴포넌트 코드는 작성하지 않는다. 여기서 정의한 화면/라우트/컴포넌트/props/문구는 `frontend-implementer`가 구현 기준으로 그대로 사용한다. 드래그앤드롭 비주얼 캔버스는 요구사항 §4.5.1·§9.2에 따라 이 문서에서도 다루지 않는다(리스트/폼 기반).
+>
+> **[2026-09-24 갱신 — No.26 레거시 API 연동]** §4.2.1 ⑫행·주석과 §8 미결정 항목 1건을 갱신했다. `API_CONDITION` v2(연결 레지스트리 기반) 편집 폼은 이 문서가 아니라 `docs/03-design/legacy-api-integration-ui-spec.md` §4.2에서 정의한다 — 이 문서는 **v1(이전 형식) 노드의 읽기 전용 표시**만 계속 다룬다.
 
 ---
 
@@ -194,7 +196,7 @@ props: { severity: 'ERROR' | 'WARNING' | 'INFO'; label?: string }  // label 없�
 | `HomonymPolicyBadge` | 동음이의어 목록(`ASK`/`DEFAULT_MEANING`/`IGNORE`) | "되묻기"(ASK) / "기본의미 사용"(DEFAULT_MEANING) / "보정 안 함"(IGNORE) |
 | `FaqCategoryBadge` | FAQ 목록/필터(`FAQ`/`SMALL_TALK`/`SELF_SERVICE`/`ERROR_RESPONSE`) | "자주묻는질문" / "스몰톡" / "셀프서비스" / "오류응답" — 색상 4종 고정 배열 |
 | `ImportRowErrorBadge` | 검증 리포트 오류 코드 | `EMPTY_NAME`→"이름 없음", `EMPTY_VALUE`→"값 없음", `TOO_LONG`→"길이 초과", `INVALID_CHAR`→"허용되지 않는 문자", `DUPLICATE_IN_FILE`→"파일 내 중복", `SYNONYM_CONFLICT`→"동의어 충돌", `INVALID_CATEGORY`→"분류 오류" |
-| `UnsupportedOutputBadge` | 아웃풋 편집 폼(`SCENARIO`/`SURVEY`/`API_CONDITION`) | 고정 문구 "이번 버전에서는 실행되지 않습니다(저장·정의만 가능)" + INFO 계열 배지 스타일(FR-5-15) |
+| `UnsupportedOutputBadge` | 아웃풋 편집 폼(`SCENARIO`/`SURVEY`/**v1(이전 형식)** `API_CONDITION` — [No.26] v2는 배지 없음, 판정은 공용 `isUnsupportedOutput()`) | 고정 문구 "이번 버전에서는 실행되지 않습니다(저장·정의만 가능)" + INFO 계열 배지 스타일(FR-5-15) |
 | `ConditionSummaryChips` | 노드 목록 행의 조건 요약 | `intents: ResourceRef[]`, `keywords: ResourceRef[]`, `context?: ResourceRef`를 각각 성격이 다른 칩(테두리색 구분+레이블 "의도:"/"키워드:"/"컨텍스트:")으로 표시. 조건 0개(START/FALLBACK)는 "조건 없음" 텍스트 |
 | `OutputTypeIconList` | 노드 목록 행의 아웃풋 요약 | `outputTypes: DialogOutputType[]`를 아이콘+개수 순서로 나열(예: "¶×2 ▦×1") — §5.2 아이콘표 참고 |
 | `LinkedNodeCountBadge` | 의도/키워드/컨텍스트 목록 | "노드 {n}건에서 사용 중" — 0이면 배지 자체를 흐린 회색으로(삭제 가능함을 암시하되 색상만으로 전달하지 않도록 텍스트 "미사용"도 병기) |
@@ -291,6 +293,7 @@ EmptyState: "아직 대화 노드가 없습니다."
 - 반복 노드(`repeated: true`)는 "↩ 반복" 텍스트를 붙이고 자식을 렌더링하지 않는다(무한 렌더 방지, FR-5-19).
 - `orphanNodes`(어떤 루트에서도 도달하지 않는 노드)는 트리 하단에 별도 목록으로 나열한다. `FALLBACK` 노드는 원래 진입 경로가 없는 것이 정상이므로 경고색을 쓰지 않는다(그 외 `NORMAL` 고아 노드는 §4.1.2 설계 점검의 `ORPHAN_NODE`가 이미 다룬다 — 이 패널은 순수 열람용, 배지 표시는 하지 않는다).
 - 빈 트리(노드 0건 또는 루트 없음)는 패널 내부에 `EmptyState`: "표시할 흐름이 없습니다."
+- **[No.26]** `API_CONDITION`(v1·v2) 조건 분기 대상은 자식 항목 `via: 'API_BRANCH'`(레이블 "API 분기")로 트리에 표시된다. 세부는 `legacy-api-integration-ui-spec.md` §4.6을 참고.
 
 ### 4.1.2 설계 점검 (`DesignValidationPanel`)
 
@@ -318,6 +321,7 @@ EmptyState: "아직 대화 노드가 없습니다."
 - 바로가기 링크는 대상이 노드면 `/dialogue/nodes/:id`, 의도면 `/dialogue/intents?resource=intent&edit=:id`처럼 각 리소스의 편집 경로로 연결한다(§0.2의 딥링크 쿼리 활용).
 - 로딩 중에는 패널 내부에 `SkeletonRow` 3~4개, 실패(5xx)는 `ErrorState` + "다시 시도".
 - 챗봇 상태 전이 컨트롤(`StatusTransitionControls`의 "활성화" 버튼)은 이 화면 것이 아니라 §S3 상세 헤더 소관이지만, `ERROR`/`WARNING`이 있는 상태로 "활성화"를 누르면(FR-5-17) 확인 모달에 "설계 점검에서 발견된 문제가 있습니다({error}건 오류, {warning}건 주의). 그래도 운영중으로 전환하시겠습니까?"를 추가한다 — 이 문구 삽입은 `frontend-implementer`가 기존 `StatusTransitionControls` 컴포넌트를 이 그룹의 검증 결과와 연결하는 통합 작업이 필요함을 표시만 해 둔다(선택적 개선, No.5 필수 범위는 D1 패널 표시까지).
+- **[No.26]** `API_CONDITION` 관련 신규 진단 코드 11종(`API_OUTPUT_NOT_LAST`·`API_MULTIPLE_OUTPUTS`·`API_NESTED_CALL`·`API_LEGACY_FORMAT`·`API_SLOT_BINDING_UNREACHABLE`·`API_FAILURE_BRANCH_MISSING`·`API_TOKEN_IN_URL_FIELD`·`BROKEN_REFERENCE`(연결 없음)·`API_CONNECTION_UNAVAILABLE`·`API_CONNECTION_INSECURE`·`API_PERSONAL_DATA_LOOKUP`/`API_RAW_PERSONAL_DATA`)이 이 패널에 같은 `DesignIssueRow` 형식으로 추가된다. 문구·심각도는 `legacy-api-integration-ui-spec.md` §4.6을 참고.
 
 ### 상태별 UI
 
@@ -408,9 +412,9 @@ EmptyState: "아직 대화 노드가 없습니다."
 | ⑦ | 전화연결 ☎ | `label`(1~40), `phoneNumber`(전화번호 형식) | `label` | 저장 시 `tel:` 링크로 렌더링됨을 도움말로 안내 |
 | ⑧ | 폼 시작 ☰ | `contextVariableId` → `ResourcePickerField(resourceType='context', multiple=false)` | 리소스 선택기 입력창 | 선택한 컨텍스트의 슬롯 수를 옆에 "(슬롯 3개)"로 표시 |
 | ⑨ | 노드 이동 ↪ | `targetNodeId` → `ResourcePickerField(resourceType='node', multiple=false, excludeIds=[현재노드id])` | 리소스 선택기 입력창 | 도움말: "이동 후 남은 아웃풋은 실행되지 않고, 대상 노드의 아웃풋으로 이어집니다." 순환 가능성은 저장을 막지 않고 설계 점검(D1)에서 경고 |
-| ⑩ | 시나리오 연동 ◈ | `scenarioKey`(1~100), `params?`(key-value 목록, 최대 20) | `scenarioKey` | `UnsupportedOutputBadge` 표시(FR-5-15) |
+| ⑩ | 시나리오 연동 ◈ | `scenarioKey`(1~100), `params?`(key-value 목록, 최대 20) | `scenarioKey` | `UnsupportedOutputBadge` 표시(FR-5-15) — **[No.26 확인]** `SCENARIO`는 이 그룹에서도 미지원으로 유지된다(요구사항 J-1) |
 | ⑪ | 설문 연동 ▥ | `surveyId`(1~100) | `surveyId` | `UnsupportedOutputBadge` 표시 |
-| ⑫ | API 조건분기 ⇄ | `method`(셀렉트), `url`(URL), `headers?`(key-value 목록, 값 입력은 `type="password"` 스타일 토글 "표시/가리기"), `bodyTemplate?`(textarea, 4000자), `conditions`(`ReorderableList`, 1~10: `path`,`operator`셀렉트 8종,`value?`,`nextNodeId`→`ResourcePickerField(node)`) | `method` | `UnsupportedOutputBadge` 표시. `headers` 값 마스킹 도움말: "저장은 평문으로 되며, 화면에서는 가려서 표시됩니다."(NFR-S5) |
+| ⑫ | API 조건분기 ⇄ | **[No.26 갱신, 2026-09-24]** 이 행은 이제 **v1(이전 형식) 노드의 읽기 전용 표시**만 설명한다. 필드: 메서드·경로 요약(수정 불가, 텍스트), 헤더 **키와 개수만**(예: "헤더 2개(값은 표시되지 않습니다)" — 서버가 응답에서 값을 `[비공개]`로 가리므로 v1 편집기에 있던 "표시/가리기" 토글은 더 이상 없다), 본문 템플릿은 `[비공개]` 고정 텍스트, 조건 목록(읽기 전용, `path`/`operator`/`value`/다음 노드 링크는 그대로 보임 — 시크릿이 아니므로). 쓰기 입력은 없다. | — (읽기 전용 카드라 포커스 이동 대상 없음) | "이전 형식 — 실행되지 않습니다. 연결을 선택해 전환하세요" 배지(§4.2.1 하단 참고) + `연결로 전환` 버튼. **v2(연결 레지스트리 기반) `API 조건분기` 편집 폼은 이 표의 대상이 아니다** — 신규 폼(연결 선택·경로/쿼리/본문 바인딩·응답 매핑·조건·기본/실패 분기·샘플 미리보기)은 `docs/03-design/legacy-api-integration-ui-spec.md` §4.2(`ApiConditionEditorV2`)에서 정의한다. 그 폼에는 URL·헤더 직접 입력 필드가 없다 |
 
 **버튼 아이템(`ButtonItemSchema`) `action`별 `value` 입력 UI**(④ 버튼, ② 카드의 `buttons`, ⑫가 아닌 공용 서브컴포넌트 `ButtonItemEditor`):
 
@@ -420,7 +424,8 @@ EmptyState: "아직 대화 노드가 없습니다."
 | `LINK`(링크 열기) | URL 입력(`SafeUrlSchema`) |
 | `NODE`(노드로 이동) | `ResourcePickerField(resourceType='node', multiple=false)` |
 
-- ⑩⑪⑫ 카드는 상단에 `UnsupportedOutputBadge`("이번 버전에서는 실행되지 않습니다(저장·정의만 가능)")를 항상 노출한다(AC-5-7). 배지는 INFO 계열 색상(파랑)으로 경고가 아님을 표시하되 텍스트로 명확히 안내한다.
+- ⑩⑪ 카드는 상단에 `UnsupportedOutputBadge`("이번 버전에서는 실행되지 않습니다(저장·정의만 가능)")를 항상 노출한다(AC-5-7). 배지는 INFO 계열 색상(파랑)으로 경고가 아님을 표시하되 텍스트로 명확히 안내한다.
+- **[No.26]** ⑫는 **v1(이전 형식)일 때만** 위 §4.2.1 표의 읽기 전용 형태와 "이전 형식 — 실행되지 않습니다. 연결을 선택해 전환하세요" 배지(INFO가 아니라 WARNING 톤 — 일반 미지원과 달리 "전환하면 실행할 수 있다"는 차이를 배지 색으로도 구분)를 보여준다. **v2 `API_CONDITION`에는 배지가 없다**(정상적으로 실행되는 아웃풋이므로) — v2 폼과 "연결로 전환" 흐름의 전체 정의는 `legacy-api-integration-ui-spec.md` §4.2·§4.5를 따른다.
 - 아웃풋 카드 우측의 "⌫ 삭제" 버튼도 44×44px 이상이며, 삭제 시 확인 없이 즉시 제거(되돌리기는 저장 전까지 `Ctrl+Z` 같은 별도 기능 없음 — 단순 폼 상태이므로 "저장" 전에는 "취소"로 전체 되돌리기 가능).
 
 ### 필드-오류 매핑
@@ -880,6 +885,8 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 | `NOT_FOUND` | 임의 리소스 상세/편집 진입 | 목록: 토스트+재조회 / 편집 페이지: 전체 `ErrorState` + 목록으로 |
 | `INTERNAL_ERROR` / 미분류 | 전 화면 | 공통 토스트: "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." |
 
+**[No.26]** 신규 오류 코드(`API_OUTPUT_LEGACY_FORMAT`·`API_CONNECTION_IN_USE`)와 v2 편집 폼의 오류 반응은 `legacy-api-integration-ui-spec.md` §5에서 별도로 다룬다.
+
 ### 5.5 설계 점검 → 편집 이동 흐름 (D1 전용)
 
 ```
@@ -955,7 +962,7 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 공통 원칙(선행 문서 §8과 동일, 이 그룹에 특히 중요한 항목만 재확인):
 
 - **`ReorderableList`의 위/아래 버튼은 모바일에서도 드래그 대체 수단으로 축소되지 않는다** — 화면 폭에 관계없이 항상 명시적 버튼 2개를 유지한다(드래그앤드롭을 "터치 친화적"이라는 이유로 모바일에만 추가하는 것도 금지 — UIUX §3 요구가 화면 크기와 무관하게 적용됨).
-- 텍스트 영역(예문 목록, 답변, 완료 문구, API 조건분기 `bodyTemplate`)은 모든 폭에서 컨테이너 전체 너비를 사용한다(UIUX §5).
+- 텍스트 영역(예문 목록, 답변, 완료 문구)은 모든 폭에서 컨테이너 전체 너비를 사용한다(UIUX §5).
 - `ImportValidationReportTable`처럼 열이 많은 표는 모바일에서 가로 스크롤 컨테이너로 감싸되(무리하게 카드로 재구성하면 행 번호·열·오류코드의 대응 관계를 잃기 쉬움), 헤더는 `position: sticky`로 고정해 스크롤 중에도 열 의미를 유지한다.
 
 ---
@@ -970,5 +977,5 @@ FAQ/스몰톡/셀프서비스/오류응답을 분류 관리하고, 중복·유�
 6. **미결정/후속 확인 필요**
    - D1의 "활성화 시 설계 점검 경고 확인 모달" 통합(§4.1.2 말미)은 이번 문서에서 설계만 제시했고 실제 `StatusTransitionControls` 통합 시점은 `frontend-implementer` 판단에 맡긴다(No.5 필수 범위 아님, 있으면 더 좋은 개선).
    - `DialogueSubNav`의 리소스 건수 배지(각 서브내비 항목 옆 "12"처럼)는 선택 사항으로 남겼다 — 구현 시 각 목록 최초 로드의 `total`을 전역 상태(예: 챗봇 단위 캐시)로 공유할지, 별도 카운트 엔드포인트 없이 생략할지는 성능/일정에 따라 결정한다.
-   - 노드 아웃풋의 `API_CONDITION.headers` 마스킹(표시/가리기 토글)의 구체적 시각 스펙(점 마스킹 문자 수 등)은 이 문서에서 규정하지 않았다 — 일반적인 비밀번호 입력 UI 관례를 따른다.
+   - **[No.26 갱신 — 해결됨]** 과거 "노드 아웃풋의 `API_CONDITION.headers` 마스킹(표시/가리기 토글)의 구체적 시각 스펙 미정" 항목은 이번 갱신으로 해소되었다 — v1 헤더는 서버 응답 단계에서 값이 아예 `[비공개]`로 가려지므로(§4.2.1 ⑫) 클라이언트에 "표시/가리기" 토글 UI 자체가 필요 없다. v2는 헤더 필드가 없다(연결 레지스트리 기반).
    - 모바일에서 `DialogueSubNav`를 바텀시트로 할지 탭 스트립으로 할지(§7)는 기존 그룹트리 모바일 구현체가 나온 뒤 그 패턴을 재사용하는 쪽으로 결정할 것을 권고한다(일관성 우선, 이 문서에서 강제하지 않음).

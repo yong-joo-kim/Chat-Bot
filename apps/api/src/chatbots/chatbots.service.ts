@@ -355,6 +355,8 @@ export class ChatbotsService {
       await tx.embeddingVector.deleteMany({ where: { chatbotId: id } });
       await tx.chatbotAnswerSetting.deleteMany({ where: { chatbotId: id } });
       await tx.ragCallLog.deleteMany({ where: { chatbotId: id } });
+      // [No.26] ApiCallLog는 FK가 없다(로그 규약) — 챗봇 영구삭제 시 서비스가 직접 동반 삭제한다(FR-L6-6).
+      await tx.apiCallLog.deleteMany({ where: { chatbotId: id } });
       await tx.augmentationSuggestion.deleteMany({ where: { chatbotId: id } });
       await tx.intentClassifierModel.deleteMany({ where: { chatbotId: id } });
       await tx.trainingJob.deleteMany({ where: { chatbotId: id } });

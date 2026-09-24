@@ -11,6 +11,7 @@ import {
 import { ButtonActionSchema, ConversationStateSchema, DialogueResolutionSchema, StateDiscardReason } from './dialogue-engine';
 import { ChatbotSkinSchema } from './chatbot';
 import { ThresholdPreviewCandidateSchema } from './answering';
+import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from './legacy-api';
 
 /**
  * 대화 1턴 처리(시뮬레이션/비교/공개 대화) 계약 — `quality-channel-설계.md` §4.2.
@@ -80,6 +81,10 @@ export const SimulateRequestSchema = z
     overlay: DialogueOverlaySchema.optional(),
     /** [신규] 명시적으로 켤 때만 2단계(RAG)를 실행한다(FR-N2-3). 기본 false — 외부 호출·비용을 무심코 소모하지 않는다. */
     useRag: z.boolean().default(false),
+    /** [No.26 신설] 외부 API 호출 모드. 조건 불충족 시 서비스가 MOCK으로 격하한다(§6.2). */
+    apiMode: SimulateApiMode.default('MOCK'),
+    /** [No.26 신설] MOCK 모드의 응답 원천. 미지정 시 연결의 첫 번째 샘플을 쓴다. */
+    mockResponse: SimulateMockResponseSchema.optional(),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -126,6 +131,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   overlayApplied: z.boolean(),
   /** [신규] 1단계 top3 점수·구간 판정 + 2단계 사용 여부(FR-N3-10). `semanticEnabled`가 꺼져 있으면 undefined. */
   matchTrace: MatchTraceSchema.optional(),
+  /** [No.26 신설] 외부 API 호출이 있었던 턴에만 존재한다(§6.2). */
+  apiStep: ApiStepViewSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 

@@ -707,6 +707,83 @@ async function main(): Promise<void> {
   });
   await seedLearningQueue(learningQueueBot.id, learningQueueBot.groupId, now);
 
+  // [No.26 레거시 API 연동] 데모 연결 1건 + v2 노드 3건(시뮬레이터 목 데모 — legacy-api-integration-설계.md §3.4).
+  // baseUrl은 `.invalid` TLD라 절대 해석되지 않는다(LIVE는 항상 NETWORK_ERROR, 외부 네트워크 호출 0건).
+  await prisma.apiConnection.deleteMany({ where: { nameNormalized: normalizeText('샘플 주문 조회') } });
+  const apiConnection = await prisma.apiConnection.create({
+    data: {
+      name: '샘플 주문 조회',
+      nameNormalized: normalizeText('샘플 주문 조회'),
+      baseUrl: 'https://legacy.example.invalid/api',
+      allowedMethods: JSON.stringify(['GET']),
+      authType: 'NONE',
+      timeoutMs: 3000,
+      rateLimitPerMin: 120,
+      sampleResponses: JSON.stringify([
+        { label: '배송중', httpStatus: 200, body: { data: { status: 'SHIPPED', delivery: { eta: '09/26' } } } },
+        { label: '준비중', httpStatus: 200, body: { data: { status: 'PREPARING' } } },
+      ]),
+      enabled: true,
+    },
+  });
+
+  const orderKeyword = await prisma.keyword.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '주문번호',
+      nameNormalized: normalizeText('주문번호'),
+      synonyms: JSON.stringify(['주문 조회', '주문확인']),
+    },
+  });
+
+  const orderShippedNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '주문조회_배송중',
+      nameNormalized: normalizeText('주문조회_배송중'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '배송 중이에요. 도착 예정일: {api.eta}' } }]),
+    },
+  });
+  const orderPreparingNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '주문조회_준비중',
+      nameNormalized: normalizeText('주문조회_준비중'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '상품을 준비 중이에요. 곧 배송을 시작할게요.' } }]),
+    },
+  });
+  const orderLookupNode = await prisma.dialogNode.create({
+    data: {
+      chatbotId: supportBot.id,
+      name: '주문조회_API',
+      nameNormalized: normalizeText('주문조회_API'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([
+        {
+          type: 'API_CONDITION',
+          payload: {
+            version: 2,
+            connectionId: apiConnection.id,
+            method: 'GET',
+            path: '/orders/1',
+            pathParams: [],
+            query: [],
+            body: [],
+            responseMappings: [{ name: 'eta', path: 'data.delivery.eta', required: false, maxLength: 50 }],
+            conditions: [{ path: 'data.status', operator: 'EQ', value: 'SHIPPED', nextNodeId: orderShippedNode.id }],
+            defaultNodeId: orderPreparingNode.id,
+          },
+        },
+      ]),
+    },
+  });
+  await prisma.dialogNodeKeyword.create({ data: { nodeId: orderLookupNode.id, keywordId: orderKeyword.id } });
+
   // eslint-disable-next-line no-console
   console.log(
     `Seed 완료: support=${supportBot.id}(100 logs), empty=${emptyBot.id}(0 logs), archived=${archivedBot.id}(20 logs), ` +

@@ -66,6 +66,8 @@ export const AuditTargetType = z.enum([
   // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §8.4) — 생성/수정/취소/재개 감사 대상.
   // 실행 자체는 기존 액션(RESTORE·STATUS_CHANGE·UPDATE|CREATE, targetType Chatbot|Channel)으로 남는다.
   'DeploySchedule',
+  // 레거시 API 연동(No.26) 그룹 추가(legacy-api-integration-설계.md §11) — 연결 CRUD 감사 대상.
+  'ApiConnection',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -85,6 +87,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   TestCaseSet: '검증 세트',
   ChatbotVersion: '챗봇 버전',
   DeploySchedule: '배포 예약',
+  ApiConnection: 'API 연결',
 };
 
 /**

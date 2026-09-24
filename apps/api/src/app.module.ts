@@ -34,6 +34,8 @@ import { ClassifierModule } from './classifier/classifier.module';
 import { ValidationModule } from './validation/validation.module';
 import { VersionsModule } from './versions/versions.module';
 import { DeploySchedulesModule } from './deploy-schedules/deploy-schedules.module';
+import { ApiConnectionsModule } from './api-connections/api-connections.module';
+import { LegacyApiModule } from './legacy-api/legacy-api.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -76,6 +78,8 @@ import { validate } from './config/env.validation';
     ValidationModule,
     VersionsModule,
     DeploySchedulesModule,
+    ApiConnectionsModule,
+    LegacyApiModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

@@ -1,22 +1,25 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import type {
-  ApiConditionItem,
-  ButtonItem,
-  DialogOutput,
-  DialogOutputType,
-} from '@chat-bot/shared-types';
+import { useEffect, useRef, useState } from 'react';
+import type { ButtonItem, DialogOutput, DialogOutputType } from '@chat-bot/shared-types';
+import { isApiConditionV2, isUnsupportedOutput } from '@chat-bot/shared-types';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ReorderableList } from '../../../components/ReorderableList';
 import { ResourcePickerField } from '../../../components/ResourcePickerField';
 import { MESSAGES } from '../../../constants/messages';
 import { UnsupportedOutputBadge } from '../badges';
 import { ButtonItemEditor } from './ButtonItemEditor';
+import { ApiConditionEditorV2 } from './api-condition/ApiConditionEditorV2';
+import { LegacyApiConditionReadonlyCard } from './api-condition/LegacyApiConditionReadonlyCard';
+import { ConvertLegacyApiConditionDialog } from './api-condition/ConvertLegacyApiConditionDialog';
 
 export interface DialogOutputEditorProps {
   value: DialogOutput;
   onChange: (value: DialogOutput) => void;
   chatbotId: string;
   currentNodeId?: string;
+  /** [No.26] 이 노드의 인풋 조건에 걸린 컨텍스트 id — `ApiConditionEditorV2`의 슬롯 후보 계산용. */
+  nodeContextVariableId?: string | null;
+  /** [No.26] `API_OUTPUT_LEGACY_FORMAT` 저장 거부 시 v1 카드로 스크롤·포커스+강조(ui-spec §3.3-5). */
+  highlightLegacyToken?: number;
   /** DOM id 접두어(예: `output-3`) — 화면 내에서만 유일하면 되고 오류 필드 경로와는 별개다. */
   idPrefix: string;
   /** 서버 `details[].field` 경로 접두어(예: `outputs.3.payload`) — DOM id와 형식이 다를 수 있다. */
@@ -64,7 +67,21 @@ function defaultPayloadFor(type: DialogOutputType): DialogOutput {
     case 'SURVEY':
       return { type, payload: { surveyId: '' } };
     case 'API_CONDITION':
-      return { type, payload: { method: 'GET', url: '', conditions: [] } };
+      // [No.26] 신규 저장은 항상 v2(연결 레지스트리 기반)만 허용된다 — v1은 읽기 호환 전용(J-16).
+      return {
+        type,
+        payload: {
+          version: 2,
+          connectionId: '',
+          method: 'GET',
+          path: '/',
+          pathParams: [],
+          query: [],
+          body: [],
+          responseMappings: [],
+          conditions: [],
+        },
+      };
     default:
       return { type: 'TEXT', payload: { text: '' } };
   }
@@ -75,11 +92,6 @@ function newButtonItem(): ButtonItem & { key: string } {
   btnKeySeq += 1;
   return { key: `btn-${btnKeySeq}`, label: '', action: 'MESSAGE', value: '' };
 }
-let condKeySeq = 0;
-function newCondition(): ApiConditionItem & { key: string } {
-  condKeySeq += 1;
-  return { key: `cond-${condKeySeq}`, path: '', operator: 'EQ', nextNodeId: '' };
-}
 
 /** 아웃풋 12종 타입별 폼(ui-spec §4.2.1). 타입 변경 시 새 서브폼의 첫 필드로 포커스를 이동시킨다. */
 export function DialogOutputEditor({
@@ -87,6 +99,8 @@ export function DialogOutputEditor({
   onChange,
   chatbotId,
   currentNodeId,
+  nodeContextVariableId = null,
+  highlightLegacyToken,
   idPrefix,
   errorFieldPrefix,
   fieldErrors,
@@ -94,6 +108,7 @@ export function DialogOutputEditor({
   const msg = MESSAGES.dialogue.outputFields;
   const prevTypeRef = useRef(value.type);
   const firstFieldRef = useRef<HTMLElement | null>(null);
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (prevTypeRef.current !== value.type) {
@@ -123,7 +138,7 @@ export function DialogOutputEditor({
         </select>
       </div>
 
-      {(value.type === 'SCENARIO' || value.type === 'SURVEY' || value.type === 'API_CONDITION') && <UnsupportedOutputBadge />}
+      {isUnsupportedOutput(value) && <UnsupportedOutputBadge />}
 
       {value.type === 'TEXT' && (
         <div className="form-field">
@@ -407,17 +422,50 @@ export function DialogOutputEditor({
         </div>
       )}
 
-      {value.type === 'API_CONDITION' && (
-        <ApiConditionEditor
-          value={value.payload}
-          onChange={(payload) => setPayload({ type: 'API_CONDITION', payload })}
-          chatbotId={chatbotId}
-          idPrefix={`${idPrefix}-api`}
-          firstFieldRef={firstFieldRef}
-          fieldErrors={fieldErrors}
-          errPrefix={errorFieldPrefix}
-        />
-      )}
+      {value.type === 'API_CONDITION' &&
+        (isApiConditionV2(value.payload) ? (
+          <ApiConditionEditorV2
+            value={value.payload}
+            onChange={(payload) => setPayload({ type: 'API_CONDITION', payload })}
+            chatbotId={chatbotId}
+            nodeContextVariableId={nodeContextVariableId}
+            errPrefix={errorFieldPrefix}
+            fieldErrors={fieldErrors}
+            firstFieldRef={firstFieldRef}
+          />
+        ) : (
+          <>
+            <LegacyApiConditionReadonlyCard
+              value={value.payload}
+              onConvert={() => setConvertConfirmOpen(true)}
+              highlightToken={highlightLegacyToken}
+            />
+            <ConvertLegacyApiConditionDialog
+              isOpen={convertConfirmOpen}
+              onCancel={() => setConvertConfirmOpen(false)}
+              onConfirm={() => {
+                const v1 = value.type === 'API_CONDITION' && !isApiConditionV2(value.payload) ? value.payload : null;
+                if (!v1) return;
+                const method = v1.method === 'GET' || v1.method === 'POST' ? v1.method : 'GET';
+                setPayload({
+                  type: 'API_CONDITION',
+                  payload: {
+                    version: 2,
+                    connectionId: '',
+                    method,
+                    path: '/',
+                    pathParams: [],
+                    query: [],
+                    body: [],
+                    responseMappings: [],
+                    conditions: v1.conditions.map((c) => ({ path: c.path, operator: c.operator, value: c.value, nextNodeId: c.nextNodeId })),
+                  },
+                });
+                setConvertConfirmOpen(false);
+              }}
+            />
+          </>
+        ))}
     </div>
   );
 }
@@ -469,184 +517,3 @@ function ButtonListEditor({
   );
 }
 
-/** ⑫ API 조건분기(FR-5-14) — 실행되지 않지만 저장/정의는 지원한다(AC-5-7). */
-function ApiConditionEditor({
-  value,
-  onChange,
-  chatbotId,
-  idPrefix,
-  firstFieldRef,
-  fieldErrors,
-  errPrefix,
-}: {
-  value: { method: string; url: string; headers?: Record<string, string>; bodyTemplate?: string; conditions: ApiConditionItem[] };
-  onChange: (v: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; url: string; headers?: Record<string, string>; bodyTemplate?: string; conditions: ApiConditionItem[] }) => void;
-  chatbotId: string;
-  idPrefix: string;
-  firstFieldRef: MutableRefObject<HTMLElement | null>;
-  fieldErrors: Record<string, string>;
-  errPrefix: string;
-}): JSX.Element {
-  const msg = MESSAGES.dialogue.outputFields;
-  const [showHeaders, setShowHeaders] = useState(false);
-  const headerEntries = Object.entries(value.headers ?? {});
-  const conditionRows = value.conditions.map((c, i) => ({ ...c, key: `${idPrefix}-cond-${i}` }));
-
-  function updateHeaders(entries: [string, string][]): void {
-    onChange({ ...value, headers: Object.fromEntries(entries.filter(([k]) => k.trim())) } as never);
-  }
-
-  return (
-    <div>
-      <div className="key-value-row">
-        <div className="form-field">
-          <label htmlFor={`${idPrefix}-method`}>{msg.apiMethod}</label>
-          <select
-            id={`${idPrefix}-method`}
-            ref={(el) => (firstFieldRef.current = el)}
-            value={value.method}
-            onChange={(e) => onChange({ ...value, method: e.target.value } as never)}
-          >
-            {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-field">
-          <label htmlFor={`${idPrefix}-url`}>{msg.apiUrl}</label>
-          <input id={`${idPrefix}-url`} type="text" value={value.url} onChange={(e) => onChange({ ...value, url: e.target.value } as never)} />
-          <InlineFieldError id={`${idPrefix}-url-error`} message={fieldErrors[`${errPrefix}.url`]} />
-        </div>
-      </div>
-
-      <div className="form-field">
-        <span className="field-label-static">{msg.apiHeaders}</span>
-        {headerEntries.map(([k, v], i) => (
-          <div key={i} className="key-value-row">
-            <input
-              type="text"
-              placeholder="key"
-              value={k}
-              onChange={(e) => {
-                const next = [...headerEntries];
-                next[i] = [e.target.value, v];
-                updateHeaders(next);
-              }}
-            />
-            <input
-              type={showHeaders ? 'text' : 'password'}
-              placeholder="value"
-              value={v}
-              onChange={(e) => {
-                const next = [...headerEntries];
-                next[i] = [k, e.target.value];
-                updateHeaders(next);
-              }}
-            />
-            <button type="button" className="btn btn-secondary" onClick={() => updateHeaders(headerEntries.filter((_, idx) => idx !== i))}>
-              {MESSAGES.dialogue.nodeForm.removeOutput}
-            </button>
-          </div>
-        ))}
-        <div className="dialogue-toolbar-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => updateHeaders([...headerEntries, ['', '']])}>
-            + 헤더 추가
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setShowHeaders((v) => !v)}>
-            {showHeaders ? msg.hideValue : msg.showValue}
-          </button>
-        </div>
-        <p className="field-hint">{msg.apiHeadersHelp}</p>
-      </div>
-
-      <div className="form-field">
-        <label htmlFor={`${idPrefix}-body`}>{msg.apiBody}</label>
-        <textarea
-          id={`${idPrefix}-body`}
-          maxLength={4000}
-          rows={3}
-          value={value.bodyTemplate ?? ''}
-          onChange={(e) => onChange({ ...value, bodyTemplate: e.target.value || undefined } as never)}
-        />
-      </div>
-
-      <div className="form-field">
-        <span className="field-label-static">{msg.apiConditions}</span>
-        <ReorderableList
-          items={conditionRows}
-          getKey={(c) => c.key}
-          onChange={(next) => onChange({ ...value, conditions: next.map(({ key: _key, ...rest }) => rest) } as never)}
-          minItems={1}
-          maxItems={10}
-          onAdd={() => onChange({ ...value, conditions: [...value.conditions, newCondition()] } as never)}
-          addLabel={msg.addCondition}
-          onRemove={(key) => onChange({ ...value, conditions: conditionRows.filter((c) => c.key !== key).map(({ key: _key, ...rest }) => rest) } as never)}
-          itemLabel={(c, i) => `${i + 1}번째 조건`}
-          renderItem={(c, index) => (
-            <div className="key-value-row">
-              <div className="form-field">
-                <label htmlFor={`${idPrefix}-cond-${index}-path`}>{msg.conditionPath}</label>
-                <input
-                  id={`${idPrefix}-cond-${index}-path`}
-                  type="text"
-                  value={c.path}
-                  onChange={(e) => {
-                    const next = [...conditionRows];
-                    next[index] = { ...c, path: e.target.value };
-                    onChange({ ...value, conditions: next.map(({ key: _key, ...rest }) => rest) } as never);
-                  }}
-                />
-              </div>
-              <div className="form-field">
-                <label htmlFor={`${idPrefix}-cond-${index}-op`}>{msg.conditionOperator}</label>
-                <select
-                  id={`${idPrefix}-cond-${index}-op`}
-                  value={c.operator}
-                  onChange={(e) => {
-                    const next = [...conditionRows];
-                    next[index] = { ...c, operator: e.target.value as ApiConditionItem['operator'] };
-                    onChange({ ...value, conditions: next.map(({ key: _key, ...rest }) => rest) } as never);
-                  }}
-                >
-                  {['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'CONTAINS', 'EXISTS'].map((op) => (
-                    <option key={op} value={op}>
-                      {op}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-field">
-                <label htmlFor={`${idPrefix}-cond-${index}-value`}>{msg.conditionValue}</label>
-                <input
-                  id={`${idPrefix}-cond-${index}-value`}
-                  type="text"
-                  value={c.value ?? ''}
-                  onChange={(e) => {
-                    const next = [...conditionRows];
-                    next[index] = { ...c, value: e.target.value || undefined };
-                    onChange({ ...value, conditions: next.map(({ key: _key, ...rest }) => rest) } as never);
-                  }}
-                />
-              </div>
-              <ResourcePickerField
-                id={`${idPrefix}-cond-${index}-next`}
-                label={msg.conditionNextNode}
-                resourceType="node"
-                chatbotId={chatbotId}
-                multiple={false}
-                value={c.nextNodeId || null}
-                onChange={(v) => {
-                  const next = [...conditionRows];
-                  next[index] = { ...c, nextNodeId: (v as string) ?? '' };
-                  onChange({ ...value, conditions: next.map(({ key: _key, ...rest }) => rest) } as never);
-                }}
-              />
-            </div>
-          )}
-        />
-      </div>
-    </div>
-  );
-}

@@ -2,7 +2,7 @@ import type { TraceStep } from '@chat-bot/shared-types';
 import { outputsToPlainText } from '@chat-bot/shared-types';
 import type { DialogOutput } from '@chat-bot/shared-types';
 
-const FALLBACK_TRACE_CODES = new Set(['FALLBACK_NODE', 'FALLBACK_FAQ', 'FALLBACK_DEFAULT', 'EMPTY_INPUT']);
+const FALLBACK_TRACE_CODES = new Set(['FALLBACK_NODE', 'FALLBACK_FAQ', 'FALLBACK_DEFAULT', 'EMPTY_INPUT', 'API_FIXED_NOTICE']);
 
 const BOT_RESPONSE_MAX_LENGTH = 2000;
 

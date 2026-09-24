@@ -8,9 +8,11 @@ import {
   type TraceStep,
 } from '@chat-bot/shared-types';
 import { resolveResponse } from './resolver';
-import type { ResolveOptions } from './resolver';
+import type { EngineResolution, ResolveOptions } from './resolver';
 import { resolveByNodeId } from './resolver';
 import { sanitizeConversationState } from './conversation-state';
+import { resumeAfterApiCall } from './api-call';
+import type { ApiCallSuspension, ApiStepResult } from './api-call';
 
 export interface DialogueTurnInput {
   message?: string;
@@ -22,6 +24,13 @@ export interface DialogueTurnResult extends DialogueResolution {
   nextState: ConversationState;
   /** 수신 봉투에서 폐기된 항목의 사유. 관리자 API만 노출한다(NFR-S1). */
   stateDiscarded: StateDiscardReason[];
+  /**
+   * [No.26] 정지했을 때만. 이때 `outputs`/`nextState`/`trace`는 "호출 실패(`NOT_EXECUTED`)" 가정의
+   * 폴백 결과다(FR-L4-9) — `apiCall`을 처리하지 않는 소비자도 빈 응답을 받지 않는다.
+   */
+  apiCall?: ApiCallSuspension;
+  /** [No.26] `resumeAfterApiCall` 결과에만 채워진다. */
+  apiStep?: ApiStepResult;
 }
 
 /**
@@ -30,6 +39,9 @@ export interface DialogueTurnResult extends DialogueResolution {
  * 전부 이 함수만 호출한다 — 엔진 단일 경로 원칙(FR-0-19).
  * `state`는 검증 전 원본을 그대로 받는다 — 항상 내부에서 `sanitizeConversationState`를 수행하므로
  * 호출부가 검증을 빠뜨릴 수 없다(NFR-S5를 구조로 보장).
+ * [No.26] `resolution.apiCall`이 있으면 "호출 실패(`NOT_EXECUTED`)" 가정의 폴백 결과를 본체로 동봉해
+ * 반환한다(§5.7, FR-L4-9) — 실제 호출은 `apps/api`의 `LegacyApiService.completeTurn()`이
+ * 이 함수의 반환값을 받아 `resumeAfterApiCall()`을 다시 호출해 완결한다.
  */
 export function resolveTurn(
   turn: DialogueTurnInput,
@@ -43,7 +55,7 @@ export function resolveTurn(
     clarifyTtlMs: options.clarifyTtlMs,
   });
 
-  let resolution: DialogueResolution;
+  let resolution: EngineResolution;
 
   if (turn.buttonAction && turn.buttonAction.kind === 'NODE') {
     resolution = resolveByNodeId(turn.buttonAction.nodeId, sanitized.contextSession, bundle, now, {
@@ -63,6 +75,30 @@ export function resolveTurn(
     code: 'STATE_DISCARDED',
     message: reason,
   }));
+
+  if (resolution.apiCall) {
+    const suspension = resolution.apiCall;
+    const mergedTrace = stateTrace.length > 0 ? [...stateTrace, ...suspension.resumeState.trace] : suspension.resumeState.trace;
+    const mergedSuspension: ApiCallSuspension = { ...suspension, resumeState: { ...suspension.resumeState, trace: mergedTrace } };
+
+    // `resumeAfterApiCall`은 `turn.apiCall`·`turn.stateDiscarded`만 읽는다 — 나머지 필드는
+    // 재계산되므로 자리표시자로 채운 뒤 타입만 맞춘다(부트스트랩, §5.7).
+    const stub = {
+      input: resolution.input,
+      normalizedInput: resolution.normalizedInput,
+      outputs: [],
+      nextSession: null,
+      unsupportedOutputs: [],
+      trace: [],
+      nextState: { version: CONVERSATION_STATE_VERSION, contextSession: null, pendingClarify: null },
+      stateDiscarded: sanitized.discarded,
+      apiCall: mergedSuspension,
+    } as DialogueTurnResult & { apiCall: ApiCallSuspension };
+
+    const polyfilled = resumeAfterApiCall(stub, { kind: 'NOT_EXECUTED' }, bundle, now, options);
+    return { ...polyfilled, apiCall: mergedSuspension };
+  }
+
   const trace = stateTrace.length > 0 ? [...stateTrace, ...resolution.trace] : resolution.trace;
 
   const nextState: ConversationState = {

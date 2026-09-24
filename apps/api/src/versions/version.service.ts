@@ -14,7 +14,7 @@ import type {
   VersionContentQuery,
   VersionCurrentStatus,
 } from '@chat-bot/shared-types';
-import { VERSION_TRIGGER_GROUPS } from '@chat-bot/shared-types';
+import { VERSION_TRIGGER_GROUPS, redactLegacyApiOutputs } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
@@ -141,7 +141,8 @@ export class VersionService {
         items = hydrated.bundle.homonyms;
         break;
       case 'NODE':
-        items = hydrated.bundle.dialogNodes;
+        // [No.26] 응답 가림(FR-L1-6·FR-L8-3) — v1 API_CONDITION 헤더 값·URL을 가린다.
+        items = hydrated.bundle.dialogNodes.map((n) => ({ ...n, outputs: redactLegacyApiOutputs(n.outputs) }));
         break;
       case 'CONTEXT':
         items = hydrated.bundle.contexts;

@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { ApiErrorCode } from '@chat-bot/shared-types';
+import type { ApiErrorCode, DialogNode, DialogOutput } from '@chat-bot/shared-types';
+import { getOutgoingNodeRefs } from '@chat-bot/dialogue-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 
 interface RefRow {
   id: string;
   name: string;
+  /** 전역 자원(API 연결 등)의 참조 목록처럼 대상이 여러 챗봇에 걸칠 때만 채운다(No.26 M-2). */
+  chatbotId?: string;
 }
 
 /**
@@ -21,7 +24,7 @@ export class ReferenceCheckService {
       code,
       409,
       message,
-      refs.map((r) => ({ field: r.id, message: r.name })),
+      refs.map((r) => ({ field: r.id, message: r.name, ...(r.chatbotId !== undefined ? { chatbotId: r.chatbotId } : {}) })),
     );
   }
 
@@ -128,22 +131,20 @@ export class ReferenceCheckService {
     }
   }
 
-  /** 노드 삭제 사전검사(FR-5-10) — DIALOG_MOVE 대상 / 버튼 NODE 액션 참조(JSON, EX-R-5). */
+  /**
+   * 노드 삭제 사전검사(FR-5-10) — `getOutgoingNodeRefs()` 재사용으로 규칙 1벌(J-17, AC-L1-7).
+   * DIALOG_MOVE 대상 / 버튼 NODE 액션 / [No.26] API 조건분기(v1·v2 모두)의 `conditions[].nextNodeId`·
+   * `defaultNodeId`·`failureNodeId` 참조를 모두 검사한다.
+   */
   async assertNodeDeletable(chatbotId: string, nodeId: string): Promise<void> {
     const candidates = await this.prisma.dialogNode.findMany({ where: { chatbotId }, select: { id: true, name: true, outputs: true } });
     const referencing: RefRow[] = [];
     for (const n of candidates) {
       if (n.id === nodeId) continue;
       try {
-        const outputs = JSON.parse(n.outputs) as Array<{
-          type: string;
-          payload?: { targetNodeId?: string; buttons?: Array<{ action: string; value: string }> };
-        }>;
-        const refersTarget = outputs.some((o) => o.type === 'DIALOG_MOVE' && o.payload?.targetNodeId === nodeId);
-        const refersButton = outputs.some(
-          (o) => o.payload?.buttons?.some((b) => b.action === 'NODE' && b.value === nodeId) ?? false,
-        );
-        if (refersTarget || refersButton) referencing.push({ id: n.id, name: n.name });
+        const outputs = JSON.parse(n.outputs) as DialogOutput[];
+        const { moveTargets, buttonTargets, apiTargets } = getOutgoingNodeRefs({ outputs } as DialogNode);
+        if ([...moveTargets, ...buttonTargets, ...apiTargets].includes(nodeId)) referencing.push({ id: n.id, name: n.name });
       } catch {
         // 무시
       }
@@ -152,6 +153,38 @@ export class ReferenceCheckService {
       this.conflict(
         'NODE_IN_USE',
         `이 노드로 이동하도록 설정된 노드가 ${referencing.length}건 있습니다. 먼저 정리해 주세요.`,
+        referencing.slice(0, 5),
+      );
+    }
+  }
+
+  /**
+   * [No.26] API 연결 삭제 사전검사(전 챗봇 노드 — 연결은 전역 자원). v2 `API_CONDITION.connectionId`
+   * 참조만 검사한다(v1은 연결을 참조하지 않는다). `details[].message`는 "챗봇명 › 노드명" 형식이고
+   * `details[].chatbotId`도 함께 채운다(딥링크용, M-2). `contains` 사전 필터로 DB 단에서 후보를 먼저
+   * 거른 뒤에만 JSON을 파싱한다(M-1, §14 성능 목표 — 1만 노드·50 연결 기준 P95 500ms).
+   */
+  async assertApiConnectionDeletable(connectionId: string): Promise<void> {
+    const candidates = await this.prisma.dialogNode.findMany({
+      where: { outputs: { contains: connectionId } },
+      select: { id: true, name: true, outputs: true, chatbotId: true, chatbot: { select: { name: true } } },
+    });
+    const referencing: RefRow[] = [];
+    for (const n of candidates) {
+      try {
+        const outputs = JSON.parse(n.outputs) as Array<{ type: string; payload?: { version?: number; connectionId?: string } }>;
+        // `contains`는 부분 문자열 오탐(다른 필드에 같은 id가 우연히 등장하는 경우)을 배제하지
+        // 못하므로, 파싱 단계에서 v2 API_CONDITION.connectionId로 다시 정확히 검사한다.
+        const refers = outputs.some((o) => o.type === 'API_CONDITION' && o.payload?.version === 2 && o.payload?.connectionId === connectionId);
+        if (refers) referencing.push({ id: n.id, name: `${n.chatbot.name} › ${n.name}`, chatbotId: n.chatbotId });
+      } catch {
+        // 무시
+      }
+    }
+    if (referencing.length > 0) {
+      this.conflict(
+        'API_CONNECTION_IN_USE',
+        `이 연결을 참조하는 대화 노드가 ${referencing.length}건 있습니다. 먼저 노드 설정을 정리해 주세요.`,
         referencing.slice(0, 5),
       );
     }

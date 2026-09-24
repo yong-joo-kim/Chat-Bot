@@ -1,18 +1,26 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { buildDialogueIndex, judgeBand, mergeOverlay, resolveTurn } from '@chat-bot/dialogue-engine';
-import type { DialogueTurnResult } from '@chat-bot/dialogue-engine';
+import type { ApiCallSuspension, DialogueTurnResult } from '@chat-bot/dialogue-engine';
 import { maskPii } from '@chat-bot/pii-mask';
 import {
+  hasPermission,
+  isApiConditionV2,
   isOverlayEmpty,
+  type ApiConditionOutputPayloadV2,
+  type ApiStepView,
   type CompareRequestDto,
   type CompareResponse,
   type CompareTurnResult,
+  type DialogOutput,
   type DialogueBundle,
   type MatchTrace,
+  type SimulateApiMode,
   type SimulateRequestDto,
   type SimulateResponse,
 } from '@chat-bot/shared-types';
 import { ApiException } from '../common/api.exception';
+import type { SessionUser } from '../common/auth/session-context';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { SemanticMatchService } from '../embedding/semantic-match.service';
@@ -21,6 +29,12 @@ import { RagHttpClient } from '../rag/rag-http.client';
 import { RagGateService } from '../rag/rag-gate.service';
 import { judgeRagResponse } from '../rag/lib/judge-rag-response';
 import { RagQueryResponseSchema } from '../rag/lib/rag-response.schema';
+import { LegacyApiService } from '../legacy-api/legacy-api.service';
+import { ApiConnectionCatalogService } from '../api-connections/catalog/api-connection-catalog.service';
+import type { MockSource } from '../api-connections/catalog/api-connection-catalog.service';
+import { resolveMockOutcome } from '../api-connections/catalog/lib/mock-outcome';
+import { completeApiTurnSync } from '../common/lib/api-turn';
+import { serializeOutputsForDiff } from '../common/lib/output-diff';
 import { assertOverlaySize, toBundleOverlayPatch } from './lib/overlay-convert';
 import { compareDiff } from './lib/compare-diff';
 import { computeAssetCounts, enrichNames } from './lib/resolution-enrich';
@@ -32,6 +46,8 @@ import { computeAssetCounts, enrichNames } from './lib/resolution-enrich';
  * `assertWritable`(ARCHIVED 차단)은 호출하지 않는다.
  * FAQ/의도 매칭 고도화 그룹부터 `matchTrace`(1단계 top3·구간 판정)와 `useRag`(명시적일 때만
  * 2단계 직접 호출, FR-N2-3/AC-N2-25)를 추가한다 — 이 경우에도 `ConversationLog`는 적재하지 않는다.
+ * [No.26] 외부 API 호출은 기본 목(MOCK) — 실제 호출(LIVE)은 `simulation:write` + GET + **저장된
+ * 노드와 직렬화 동일한 아웃풋** + 단건일 때만이며, 불충족은 거부가 아니라 MOCK 격하다(§6.2).
  */
 @Injectable()
 export class SimulationService {
@@ -42,9 +58,12 @@ export class SimulationService {
     private readonly answerSettingsCache: AnswerSettingsCacheService,
     private readonly ragHttpClient: RagHttpClient,
     private readonly ragGate: RagGateService,
+    private readonly legacyApiService: LegacyApiService,
+    private readonly apiConnectionCatalog: ApiConnectionCatalogService,
+    private readonly config: ConfigService,
   ) {}
 
-  async simulate(chatbotId: string, dto: SimulateRequestDto): Promise<SimulateResponse> {
+  async simulate(chatbotId: string, dto: SimulateRequestDto, actor: SessionUser): Promise<SimulateResponse> {
     await this.scope.assertReadable(chatbotId);
     assertOverlaySize(dto.overlay);
 
@@ -71,7 +90,15 @@ export class SimulationService {
         : undefined;
 
     const turnInput = dto.buttonAction ? { buttonAction: dto.buttonAction } : { message: dto.message ?? '' };
-    const result: DialogueTurnResult = resolveTurn(turnInput, dto.state, bundle, now, { index, semantic });
+    let result: DialogueTurnResult = resolveTurn(turnInput, dto.state, bundle, now, { index, semantic });
+
+    let apiStep: ApiStepView | undefined;
+    if (result.apiCall) {
+      const outcome = await this.completeApiStep(chatbotId, result, dto, bundle, baseBundle, now, actor);
+      result = outcome.turn;
+      apiStep = outcome.view;
+    }
+
     const names = enrichNames(bundle, result);
 
     const matchTrace = semantic
@@ -104,6 +131,109 @@ export class SimulationService {
       assetCounts: computeAssetCounts(bundle),
       overlayApplied,
       matchTrace,
+      apiStep,
+    };
+  }
+
+  /**
+   * [No.26] 외부 API 단계 완결(§6.2) — LIVE 조건 4개를 모두 만족해야 실제 호출한다. 불충족은
+   * 격하 사유(`downgradeReason`)와 함께 MOCK으로 처리한다(오류가 아니다, FR-L7-2).
+   */
+  private async completeApiStep(
+    chatbotId: string,
+    result: DialogueTurnResult,
+    dto: SimulateRequestDto,
+    bundle: DialogueBundle,
+    baseBundle: DialogueBundle,
+    now: Date,
+    actor: SessionUser,
+  ): Promise<{ turn: DialogueTurnResult; view: ApiStepView }> {
+    const suspension = result.apiCall as ApiCallSuspension;
+    const payload = suspension.payload;
+
+    let mode: SimulateApiMode = 'MOCK';
+    let downgradeReason: string | undefined;
+    let connectionName = payload.connectionId;
+
+    if (dto.apiMode === 'LIVE') {
+      if (!hasPermission(actor.role, 'simulation:write')) {
+        downgradeReason = 'NO_PERMISSION';
+      } else if (payload.method !== 'GET') {
+        downgradeReason = 'METHOD_NOT_GET';
+      } else if (!this.isSavedNode(baseBundle, suspension, payload)) {
+        downgradeReason = 'UNSAVED_NODE';
+      } else if (!(this.config.get<boolean>('LEGACY_API_ENABLED') ?? true)) {
+        downgradeReason = 'FEATURE_DISABLED';
+      } else {
+        const connection = await this.apiConnectionCatalog.findForCall(payload.connectionId);
+        if (!connection || !connection.enabled) {
+          downgradeReason = 'CONNECTION_DISABLED';
+        } else {
+          mode = 'LIVE';
+          connectionName = connection.name;
+        }
+      }
+    }
+
+    if (mode === 'LIVE') {
+      const turn = await this.legacyApiService.completeTurn(result, { chatbotId, source: 'SIMULATION_LIVE', bundle, now });
+      return { turn, view: this.buildApiStepView(mode, downgradeReason, payload, turn, connectionName) };
+    }
+
+    const sources = await this.apiConnectionCatalog.loadMockSources([payload.connectionId]);
+    const source: MockSource | undefined = sources.get(payload.connectionId);
+    connectionName = source?.name ?? connectionName;
+
+    let sampleLabel: string | undefined;
+    let noSample: boolean | undefined;
+    const { turn } = completeApiTurnSync(
+      result,
+      () => {
+        const outcome = resolveMockOutcome(source?.samples ?? [], dto.mockResponse);
+        sampleLabel = outcome.sampleLabel;
+        noSample = outcome.noSample;
+        return { result: outcome.result, mock: { sampleHash8: outcome.sampleHash8, sampleLabel: outcome.sampleLabel, noSample: outcome.noSample } };
+      },
+      bundle,
+      now,
+    );
+
+    return { turn, view: this.buildApiStepView(mode, downgradeReason, payload, turn, connectionName, sampleLabel, noSample) };
+  }
+
+  /** "저장된 노드" 판정 — id뿐 아니라 정지한 아웃풋이 저장본과 직렬화 동일해야 한다(오버레이 우회 차단, AC-L6-3). */
+  private isSavedNode(baseBundle: DialogueBundle, suspension: ApiCallSuspension, payload: ApiConditionOutputPayloadV2): boolean {
+    const baseNode = baseBundle.dialogNodes.find((n) => n.id === suspension.nodeId);
+    const baseOutput = baseNode?.outputs[suspension.outputIndex];
+    if (!baseOutput || baseOutput.type !== 'API_CONDITION' || !isApiConditionV2(baseOutput.payload)) return false;
+    const suspendedOutput: DialogOutput = { type: 'API_CONDITION', payload };
+    return serializeOutputsForDiff([baseOutput]) === serializeOutputsForDiff([suspendedOutput]);
+  }
+
+  private buildApiStepView(
+    mode: SimulateApiMode,
+    downgradeReason: string | undefined,
+    payload: ApiConditionOutputPayloadV2,
+    turn: DialogueTurnResult,
+    connectionName: string,
+    sampleLabel?: string,
+    noSample?: boolean,
+  ): ApiStepView {
+    const step = turn.apiStep;
+    return {
+      mode,
+      downgradeReason,
+      connectionId: payload.connectionId,
+      connectionName,
+      method: payload.method,
+      pathTemplate: payload.path,
+      outcome: step?.outcome ?? 'NETWORK_ERROR',
+      httpStatus: step?.httpStatus,
+      branch: step?.branch ?? 'NOTICE',
+      conditionIndex: step?.conditionIndex,
+      sampleLabel,
+      ...(noSample ? { noSample: true } : {}),
+      variables: Object.entries(step?.variables ?? {}).map(([name, value]) => ({ name, value: maskPii(value).maskedText })),
     };
   }
 
@@ -180,15 +310,35 @@ export class SimulationService {
     const bundleB = mergeOverlay(bundleA, patch);
     const indexB = buildDialogueIndex(bundleB);
 
+    // [No.26] A/B 두 번들의 v2 connectionId 합집합으로 목 원천을 요청당 1회 로드한다(FR-L7-4).
+    const connectionIds = new Set<string>();
+    for (const b of [bundleA, bundleB]) {
+      for (const node of b.dialogNodes) {
+        for (const output of node.outputs) {
+          if (output.type === 'API_CONDITION' && isApiConditionV2(output.payload)) connectionIds.add(output.payload.connectionId);
+        }
+      }
+    }
+    const mockSources = await this.apiConnectionCatalog.loadMockSources([...connectionIds]);
+    const mockExecutor = (suspension: ApiCallSuspension) => {
+      const source = mockSources.get(suspension.payload.connectionId);
+      const outcome = resolveMockOutcome(source?.samples ?? []);
+      return { result: outcome.result, mock: { sampleHash8: outcome.sampleHash8, sampleLabel: outcome.sampleLabel, noSample: outcome.noSample } };
+    };
+
     let stateA: unknown = dto.initialState;
     let stateB: unknown = dto.initialState;
     const turns: CompareResponse['turns'] = [];
     let same = 0;
 
-    dto.messages.forEach((message, i) => {
-      const a = resolveTurn({ message }, stateA, bundleA, now, { index: indexA });
+    for (let i = 0; i < dto.messages.length; i++) {
+      const message = dto.messages[i];
+      let a = resolveTurn({ message }, stateA, bundleA, now, { index: indexA });
+      if (a.apiCall) a = completeApiTurnSync(a, mockExecutor, bundleA, now).turn;
       stateA = a.nextState;
-      const b = resolveTurn({ message }, stateB, bundleB, now, { index: indexB });
+
+      let b = resolveTurn({ message }, stateB, bundleB, now, { index: indexB });
+      if (b.apiCall) b = completeApiTurnSync(b, mockExecutor, bundleB, now).turn;
       stateB = b.nextState;
 
       const diff = compareDiff(a, b);
@@ -201,7 +351,7 @@ export class SimulationService {
         b: toCompareTurnResult(bundleB, b),
         diff,
       });
-    });
+    }
 
     return {
       turns,

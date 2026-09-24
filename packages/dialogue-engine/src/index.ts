@@ -2,7 +2,7 @@ export { matchIntent, matchFaq, simulate } from './matcher';
 export type { IntentMatch, FaqMatch, MatchIntentOptions } from './matcher';
 
 export { resolveResponse, resolveByNodeId } from './resolver';
-export type { ResolveOptions } from './resolver';
+export type { ResolveOptions, EngineResolution } from './resolver';
 
 export { resolveTurn } from './turn';
 export type { DialogueTurnInput, DialogueTurnResult } from './turn';
@@ -28,10 +28,23 @@ export type { SemanticBand } from './semantic';
 export { executeOutputs } from './outputs';
 export type { ExecuteOutputsOptions, ExecuteOutputsResult } from './outputs';
 
+export { bindRequest, resumeAfterApiCall } from './api-call';
+export type {
+  ApiBoundValue,
+  ApiCallRequestSpec,
+  ApiCallResumeInput,
+  ApiCallSuspension,
+  ApiResumeState,
+  ApiStepResult,
+  ApiSuspensionRequest,
+  CompletedFormInfo,
+} from './api-call';
+
 export { evaluateNode, rankNodes } from './node-matcher';
 export type { EngineContext, NodeEvaluation, BrokenReference } from './node-matcher';
 
 export { validateDialogueDesign, computeIncomingCounts, getOutgoingNodeRefs } from './design-validator';
+export type { DesignValidationApiConnectionInfo, DesignValidationContext } from './design-validator';
 
 export { buildFlowTree } from './flow-tree';
 

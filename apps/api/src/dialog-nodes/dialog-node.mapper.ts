@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { DialogNode as PrismaDialogNode } from '@prisma/client';
 import type { DialogMatchMode, DialogNode, DialogNodeType, DialogOutput } from '@chat-bot/shared-types';
+import { redactLegacyApiOutputs } from '@chat-bot/shared-types';
 
 const logger = new Logger('DialogNodeMapper');
 
@@ -37,4 +38,14 @@ export function toDialogNodeEntity(row: NodeRowWithLinks): DialogNode {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/**
+ * [No.26] 응답 가림(FR-L1-6) — `toDialogNodeEntity(row)` + `redactLegacyApiOutputs(outputs)`.
+ * ⚠ `toDialogNodeEntity`·`parseOutputs`는 무변경이다(감사 스냅샷·수정 시 기존 값 보존 경로가
+ * 원본을 써야 한다). 노드 CRUD 응답 전부(목록·상세·생성·수정·복사)가 이 함수를 통과해야 한다.
+ */
+export function toDialogNodeResponse(row: NodeRowWithLinks): DialogNode {
+  const entity = toDialogNodeEntity(row);
+  return { ...entity, outputs: redactLegacyApiOutputs(entity.outputs) };
 }

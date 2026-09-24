@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { normalizeText } from '@chat-bot/shared-types';
+import { isApiConditionV2, normalizeText } from '@chat-bot/shared-types';
 import type { RestoreWarning } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BannedWordFilterService } from '../../banned-words/banned-word-filter.service';
@@ -126,6 +126,31 @@ export class RestoreWarningsService {
     if (this.reindexQueue.isRunning(chatbotId)) warnings.push({ code: 'REINDEX_IN_PROGRESS' });
 
     if (upcastedFrom !== undefined) warnings.push({ code: 'SCHEMA_UPCASTED', fromVersion: upcastedFrom, toVersion: currentSchemaVersion });
+
+    // [No.26] API 연결 참조 경고(§15) — 대상 스냅샷의 v2 connectionId 집합으로 1회 조회.
+    const targetConnectionIds = new Set<string>();
+    let legacyFormatCount = 0;
+    for (const node of target.assets.dialogNodes) {
+      for (const output of node.outputs) {
+        if (output.type !== 'API_CONDITION') continue;
+        if (isApiConditionV2(output.payload)) targetConnectionIds.add(output.payload.connectionId);
+        else legacyFormatCount += 1;
+      }
+    }
+    if (targetConnectionIds.size > 0) {
+      const rows = await this.prisma.apiConnection.findMany({ where: { id: { in: [...targetConnectionIds] } }, select: { id: true, enabled: true } });
+      const foundMap = new Map(rows.map((r) => [r.id, r.enabled]));
+      let missing = 0;
+      let disabled = 0;
+      for (const id of targetConnectionIds) {
+        const enabled = foundMap.get(id);
+        if (enabled === undefined) missing += 1;
+        else if (!enabled) disabled += 1;
+      }
+      if (missing > 0) warnings.push({ code: 'API_CONNECTION_MISSING', count: missing });
+      if (disabled > 0) warnings.push({ code: 'API_CONNECTION_DISABLED', count: disabled });
+    }
+    if (legacyFormatCount > 0) warnings.push({ code: 'API_LEGACY_FORMAT', count: legacyFormatCount });
 
     return warnings;
   }

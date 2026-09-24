@@ -88,6 +88,8 @@ export function toTestRunResultDto(row: PrismaTestRunResult, nameById?: Readonly
     ragAttempted: row.ragAttempted,
     ragLatencyMs: row.ragLatencyMs ?? undefined,
     ragSourceCount: row.ragSourceCount ?? undefined,
+    apiMockA: row.apiMockA ?? null,
+    apiMockB: row.apiMockB ?? undefined,
     createdAt: row.createdAt,
   };
 }

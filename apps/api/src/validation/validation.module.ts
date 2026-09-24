@@ -5,6 +5,7 @@ import { EmbeddingModule } from '../embedding/embedding.module';
 import { AnswerSettingsModule } from '../answer-settings/answer-settings.module';
 import { RagModule } from '../rag/rag.module';
 import { TrainingJobsModule } from '../training-jobs/training-jobs.module';
+import { ApiConnectionCatalogModule } from '../api-connections/catalog/api-connection-catalog.module';
 import { TestSetsController } from './test-sets.controller';
 import { TestCasesController } from './test-cases.controller';
 import { TestRunsController } from './test-runs.controller';
@@ -32,7 +33,7 @@ import { TestRunCompareService } from './compare/test-run-compare.service';
  * 주입하지 않는다 — `EmbeddingModule`/`RagModule`을 import해도 그 두 서비스는 **소비하지 않는다**.
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, AnswerSettingsModule, RagModule, TrainingJobsModule],
+  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, AnswerSettingsModule, RagModule, TrainingJobsModule, ApiConnectionCatalogModule],
   controllers: [TestSetsController, TestCasesController, TestRunsController],
   providers: [
     TestSetService,

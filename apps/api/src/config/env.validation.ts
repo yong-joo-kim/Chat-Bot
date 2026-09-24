@@ -112,6 +112,18 @@ const EnvSchema = z.object({
   DEPLOY_SCHEDULE_MISFIRE_GRACE_MINUTES: z.coerce.number().int().min(0).max(1440).default(10),
   DEPLOY_SCHEDULE_RETRY_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   DEPLOY_SCHEDULE_LEASE_MINUTES: z.coerce.number().int().min(1).default(5),
+  // 레거시 API 연동(No.26) 그룹 추가 — 전부 선택(기본값 있음, FR-0-103). 하나도 설정하지 않으면
+  // 활성화·타임아웃 3초(상한 10초)·응답 256KB·회로 5회/60초·사설 대역 allowlist 빈 값(구축형은
+  // 운영자가 채운다)으로 정상 동작한다. 연결 시크릿 전용 환경변수(접두사 규약, `legacy-api-secret
+  // .resolver.ts` 참고)는 여기에 등록하지 않는다 — zod 스키마는 알 수 없는 키를 걸러 내므로
+  // 검증 대상이 될 수 없고, 그 리졸버가 `process.env`에서 직접 읽는다(정적 검사 L-1).
+  LEGACY_API_ENABLED: envBoolean(true),
+  LEGACY_API_PRIVATE_ALLOWLIST: z.string().default(''),
+  LEGACY_API_DEFAULT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(10000).default(3000),
+  LEGACY_API_MAX_TIMEOUT_MS: z.coerce.number().int().min(1000).max(10000).default(10000),
+  LEGACY_API_MAX_RESPONSE_BYTES: z.coerce.number().int().min(1024).max(1048576).default(262144),
+  LEGACY_API_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).default(5),
+  LEGACY_API_CIRCUIT_OPEN_MS: z.coerce.number().int().min(1000).default(60000),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

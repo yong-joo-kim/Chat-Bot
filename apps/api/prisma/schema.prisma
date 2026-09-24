@@ -787,6 +787,10 @@ model TestRunResult {
   ragAttempted   Boolean @default(false)
   ragLatencyMs   Int?
   ragSourceCount Int?
+  /// [신규 2026-09-24 No.26 레거시 API 연동] 이 TC 판정에 API 목이 관여했는가: null = 관여 없음 ·
+  /// "NO_SAMPLE" · 샘플 해시 앞 8자리(FR-L7-6). 원문 없음.
+  apiMockA String?
+  apiMockB String?
   createdAt      DateTime @default(now())
 
   @@index([runId, resultA])
@@ -948,4 +952,79 @@ model DeploySchedule {
 // 없어 마이그레이션 SQL에 raw로만 존재한다(prisma/migrations/<이 그룹 마이그레이션>/migration.sql
 // 참고). 이후 `prisma migrate dev`로 deploy_schedules 관련 마이그레이션을 새로 생성할 때, diff가
 // 이 인덱스 2개(그리고 test_runs_chatbotId_active_key)를 삭제하는 구문을 끼워 넣지 않는지 반드시
+// 확인할 것.
+
+/// [신규 2026-09-24 No.26 레거시 API 연동] 레거시 API 연결 레지스트리(전역 — 챗봇 스코프 아님,
+/// ADR-0034 §2). ADMIN만 쓴다. ★ 시크릿 **값** 컬럼은 존재하지 않는다 — `secretRef`(이름)만 두고
+/// 값은 환경변수 `LEGACY_API_SECRET__<secretRef>`에서 `LegacyApiSecretResolver`만 읽는다(ADR-0034 §3).
+/// 노드 → 연결 참조는 `DialogNode.outputs` JSON 안이라 FK가 없다(앱 레벨 검사 — 삭제 409).
+model ApiConnection {
+  id                   String   @id @default(uuid())
+  name                 String
+  /// normalizeText(name) — 전역 유일(ADR-0006, BannedWord.wordNormalized와 같은 전역 규약)
+  nameNormalized       String   @unique
+  description          String?
+  /// 스킴+호스트+포트+기준 경로. 사용자정보·쿼리·프래그먼트 금지(§7.2)
+  baseUrl              String
+  /// JSON 배열 — ["GET"] | ["POST"] | ["GET","POST"]
+  allowedMethods       String   @default("[\"GET\"]")
+  /// NONE | API_KEY_HEADER | BEARER | BASIC (zod ApiConnectionAuthType)
+  authType             String   @default("NONE")
+  authHeaderName       String?
+  /// ^[A-Z0-9_]{1,40}$ — 이름뿐이다(값 아님)
+  secretRef            String?
+  timeoutMs            Int      @default(3000)
+  rateLimitPerMin      Int      @default(120)
+  allowRawPersonalData Boolean  @default(false)
+  personalDataLookup   Boolean  @default(false)
+  /// JSON [{ label, httpStatus, body }] 0~5개 — 목 전용 관리자 작성 데이터(각 body ≤16KB)
+  sampleResponses      String   @default("[]")
+  enabled              Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@map("api_connections")
+}
+
+/// [신규 2026-09-24 No.26 레거시 API 연동] 레거시 API 호출 관측 로그(ADR-0016 §5 예고의 실체화,
+/// ADR-0034 §6). **메타데이터 전용** — 치환된 URL·쿼리·헤더·요청/응답 본문·바인딩 값·응답 값 컬럼은
+/// **존재하지 않는다**(정적 검사 L-7).
+/// FK 없음(로그 규약) — 연결·노드가 삭제돼도 기록은 남고, 챗봇 영구삭제 시 서비스가 동반 삭제한다.
+model ApiCallLog {
+  id                 String   @id @default(uuid())
+  /// CONNECTION_TEST는 챗봇 무관이라 null
+  chatbotId          String?
+  connectionId       String
+  /// 기록 시점 연결 이름 스냅샷(AuditLog.targetName 선례 — 연결 삭제 후에도 목록이 UUID 나열이 되지 않게)
+  connectionName     String
+  nodeId             String?
+  /// 공개 대화의 messageId(= ConversationLog.id). FK 없음
+  conversationLogId  String?
+  /// PUBLIC | SIMULATION_LIVE | CONNECTION_TEST
+  source             String
+  /// GET | POST
+  method             String
+  /// 치환 전 템플릿(예: "/orders/{0}") — 바인딩 값 없음
+  pathTemplate       String
+  /// ApiCallOutcome 18종(§7.8)
+  outcome            String
+  httpStatus         Int?
+  latencyMs          Int
+  responseBytes      Int?
+  /// CONDITION | DEFAULT | FAILURE | NOTICE (연결 테스트는 null)
+  branch             String?
+  /// branch=CONDITION일 때 1부터
+  conditionIndex     Int?
+  /// 송신 값이 마스킹으로 바뀌었는가(FR-L6-3) — 원문도 마스킹본도 저장하지 않는다
+  personalDataMasked Boolean  @default(false)
+  /// ADR-0017 KST 버킷 규약 재사용
+  dayBucket          String   @default("")
+  createdAt          DateTime @default(now())
+
+  @@index([chatbotId, dayBucket])
+  @@index([chatbotId, createdAt])
+  @@index([connectionId, createdAt])
+  @@map("api_call_logs")
+}
 // 확인할 것 — 삭제된다면 해당 라인을 새 마이그레이션에서 제거하고 인덱스 자체는 유지해야 한다.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   CreateDialogNodeSchema,
+  findLegacyApiOutputIndexes,
   type DialogMatchMode,
   type DialogNodeType,
   type DialogOutput,
@@ -59,6 +60,9 @@ export function NodeFormPage(): JSX.Element {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formBanner, setFormBanner] = useState<string | undefined>(undefined);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  // [No.26] `API_OUTPUT_LEGACY_FORMAT` 저장 거부 시 v1 카드로 스크롤·포커스+강조(ui-spec §3.3-5).
+  // `token`은 같은 인덱스에서 재시도해도 효과가 다시 발동하도록 매번 갱신한다.
+  const [legacyHighlight, setLegacyHighlight] = useState<{ index: number; token: number } | null>(null);
 
   const load = useCallback(async () => {
     if (isNew || !nodeId) return;
@@ -156,6 +160,13 @@ export function NodeFormPage(): JSX.Element {
           setFieldErrors({ name: e2.message });
         } else if (e2.code === 'START_NODE_EXISTS' || e2.code === 'FALLBACK_NODE_EXISTS') {
           setFormBanner(e2.message);
+        } else if (e2.code === 'API_OUTPUT_LEGACY_FORMAT') {
+          // [No.26] v1 카드로 스크롤·포커스를 옮기고 "연결로 전환" 버튼을 강조한다(ui-spec §3.3-5).
+          setFormBanner(MESSAGES.dialogue.outputFields.saveBlockedLegacyFormat);
+          const legacyIndexes = findLegacyApiOutputIndexes(outputs.map((o) => o.output));
+          if (legacyIndexes.length > 0) {
+            setLegacyHighlight({ index: legacyIndexes[0], token: Date.now() });
+          }
         } else if (Object.keys(details).length > 0) {
           setFieldErrors(details);
           setFormBanner(e2.message);
@@ -375,6 +386,8 @@ export function NodeFormPage(): JSX.Element {
                   }}
                   chatbotId={chatbot.id}
                   currentNodeId={nodeId}
+                  nodeContextVariableId={contextVariableId}
+                  highlightLegacyToken={legacyHighlight?.index === index ? legacyHighlight.token : undefined}
                   idPrefix={`output-${index}`}
                   errorFieldPrefix={`outputs.${index}.payload`}
                   fieldErrors={fieldErrors}

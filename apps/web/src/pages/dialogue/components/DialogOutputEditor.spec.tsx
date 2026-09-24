@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import type { DialogOutput } from '@chat-bot/shared-types';
 import { DialogOutputEditor } from './DialogOutputEditor';
+
+// [No.26] `ApiConnectionPickerField`(v2 API 조건분기 폼)가 `useAuth()`를 사용한다.
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ can: () => true }),
+}));
 
 function Harness({ initial, onChangeSpy }: { initial: DialogOutput; onChangeSpy: (v: DialogOutput) => void }): JSX.Element {
   const [value, setValue] = useState<DialogOutput>(initial);
@@ -97,5 +102,73 @@ describe('DialogOutputEditor — 아웃풋 타입 전환', () => {
     expect(screen.getByText('0/1000자')).toBeInTheDocument();
     await user.type(screen.getByLabelText(/텍스트/), '안녕');
     expect(screen.getByText('2/1000자')).toBeInTheDocument();
+  });
+
+  // [No.26] API 조건분기 v1/v2 분기 — `isUnsupportedOutput()`/`isApiConditionV2()` 공용 판정 회귀.
+  it('TEXT → API 조건분기로 전환하면 v2(연결 레지스트리) 폼이 나타나고, 미지원 배지는 뜨지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ type: 'TEXT', payload: { text: '' } }} onChangeSpy={vi.fn()} />);
+
+    await user.selectOptions(screen.getByLabelText('유형'), 'API 조건분기');
+
+    expect(screen.queryByText(/이번 버전에서는 실행되지 않습니다/)).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '연결' })).toBeInTheDocument();
+  });
+
+  it('이전 형식(v1) API_CONDITION 데이터는 읽기 전용 카드로 표시되고 "연결로 전환" 버튼을 제공한다(FR-L1-1)', () => {
+    render(
+      <Harness
+        initial={{
+          type: 'API_CONDITION',
+          payload: {
+            method: 'GET',
+            url: 'https://erp.corp.local/',
+            conditions: [{ path: 'data.status', operator: 'EQ', value: 'A', nextNodeId: '11111111-1111-1111-1111-111111111111' }],
+          },
+        }}
+        onChangeSpy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/이전 형식 — 실행되지 않습니다/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '연결로 전환' })).toBeInTheDocument();
+  });
+
+  it('"연결로 전환" 확인 시 메서드·조건만 옮겨진 v2 초안으로 교체된다(ui-spec §3.3)', async () => {
+    const user = userEvent.setup();
+    const onChangeSpy = vi.fn();
+    render(
+      <Harness
+        initial={{
+          type: 'API_CONDITION',
+          payload: {
+            method: 'GET',
+            url: 'https://erp.corp.local/',
+            conditions: [{ path: 'data.status', operator: 'EQ', value: 'A', nextNodeId: '11111111-1111-1111-1111-111111111111' }],
+          },
+        }}
+        onChangeSpy={onChangeSpy}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '연결로 전환' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: '연결로 전환' }));
+
+    expect(onChangeSpy).toHaveBeenCalledWith({
+      type: 'API_CONDITION',
+      payload: {
+        version: 2,
+        connectionId: '',
+        method: 'GET',
+        path: '/',
+        pathParams: [],
+        query: [],
+        body: [],
+        responseMappings: [],
+        conditions: [{ path: 'data.status', operator: 'EQ', value: 'A', nextNodeId: '11111111-1111-1111-1111-111111111111' }],
+      },
+    });
+    expect(screen.queryByText(/이전 형식 — 실행되지 않습니다/)).not.toBeInTheDocument();
   });
 });

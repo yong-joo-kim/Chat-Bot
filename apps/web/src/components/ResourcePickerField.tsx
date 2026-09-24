@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, use
 import { Link } from 'react-router-dom';
 import { intentsApi, keywordsApi, contextsApi, dialogNodesApi, faqsApi } from '../api/dialogue';
 import { chatbotsApi } from '../api/chatbots';
+import { apiConnectionsApi } from '../api/apiConnections';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { MESSAGES } from '../constants/messages';
 import { InlineFieldError } from './InlineFieldError';
@@ -12,7 +13,13 @@ import { InlineFieldError } from './InlineFieldError';
  * `chatbotId` prop(스코프)이 필요 없다 — 전역 `GET /chatbots` 목록에서 바로 검색한다.
  */
 /** `faq`는 검증/품질 고도화(No.19) 그룹이 추가한 6번째 타입이다 — TC의 "기대 대상"(FAQ)을 고른다. */
-export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq';
+/**
+ * `apiConnection`은 [No.26]이 추가한 7번째 타입이다. `chatbot`과 마찬가지로 전역 자원이라
+ * `chatbotId` prop이 필요 없다(J-2) — `GET /api-connections/picker`(`dialogue:read`)를 쓴다.
+ * 이 엔드포인트는 `q` 검색을 지원하지 않으므로 클라이언트에서 이름으로 필터링한다(목록이 작다는 전제).
+ * 사용 중지된 연결도 후보에 남기되 이름에 "(사용 중지)" 접미사를 붙인다(ui-spec §2.2 `ApiConnectionPickerField`).
+ */
+export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq' | 'apiConnection';
 
 interface Option {
   id: string;
@@ -34,6 +41,13 @@ async function searchResource(chatbotId: string, type: ResourcePickerType, q: st
       return (await chatbotsApi.list(query)).items;
     case 'faq':
       return (await faqsApi.list(chatbotId, query)).items.map((f) => ({ id: f.id, name: f.question }));
+    case 'apiConnection': {
+      const { items } = await apiConnectionsApi.picker();
+      const lowered = q.toLowerCase();
+      return items
+        .filter((c) => c.name.toLowerCase().includes(lowered))
+        .map((c) => ({ id: c.id, name: c.enabled ? c.name : `${c.name} ${MESSAGES.apiConnections.pickerDisabledSuffix}` }));
+    }
     default:
       return [];
   }
@@ -55,6 +69,12 @@ async function findOneResource(chatbotId: string, type: ResourcePickerType, id: 
       case 'faq': {
         const entry = await faqsApi.findOne(chatbotId, id);
         return entry ? { id: entry.id, name: entry.question } : null;
+      }
+      case 'apiConnection': {
+        // `security:read`가 없어도(EDITOR/VIEWER) 이름을 볼 수 있어야 하므로 `picker()`(dialogue:read)를 쓴다.
+        const { items } = await apiConnectionsApi.picker();
+        const found = items.find((c) => c.id === id);
+        return found ? { id: found.id, name: found.name } : null;
       }
       default:
         return null;
@@ -79,6 +99,12 @@ export interface ResourcePickerFieldProps {
   disabled?: boolean;
   errorMessage?: string;
   helpText?: string;
+  /** 검색 결과 0건 문구를 리소스별로 바꿔야 할 때(예: `apiConnection`) 기본 `dialogue.picker.noResults` 대신 쓴다. */
+  noResultMessage?: (query: string) => string;
+  /** `createHref` 대신(권한 없어 링크를 줄 수 없을 때) 보여줄 안내 텍스트. 링크와 동시에 주면 링크가 우선한다. */
+  createHint?: string;
+  /** `createHref` 링크의 표시 문구. 기본은 `dialogue.picker.createNew(label)`. */
+  createLinkLabel?: string;
 }
 
 /**
@@ -104,6 +130,9 @@ export const ResourcePickerField = forwardRef<HTMLInputElement, ResourcePickerFi
     disabled = false,
     errorMessage,
     helpText,
+    noResultMessage,
+    createHint,
+    createLinkLabel,
   },
   forwardedRef,
 ) {
@@ -246,11 +275,13 @@ export const ResourcePickerField = forwardRef<HTMLInputElement, ResourcePickerFi
               {loading && <li className="resource-picker-status">{MESSAGES.dialogue.picker.loading}</li>}
               {!loading && options.length === 0 && (
                 <li className="resource-picker-empty">
-                  {MESSAGES.dialogue.picker.noResults(query)}
-                  {createHref && (
+                  {(noResultMessage ?? MESSAGES.dialogue.picker.noResults)(query)}
+                  {createHref ? (
                     <Link to={createHref} className="resource-picker-create-link">
-                      {MESSAGES.dialogue.picker.createNew(label)}
+                      {createLinkLabel ?? MESSAGES.dialogue.picker.createNew(label)}
                     </Link>
+                  ) : (
+                    createHint && <span className="resource-picker-create-hint">{createHint}</span>
                   )}
                 </li>
               )}

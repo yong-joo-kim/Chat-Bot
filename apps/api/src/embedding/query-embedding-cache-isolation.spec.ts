@@ -91,6 +91,7 @@ describe('AC-V4-3 — 대량 TC 실행이 전역 질의 임베딩 캐시를 오�
     const overlayBuilder = { build: jest.fn() };
     const ragService = { attempt: jest.fn().mockResolvedValue({ wouldUseRag: false }) };
     const cancelRegistry = { isCancelled: jest.fn().mockReturnValue(false), cancel: jest.fn(), clear: jest.fn() };
+    const apiConnectionCatalog = { loadMockSources: jest.fn().mockResolvedValue(new Map()) };
 
     const executor = new TestRunExecutor(
       prisma as never,
@@ -103,6 +104,7 @@ describe('AC-V4-3 — 대량 TC 실행이 전역 질의 임베딩 캐시를 오�
       ragService as never,
       cancelRegistry as never,
       config as never,
+      apiConnectionCatalog as never,
     );
 
     const callsBeforeExecution = embedSpy.mock.calls.length;

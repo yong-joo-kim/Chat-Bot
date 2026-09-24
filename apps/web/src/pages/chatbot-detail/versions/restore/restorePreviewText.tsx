@@ -78,6 +78,13 @@ export function warningText(warning: RestoreWarning): string {
       return msg.warnings.REINDEX_IN_PROGRESS;
     case 'SCHEMA_UPCASTED':
       return msg.warnings.SCHEMA_UPCASTED;
+    // [No.26] 레거시 API 연동 — 복원 미리보기 경고 3종(legacy-api-integration-ui-spec.md §3.9).
+    case 'API_CONNECTION_MISSING':
+      return msg.warnings.API_CONNECTION_MISSING(warning.count);
+    case 'API_CONNECTION_DISABLED':
+      return msg.warnings.API_CONNECTION_DISABLED(warning.count);
+    case 'API_LEGACY_FORMAT':
+      return msg.warnings.API_LEGACY_FORMAT(warning.count);
     default:
       return '';
   }

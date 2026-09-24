@@ -3465,3 +3465,67 @@ a:focus-visible {
 .intent-table td {
   vertical-align: top;
 }
+
+/* [No.26] 레거시 API 연동 — API 연결 관리(AC1)·API 조건분기 v2·SIM1 외부 API 단계·외부 연동 로그(L1) */
+.field-hint--warning {
+  color: #92400e;
+}
+.form-banner--success {
+  background: #dcfce7;
+  color: #166534;
+}
+.api-connection-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.api-connection-test-panel .api-connection-test-result {
+  margin-top: 8px;
+}
+.legacy-api-condition-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.legacy-api-condition-card--highlight {
+  outline: 2px solid #92400e;
+  outline-offset: 2px;
+}
+.resource-picker-create-hint {
+  color: var(--color-text-muted);
+  display: block;
+}
+.legacy-api-readonly-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0;
+}
+.legacy-api-readonly-fields dt {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.flow-tree-via-label {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+}
+.api-mode-toggle,
+.mock-response-selector {
+  border: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.api-step-panel .api-step-detail {
+  padding: 8px 0;
+}
+.api-condition-preview-panel {
+  margin-top: 12px;
+}
+.api-call-outcome-distribution ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}

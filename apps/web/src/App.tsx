@@ -41,6 +41,8 @@ import { VersionContentPage } from './pages/chatbot-detail/versions/content/Vers
 import { DeployScheduleListPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleListPage';
 import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleDetailPage';
 import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
+import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
+import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -92,6 +94,8 @@ export function App(): JSX.Element {
               <Route index element={<Navigate to="overview" replace />} />
               <Route path="overview" element={<StatsOverviewPage />} />
               <Route path="learning" element={<LearningQueuePage />} />
+              {/* [No.26] L1 외부 연동 로그 — StatsShell 3번째 서브탭(ui-spec §1 L1 권고안). */}
+              <Route path="api-calls" element={<ApiCallLogPage />} />
             </Route>
             <Route path="settings" element={<SettingsTab />} />
             <Route path="versions" element={<VersionListPage />} />
@@ -154,6 +158,14 @@ export function App(): JSX.Element {
             element={
               <RequirePermission permission="chatbot:read" menuName={MESSAGES.systemSettings.deploySchedules}>
                 <DeploySchedulesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/settings/api-connections"
+            element={
+              <RequirePermission permission="security:read" menuName={MESSAGES.systemSettings.apiConnections}>
+                <ApiConnectionsPage />
               </RequirePermission>
             }
           />

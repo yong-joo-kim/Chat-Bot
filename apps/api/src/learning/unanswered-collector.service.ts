@@ -13,6 +13,8 @@ export interface CollectUnansweredQuestionParams {
   isAnswered: boolean;
   blockedByFilter: boolean;
   inputKind: InputKind;
+  /** [No.26] 외부 API 고정 문구 턴(§6.1) — 기본 false. */
+  apiNotice?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export class UnansweredCollectorService {
         inputKind: input.inputKind,
         questionText: input.questionText,
         maxLength,
+        apiNotice: input.apiNotice,
       });
       if (!decision.collect) return;
 

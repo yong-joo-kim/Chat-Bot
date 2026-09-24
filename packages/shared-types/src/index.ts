@@ -21,3 +21,5 @@ export * from './output-view';
 export * from './contrast';
 export * from './validation';
 export * from './deploy-schedule';
+export * from './api-mapping';
+export * from './legacy-api';

@@ -2,19 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { buildDialogueIndex, judgeBand, mergeOverlay, normalizeText, resolveTurn } from '@chat-bot/dialogue-engine';
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
-import type {
-  DialogOutput,
-  DialogOutputType,
-  DialogueBundle,
-  DialogueOverlay,
-  TestCaseExpectedKind,
-  TestCaseResultKind,
-  TestRunOverlaySource,
-  TestRunResultBand,
-  TestRunSideSummary,
+import {
+  isApiConditionV2,
+  type DialogOutput,
+  type DialogOutputType,
+  type DialogueBundle,
+  type DialogueOverlay,
+  type TestCaseExpectedKind,
+  type TestCaseResultKind,
+  type TestRunOverlaySource,
+  type TestRunResultBand,
+  type TestRunSideSummary,
 } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DialogueBundleService } from '../../dialogue-common/dialogue-bundle.service';
+import { ApiConnectionCatalogService } from '../../api-connections/catalog/api-connection-catalog.service';
+import type { MockSource } from '../../api-connections/catalog/api-connection-catalog.service';
+import { resolveMockOutcome } from '../../api-connections/catalog/lib/mock-outcome';
+import { completeApiTurnSync } from '../../common/lib/api-turn';
 import { EmbeddingProviderFactory } from '../../embedding/embedding-provider.factory';
 import { VectorCacheService } from '../../embedding/vector-cache.service';
 import type { CachedVectorEntry } from '../../embedding/vector-cache.service';
@@ -61,6 +66,8 @@ interface SideOutcome {
   marginToTop2?: number;
   blockedByFilter: boolean;
   elapsedMs: number;
+  /** [No.26] 마지막 턴 기준 — 샘플 해시 앞 8자리 | 'NO_SAMPLE' | null(관여 없음, FR-L7-6). */
+  apiMock: string | null;
 }
 
 interface ResultRow {
@@ -107,7 +114,19 @@ export class TestRunExecutor {
     private readonly ragService: TestRunRagService,
     private readonly cancelRegistry: TestRunCancelRegistry,
     private readonly config: ConfigService,
+    private readonly apiConnectionCatalog: ApiConnectionCatalogService,
   ) {}
+
+  /** [No.26] 번들의 v2 API_CONDITION이 참조하는 연결 id를 모은다(목 원천 로드 대상 산출). */
+  private collectApiConnectionIds(bundle: DialogueBundle): string[] {
+    const ids = new Set<string>();
+    for (const node of bundle.dialogNodes) {
+      for (const output of node.outputs) {
+        if (output.type === 'API_CONDITION' && isApiConditionV2(output.payload)) ids.add(output.payload.connectionId);
+      }
+    }
+    return [...ids];
+  }
 
   async execute(params: TestRunExecutionParams): Promise<{ status: 'SUCCEEDED' | 'FAILED'; resultSummary?: Record<string, unknown>; failureReason?: string }> {
     const { chatbotId, runId, setId, mode, overlaySource, overlay, suggestionIds, useRag } = params;
@@ -184,6 +203,10 @@ export class TestRunExecutor {
       }
     }
 
+    // [No.26] 실행당 목 원천 1회 로드(N+1 금지, FR-L7-5) — A∪B 번들의 v2 connectionId 합집합.
+    const apiConnectionIds = new Set([...this.collectApiConnectionIds(bundleA), ...(bundleB ? this.collectApiConnectionIds(bundleB) : [])]);
+    const mockSources = await this.apiConnectionCatalog.loadMockSources([...apiConnectionIds]);
+
     const bannedDict = await this.loadBannedWordDict();
     const ragMaxCalls = this.config.get<number>('TEST_RUN_RAG_MAX_CALLS') ?? 50;
     let ragCallCount = 0;
@@ -203,7 +226,7 @@ export class TestRunExecutor {
       const messages = this.parseMessages(testCase.messages);
       const questionText = messages[messages.length - 1] ?? '';
 
-      const outcomeA = this.runSide(messages, bundleA, indexA, entriesA, provider?.modelId, settings.semanticEnabled, embeddingMap, thresholds, now, bannedDict);
+      const outcomeA = this.runSide(messages, bundleA, indexA, entriesA, provider?.modelId, settings.semanticEnabled, embeddingMap, thresholds, now, bannedDict, mockSources);
       const ragResultA = await this.ragService.attempt(questionText, outcomeA.bandKind, settings, useRag, ragCallCount < ragMaxCalls);
       if (ragResultA.ragAttempted) ragCallCount += 1;
 
@@ -229,7 +252,7 @@ export class TestRunExecutor {
       };
 
       if (mode === 'OVERLAY_COMPARE' && bundleB && indexB && liveIdsB) {
-        const outcomeB = this.runSide(messages, bundleB, indexB, entriesB, provider?.modelId, settings.semanticEnabled, embeddingMap, thresholds, now, bannedDict);
+        const outcomeB = this.runSide(messages, bundleB, indexB, entriesB, provider?.modelId, settings.semanticEnabled, embeddingMap, thresholds, now, bannedDict, mockSources);
         // B 계열은 RAG를 별도로 시도하지 않는다 — RAG 판정 제외 규칙은 A 계열 기준으로 충분하며
         // 실행당 상한을 A/B가 각각 소모하면 예산이 2배로 늘어난다(J-10 상한 취지 유지).
         row.resultB = judgeTestCase(
@@ -333,6 +356,8 @@ export class TestRunExecutor {
         ragAttempted: r.ragAttemptedA,
         ragLatencyMs: r.ragLatencyMsA ?? null,
         ragSourceCount: r.ragSourceCountA ?? null,
+        apiMockA: r.a.apiMock,
+        apiMockB: r.b?.apiMock ?? null,
       })),
     });
     await this.prisma.testRun.update({
@@ -371,6 +396,7 @@ export class TestRunExecutor {
     thresholds: { accept: number; low: number; margin: number },
     now: Date,
     bannedDict: BannedWordEntry[],
+    mockSources: Map<string, MockSource>,
   ): SideOutcome {
     const start = Date.now();
     let state: unknown;
@@ -385,8 +411,10 @@ export class TestRunExecutor {
     let top1Id: string | undefined;
     let marginToTop2: number | undefined;
     let blockedByFilter = false;
+    let apiMock: string | null = null;
 
     for (const message of messages) {
+      apiMock = null; // 마지막 턴 기준(FR-L7-6) — 매 턴 초기화한다.
       const decision = bannedDict.length > 0 ? decide(detect(message, bannedDict)) : 'PASS';
       // 판정은 **마지막 턴** 기준이므로, 이 플래그도 마지막으로 처리한 턴의 상태만 반영한다.
       blockedByFilter = decision === 'BLOCK';
@@ -405,7 +433,22 @@ export class TestRunExecutor {
       const vector = semanticEnabled ? embeddingMap?.get(norm) : undefined;
       const semantic = vector ? assembleSemanticInput(vector, entries, bundle, thresholds, modelId ?? '') : undefined;
 
-      const result = resolveTurn({ message }, state, bundle, now, { index, semantic });
+      let result = resolveTurn({ message }, state, bundle, now, { index, semantic });
+      // [No.26] 목 완결 — TC는 항상 목이다(ADR-0030 ① — 실제 호출·`ApiCallLog`·`ConversationLog` 0건).
+      if (result.apiCall) {
+        const { turn, mock } = completeApiTurnSync(
+          result,
+          (suspension) => {
+            const source = mockSources.get(suspension.payload.connectionId);
+            const outcome = resolveMockOutcome(source?.samples ?? []);
+            return { result: outcome.result, mock: { sampleHash8: outcome.sampleHash8, sampleLabel: outcome.sampleLabel, noSample: outcome.noSample } };
+          },
+          bundle,
+          now,
+        );
+        result = turn;
+        apiMock = mock?.noSample ? 'NO_SAMPLE' : mock?.sampleHash8 ?? null;
+      }
       state = result.nextState;
       outputs = result.outputs;
       unsupportedOutputs = result.unsupportedOutputs;
@@ -443,6 +486,7 @@ export class TestRunExecutor {
       marginToTop2,
       blockedByFilter,
       elapsedMs: Date.now() - start,
+      apiMock,
     };
   }
 }

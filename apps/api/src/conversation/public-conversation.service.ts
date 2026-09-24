@@ -31,6 +31,7 @@ import { RagGateService } from '../rag/rag-gate.service';
 import { RagAnswerService } from '../rag/rag-answer.service';
 import type { PendingAnswerStore } from '../rag/pending-answer.store';
 import { shouldRunRag } from '../rag/lib/should-run-rag';
+import { LegacyApiService } from '../legacy-api/legacy-api.service';
 
 /** 대기 안내 문구(FR-N2-34, S-4) — "RAG"·"LLM"·"벡터" 같은 내부 용어를 쓰지 않는다(FR-N2-24). */
 const RAG_WAITING_TEXT = '문서에서 찾아보고 있어요. 잠시만요.';
@@ -59,6 +60,7 @@ export class PublicConversationService {
     private readonly ragAnswer: RagAnswerService,
     @Inject('PendingAnswerStore') private readonly pendingStore: PendingAnswerStore,
     private readonly config: ConfigService,
+    private readonly legacyApi: LegacyApiService,
   ) {}
 
   async getConfig(slug: string): Promise<PublicChatbotConfig> {
@@ -131,19 +133,37 @@ export class PublicConversationService {
           })
         : undefined;
 
-    const result = resolveTurn(turnInput, inbound.state, bundle, now, { index, semantic });
+    let result = resolveTurn(turnInput, inbound.state, bundle, now, { index, semantic });
+    // messageId 생성을 resolveTurn 직후로 앞당긴다(No.26) — 값만 쓰므로 동작은 기존과 동일하고,
+    // ④.5(외부 API 턴 완결)의 `ApiCallLog.conversationLogId`가 이 값을 참조할 수 있게 한다.
+    const messageId = randomUUID();
+    const apiTurn = !!result.apiCall;
+
+    // ④.5 [신규] 외부 API 호출이 정지된 턴만 완결한다(§6.1). 예상 밖 예외는 `completeTurn` 내부에서
+    // 전부 삼켜지므로 여기서는 항상 유효한 결과가 돌아온다(폴백 동봉본 그대로일 수 있다).
+    if (result.apiCall) {
+      result = await this.legacyApi.completeTurn(result, {
+        chatbotId: chatbot.id,
+        conversationLogId: messageId,
+        source: 'PUBLIC',
+        bundle,
+        now,
+      });
+    }
 
     const rendered = adapter.renderOutbound(result.outputs);
-    // ⑤.5 출구 금지어 필터(FR-12-40) — 정책 무관, 항상 마스킹만 한다(차단하지 않는다).
+    // ⑤.5 출구 금지어 필터(FR-12-40) — 정책 무관, 항상 마스킹만 한다(차단하지 않는다). 외부 API
+    // 값이 섞인 최종 출력 전체가 이 필터를 통과한다(FR-L4-14 · AC-L3-10).
     const outputs = await this.bannedWordFilter.maskOutbound(rendered[0]?.outputs ?? []);
-    const messageId = randomUUID();
     const stateReset = result.stateDiscarded.length > 0;
     const isAnswered = judgeAnswered(result.trace);
     const inputKind = resolveInputKind(inbound);
+    const apiNotice = result.apiStep?.branch === 'NOTICE';
 
     // ⑦ [신규] 2단계(외부 RAG) 분기 판정 — 9조건(FR-N2-1) + 유량 여유(회로·동시성·레이트리밋)까지
     // 전부 통과해야 PENDING으로 넘어간다. 하나라도 막히면 기존 폴백 경로로 수렴한다(FR-0-43).
-    const shouldTryRag = this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind);
+    // [No.26] 외부 API가 개입한 턴은 항상 false다(FR-L4-12 · AC-L3-15).
+    const shouldTryRag = apiTurn ? false : this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind);
     if (shouldTryRag && this.ragGate.tryAcquire()) {
       return this.startPendingRagAnswer({
         slug,
@@ -181,6 +201,7 @@ export class PublicConversationService {
       matchedFaqId: result.matchedFaqId,
       isAnswered,
       inputKind,
+      apiNotice,
     });
 
     return response;

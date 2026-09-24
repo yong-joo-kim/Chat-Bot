@@ -51,6 +51,21 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §8.4) — 생성/수정/취소/재개 감사.
   // params는 매퍼가 평탄화한 enableWebChannel/enabled를 number/boolean으로만 추가한다(원문 없음).
   DeploySchedule: ['action', 'status', 'scheduledAt', 'targetVersionNo', 'memo', 'enableWebChannel', 'enabled'],
+  // 레거시 API 연동(No.26) 그룹 추가(legacy-api-integration-설계.md §11) — `secretRef`는 **이름**,
+  // `baseUrl`은 **호스트만**, 샘플은 **개수만**(원문 없음).
+  ApiConnection: [
+    'name',
+    'baseUrlHost',
+    'allowedMethods',
+    'authType',
+    'secretRef',
+    'timeoutMs',
+    'rateLimitPerMin',
+    'allowRawPersonalData',
+    'personalDataLookup',
+    'enabled',
+    'sampleCount',
+  ],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

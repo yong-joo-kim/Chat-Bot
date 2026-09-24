@@ -17,8 +17,15 @@ vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
 }));
 
+const mockFindOne = vi.fn();
+const mockUpdate = vi.fn();
 vi.mock('../../api/dialogue', () => ({
-  dialogNodesApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }), findOne: vi.fn() },
+  dialogNodesApi: {
+    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    findOne: (...args: unknown[]) => mockFindOne(...args),
+    update: (...args: unknown[]) => mockUpdate(...args),
+    create: vi.fn(),
+  },
   intentsApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
   keywordsApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
   contextsApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
@@ -69,5 +76,65 @@ describe('NodeFormPage — SIM1-D 드로어 진입("이 설정으로 테스트")
     await user.click(screen.getByRole('button', { name: '이 설정으로 테스트' }));
 
     expect((mockContext.setUnsavedGuard as ReturnType<typeof vi.fn>).mock.calls.length).toBe(setUnsavedGuardCallsBefore);
+  });
+});
+
+function renderEditPage(): ReturnType<typeof render> {
+  return render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/chatbots/bot-1/dialogue/nodes/node-legacy']}>
+        <Routes>
+          <Route path="/chatbots/:chatbotId/dialogue/nodes/:nodeId" element={<NodeFormPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
+  );
+}
+
+/**
+ * [No.26 1차 코드리뷰 반영] `API_OUTPUT_LEGACY_FORMAT` 저장 거부 시 v1 카드로 스크롤·포커스를 옮기고
+ * "연결로 전환" 버튼을 강조한다(ui-spec §3.3-5).
+ */
+describe('NodeFormPage — API_OUTPUT_LEGACY_FORMAT 저장 거부', () => {
+  it('저장이 거부되면 안내 배너가 뜨고 legacyHighlight가 v1 아웃풋 인덱스로 설정된다', async () => {
+    mockFindOne.mockResolvedValue({
+      id: 'node-legacy',
+      chatbotId: 'bot-1',
+      name: '레거시노드',
+      nodeType: 'FALLBACK',
+      matchMode: 'ANY',
+      enabled: true,
+      priority: 100,
+      intentIds: [],
+      keywordIds: [],
+      outputs: [
+        {
+          type: 'API_CONDITION',
+          payload: {
+            method: 'GET',
+            url: 'https://erp.corp.local/',
+            conditions: [{ path: 'data.status', operator: 'EQ', value: 'A', nextNodeId: '11111111-1111-1111-1111-111111111111' }],
+          },
+        },
+      ],
+      createdAt: new Date('2026-09-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    mockUpdate.mockRejectedValue(
+      new (await import('../../api/client')).ApiError(400, 'API 조건을 연결 방식으로 전환해야 저장할 수 있습니다.', 'API_OUTPUT_LEGACY_FORMAT', [
+        { field: 'outputs[0]', message: '이전 형식 API 조건은 저장할 수 없습니다.' },
+      ]),
+    );
+
+    const user = userEvent.setup();
+    renderEditPage();
+    const nameInput = await screen.findByDisplayValue('레거시노드');
+    // 저장 버튼은 `dirty`일 때만 활성화된다 — 이름 끝에 문자 하나를 더해 변경 상태를 만든다.
+    await user.type(nameInput, 'x');
+
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(await screen.findByText('API 조건을 연결 방식으로 전환해야 저장할 수 있습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '연결로 전환' })).toBeInTheDocument();
   });
 });

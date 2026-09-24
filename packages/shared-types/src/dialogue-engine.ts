@@ -93,7 +93,7 @@ export type DialogueBundle = z.infer<typeof DialogueBundleSchema>;
  * trace — FR-E-8
  * ---------------------------------------------------------------------------------------------- */
 
-export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT', 'SEMANTIC']);
+export const TraceStageEnum = z.enum(['PREPROCESS', 'SESSION', 'HOMONYM', 'NODE', 'FAQ', 'INTENT', 'FALLBACK', 'OUTPUT', 'SEMANTIC', 'API']);
 export type TraceStage = z.infer<typeof TraceStageEnum>;
 
 export const TraceCodeEnum = z.enum([
@@ -135,6 +135,18 @@ export const TraceCodeEnum = z.enum([
   'SEMANTIC_AMBIGUOUS',
   'SEMANTIC_BELOW_THRESHOLD',
   'SEMANTIC_SKIPPED',
+  // 레거시 API 연동(No.26) 추가 코드 — §4.6. trace에 바인딩 값·응답 값·URL을 넣지 않는다(FR-L4-10).
+  'API_CALL_REQUESTED',
+  'API_CALL_SUCCEEDED',
+  'API_CALL_FAILED',
+  'API_BRANCH_MATCHED',
+  'API_BRANCH_DEFAULT',
+  'API_BRANCH_FAILURE',
+  'API_FIXED_NOTICE',
+  'API_MAPPING_MISSING',
+  'API_VALUE_DROPPED',
+  'API_CALL_LIMIT',
+  'API_MOCKED',
 ]);
 export type TraceCode = z.infer<typeof TraceCodeEnum>;
 
@@ -197,6 +209,18 @@ export const DesignIssueCode = z.enum([
   'NO_FALLBACK_NODE',
   'EMPTY_EXAMPLE_INTENT',
   'UNSUPPORTED_OUTPUT',
+  // 레거시 API 연동(No.26) 추가 코드 — §5.9(⑧ BROKEN_REFERENCE는 기존 코드 재사용).
+  'API_OUTPUT_NOT_LAST',
+  'API_MULTIPLE_OUTPUTS',
+  'API_NESTED_CALL',
+  'API_LEGACY_FORMAT',
+  'API_SLOT_BINDING_UNREACHABLE',
+  'API_FAILURE_BRANCH_MISSING',
+  'API_TOKEN_IN_URL_FIELD',
+  'API_CONNECTION_UNAVAILABLE',
+  'API_CONNECTION_INSECURE',
+  'API_PERSONAL_DATA_LOOKUP',
+  'API_RAW_PERSONAL_DATA',
 ]);
 export type DesignIssueCode = z.infer<typeof DesignIssueCode>;
 
@@ -230,7 +254,7 @@ export interface FlowNode {
   nodeId: string;
   name: string;
   nodeType: DialogNodeType;
-  via: 'ROOT' | 'DIALOG_MOVE' | 'BUTTON_NODE';
+  via: 'ROOT' | 'DIALOG_MOVE' | 'BUTTON_NODE' | 'API_BRANCH';
   repeated: boolean;
   children: FlowNode[];
 }
@@ -240,7 +264,7 @@ export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
     nodeId: z.string(),
     name: z.string(),
     nodeType: DialogNodeType,
-    via: z.enum(['ROOT', 'DIALOG_MOVE', 'BUTTON_NODE']),
+    via: z.enum(['ROOT', 'DIALOG_MOVE', 'BUTTON_NODE', 'API_BRANCH']),
     repeated: z.boolean(),
     children: z.array(FlowNodeSchema),
   }),

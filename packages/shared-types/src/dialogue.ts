@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray, queryBoolean } from './common';
+import { parseResponsePath } from './api-mapping';
 
 /**
  * 대화 설계(빌더) No.5~9 도메인 스키마.
@@ -428,8 +429,12 @@ export const DialogOutputType = z.enum([
 ]);
 export type DialogOutputType = z.infer<typeof DialogOutputType>;
 
-/** 이번 Phase에서 정의·저장까지만 지원하고 실행하지 않는 아웃풋 타입(FR-5-15, FR-E-7). */
-export const UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO', 'SURVEY', 'API_CONDITION'] as const;
+/**
+ * [No.26에서 축소] 정의·저장까지만 지원하고 실행하지 않는 아웃풋 "타입"(FR-5-15, FR-E-7, FR-L1-1).
+ * `API_CONDITION`은 더 이상 타입만으로 미지원 여부가 갈리지 않는다 — **형태**(v1/v2)로 판정한다.
+ * 실행 미지원 여부를 판정할 때는 타입 상수를 직접 보지 말고 `isUnsupportedOutput()`을 쓴다.
+ */
+export const UNSUPPORTED_OUTPUT_TYPES = ['SCENARIO', 'SURVEY'] as const;
 
 export const ButtonItemSchema = z
   .object({
@@ -518,16 +523,200 @@ export const ApiConditionItemSchema = z.object({
 export type ApiConditionItem = z.infer<typeof ApiConditionItemSchema>;
 
 /**
- * ⚠ `url`은 형식(SafeUrl)만 검증한다. SSRF 방어(사설 IP 대역 차단)는 실행 Phase(No.26)의 책임이다(NFR-S4).
- * `headers`는 평문 저장된다 — 암호화는 No.26/No.45 과제(NFR-S5).
+ * [No.5 원형 — 읽기 호환 전용] 새로 저장할 수 없다(서비스가 `400 API_OUTPUT_LEGACY_FORMAT`으로 거부).
+ * ⚠ `url`은 형식(SafeUrl)만 검증한다. `headers`는 평문 저장돼 있다 — VIEWER의 열람은 응답 가림
+ * (`redactLegacyApiOutputs`)으로 해소한다(No.26, FR-L1-6). @deprecated 연결 방식(v2)으로 전환하세요.
  */
-export const ApiConditionOutputPayloadSchema = z.object({
+export const ApiConditionOutputPayloadV1Schema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   url: SafeUrlSchema,
   headers: z.record(z.string()).optional(),
   bodyTemplate: z.string().max(4000).optional(),
   conditions: z.array(ApiConditionItemSchema).min(1).max(10),
 });
+export type ApiConditionOutputPayloadV1 = z.infer<typeof ApiConditionOutputPayloadV1Schema>;
+
+/* ------------------------------------------------------------------------------------------------
+ * [No.26 신설] API 조건분기 v2 — 전역 `ApiConnection` 참조형. 헤더·URL·자유 본문 템플릿 필드가
+ * 존재하지 않는다(NFR-LS6 ⑦). `docs/02-spec/legacy-api-integration-설계.md` §4.1 근거.
+ * ---------------------------------------------------------------------------------------------- */
+
+export const API_CONDITION_LIMITS = {
+  pathMaxLength: 300,
+  pathParamsMax: 5,
+  queryMax: 20,
+  bodyMax: 30,
+  bodyFieldDepthMax: 3,
+  mappingsMax: 20,
+  mappingMaxLengthDefault: 200,
+  mappingMaxLengthMax: 500,
+  conditionsMin: 1,
+  conditionsMax: 10,
+  responsePathMaxLength: 200,
+  responsePathDepthMax: 10,
+  constValueMax: 500,
+} as const;
+
+const FORBIDDEN_BODY_FIELD_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+const API_BODY_FIELD_SEGMENT_RE = /^[A-Za-z_][A-Za-z0-9_]{0,49}$/;
+
+/** 노드에 저장하는 상대 경로(§7.2) — 쿼리는 이 필드에 담지 않는다(`query` 배열로만). */
+export const ApiRelativePathSchema = z
+  .string()
+  .min(1, '경로를 입력해 주세요.')
+  .max(API_CONDITION_LIMITS.pathMaxLength, `경로는 최대 ${API_CONDITION_LIMITS.pathMaxLength}자까지 입력할 수 있습니다.`)
+  .refine((v) => v.startsWith('/'), { message: '경로는 "/"로 시작해야 합니다.' })
+  .refine((v) => /^[A-Za-z0-9\-._~/!$&'()*+,;=:@{}]*$/.test(v), {
+    message: '경로에 허용되지 않는 문자가 포함되어 있습니다.',
+  })
+  .refine((v) => !v.includes('//'), { message: '경로에 연속된 슬래시(//)를 사용할 수 없습니다.' })
+  .refine((v) => !v.includes('\\'), { message: '경로에 역슬래시를 사용할 수 없습니다.' })
+  .refine((v) => !v.split('/').some((seg) => seg === '..'), { message: '경로에 상위 경로(..)를 사용할 수 없습니다.' })
+  .refine(
+    (v) => {
+      const matches = v.match(/\{[^}]*\}/g) ?? [];
+      return matches.every((m) => /^\{[0-4]\}$/.test(m));
+    },
+    { message: '경로 자리표시자는 {0}~{4}만 사용할 수 있습니다.' },
+  );
+export type ApiRelativePath = z.infer<typeof ApiRelativePathSchema>;
+
+/** 응답 JSON 추출 경로(§4.5) — `parseResponsePath()`가 통과하는 문법만 허용한다. */
+export const ApiResponsePathSchema = z
+  .string()
+  .min(1, '경로를 입력해 주세요.')
+  .max(API_CONDITION_LIMITS.responsePathMaxLength)
+  .refine((v) => parseResponsePath(v) !== null, { message: '응답 경로 형식이 올바르지 않습니다.' });
+export type ApiResponsePath = z.infer<typeof ApiResponsePathSchema>;
+
+/** POST 본문 필드 경로 — 세그먼트 `^[A-Za-z_][A-Za-z0-9_]{0,49}$`, 깊이 ≤3, 금지 키. */
+export const ApiBodyFieldSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .refine(
+    (v) => {
+      const segments = v.split('.');
+      if (segments.length === 0 || segments.length > API_CONDITION_LIMITS.bodyFieldDepthMax) return false;
+      return segments.every((seg) => API_BODY_FIELD_SEGMENT_RE.test(seg) && !FORBIDDEN_BODY_FIELD_SEGMENTS.has(seg));
+    },
+    { message: '본문 필드명 형식이 올바르지 않습니다.' },
+  );
+export type ApiBodyField = z.infer<typeof ApiBodyFieldSchema>;
+
+/** 구조적 바인딩 — 관리자 작성 상수 또는 같은 턴에 완료된 폼의 슬롯 값. */
+export const ApiBindingSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('CONST'), value: z.string().max(API_CONDITION_LIMITS.constValueMax) }),
+  z.object({ kind: z.literal('SLOT'), contextVariableId: z.string().uuid(), slotName: z.string().min(1).max(50) }),
+]);
+export type ApiBinding = z.infer<typeof ApiBindingSchema>;
+
+export const ApiResponseMappingSchema = z.object({
+  name: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,29}$/, '매핑 이름은 영문으로 시작하는 영문/숫자/언더스코어 30자 이내여야 합니다.'),
+  path: ApiResponsePathSchema,
+  required: z.boolean().default(false),
+  maxLength: z
+    .number()
+    .int()
+    .min(1)
+    .max(API_CONDITION_LIMITS.mappingMaxLengthMax)
+    .default(API_CONDITION_LIMITS.mappingMaxLengthDefault),
+});
+export type ApiResponseMapping = z.infer<typeof ApiResponseMappingSchema>;
+
+/** v2 조건 아이템 — v1과 동일한 판정 연산자를 쓰되 경로는 응답 경로 문법을 따른다. */
+export const ApiConditionItemV2Schema = ApiConditionItemSchema.extend({ path: ApiResponsePathSchema });
+export type ApiConditionItemV2 = z.infer<typeof ApiConditionItemV2Schema>;
+
+function countPathPlaceholders(path: string): number {
+  return (path.match(/\{[0-4]\}/g) ?? []).length;
+}
+
+/** [No.26] 연결 참조형. 헤더·URL·자유 본문 템플릿 필드가 **존재하지 않는다**(NFR-LS6 ⑦). */
+export const ApiConditionOutputPayloadV2Schema = z
+  .object({
+    version: z.literal(2),
+    connectionId: z.string().uuid(),
+    method: z.enum(['GET', 'POST']),
+    path: ApiRelativePathSchema,
+    pathParams: z.array(ApiBindingSchema).max(API_CONDITION_LIMITS.pathParamsMax).default([]),
+    query: z
+      .array(z.object({ name: z.string().regex(/^[A-Za-z0-9_.\-]{1,50}$/), value: ApiBindingSchema }))
+      .max(API_CONDITION_LIMITS.queryMax)
+      .default([]),
+    body: z
+      .array(z.object({ field: ApiBodyFieldSchema, value: ApiBindingSchema }))
+      .max(API_CONDITION_LIMITS.bodyMax)
+      .default([]),
+    responseMappings: z.array(ApiResponseMappingSchema).max(API_CONDITION_LIMITS.mappingsMax).default([]),
+    conditions: z.array(ApiConditionItemV2Schema).min(API_CONDITION_LIMITS.conditionsMin).max(API_CONDITION_LIMITS.conditionsMax),
+    defaultNodeId: z.string().uuid().optional(),
+    failureNodeId: z.string().uuid().optional(),
+  })
+  .superRefine((val, ctx) => {
+    const placeholderCount = countPathPlaceholders(val.path);
+    if (placeholderCount !== val.pathParams.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `경로 자리표시자 수(${placeholderCount})와 경로 값 수(${val.pathParams.length})가 일치해야 합니다.`,
+        path: ['pathParams'],
+      });
+    }
+    if (val.method === 'GET' && val.body.length > 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'GET 요청에는 본문을 지정할 수 없습니다.', path: ['body'] });
+    }
+    const mappingNames = new Set<string>();
+    val.responseMappings.forEach((m, i) => {
+      if (mappingNames.has(m.name)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `매핑 이름 "${m.name}"이(가) 중복됩니다.`, path: ['responseMappings', i, 'name'] });
+      }
+      mappingNames.add(m.name);
+    });
+    const queryNames = new Set<string>();
+    val.query.forEach((q, i) => {
+      if (queryNames.has(q.name)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `쿼리 이름 "${q.name}"이(가) 중복됩니다.`, path: ['query', i, 'name'] });
+      }
+      queryNames.add(q.name);
+    });
+    const bodyFields = val.body.map((b) => b.field);
+    const bodyFieldSet = new Set<string>();
+    val.body.forEach((b, i) => {
+      if (bodyFieldSet.has(b.field)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `본문 필드 "${b.field}"이(가) 중복됩니다.`, path: ['body', i, 'field'] });
+      }
+      bodyFieldSet.add(b.field);
+      const hasPrefixCollision = bodyFields.some(
+        (other) => other !== b.field && (other.startsWith(`${b.field}.`) || b.field.startsWith(`${other}.`)),
+      );
+      if (hasPrefixCollision) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `본문 필드 "${b.field}"이(가) 다른 필드와 상위/하위 관계로 충돌합니다.`,
+          path: ['body', i, 'field'],
+        });
+      }
+    });
+  });
+export type ApiConditionOutputPayloadV2 = z.infer<typeof ApiConditionOutputPayloadV2Schema>;
+
+/** 읽기 스키마 = v2 ∪ v1(v2 먼저). 엔진 파싱·번들·스냅샷 복원 검증·응답 DTO가 v1을 계속 읽어야 한다. */
+export const ApiConditionOutputPayloadSchema = z.union([ApiConditionOutputPayloadV2Schema, ApiConditionOutputPayloadV1Schema]);
+export type ApiConditionOutputPayload = z.infer<typeof ApiConditionOutputPayloadSchema>;
+
+/** `p.version === 2`로 판별한다. */
+export function isApiConditionV2(p: ApiConditionOutputPayload): p is ApiConditionOutputPayloadV2 {
+  return (p as { version?: number }).version === 2;
+}
+
+/** v1 `API_CONDITION` 아웃풋의 인덱스(쓰기 거부·복사 제외 공용). */
+export function findLegacyApiOutputIndexes(outputs: readonly DialogOutput[]): number[] {
+  const indexes: number[] = [];
+  outputs.forEach((o, i) => {
+    if (o.type === 'API_CONDITION' && !isApiConditionV2(o.payload)) indexes.push(i);
+  });
+  return indexes;
+}
 
 export const DialogOutputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('TEXT'), payload: TextOutputPayloadSchema }),
@@ -544,6 +733,46 @@ export const DialogOutputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('API_CONDITION'), payload: ApiConditionOutputPayloadSchema }),
 ]);
 export type DialogOutput = z.infer<typeof DialogOutputSchema>;
+
+/** 실행 미지원 = `SCENARIO`·`SURVEY`·v1 `API_CONDITION`. 엔진·설계 점검·웹 배지가 공용으로 쓴다(FR-L1-5). */
+export function isUnsupportedOutput(o: DialogOutput): boolean {
+  if ((UNSUPPORTED_OUTPUT_TYPES as readonly string[]).includes(o.type)) return true;
+  if (o.type === 'API_CONDITION' && !isApiConditionV2(o.payload)) return true;
+  return false;
+}
+
+export const LEGACY_REDACTED_VALUE = '[비공개]';
+
+/**
+ * v1 `API_CONDITION`만 변환한다: `url` → origin + "/" · `headers`의 모든 값 → `LEGACY_REDACTED_VALUE`
+ * (키는 유지) · `bodyTemplate`(있으면) → `LEGACY_REDACTED_VALUE`. v2·그 외 아웃풋은 그대로 반환한다.
+ * 결과는 여전히 v1 스키마를 통과한다(FR-L1-6 · FR-L8-3 · AC-L1-4).
+ */
+export function redactLegacyApiOutputs(outputs: readonly DialogOutput[]): DialogOutput[] {
+  return outputs.map((o) => {
+    if (o.type !== 'API_CONDITION' || isApiConditionV2(o.payload)) return o;
+    const v1 = o.payload;
+    let redactedUrl = v1.url;
+    try {
+      const u = new URL(v1.url);
+      redactedUrl = `${u.protocol}//${u.host}/`;
+    } catch {
+      // 저장 시점에 SafeUrlSchema가 이미 검증했으므로 실무상 도달하지 않는다 — 원본을 그대로 둔다.
+    }
+    const redactedHeaders = v1.headers
+      ? Object.fromEntries(Object.keys(v1.headers).map((k) => [k, LEGACY_REDACTED_VALUE]))
+      : v1.headers;
+    return {
+      type: 'API_CONDITION',
+      payload: {
+        ...v1,
+        url: redactedUrl,
+        headers: redactedHeaders,
+        bodyTemplate: v1.bodyTemplate !== undefined ? LEGACY_REDACTED_VALUE : v1.bodyTemplate,
+      },
+    };
+  });
+}
 
 /* ------------------------------------------------------------------------------------------------
  * (e) 대화 노드 — FR-5-1~11
@@ -599,6 +828,12 @@ const DialogNodeBaseSchema = z.object({
 
 export const DialogNodeSchema = DialogNodeBaseSchema.superRefine((val, ctx) => checkNodeConditionsAndOutputs(val, ctx));
 export type DialogNode = z.infer<typeof DialogNodeSchema>;
+
+/** 노드 복사 응답(No.26) — v1 `API_CONDITION`은 복사에서 제외되며 그 개수를 함께 돌려준다. */
+export const DialogNodeCopyResponseSchema = DialogNodeBaseSchema.extend({
+  excludedLegacyApiOutputCount: z.number().int().nonnegative(),
+});
+export type DialogNodeCopyResponse = z.infer<typeof DialogNodeCopyResponseSchema>;
 
 export const CreateDialogNodeSchema = z
   .object({

@@ -6,6 +6,7 @@ import {
   CreateDialogNodeSchema,
   DesignValidationReport,
   DialogNode,
+  DialogNodeCopyResponse,
   DialogNodeListItem,
   DialogNodeListQuery,
   DialogNodeListQuerySchema,
@@ -76,7 +77,7 @@ export class DialogNodesController {
     @Param('chatbotId') chatbotId: string,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(CopyDialogNodeSchema)) dto: CopyDialogNodeDto,
-  ): Promise<DialogNode> {
+  ): Promise<DialogNodeCopyResponse> {
     return this.dialogNodesService.copy(chatbotId, id, dto);
   }
 

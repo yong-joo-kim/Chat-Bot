@@ -23,6 +23,11 @@ vi.mock('../api/dialogue', () => ({
   dialogNodesApi: { list: vi.fn(), findOne: vi.fn() },
 }));
 
+const mockApiConnectionsPicker = vi.fn();
+vi.mock('../api/apiConnections', () => ({
+  apiConnectionsApi: { picker: (...args: unknown[]) => mockApiConnectionsPicker(...args) },
+}));
+
 /**
  * `ResourcePickerField`의 `resourceType='chatbot'` 자동시험 — 2차 코드리뷰 Low 관찰사항(a) 커버.
  * `chatbot`은 다른 4종과 달리 챗봇 "안"의 리소스가 아니라 챗봇 자체를 전역 검색 대상으로 삼는다
@@ -69,5 +74,58 @@ describe('ResourcePickerField — resourceType="chatbot" (전역 챗봇 검색·
 
     await waitFor(() => expect(mockChatbotsFindOne).toHaveBeenCalledWith('bot-2'));
     expect(await screen.findByText('환불 상담봇')).toBeInTheDocument();
+  });
+});
+
+/**
+ * [No.26] `resourceType='apiConnection'` — 전역 자원이라 `chatbotId` prop이 필요 없다(ui-spec §2.2).
+ * `GET /api-connections/picker`(dialogue:read)는 `q` 검색을 지원하지 않으므로 클라이언트에서
+ * 이름으로 필터링하고, 사용 중지된 연결은 "(사용 중지)" 접미사를 붙여 후보에 남긴다.
+ */
+describe('ResourcePickerField — resourceType="apiConnection" (전역 연결 검색·선택)', () => {
+  beforeEach(() => {
+    mockApiConnectionsPicker.mockReset();
+  });
+
+  it('검색어를 입력하면 picker() 전체 목록을 클라이언트에서 이름으로 필터링해 후보를 보여준다', async () => {
+    mockApiConnectionsPicker.mockResolvedValue({
+      items: [
+        { id: 'conn-1', name: 'ERP 주문', allowedMethods: ['GET', 'POST'], enabled: true, personalDataLookup: false, allowRawPersonalData: false, sampleLabels: [] },
+        { id: 'conn-2', name: '결제조회', allowedMethods: ['GET'], enabled: false, personalDataLookup: false, allowRawPersonalData: false, sampleLabels: [] },
+      ],
+    });
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <ResourcePickerField id="picker" label="연결" resourceType="apiConnection" multiple={false} value={null} onChange={onChange} />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByRole('combobox'), 'ERP');
+
+    expect(await screen.findByRole('option', { name: 'ERP 주문' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /결제조회/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: 'ERP 주문' }));
+    expect(onChange).toHaveBeenCalledWith('conn-1');
+  });
+
+  it('사용 중지된 연결도 "(사용 중지)" 접미사와 함께 후보에 남는다', async () => {
+    mockApiConnectionsPicker.mockResolvedValue({
+      items: [{ id: 'conn-2', name: '결제조회', allowedMethods: ['GET'], enabled: false, personalDataLookup: false, allowRawPersonalData: false, sampleLabels: [] }],
+    });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <ResourcePickerField id="picker" label="연결" resourceType="apiConnection" multiple={false} value={null} onChange={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByRole('combobox'), '결제');
+
+    expect(await screen.findByRole('option', { name: '결제조회 (사용 중지)' })).toBeInTheDocument();
   });
 });
