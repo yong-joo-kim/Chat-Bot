@@ -220,3 +220,13 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - **서비스 재검증**: 전송 = 담당자 본인 · 종료 = 담당자·ADMIN · 강제 인수 = 역할 ADMIN · 원문 열람 = `cs:write` ∧ (담당자 ∨ ADMIN) ∧ 상담 중. 권한 문자열은 여전히 가드가 강제하는 기준선이다.
 - **OR 판정은 여전히 지원하지 않는다** — 자주 쓰는 문장 목록은 경로를 둘로 나눠(`dialogue:read` 관리 · `cs:read` 콘솔 검색) 각각 AND 가드를 건다.
 - 역할은 전역이다 — 챗봇별 상담원 배정·부서 분리는 멀티테넌시(No.22·45) 재검토 트리거에 합류한다. `@Public()` 6 → 7(상담 폴링 — 인증 대상이 아니라 토큰 보상 통제).
+
+
+---
+
+## 갱신 (2026-09-25 — No.44 피드백 루프: `@Public()` 7 → 8 · 신규 권한 0종)
+
+피드백 기반 개선 루프(No.44, **ADR-0038 §2**)는 **신규 권한·역할을 만들지 않는다**(PM 확정 P-15). `Permission` 17종 · 역할 4종 · `ROLE_PERMISSIONS` · fail-closed 판정 순서는 전부 불변이다.
+
+- **`@Public()` 7 → 8** — 답변 평가(`PUT …/messages/:messageId/feedback`). 인증 대상이 아니라 **3요소 결합 검증**(챗봇·세션·서버 발급 `messageId` + `feedbackOffered`)·단일 404·평가 전용 버킷의 보상 통제다. 개수 고정 테스트는 무력화하지 않고 8로 갱신한다(숫자 단언 5파일 + 제목 1파일 — `feedback-loop-설계.md` §21.2).
+- 스위치 = `channel:write` · 부정 평가 항목 조회 `dialogue:read` / 직접 수정 완료 `dialogue:write`(바꾸는 자원 = 학습 큐) · 만족도 통계 `chatbot:read`(AGENT 포함 — 통계와 같은 도메인).

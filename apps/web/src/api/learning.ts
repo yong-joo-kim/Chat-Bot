@@ -13,10 +13,13 @@ import type {
   UnansweredQuestionListItem,
   UnansweredQuestionStatus,
   UnansweredQuestionSummary,
+  UnansweredSource,
 } from '@chat-bot/shared-types';
 
 export interface UnansweredListParams {
   status?: UnansweredQuestionStatus[];
+  /** [신규 No.44] 없으면 전체 소스(feedback-loop-ui-spec.md §3.3). */
+  source?: UnansweredSource[];
   from?: string;
   to?: string;
   q?: string;
@@ -57,6 +60,9 @@ export const learningApi = {
     apiClient.post<UnansweredQuestionListItem>(`/chatbots/${chatbotId}/unanswered-questions/${id}/ignore`, undefined),
   reopen: (chatbotId: string, id: string) =>
     apiClient.post<UnansweredQuestionListItem>(`/chatbots/${chatbotId}/unanswered-questions/${id}/reopen`, undefined),
+  /** [신규 No.44] "직접 수정 완료" — `NEGATIVE_FEEDBACK` ∧ `PENDING`일 때만 가능(§11.3). */
+  markAddressed: (chatbotId: string, id: string) =>
+    apiClient.post<UnansweredQuestionListItem>(`/chatbots/${chatbotId}/unanswered-questions/${id}/mark-addressed`, undefined),
   bulkResolve: (chatbotId: string, dto: BulkResolveDto) =>
     apiClient.post<BulkResult>(`/chatbots/${chatbotId}/unanswered-questions/bulk-resolve`, dto),
   bulkIgnore: (chatbotId: string, dto: BulkIgnoreDto) =>

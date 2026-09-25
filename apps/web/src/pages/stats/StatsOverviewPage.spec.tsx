@@ -12,23 +12,28 @@ const chatbot = makeChatbot({ id: '33333333-3333-4333-8333-333333333333' });
 const mockContext: ChatbotDetailContext = {
   chatbot,
   reload: vi.fn().mockResolvedValue(undefined),
-  setUnsavedGuard: vi.fn(),
-};
+  setUnsavedGuard: vi.fn(), learningSummary: null, refreshLearningSummary: vi.fn() };
 
 vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
+}));
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ can: () => true }),
 }));
 
 const mockGetSummary = vi.fn();
 const mockGetDistribution = vi.fn();
 const mockGetQuestions = vi.fn();
 const mockGetIntentStats = vi.fn();
+const mockGetFeedbackStats = vi.fn();
 vi.mock('../../api/stats', () => ({
   statsApi: {
     getSummary: (...args: unknown[]) => mockGetSummary(...args),
     getDistribution: (...args: unknown[]) => mockGetDistribution(...args),
     getQuestions: (...args: unknown[]) => mockGetQuestions(...args),
     getIntentStats: (...args: unknown[]) => mockGetIntentStats(...args),
+    getFeedbackStats: (...args: unknown[]) => mockGetFeedbackStats(...args),
   },
 }));
 
@@ -103,6 +108,18 @@ function mockAllSuccess(): void {
     distinctIntentCount: 0,
     items: [],
   });
+  mockGetFeedbackStats.mockResolvedValue({
+    periodStart: PERIOD_META.periodStart,
+    periodEnd: PERIOD_META.periodEnd,
+    granularity: 'DAY',
+    timezone: 'Asia/Seoul',
+    chatbotId: chatbot.id,
+    generatedAt: new Date('2026-09-22T00:00:00.000Z'),
+    totals: { upCount: 0, downCount: 0, ratedCount: 0, offeredCount: 0, positiveRate: null, participationRate: null, lowSample: false },
+    buckets: [],
+    topNegativeTargets: [],
+    lowSampleThreshold: 30,
+  });
 }
 
 function renderPage(): ReturnType<typeof render> {
@@ -119,6 +136,7 @@ describe('StatsOverviewPage — 요청 순번 가드', () => {
     mockGetDistribution.mockReset();
     mockGetQuestions.mockReset();
     mockGetIntentStats.mockReset();
+    mockGetFeedbackStats.mockReset();
   });
 
   it('빠른 기간(세분화) 전환 시 늦게 도착한 이전 응답이 최신 결과를 덮어쓰지 않는다', async () => {

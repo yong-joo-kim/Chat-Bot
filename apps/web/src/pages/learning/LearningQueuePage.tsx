@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type {
   BulkResult,
   DecomposedResolveResult,
@@ -31,9 +31,15 @@ import { BulkResultPanel } from './BulkResultPanel';
 import { PendingLimitBanner } from './PendingLimitBanner';
 import { LearningLinkWarningBanner, type LinkWarningEntry } from './LearningLinkWarningBanner';
 import { ClassifierStatusPanel } from './ClassifierStatusPanel';
+import { SourceTabStrip, type SourceTabValue } from './SourceTabStrip';
+import { NegativeFeedbackLimitBanner } from './NegativeFeedbackLimitBanner';
 
 const PAGE_SIZE = 20;
-type EmptyKind = 'none-ever' | 'all-processed' | null;
+type EmptyKind = 'none-ever' | 'all-processed' | 'none-ever-negative' | null;
+
+function isSourceTabValue(v: string | null): v is SourceTabValue {
+  return v === 'ALL' || v === 'UNANSWERED' || v === 'NEGATIVE_FEEDBACK';
+}
 
 /** L1 — 학습현황 화면(FR-15-*, ui-spec §4). VIEWER는 쓰기 액션을 렌더하지 않는다(F-7, FR-C-6). */
 export function LearningQueuePage(): JSX.Element {
@@ -41,15 +47,20 @@ export function LearningQueuePage(): JSX.Element {
   const { can } = useAuth();
   const { showToast } = useToast();
   const canWrite = can('dialogue:write');
+  const canWriteChannel = can('channel:write');
   const { topicsById } = useTopics(chatbot.id);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get('highlightId') ?? undefined;
+  const sourceParam = searchParams.get('source');
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<UnansweredQuestionStatus[]>(['PENDING']);
   const [recurredOnly, setRecurredOnly] = useState(false);
   const [sort, setSort] = useState<UnansweredSort>('occurredCount');
   const [page, setPage] = useState(1);
+  // [신규 No.44] 소스 탭(feedback-loop-ui-spec.md §3.3) — URL 쿼리 `source`와 동기화.
+  const [sourceTab, setSourceTab] = useState<SourceTabValue>(isSourceTabValue(sourceParam) ? sourceParam : 'ALL');
+  const [markAddressedSubmittingId, setMarkAddressedSubmittingId] = useState<string | null>(null);
 
   const [items, setItems] = useState<UnansweredQuestionListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -63,7 +74,12 @@ export function LearningQueuePage(): JSX.Element {
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
 
   const [intentOptions, setIntentOptions] = useState<IntentOption[]>([]);
-  const [resolveTarget, setResolveTarget] = useState<{ question: UnansweredQuestionListItem; initialIntentName?: string } | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<{
+    question: UnansweredQuestionListItem;
+    initialIntentName?: string;
+    /** [신규 No.44] "현재 매칭" 후보로 반영 모달을 연 경우 상단 비차단 경고(FR-FB7-4). */
+    currentMatchWarning?: boolean;
+  } | null>(null);
   const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
   const [bulkIgnoreConfirmOpen, setBulkIgnoreConfirmOpen] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
@@ -99,6 +115,9 @@ export function LearningQueuePage(): JSX.Element {
       });
   }
 
+  // [신규 No.44] "전체" 탭은 두 소스를 함께 받는다(source 미지정, AC-FB5-1과 동일 해석).
+  const sourceQuery = sourceTab === 'ALL' ? undefined : [sourceTab];
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
@@ -106,6 +125,7 @@ export function LearningQueuePage(): JSX.Element {
       const res = await learningApi.list(chatbot.id, {
         q: q || undefined,
         status,
+        source: sourceQuery,
         recurredOnly,
         sort,
         order: 'desc',
@@ -118,8 +138,12 @@ export function LearningQueuePage(): JSX.Element {
 
       const isDefaultFilter = status.length === 1 && status[0] === 'PENDING' && q === '' && !recurredOnly;
       if (res.total === 0 && isDefaultFilter) {
-        const all = await learningApi.list(chatbot.id, { status: ['PENDING', 'RESOLVED', 'IGNORED'], page: 1, pageSize: 1 });
-        setEmptyKind(all.total === 0 ? 'none-ever' : 'all-processed');
+        const all = await learningApi.list(chatbot.id, { status: ['PENDING', 'RESOLVED', 'IGNORED'], source: sourceQuery, page: 1, pageSize: 1 });
+        if (all.total > 0) {
+          setEmptyKind('all-processed');
+        } else {
+          setEmptyKind(sourceTab === 'NEGATIVE_FEEDBACK' ? 'none-ever-negative' : 'none-ever');
+        }
       } else {
         setEmptyKind(null);
       }
@@ -128,7 +152,7 @@ export function LearningQueuePage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [chatbot.id, q, status, recurredOnly, sort, page]);
+  }, [chatbot.id, q, status, recurredOnly, sort, page, sourceTab]);
 
   useEffect(() => {
     void load();
@@ -146,6 +170,43 @@ export function LearningQueuePage(): JSX.Element {
   function showProcessed(): void {
     setStatus(['RESOLVED', 'IGNORED']);
     setPage(1);
+  }
+
+  // [신규 No.44] 소스 탭 전환 — URL 쿼리와 동기화하고 목록을 재조회한다(feedback-loop-ui-spec.md §2.2).
+  function handleSourceTabChange(value: SourceTabValue): void {
+    setSourceTab(value);
+    setPage(1);
+    const next = new URLSearchParams(searchParams);
+    if (value === 'ALL') next.delete('source');
+    else next.set('source', value);
+    setSearchParams(next, { replace: true });
+  }
+
+  // [신규 No.44] "직접 수정 완료" — 중복 클릭 방지(진행 중 id는 재요청하지 않는다).
+  async function handleMarkAddressed(item: UnansweredQuestionListItem): Promise<void> {
+    if (markAddressedSubmittingId) return;
+    setMarkAddressedSubmittingId(item.id);
+    try {
+      await learningApi.markAddressed(chatbot.id, item.id);
+      showToast(MESSAGES.learning.markAddressedSuccess);
+      refreshHighlightIfMatch(item.id);
+      void load();
+      refreshLearningSummary();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'ALREADY_RESOLVED') {
+        showToast(MESSAGES.learning.markAddressedAlreadyResolved);
+        void load();
+        // [R1 반영] 다른 관리자가 먼저 처리한 경합이므로 이 세션의 배지/탭 카운트도 최신화한다
+        // (§3.3 5번 흐름 — 자동 재조회와 함께 요약도 갱신해야 SourceTabStrip/NAV 배지가 어긋나지 않는다).
+        refreshLearningSummary();
+      } else if (e instanceof ApiError && e.code === 'INVALID_STATUS_TRANSITION') {
+        showToast(MESSAGES.learning.markAddressedDisabledUnanswered);
+      } else {
+        showToast(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
+      }
+    } finally {
+      setMarkAddressedSubmittingId(null);
+    }
   }
 
   async function loadDetail(id: string): Promise<void> {
@@ -178,8 +239,8 @@ export function LearningQueuePage(): JSX.Element {
     });
   }
 
-  function openResolve(question: UnansweredQuestionListItem, initialIntentName?: string): void {
-    setResolveTarget({ question, initialIntentName });
+  function openResolve(question: UnansweredQuestionListItem, initialIntentName?: string, currentMatchWarning?: boolean): void {
+    setResolveTarget({ question, initialIntentName, currentMatchWarning });
   }
 
   function handleResolved(result: ResolveResult | DecomposedResolveResult, resolveDecomposedKeywordNames?: string[]): void {
@@ -286,7 +347,20 @@ export function LearningQueuePage(): JSX.Element {
 
       <ClassifierStatusPanel chatbotId={chatbot.id} canWrite={canWrite} />
 
+      {/* [신규 No.44] `limitReached`(최상위)는 기존 의미(UNANSWERED 기준) 그대로다 — 두 배너는
+          동시에 뜰 수 있는 별도 인스턴스다(feedback-loop-ui-spec.md §3.3, learning.ts D-9 주석). */}
       {learningSummary?.limitReached && <PendingLimitBanner />}
+      {learningSummary?.bySource?.NEGATIVE_FEEDBACK?.limitReached && <NegativeFeedbackLimitBanner />}
+
+      <SourceTabStrip
+        counts={{
+          all: learningSummary?.pendingCount ?? 0,
+          unanswered: learningSummary?.bySource?.UNANSWERED?.pendingCount ?? 0,
+          negativeFeedback: learningSummary?.bySource?.NEGATIVE_FEEDBACK?.pendingCount ?? 0,
+        }}
+        value={sourceTab}
+        onChange={handleSourceTabChange}
+      />
 
       {highlightId && highlightDetail && !items.some((i) => i.id === highlightId) && (
         <div className="learning-highlight-card" role="status">
@@ -355,6 +429,18 @@ export function LearningQueuePage(): JSX.Element {
       ) : items.length === 0 ? (
         emptyKind === 'none-ever' ? (
           <EmptyState title={MESSAGES.learning.emptyNoneEverTitle} description={MESSAGES.learning.emptyNoneEverDesc} />
+        ) : emptyKind === 'none-ever-negative' ? (
+          <EmptyState
+            title={MESSAGES.learning.emptyNoneNegativeFeedbackTitle}
+            description={MESSAGES.learning.emptyNoneNegativeFeedbackDesc}
+            action={
+              canWriteChannel ? (
+                <Link to={`/chatbots/${chatbot.id}/channels`} className="btn btn-secondary">
+                  {MESSAGES.learning.goToChannelSettings}
+                </Link>
+              ) : undefined
+            }
+          />
         ) : emptyKind === 'all-processed' ? (
           <EmptyState
             title={MESSAGES.learning.emptyAllProcessedTitle}
@@ -393,6 +479,9 @@ export function LearningQueuePage(): JSX.Element {
             onReopenClick={(item) => void handleReopen(item)}
             highlightId={highlightId}
             topicsById={topicsById}
+            chatbotId={chatbot.id}
+            onMarkAddressedClick={(item) => void handleMarkAddressed(item)}
+            markAddressedSubmittingId={markAddressedSubmittingId}
           />
           <p>{MESSAGES.learning.totalCount(total)}</p>
           <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
@@ -405,6 +494,7 @@ export function LearningQueuePage(): JSX.Element {
         question={resolveTarget?.question ?? null}
         intentOptions={intentOptions}
         initialIntentName={resolveTarget?.initialIntentName}
+        currentMatchWarning={resolveTarget?.currentMatchWarning}
         onClose={() => setResolveTarget(null)}
         onResolved={handleResolved}
         onAlreadyResolved={handleAlreadyResolved}

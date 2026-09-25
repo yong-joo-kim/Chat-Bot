@@ -20,5 +20,7 @@ export interface ConversationLogPort {
     /** 2단계(외부 RAG) 응답 여부(J-10, DD-82). */
     answeredByRag: boolean;
     inputKind: InputKind;
+    /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). 선택 — 기존 시험의 `objectContaining` 단언 불변. */
+    feedbackOffered?: boolean;
   }): Promise<void>;
 }

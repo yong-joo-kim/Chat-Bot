@@ -13,6 +13,10 @@ import {
   HandoffPollQuerySchema,
   HandoffPollMessageSchema,
   HandoffPollResponseSchema,
+  // [신규 No.44] 답변 평가 공개 계약 3종 — T-13 가드(신규 Public*Schema 누락 감지)가 요구한다.
+  PublicFeedbackOfferSchema,
+  PublicFeedbackRequestSchema,
+  PublicFeedbackResponseSchema,
 } from '@chat-bot/shared-types';
 
 /**
@@ -351,7 +355,7 @@ describe('토픽 시스템(No.22) 정적 검사 — topic-system-설계.md §17'
     });
   });
 
-  describe('T-9: @Public() 총 7 · topics/**·asset-transfer/**에 0건', () => {
+  describe('T-9: @Public() 총 8 · topics/**·asset-transfer/**에 0건', () => {
     it('topics/**·asset-transfer/**에 @Public( 심볼이 없다', () => {
       const targetFiles = apiFileContents.filter(({ f }) => f.includes('/src/topics/') || f.includes('/src/asset-transfer/'));
       expect(targetFiles.length).toBeGreaterThan(5);
@@ -424,6 +428,10 @@ describe('토픽 시스템(No.22) 정적 검사 — topic-system-설계.md §17'
       ['HandoffPollQuerySchema', HandoffPollQuerySchema],
       ['HandoffPollMessageSchema', HandoffPollMessageSchema],
       ['HandoffPollResponseSchema', HandoffPollResponseSchema],
+      // [신규 No.44]
+      ['PublicFeedbackOfferSchema', PublicFeedbackOfferSchema],
+      ['PublicFeedbackRequestSchema', PublicFeedbackRequestSchema],
+      ['PublicFeedbackResponseSchema', PublicFeedbackResponseSchema],
     ];
 
     it('스캔 대상 스키마가 존재한다(회귀 방지)', () => {

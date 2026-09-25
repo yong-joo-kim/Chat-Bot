@@ -9,6 +9,7 @@ import { IntentStatsService } from './intents/intent-stats.service';
 import { SurveyResultsController } from './surveys/survey-results.controller';
 import { SurveyStatsService } from './surveys/survey-stats.service';
 import { SurveyResultsService } from './surveys/survey-results.service';
+import { FeedbackStatsService } from './feedback/feedback-stats.service';
 
 // [No.29] ChatbotGroupsModule·ConversationModule·LearningModule은 import하지 않는다(설계서 §2.2) —
 // 그룹 행은 Prisma로 직접 읽고(보관 포함), 통계의 Prisma 쓰기 대상은 0개다.
@@ -16,6 +17,6 @@ import { SurveyResultsService } from './surveys/survey-results.service';
 @Module({
   imports: [ChatbotsModule],
   controllers: [StatsController, IntegratedStatsController, SurveyResultsController],
-  providers: [StatsService, IntegratedStatsService, IntegratedSessionQuery, IntentStatsService, SurveyStatsService, SurveyResultsService],
+  providers: [StatsService, IntegratedStatsService, IntegratedSessionQuery, IntentStatsService, SurveyStatsService, SurveyResultsService, FeedbackStatsService],
 })
 export class StatsModule {}

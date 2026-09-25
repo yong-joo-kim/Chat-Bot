@@ -254,21 +254,21 @@ describe('챗봇 복원/버전 이력관리(No.25) 정적 검사 — version-his
     });
   });
 
-  describe('V-8: @Public() 핸들러 수는 정확히 7개다(FR-0-76 — No.24 상담 폴링 6→7)', () => {
+  describe('V-8: @Public() 핸들러 수는 정확히 8개다(FR-0-76 — No.44 답변 평가 7→8)', () => {
     function collectAllApiControllerFiles(): string[] {
       const files: string[] = [];
       walk(join(REPO_ROOT, 'apps/api/src'), ['.controller.ts'], files);
       return files;
     }
 
-    it('*.controller.ts 전체에서 @Public() 총개수가 7개다(versions.controller.ts는 0건, No.24 상담 폴링 6→7)', () => {
+    it('*.controller.ts 전체에서 @Public() 총개수가 8개다(versions.controller.ts는 0건, No.44 답변 평가 7→8)', () => {
       const controllerFiles = collectAllApiControllerFiles();
       expect(controllerFiles.length).toBeGreaterThan(10);
       let total = 0;
       for (const file of controllerFiles) {
         total += nonCommentOccurrences(readFileSync(file, 'utf8'), /@Public\(\)/g);
       }
-      expect(total).toBe(7);
+      expect(total).toBe(8);
     });
 
     it('versions.controller.ts에는 @Public()이 없다', () => {

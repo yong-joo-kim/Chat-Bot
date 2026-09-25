@@ -25,8 +25,7 @@ const chatbot: Chatbot = {
 const mockContext: ChatbotDetailContext = {
   chatbot,
   reload: vi.fn().mockResolvedValue(undefined),
-  setUnsavedGuard: vi.fn(),
-};
+  setUnsavedGuard: vi.fn(), learningSummary: null, refreshLearningSummary: vi.fn() };
 
 vi.mock('../../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,

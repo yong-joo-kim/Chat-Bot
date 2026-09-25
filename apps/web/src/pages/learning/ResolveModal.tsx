@@ -21,6 +21,8 @@ export interface ResolveModalProps {
   intentOptions: IntentOption[];
   /** 추천 후보에서 진입한 경우 의도명이 사전 채워진다(S-6). */
   initialIntentName?: string;
+  /** [신규 No.44] "현재 매칭" 후보로 열렸을 때 상단 비차단 경고(FR-FB7-4, feedback-loop-ui-spec.md §3.3). */
+  currentMatchWarning?: boolean;
   onClose: () => void;
   /**
    * `resolveDecomposedKeywordNames`는 `resolve-decomposed` 경로에서만 채워진다(1건 이상 등록 시) —
@@ -48,6 +50,7 @@ export function ResolveModal({
   question,
   intentOptions,
   initialIntentName,
+  currentMatchWarning,
   onClose,
   onResolved,
   onAlreadyResolved,
@@ -165,6 +168,13 @@ export function ResolveModal({
       <p>
         <strong>{MESSAGES.learning.targetQuestionLabel}</strong>: {question.questionText}
       </p>
+
+      {/* [신규 No.44] 비차단 경고 — 저장을 막지 않는다(AC-FB5-3, feedback-loop-ui-spec.md §3.3). */}
+      {currentMatchWarning && (
+        <p className="modal-banner modal-banner--warning" role="status" aria-live="polite">
+          {MESSAGES.learning.currentMatchWarning}
+        </p>
+      )}
 
       {limitExceeded && (
         <p className="modal-banner modal-banner--error" role="alert">

@@ -58,19 +58,20 @@ function routeHandlerNames(prototype: object): string[] {
 }
 
 /**
- * `@Public()`은 정확히 7곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 6→7, 근거는
- * `docs/02-spec/decisions/ADR-0036-hybrid-cs-handoff-thread-short-polling-and-transient-raw-text.md`
- * §2 및 `hybrid-cs-설계.md` §7.1). 7번째는 상담 폴링(`PublicConversationController#pollHandoff`)이다.
+ * `@Public()`은 정확히 8곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 7→8, 근거는
+ * `docs/02-spec/decisions/ADR-0038-answer-feedback-message-capability-ledger-and-queue-source-split.md`
+ * §2 및 `feedback-loop-설계.md` §7.1). 8번째는 답변 평가(`PublicConversationController#submitFeedback`)다.
  * 인가 우회는 "추가된 코드"가 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가
  * 놓쳐도 CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
  */
 describe('@Public() 부착 개수 — AC-C-4', () => {
-  it('정확히 7곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 로그인, 로그아웃)에만 부착되어 있다', () => {
+  it('정확히 8곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 답변 평가, 로그인, 로그아웃)에만 부착되어 있다', () => {
     expect(isPublic(HealthController.prototype, 'check')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'getConfig')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'sendMessage')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'pollMessage')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'pollHandoff')).toBe(true);
+    expect(isPublic(PublicConversationController.prototype, 'submitFeedback')).toBe(true);
     expect(isPublic(AuthController.prototype, 'login')).toBe(true);
     expect(isPublic(AuthController.prototype, 'logout')).toBe(true);
   });
@@ -91,7 +92,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 34개 컨트롤러 전체에서 @Public() 총개수가 정확히 7건이다', () => {
+  it('전수 스캔: 등록된 34개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -154,6 +155,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
         'PublicConversationController#sendMessage',
         'PublicConversationController#pollMessage',
         'PublicConversationController#pollHandoff',
+        'PublicConversationController#submitFeedback',
       ].sort(),
     );
   });

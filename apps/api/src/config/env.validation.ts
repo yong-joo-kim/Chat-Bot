@@ -137,6 +137,13 @@ const EnvSchema = z.object({
   // [코드리뷰 2회차 M-1] 정리 루프(60초) 자동 기동 스위치 — `DEPLOY_SCHEDULE_ENABLED` 선례와 동일한
   // 형식. 운영 기본값은 true, 시험 기본값은 jest.isolate-env.js가 false로 고정한다.
   HANDOFF_SWEEPER_ENABLED: envBoolean(true),
+  // 피드백 기반 개선 루프(No.44) 그룹 추가 — 전부 선택(기본값 있음, FR-0-148). 기동 조건 아님.
+  // 기능 스위치는 환경변수가 아니라 챗봇별 WEB 채널 설정이다(기본 꺼짐, §5).
+  PUBLIC_FEEDBACK_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(120),
+  PUBLIC_FEEDBACK_RATE_LIMIT_MESSAGE_PER_MIN: z.coerce.number().int().positive().default(10),
+  FEEDBACK_CHANGE_WINDOW_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  FEEDBACK_MAX_CHANGES: z.coerce.number().int().min(0).max(20).default(5),
+  FEEDBACK_QUEUE_MAX_PENDING: z.coerce.number().int().positive().default(2000),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
-import type { UnansweredQuestionSummary } from '@chat-bot/shared-types';
 import { useChatbotDetailContext, type ChatbotDetailContext } from '../ChatbotDetailLayout';
 import { useAuth } from '../../context/AuthContext';
-import { learningApi } from '../../api/learning';
 import { MESSAGES } from '../../constants/messages';
 import { NavPendingBadge } from './NavPendingBadge';
+import { NegativeFeedbackNavBadge } from './NegativeFeedbackNavBadge';
 
-export interface StatsShellContext extends ChatbotDetailContext {
-  learningSummary: UnansweredQuestionSummary | null;
-  refreshLearningSummary: () => void;
-}
+/**
+ * [No.44 R2] 학습현황 요약(`learningSummary`/`refreshLearningSummary`)은 더 이상 이 컴포넌트가 직접
+ * 조회하지 않는다 — `ChatbotDetailLayout`(TabNav·StatsShell·LearningQueuePage의 공통 부모)이 챗봇
+ * 상세 마운트당 1회만 조회해 `ChatbotDetailContext`로 내려준다. `StatsShellContext`는 그 값을 그대로
+ * 하위(`LearningQueuePage`)에 전달하기 위한 통로일 뿐이라 별도로 추가하는 필드가 없다.
+ */
+export type StatsShellContext = ChatbotDetailContext;
 
 export function useStatsShellContext(): StatsShellContext {
   return useOutletContext<StatsShellContext>();
@@ -22,23 +23,8 @@ export function useStatsShellContext(): StatsShellContext {
  */
 export function StatsShell(): JSX.Element {
   const ctx = useChatbotDetailContext();
-  const { chatbot } = ctx;
+  const { chatbot, learningSummary } = ctx;
   const { can } = useAuth();
-  const [learningSummary, setLearningSummary] = useState<UnansweredQuestionSummary | null>(null);
-
-  const refreshLearningSummary = useCallback(() => {
-    if (!can('dialogue:read')) return;
-    learningApi
-      .summary(chatbot.id)
-      .then(setLearningSummary)
-      .catch(() => {
-        // 배지·배너는 보조 정보다 — 실패해도 화면 전체를 막지 않는다.
-      });
-  }, [chatbot.id, can]);
-
-  useEffect(() => {
-    refreshLearningSummary();
-  }, [refreshLearningSummary]);
 
   const subNavClassName = ({ isActive }: { isActive: boolean }): string =>
     `stats-subnav-link${isActive ? ' stats-subnav-link--active' : ''}`;
@@ -53,7 +39,11 @@ export function StatsShell(): JSX.Element {
         )}
         {can('dialogue:read') && (
           <NavLink to={`/chatbots/${chatbot.id}/stats/learning`} className={subNavClassName}>
-            {MESSAGES.statsShell.tabLearning} <NavPendingBadge count={learningSummary?.pendingCount ?? 0} />
+            {MESSAGES.statsShell.tabLearning}{' '}
+            {/* [No.44] 기존 "미응답 대기" 배지는 의미를 바꾸지 않는다 — bySource.UNANSWERED만 센다
+                (합계 pendingCount 아님, feedback-loop-ui-spec.md §3.5). 부정 평가는 별도 배지로 표시한다. */}
+            <NavPendingBadge count={learningSummary?.bySource?.UNANSWERED?.pendingCount ?? 0} />{' '}
+            <NegativeFeedbackNavBadge count={learningSummary?.bySource?.NEGATIVE_FEEDBACK?.pendingCount ?? 0} />
           </NavLink>
         )}
         {/* [No.26] L1 외부 연동 로그 — `chatbot:read`(세 역할 전부, legacy-api-integration-ui-spec.md §1). */}
@@ -64,7 +54,7 @@ export function StatsShell(): JSX.Element {
         )}
       </nav>
       <div className="stats-content">
-        <Outlet context={{ ...ctx, learningSummary, refreshLearningSummary } satisfies StatsShellContext} />
+        <Outlet context={ctx satisfies StatsShellContext} />
       </div>
     </div>
   );

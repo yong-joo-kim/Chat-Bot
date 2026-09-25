@@ -14,25 +14,46 @@ const chatbot = makeChatbot({ id: '33333333-3333-4333-8333-333333333333' });
 const mockContext: ChatbotDetailContext = {
   chatbot,
   reload: vi.fn().mockResolvedValue(undefined),
-  setUnsavedGuard: vi.fn(),
-};
+  setUnsavedGuard: vi.fn(), learningSummary: null, refreshLearningSummary: vi.fn() };
 
 vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
+}));
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ can: () => true }),
 }));
 
 const mockGetSummary = vi.fn();
 const mockGetDistribution = vi.fn();
 const mockGetQuestions = vi.fn();
 const mockGetIntentStats = vi.fn();
+const mockGetFeedbackStats = vi.fn();
 vi.mock('../../api/stats', () => ({
   statsApi: {
     getSummary: (...args: unknown[]) => mockGetSummary(...args),
     getDistribution: (...args: unknown[]) => mockGetDistribution(...args),
     getQuestions: (...args: unknown[]) => mockGetQuestions(...args),
     getIntentStats: (...args: unknown[]) => mockGetIntentStats(...args),
+    getFeedbackStats: (...args: unknown[]) => mockGetFeedbackStats(...args),
   },
 }));
+
+function makeFeedbackStats(overrides: Partial<import('@chat-bot/shared-types').FeedbackStats> = {}): import('@chat-bot/shared-types').FeedbackStats {
+  return {
+    periodStart: PERIOD_META.periodStart,
+    periodEnd: PERIOD_META.periodEnd,
+    granularity: 'DAY',
+    timezone: 'Asia/Seoul',
+    chatbotId: chatbot.id,
+    generatedAt: new Date('2026-09-22T00:00:00.000Z'),
+    totals: { upCount: 30, downCount: 10, ratedCount: 40, offeredCount: 200, positiveRate: 0.75, participationRate: 0.2, lowSample: false },
+    buckets: [{ dayBucket: '2026-09-22', upCount: 30, downCount: 10, offeredCount: 200, positiveRate: 0.75 }],
+    topNegativeTargets: [{ kind: 'FAQ', targetId: '66666666-6666-4666-8666-666666666666', name: '환불 안내', deleted: false, downCount: 10, upCount: 2 }],
+    lowSampleThreshold: 30,
+    ...overrides,
+  };
+}
 
 function makeIntentStats(overrides: Partial<import('@chat-bot/shared-types').IntentStats> = {}): import('@chat-bot/shared-types').IntentStats {
   return {
@@ -126,19 +147,23 @@ describe('StatsOverviewPage — axe 접근성 스캔', () => {
     mockGetDistribution.mockReset();
     mockGetQuestions.mockReset();
     mockGetIntentStats.mockReset();
+    mockGetFeedbackStats.mockReset();
   });
 
-  it('정상 데이터 화면(카드+차트+분포+순위+의도별 매칭)에 구조적 접근성 위반이 없다', async () => {
+  it('정상 데이터 화면(카드+차트+분포+순위+의도별 매칭+답변 만족도)에 구조적 접근성 위반이 없다', async () => {
     mockGetSummary.mockResolvedValue(makeSummary());
     mockGetDistribution.mockResolvedValue(makeDistribution());
     mockGetQuestions.mockResolvedValue(makeQuestions());
     mockGetIntentStats.mockResolvedValue(makeIntentStats());
+    mockGetFeedbackStats.mockResolvedValue(makeFeedbackStats());
 
     const { container } = renderPage();
     await screen.findByText('세션 수');
     await screen.findByText('응답 출처 분포');
     await screen.findByRole('heading', { name: '의도별 매칭' });
     await screen.findByText('환급일_문의');
+    await screen.findByRole('heading', { name: '답변 만족도' });
+    await screen.findByText('환불 안내');
 
     const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(results).toHaveNoViolations();
@@ -176,10 +201,18 @@ describe('StatsOverviewPage — axe 접근성 스캔', () => {
     );
     mockGetQuestions.mockResolvedValue(makeQuestions({ topQuestions: [], topUnansweredQuestions: [] }));
     mockGetIntentStats.mockResolvedValue(makeIntentStats({ matchedTurnCount: 0, items: [], distinctIntentCount: 0, unmatchedTurnCount: 100 }));
+    mockGetFeedbackStats.mockResolvedValue(
+      makeFeedbackStats({
+        totals: { upCount: 0, downCount: 0, ratedCount: 0, offeredCount: 0, positiveRate: null, participationRate: null, lowSample: false },
+        buckets: [],
+        topNegativeTargets: [],
+      }),
+    );
 
     const { container } = renderPage();
     await screen.findByText('선택한 기간에 대화 기록이 없습니다.');
     await screen.findByText('매칭된 의도가 없습니다.');
+    await screen.findByText('이 기간에는 답변 평가가 없습니다.');
 
     const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(results).toHaveNoViolations();

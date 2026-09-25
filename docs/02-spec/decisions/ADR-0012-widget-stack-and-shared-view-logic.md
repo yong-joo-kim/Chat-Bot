@@ -114,3 +114,15 @@ packages/shared-types/src/contrast.ts      # (신규) apps/web/src/lib/contrast.
 - `frontend-implementer` 인계: `core/`는 DOM 없이 단위 테스트(FR-W-16), `ui/`는 최소한의 jsdom 테스트, 접근성은 §9.5 매핑표(설계서)를 체크리스트로 사용.
 - `test-automation` 인계: AC-W 18건 중 브라우저 통합이 필요한 항목을 최소화하고, `store`/`pause-schedule`/`button-action`/`session`/`output-view`를 순수 테스트로 커버한다.
 - **배포 인계**: `widget.js` 파일명 고정 → `Cache-Control: max-age=300, must-revalidate` 권고, `/c/*` SPA fallback 필요. `docs/05-ops/자동배포.md`에 기록.
+
+
+---
+
+## 갱신 (2026-09-25 — No.44: 답변 평가 버튼 · vanilla 유지 · 감수 비용 ③ 트리거 미발동)
+
+피드백 기반 개선 루프(No.44, **ADR-0038 §1**). 스택·격리·서브패스 공유 결정은 **불변**이다.
+
+1. 위젯이 요청 `features`에 `'feedback-v1'`을 더 싣고, 서버가 `feedback.rateable`로 표시한 봇 말풍선(보류 턴은 `READY`/`FAILED` 최종 말풍선)에만 버튼 2개를 붙인다. 인사말·대기 문구·로컬 정리 문구·시스템·오류·상담원 말풍선에는 없다.
+2. 로직은 `core/feedback.ts`(응답 결과 → 재시도·표시 결정 순수 함수 — 첫 `404`도 1초 뒤 1회 재시도)와 `ui/feedback-bar.ts`(DOM)로 나눈다. 평가 상태는 DOM에만 두며 `sessionStorage`·`localStorage`를 쓰지 않는다.
+3. 메시지 목록(`role="log"`, `aria-relevant="additions"`)에 새 노드를 추가하지 않고 속성(`aria-pressed`) 변경과 상태 영역(`#cb-status`) 1회 안내로 알린다.
+4. **감수 비용 ③(Preact 재검토) 트리거는 발동하지 않는다** — 런타임 의존성 0 · gzip 100KB 게이트 유지 · 증가분(예상 2KB 이하)은 빌드 로그로 보고한다.

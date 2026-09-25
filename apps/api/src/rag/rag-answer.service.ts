@@ -30,6 +30,8 @@ export interface RagAnswerRunInput {
   showSources: boolean;
   fallbackText: string;
   inputKind: InputKind;
+  /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). */
+  feedbackOffered?: boolean;
 }
 
 type CallResult =
@@ -163,6 +165,7 @@ export class RagAnswerService {
         isAnswered: true,
         answeredByRag: true,
         inputKind: input.inputKind,
+        feedbackOffered: input.feedbackOffered,
       });
     } finally {
       this.gate.release();
@@ -183,6 +186,7 @@ export class RagAnswerService {
       isAnswered: false,
       answeredByRag: false,
       inputKind: input.inputKind,
+      feedbackOffered: input.feedbackOffered,
     });
   }
 

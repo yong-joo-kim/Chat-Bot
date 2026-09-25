@@ -259,15 +259,16 @@ describe('하이브리드 CS(No.24) 봉인 정적 검사 — hybrid-cs-설계.md
     expect(offenders).toEqual([]);
   });
 
-  it('H-10) @Public() 총 7건이며 7번째는 PublicConversationController#pollHandoff다', () => {
+  it('H-10) @Public() 총 8건이며 7번째는 PublicConversationController#pollHandoff · 8번째는 submitFeedback다', () => {
     const controllerFiles: string[] = [];
     walk(API_SRC, ['.controller.ts'], controllerFiles);
     let total = 0;
     for (const f of controllerFiles) total += nonCommentOccurrences(readFileSync(f, 'utf8'), /@Public\(\)/g);
-    expect(total).toBe(7);
+    expect(total).toBe(8);
 
     const controllerFile = readFileSync(resolve(API_SRC, 'conversation/public-conversation.controller.ts'), 'utf8');
     const pollHandoffIndex = controllerFile.indexOf('pollHandoff(');
+    // [No.44] 새 핸들러(submitFeedback)는 파일 끝에 둔다 — pollHandoff( 앞 400자 검사는 불변이다.
     const precedingDecorator = controllerFile.slice(Math.max(0, pollHandoffIndex - 400), pollHandoffIndex);
     expect(precedingDecorator.includes('@Public()')).toBe(true);
   });

@@ -1,12 +1,23 @@
-import type { ButtonAction, ConversationState, HandoffPollResponse, PendingAnswerPollResponse, PublicChatbotConfig, PublicMessageResponse } from '@chat-bot/shared-types';
+import type {
+  ButtonAction,
+  ConversationState,
+  HandoffPollResponse,
+  PendingAnswerPollResponse,
+  PublicChatbotConfig,
+  PublicFeedbackResponse,
+  PublicMessageResponse,
+} from '@chat-bot/shared-types';
 import { HANDOFF_SESSION_HEADER, HANDOFF_TOKEN_HEADER, WIDGET_FEATURE_HANDOFF_V1 } from '../constants/handoff';
+import { WIDGET_FEATURE_FEEDBACK_V1 } from '../constants/feedback';
+import type { FeedbackRating } from '../core/feedback';
 
 /**
- * 공개 API 3개(No.24로 상담 폴링 1개 추가)를 호출하는 fetch 래퍼(FR-W-13). `credentials:'omit'`
- * (NFR-S3) — 자격증명 기반 요청을 쓰지 않는다. 오류를 4가지로 분류해 위젯이 문구를 구분할 수 있게
- * 한다(FR-W-10).
+ * 공개 API(No.24 상담 폴링·No.44 답변 평가 포함)를 호출하는 fetch 래퍼(FR-W-13). `credentials:'omit'`
+ * (NFR-S3) — 자격증명 기반 요청을 쓰지 않는다. 오류를 분류해 위젯이 문구를 구분할 수 있게 한다
+ * (FR-W-10). `CLOSED`(409)는 No.44 평가 변경 한도·기한 초과 전용이다 — 다른 엔드포인트는 409를
+ * 반환하지 않는다.
  */
-export type PublicApiErrorKind = 'NETWORK' | 'RATE_LIMITED' | 'DISABLED' | 'NOT_FOUND' | 'UNKNOWN';
+export type PublicApiErrorKind = 'NETWORK' | 'RATE_LIMITED' | 'DISABLED' | 'NOT_FOUND' | 'CLOSED' | 'UNKNOWN';
 
 export class PublicApiError extends Error {
   constructor(
@@ -23,6 +34,7 @@ function classifyStatus(status: number): PublicApiErrorKind {
   if (status === 429) return 'RATE_LIMITED';
   if (status === 403) return 'DISABLED';
   if (status === 404) return 'NOT_FOUND';
+  if (status === 409) return 'CLOSED';
   return 'UNKNOWN';
 }
 
@@ -60,18 +72,29 @@ export function createPublicClient(apiBase: string, slug: string) {
   return {
     getConfig: (): Promise<PublicChatbotConfig> => request<PublicChatbotConfig>('/config'),
     /**
-     * [No.24] 신버전 위젯 기능 선언(`features: ['handoff-v1']`)을 항상 싣는다(ADR-0036 §5.6 —
-     * 이게 없으면 서버가 구버전으로 취급해 편승 격하한다). 상담 토큰이 있으면 헤더로 함께 보낸다.
+     * [No.24·No.44] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1']`)을 항상
+     * 싣는다(ADR-0036 §5.6 — 이게 없으면 서버가 구버전으로 취급해 편승 격하한다). 상담 토큰이
+     * 있으면 헤더로 함께 보낸다.
      */
     sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string }): Promise<PublicMessageResponse> =>
       request<PublicMessageResponse>('/messages', {
         method: 'POST',
-        body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1] }),
+        body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_FEEDBACK_V1] }),
         headers: opts?.handoffToken ? { [HANDOFF_TOKEN_HEADER]: opts.handoffToken } : undefined,
       }),
     /** 보류 답변 폴링(ADR-0023) — `messageId` 불일치/TTL 만료는 404(`NOT_FOUND`)로 온다. */
     pollMessage: (messageId: string): Promise<PendingAnswerPollResponse> =>
       request<PendingAnswerPollResponse>(`/messages/${encodeURIComponent(messageId)}`),
+    /**
+     * [신규 No.44] 답변 평가 — `PUT`(멱등 설정). 토큰 없음, `messageId`+`sessionId`+슬러그 결합
+     * 검증만으로 판정한다(`feedback-loop-설계.md` §7). 404(`FEEDBACK_TARGET_NOT_FOUND`)·
+     * 409(`FEEDBACK_CLOSED`)·429는 `PublicApiError.kind`로 구분해 던진다.
+     */
+    submitFeedback: (messageId: string, payload: { sessionId: string; rating: FeedbackRating }): Promise<PublicFeedbackResponse> =>
+      request<PublicFeedbackResponse>(`/messages/${encodeURIComponent(messageId)}/feedback`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
     /**
      * [No.24] 상담 전용 짧은 폴링(ADR-0036 §7) — 세션·토큰은 헤더로만 보낸다(URL·본문 금지).
      * 토큰 무효·교차·유예 경과는 404(`NOT_FOUND`)로 온다.

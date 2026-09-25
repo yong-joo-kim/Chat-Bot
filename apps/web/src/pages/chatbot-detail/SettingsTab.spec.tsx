@@ -13,8 +13,7 @@ const chatbot = makeChatbot({ slug: 'order-bot', status: 'ACTIVE' });
 const mockContext: ChatbotDetailContext = {
   chatbot,
   reload: vi.fn().mockResolvedValue(undefined),
-  setUnsavedGuard: vi.fn(),
-};
+  setUnsavedGuard: vi.fn(), learningSummary: null, refreshLearningSummary: vi.fn() };
 
 const mockEmbedCode = vi.fn().mockResolvedValue({
   pc: '<script data-chatbot="order-bot"></script>',

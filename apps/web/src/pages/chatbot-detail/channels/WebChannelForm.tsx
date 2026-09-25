@@ -22,15 +22,20 @@ export function WebChannelForm({
   const [quickReplies, setQuickReplies] = useState<string[]>(initial.quickReplies);
   const [launcherPosition, setLauncherPosition] = useState(initial.launcherPosition);
   const [showLauncher, setShowLauncher] = useState(initial.showLauncher);
+  // [신규 No.44] 답변 평가 받기(feedback-loop-ui-spec.md §3.1). 키 없음 = 꺼짐(하위호환).
+  const [feedbackEnabled, setFeedbackEnabled] = useState(initial.feedbackEnabled ?? false);
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
+    // ⚠ config는 전체 교체 시맨틱이다 — feedbackEnabled를 다른 필드와 같은 요청에 항상 포함한다.
+    // 빠뜨리면 저장 시 스위치가 조용히 꺼진다(feedback-loop-ui-spec.md §3.1 ⚠).
     onSave({
       allowedOrigins,
       greetingMessage: greetingMessage || undefined,
       quickReplies,
       launcherPosition,
       showLauncher,
+      feedbackEnabled,
     });
   }
 
@@ -89,6 +94,19 @@ export function WebChannelForm({
       <div className="form-field form-field--inline">
         <input id="web-channel-show-launcher" type="checkbox" checked={showLauncher} onChange={(e) => setShowLauncher(e.target.checked)} />
         <label htmlFor="web-channel-show-launcher">{msg.showLauncherLabel}</label>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field--inline">
+          <input
+            id="web-channel-feedback-enabled"
+            type="checkbox"
+            checked={feedbackEnabled}
+            onChange={(e) => setFeedbackEnabled(e.target.checked)}
+          />
+          <label htmlFor="web-channel-feedback-enabled">{msg.feedbackEnabledLabel}</label>
+        </div>
+        <p className="field-hint">{msg.feedbackEnabledDesc}</p>
       </div>
 
       <div className="form-actions">

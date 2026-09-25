@@ -253,6 +253,39 @@ export const WIDGET_STYLES = `
 .cb-sources ul { margin: 4px 0; padding-left: 18px; font-size: 13px; color: #374151; }
 .cb-sources-caption { margin: 4px 0 0; font-size: 11px; color: #9ca3af; }
 
+/*
+ * [No.44] 답변 평가 막대(FB-W, feedback-loop-ui-spec.md §3.2.3) — 말풍선 밖, .cb-msg 안의
+ * 형제 요소. 선택 상태는 색상 하나에 기대지 않는다(배경 채움 + 굵은 테두리 + 체크 표시 3중).
+ */
+.cb-feedback-bar { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.cb-feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #6b7280;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cb-feedback-btn:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.cb-feedback-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.cb-feedback-btn--selected {
+  background: var(--cb-primary, #4f46e5);
+  border-color: var(--cb-primary, #4f46e5);
+  border-width: 2px;
+  color: var(--cb-header-text, #fff);
+  font-weight: 700;
+}
+.cb-feedback-btn--selected .cb-feedback-label::before { content: '\\2713 '; }
+.cb-feedback-bar[aria-busy="true"] .cb-feedback-btn { opacity: 0.5; }
+.cb-feedback-icon { font-size: 14px; }
+.cb-feedback-note { font-size: 11px; color: #6b7280; }
+
 @media (max-width: 420px) {
   .cb-panel { bottom: 0; right: 0; left: 0; width: 100vw; max-width: 100vw; }
 }

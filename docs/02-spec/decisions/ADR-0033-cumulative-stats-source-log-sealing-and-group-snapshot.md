@@ -147,3 +147,16 @@ No.14와 같은 방식(DB `groupBy` + 순수 함수)을 **`where` 절만 넓혀*
 4. **질문 순위의 원천 규칙 보강**: 상담 구간 턴(`ConversationLog.handoffTurn=true`)도 설문 턴과 같은 상수 1벌로 **모든 스코프의 질문 순위**에서 제외한다. 턴 수·세션·응답률·출처(`OTHER`) 불변, 기존 행 false.
 5. **R-7 갱신**: 원시 SQL 보유 파일 3 → **4**(`handoff/handoff-secure-delete.query.ts` — `PRAGMA secure_delete` 1줄, 원문 소거 트랜잭션의 SQLite 페이지 잔존 제거). `$executeRaw` 계열 0건은 유지한다.
 6. **롤업 규약**: 향후 상담 기록 삭제(No.45 보존기간)도 단일 서비스 + 같은 트랜잭션의 수치 롤업 선적재로만 추가한다 — 상담 롤업 = `(chatbotId, dayBucket)` 키의 건수·종료 사유·첫 응답/상담 시간 합계 + `groupId` 스냅샷(텍스트·세션 ID 없음).
+
+
+---
+
+## 갱신 (2026-09-25 — No.44: 봉인 대상에 평가 원장 · 로그 표식 2컬럼 · `groupId` 스냅샷 복사)
+
+피드백 기반 개선 루프(No.44, **ADR-0038 §3**). 결정 1~8은 불변이다.
+
+1. **L1 DB**: `MessageFeedback → Chatbot` FK `onDelete: Restrict`(Cascade/SetNull 없음). `conversationLogId`는 FK 없음(로그 규약).
+2. **L2 서비스**: 챗봇 영구삭제 사전검사에 `messageFeedbacks`('답변 평가')를 추가한다(14 → 15종, 동반 삭제 목록에 넣지 않는다). 원장 행은 로그 행 없이 생길 수 없어 차단 집합은 실질적으로 불변이다.
+3. **L3 정적 검사**(`feedback-sealing.spec.ts`): 원장의 `delete`/`deleteMany`/원시 `DELETE` **0건** · 쓰기 1파일 · 컬럼 이름 허용 목록(텍스트·`sessionId` 없음). **로그 `update*` 0건(R-10)은 유지된다** — 평가값은 로그에 쓰지 않고 별도 원장에 둔다. 로그에 새로 생기는 `feedbackOffered`·`inputKind`는 `groupId`와 같이 **적재 시점에 확정되는 사실**이며 `record()` 1곳에서만 쓴다.
+4. **결정 4 재사용**: `MessageFeedback.groupId` = 로그의 `groupId` 복사(**대화 당시** 그룹 — 평가 시점 소속이 아니다). 그룹·전역 만족도는 1차 범위 밖이지만 후속 통합이 과거를 소급 변경하지 않도록 지금 적재한다.
+5. **롤업 규약**: 향후 원장 삭제(No.45 보존기간·파기)도 단일 서비스 + 같은 트랜잭션의 수치 롤업 선적재로만 추가한다 — 평가 롤업 = `(chatbotId, turnDayBucket, targetKind, targetId)` 키의 👍/👎 건수 + `groupId` 스냅샷(텍스트·세션 ID 없음).

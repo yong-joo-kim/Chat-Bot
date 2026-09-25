@@ -8,8 +8,10 @@ import { RagModule } from '../rag/rag.module';
 import { LegacyApiModule } from '../legacy-api/legacy-api.module';
 import { SurveyResponsesModule } from '../survey-responses/survey-responses.module';
 import { HandoffModule } from '../handoff/handoff.module';
+import { FeedbackModule } from '../feedback/feedback.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
+import { PublicFeedbackService } from './public-feedback.service';
 import { PublicAccessService } from './public-access.service';
 import { ConversationLogService } from './conversation-log.service';
 import { WebChannelAdapter } from './adapters/web-channel.adapter';
@@ -28,10 +30,22 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
  * `ConversationLogPort` 인터페이스로 호출 시점에 전달한다(DD-85, 순환 참조 회피).
  */
 @Module({
-  imports: [DialogueCommonModule, BannedWordsModule, LearningModule, EmbeddingModule, AnswerSettingsModule, RagModule, LegacyApiModule, SurveyResponsesModule, HandoffModule],
+  imports: [
+    DialogueCommonModule,
+    BannedWordsModule,
+    LearningModule,
+    EmbeddingModule,
+    AnswerSettingsModule,
+    RagModule,
+    LegacyApiModule,
+    SurveyResponsesModule,
+    HandoffModule,
+    FeedbackModule,
+  ],
   controllers: [PublicConversationController],
   providers: [
     PublicConversationService,
+    PublicFeedbackService,
     PublicAccessService,
     ConversationLogService,
     WebChannelAdapter,

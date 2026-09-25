@@ -150,3 +150,18 @@ record() ─ ① 금지어 마스킹 → ② PII 마스킹 → ③ 버킷 계산
 
 - `shouldCollect()` 입력에 `handoffTurn?`(기본 false — 기존 호출 무변경)을 더하고 `surveyTurn` 다음 순서로 판정해 사유 **`HANDOFF_TURN`**을 반환한다. 상담 구간 턴은 엔진을 타지 않아 원래 `ANSWERED`로 제외되지만 명시적 사유를 둔다(설문 선례). **개입 전 봇 구간 미응답은 그대로 수집된다** — 실제 학습 공백이다.
 - **진행 중 경고(연속 미응답)는 이 판정을 재사용하지 않는다** — 큐는 "학습할 것", 경고는 "사람이 도울 사용자"다. 경고는 `judgeAnswered()`가 적재한 `isAnswered`만 읽고(재판정 금지 원칙 유지), 금지어·설문·상담 턴은 중립, **API 고정 문구 턴은 미응답으로 센다**(큐에서는 `API_NOTICE`로 제외 — 목적 차이). 사유 표시를 위해 `apiNotice`를 로그 컬럼으로도 남긴다(`record()` 1곳).
+
+
+---
+
+## 갱신 (2026-09-25 — No.44: 소스 분리 유일 키 · 두 번째 적재 진입점 · `inputKind` 컬럼화 · 소스별 상한 · 직접 수정 완료 · 쓰기 파일 3 정정)
+
+피드백 기반 개선 루프(No.44, **ADR-0038 §1·§4**). 결정 §1(실시간 upsert)·§4(추천 비저장)·§5(재발생 정책·물리 삭제 없음)·§6(비감사)은 **불변**이다.
+
+1. **§1 병합 키 변경**: `(chatbotId, questionNormalized)` → **`(chatbotId, source, questionNormalized)`**. 91행이 예고한 `NEGATIVE_FEEDBACK` 소스가 같은 테이블에 들어오되, 같은 질문의 "못 답함"과 "답했는데 틀림"이 **각각 1행**이다(처방이 다르다 — 예문 추가 vs 답변 수정). 기존 행은 전부 `UNANSWERED`라 데이터 충돌 0이며, SQLite에서도 **유니크 인덱스 교체**만으로 끝난다(테이블 재정의 0). 기존 수집 경로는 `source = 'UNANSWERED'`를 명시적으로 쓴다(동작 불변).
+2. **§2 두 번째 적재 진입점**: `UnansweredCollectorService.collectNegativeFeedback()` — 평가 요청의 👎 확정 시 호출된다. `record()` 밖이지만 입력은 **`ConversationLog.userMessage`(이미 마스킹된 값)** 이므로 "마스킹 지점 = 적재 지점" 근거(88행)가 깨지지 않는다 — 원문을 다시 만지지 않는다. 실패는 흡수하고(평가 응답 `200`) 재시도하지 않는다. 메시지당 1회 기여는 평가 원장의 선점 상태 기계가 보장한다.
+3. **§2 쓰기 주체 정정**: 45행의 "쓰기는 2곳뿐"은 No.23(학습 고도화)이 `learning/decomposed-resolve.service.ts`에 요소분해 반영의 CAS 전이를 더한 뒤 **3곳**이었다. 이 그룹은 이 **3파일 집합을 바꾸지 않으며**(편입 = 수집기의 두 번째 메서드 · 직접 수정 완료 = 상태 전이 서비스) `feedback-sealing.spec.ts` F-9가 정확한 집합을 단언한다.
+4. **§3 재검토 트리거 발동 — `inputKind` 컬럼화**: 57행의 트리거("입력 유형별 지표 요구")가 발동했다. 평가는 턴이 끝난 뒤 도착하므로 큐 편입 판정이 로그 행만 보고 `BUTTON_NODE` 턴을 걸러야 한다. `record()` 파라미터를 그대로 `ConversationLog.inputKind`에 적재한다(1곳 · 적재 후 불변 · 인덱스 없음 · 기존 행 null). 감수 비용 3("버튼 턴을 사후 로그로 구분할 수 없다")은 도입 이후 행부터 해소된다.
+5. **§3 판정 1벌 공유**: `collect-decision.ts`에 `shouldQueueNegativeFeedback()`을 더하고 정규화·빈 입력·장문 판정을 `shouldCollect()`와 같은 내부 함수로 공유한다. 부정 평가 제외 사유 = `API_NOTICE` → `ALREADY_UNANSWERED`(폴백은 이미 미응답으로 수집됨) → `BUTTON_NODE`(`TEXT`·`BUTTON_MESSAGE`가 아니면 — null 포함) → `EMPTY` → `TOO_LONG`(+ 상한 `LIMIT_REACHED`). `shouldCollect()`의 동작·사유 순서는 불변.
+6. **§5 상한의 소스별 분리**: `UNANSWERED` = `UNANSWERED_MAX_PENDING`(5,000 — 계수에 소스 조건만 추가, 도입 전과 같은 값) · `NEGATIVE_FEEDBACK` = `FEEDBACK_QUEUE_MAX_PENDING`(2,000). 한 소스의 상한이 다른 소스 수집을 막지 않는다. 요약 API의 `limitReached`는 기존 의미(미응답 기준)를 유지하고 `bySource`를 더한다.
+7. **새 전이 "직접 수정 완료"**: `NEGATIVE_FEEDBACK` 항목의 원인이 "매칭은 맞는데 답변 내용이 틀림"이면 예문 추가가 무의미하므로, `PENDING → RESOLVED`(`resolvedIntentId = null`, CAS)를 둔다(`dialogue:write`). `UNANSWERED` 항목에는 허용하지 않는다(`400 INVALID_STATUS_TRANSITION`). **§6 그대로 감사하지 않는다.**

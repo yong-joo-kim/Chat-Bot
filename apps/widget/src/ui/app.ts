@@ -19,9 +19,11 @@ import {
   type HandoffPollState,
 } from '../core/handoff-poll';
 import { clearHandoffToken, loadHandoffToken, saveHandoffToken } from '../core/handoff-storage';
+import type { FeedbackAttemptResult, FeedbackRating } from '../core/feedback';
 import type { WidgetMount } from './shadow-root';
 import { createLauncher } from './launcher';
 import { createPanel } from './panel';
+import type { FeedbackBarBinding } from './feedback-bar';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -251,6 +253,66 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     launcher.root.hidden = true;
   }
 
+  /**
+   * [No.44/N2] `delayMs` 뒤, 그 사이 다른 문구로 바뀌지 않았을 때만(자기 문구일 때만) `#cb-status`를
+   * 지운다(`feedback-loop-설계.md` §13.4). `announceFeedback`과 `pollPendingAnswer` 종료 시 공통으로
+   * 쓴다 — 보류 RAG 최종 답변 직후 평가 안내가 뜬 상태에서 이 타이머가 무조건 지우면 경합이 난다
+   * (code-reviewer R1 Medium).
+   */
+  function clearStatusTextIfUnchanged(text: string, delayMs = 2000): void {
+    window.setTimeout(() => {
+      if (panel.status.textContent === text) panel.setStatusText('');
+    }, delayMs);
+  }
+
+  /**
+   * [No.44] `#cb-status`(polite) 1회 안내 — `panel.setStatusText`. 2초 뒤 **자기 문구일 때만**
+   * 지운다(다른 상태 문구를 덮어써 지우지 않는다, `feedback-loop-설계.md` §13.4).
+   */
+  function announceFeedback(text: string): void {
+    panel.setStatusText(text);
+    clearStatusTextIfUnchanged(text);
+  }
+
+  /**
+   * [No.44] 공개 평가 API 호출 — 오류를 `core/feedback.ts`의 `FeedbackAttemptResult`로 분류해
+   * `ui/feedback-bar.ts`(DOM 무의존 재시도 판정)에 넘긴다. `sessionStorage`/`localStorage`에
+   * 평가를 저장하지 않는다(F-16) — 상태는 DOM(막대)에만 있다.
+   */
+  async function submitFeedback(messageId: string, rating: FeedbackRating): Promise<FeedbackAttemptResult> {
+    const sessionId = getOrCreateSessionId(options.slug);
+    try {
+      await client.submitFeedback(messageId, { sessionId, rating });
+      return 'OK';
+    } catch (e) {
+      if (e instanceof PublicApiError) {
+        switch (e.kind) {
+          case 'NOT_FOUND':
+            return 'NOT_FOUND';
+          case 'CLOSED':
+            return 'CLOSED';
+          case 'RATE_LIMITED':
+            return 'RATE_LIMITED';
+          case 'DISABLED':
+            return 'DISABLED';
+          case 'NETWORK':
+            return 'NETWORK';
+          default:
+            return 'SERVER';
+        }
+      }
+      return 'SERVER';
+    }
+  }
+
+  function makeFeedbackBinding(messageId: string): FeedbackBarBinding {
+    return {
+      messageId,
+      onRate: (rating) => submitFeedback(messageId, rating),
+      onAnnounce: announceFeedback,
+    };
+  }
+
   function applySkin(config: PublicChatbotConfig): void {
     const primary = config.skin.primaryColor;
     cbRoot.style.setProperty('--cb-primary', primary);
@@ -338,7 +400,7 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
    * `core/pending-poll.ts`의 순수 함수로 간격·상한을 계산하고, 여기서는 `setTimeout`/`fetch`
    * 부수효과만 수행한다. `pollGeneration`이 호출 시점과 달라지면(새 질문 전송) 조용히 중단한다.
    */
-  async function pollPendingAnswer(pendingId: string, pollAfterMs: number): Promise<void> {
+  async function pollPendingAnswer(pendingId: string, pollAfterMs: number, feedbackOffered: boolean): Promise<void> {
     const generation = ++pollGeneration;
     const config = createPendingPollConfig(pollAfterMs);
     const startedAt = Date.now();
@@ -382,16 +444,24 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         ensureHandoffPolling();
       }
 
+      // [No.44] 평가 막대는 보류 RAG의 **최종** 말풍선(READY·FAILED)에만 붙는다 — 인터림 안내·
+      // 로컬 정리 문구(EXPIRED/TIMEOUT)에는 붙이지 않는다(`feedback-loop-ui-spec.md` §3.2.1).
+      let statusText: string;
       if (decision.reason === 'READY' && payload) {
-        panel.setStatusText(MESSAGES.pending.readyAnnounce);
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction);
+        statusText = MESSAGES.pending.readyAnnounce;
+        panel.setStatusText(statusText);
+        const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
+        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction, feedback);
       } else if (decision.reason === 'FAILED' && payload) {
-        panel.setStatusText(MESSAGES.pending.timeoutFallback);
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), undefined, handleButtonAction);
+        statusText = MESSAGES.pending.timeoutFallback;
+        panel.setStatusText(statusText);
+        const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
+        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), undefined, handleButtonAction, feedback);
       } else {
         // EXPIRED(404/TTL 만료) 또는 TIMEOUT(90초 초과, 로컬 판단) — 서버 응답이 없으므로
         // 클라이언트가 정리 문구로 마감한다(S-15, 오류로 표시하지 않는다).
-        panel.setStatusText(MESSAGES.pending.timeoutFallback);
+        statusText = MESSAGES.pending.timeoutFallback;
+        panel.setStatusText(statusText);
         await panel.messages.addBotAnswer(
           pendingId,
           [{ type: 'TEXT', payload: { text: MESSAGES.pending.timeoutFallback } }],
@@ -400,7 +470,9 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         );
       }
       panel.composer.focus();
-      window.setTimeout(() => panel.setStatusText(''), 2000);
+      // R1 Medium — 무조건 지우던 것을, 그 사이(예: READY 직후 평가 클릭) 안내 문구가 덮어써졌으면
+      // 지우지 않도록 조건부로 바꾼다(§13.4와 동일 규칙, announceFeedback과 헬퍼 공유).
+      clearStatusTextIfUnchanged(statusText);
       return;
     }
   }
@@ -453,18 +525,23 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
       const views = toOutputViews(res.outputs);
       if (res.pendingAnswer) {
         // PENDING — 인터림 안내 말풍선(서버가 내려준 일반 TEXT 아웃풋)만 먼저 렌더하고, 입력은
-        // 잠그지 않는다(FR-N2-38, AWAITING_ANSWER는 SENDING과 달리 입력 잠금이 없다).
+        // 잠그지 않는다(FR-N2-38, AWAITING_ANSWER는 SENDING과 달리 입력 잠금이 없다). [No.44]
+        // `res.feedback`은 이 POST 응답 시점에 이미 있을 수 있지만(§6.1) 인터림 말풍선에는 붙이지
+        // 않는다 — 최종 답변(READY/FAILED)에만 `pollPendingAnswer`가 붙인다.
         await panel.messages.addBotOutputs(views, handleButtonAction);
         dispatch({ type: 'PENDING_STARTED' });
         panel.composer.setDisabled(false);
         panel.composer.focus();
-        void pollPendingAnswer(res.pendingAnswer.id, res.pendingAnswer.pollAfterMs);
+        void pollPendingAnswer(res.pendingAnswer.id, res.pendingAnswer.pollAfterMs, res.feedback?.rateable === true);
         return;
       }
       // [No.24] 상담 구간 검증 발화(G-4)는 `outputs: []`가 정상이다 — 봇 말풍선을 만들지 않는다
       // (사용자 말풍선만, §14.2 ⑤). 그 밖의(핸드오프와 무관한) 빈 응답은 기존 폴백 문구를 유지한다(EX-W-6).
       if (views.length > 0 || res.handoff?.status !== 'CONNECTED') {
-        await panel.messages.addBotOutputs(views, handleButtonAction, (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''));
+        // [No.44] 서버가 `feedback.rateable === true`를 준 말풍선에만 평가 막대를 붙인다 — 위젯은
+        // 스스로 평가 가능성을 추정하지 않는다(FR-FB9-3).
+        const feedback = res.feedback?.rateable === true ? makeFeedbackBinding(res.messageId) : undefined;
+        await panel.messages.addBotOutputs(views, handleButtonAction, (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''), undefined, feedback);
       }
       dispatch({ type: 'SEND_SUCCEEDED', botMessages: [] });
       panel.setStatusText('');

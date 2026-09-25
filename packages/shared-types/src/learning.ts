@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiErrorCode, PaginationQuerySchema, SortOrder, csvEnumArray, queryBoolean } from './common';
 import { ExampleConflictSchema } from './dialogue';
 import { AutoSnapshotOutcomeSchema } from './version';
+import { FeedbackTargetRefSchema } from './feedback';
 
 /**
  * No.15 학습현황(관리자 보조 재학습) 도메인 스키마.
@@ -19,9 +20,14 @@ export const UNANSWERED_STATUS_LABELS: Record<UnansweredQuestionStatus, string> 
   IGNORED: '무시됨',
 };
 
-/** 수집 소스(J-2 §1.5). 이번 Phase는 'UNANSWERED' 1종이며 No.44가 'NEGATIVE_FEEDBACK'을 더한다. */
-export const UnansweredSource = z.enum(['UNANSWERED']);
+/** 수집 소스(J-2 §1.5). No.44가 'NEGATIVE_FEEDBACK'을 더했다(ADR-0038 §4). */
+export const UnansweredSource = z.enum(['UNANSWERED', 'NEGATIVE_FEEDBACK']);
 export type UnansweredSource = z.infer<typeof UnansweredSource>;
+
+export const UNANSWERED_SOURCE_LABELS: Record<UnansweredSource, string> = {
+  UNANSWERED: '답변 못함',
+  NEGATIVE_FEEDBACK: '부정 평가',
+};
 
 /** 학습현황 그룹 한도값(전부 환경변수로 조정 가능한 서버 기본값의 클라이언트 표기용 사본). */
 export const LEARNING_LIMITS = {
@@ -32,6 +38,8 @@ export const LEARNING_LIMITS = {
   suggestionsMax: 3,
   suggestMinScore: 0.25,
   trendDays: 14,
+  /** [신규 No.44] NEGATIVE_FEEDBACK 소스의 챗봇당 PENDING 상한(ADR-0038 §4). */
+  maxPendingNegativeFeedback: 2000,
 };
 
 export const IntentSuggestionSchema = z.object({
@@ -68,11 +76,21 @@ export const UnansweredQuestionListItemSchema = z.object({
   resolvedAt: z.coerce.date().optional(),
   /** 조회 시점 계산(J-5). 저장되지 않는다. */
   suggestions: z.array(IntentSuggestionSchema).default([]),
+  /** [신규 No.44] 수집 소스 — 서버는 항상 싣는다(없으면 UNANSWERED로 해석, 하위호환). */
+  source: UnansweredSource.optional(),
+  /** [신규 No.44] NEGATIVE_FEEDBACK 행만 — 최근 👎 턴의 답변 대상. */
+  lastFeedbackTarget: FeedbackTargetRefSchema.optional(),
+  /** [신규 No.44] 추천 목록의 "현재 매칭" 배지 판정용(서버는 비교하지 않는다, D-21). */
+  lastFeedbackMatchedIntentId: z.string().uuid().optional(),
+  /** [신규 No.44] "직접 수정 완료"로 처리된 행만 true. */
+  resolvedDirectly: z.literal(true).optional(),
 });
 export type UnansweredQuestionListItem = z.infer<typeof UnansweredQuestionListItemSchema>;
 
 export const UnansweredQuestionListQuerySchema = PaginationQuerySchema.extend({
   status: csvEnumArray(UnansweredQuestionStatus).default(['PENDING']),
+  /** [신규 No.44] 없으면 전체 소스(하위 호환 — 기존 호출은 두 소스를 함께 받는다, AC-FB5-1). */
+  source: csvEnumArray(UnansweredSource).optional(),
   /** `lastOccurredAt` 기준 필터(FR-15-10). */
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
@@ -85,19 +103,37 @@ export type UnansweredQuestionListQuery = z.infer<typeof UnansweredQuestionListQ
 
 /** 탭 배지·대시보드 위젯 전용 경량 응답(FR-15-14) — 목록 전체를 불러오지 않는다. */
 export const UnansweredQuestionSummarySchema = z.object({
+  /** 두 소스 합계(전체 탭 배지). "미응답 대기"류 기존 표시는 `bySource.UNANSWERED.pendingCount`를 쓴다. */
   pendingCount: z.number().int().nonnegative(),
-  /** 챗봇당 `PENDING` 상한(FR-15-8)에 도달했는지. 도달 시 화면이 배너를 표시한다. */
+  /** 챗봇당 `PENDING` 상한(FR-15-8)에 도달했는지 — **UNANSWERED 기준**(기존 의미 그대로, D-9). */
   limitReached: z.boolean(),
+  /** [신규 No.44] 소스별 내역 — 서버는 항상 싣는다(선택 필드는 하위호환을 위한 타입 표기일 뿐). */
+  bySource: z
+    .record(UnansweredSource, z.object({ pendingCount: z.number().int().nonnegative(), limitReached: z.boolean() }))
+    .optional(),
 });
 export type UnansweredQuestionSummary = z.infer<typeof UnansweredQuestionSummarySchema>;
 
 export const UnansweredQuestionDetailSchema = UnansweredQuestionListItemSchema.extend({
   /** 최근 표기 변형 샘플 최대 5건(FR-15-4). */
   variants: z.array(z.string()),
-  /** 발생 추이(DD-67, `variants[]` 기반 파생). */
+  /** 발생 추이(DD-67, `variants[]` 기반 파생 또는 원장 기반 — `trendSource` 참고). */
   trend: z.array(z.object({ dayBucket: z.string(), count: z.number().int().nonnegative() })),
   /** 변형이 5종을 넘으면 일부 발생이 추이 집계에서 빠질 수 있다(DD-67). */
   trendApproximated: z.boolean(),
+  /** [신규 No.44] 추이 산출 원천 — 'VARIANTS'(UNANSWERED, 기존 방식) | 'FEEDBACK_LEDGER'(NEGATIVE_FEEDBACK, 원장 기반 정확 집계). */
+  trendSource: z.enum(['VARIANTS', 'FEEDBACK_LEDGER']).optional(),
+  /** [신규 No.44] NEGATIVE_FEEDBACK 행만 — 최근 👎 턴의 당시 봇 답변(마스킹본·2000자 절단)과 대상. */
+  lastFeedback: z
+    .object({
+      botResponse: z.string().max(2001),
+      turnAt: z.coerce.date(),
+      target: FeedbackTargetRefSchema,
+      matchedIntentId: z.string().uuid().optional(),
+    })
+    .optional(),
+  /** [신규 No.44] 같은 정규화 질문의 다른 소스 항목(있으면) — 반영·오답 왕복 표시(FR-FB7-5). */
+  counterpart: z.object({ id: z.string().uuid(), source: UnansweredSource, status: UnansweredQuestionStatus }).optional(),
 });
 export type UnansweredQuestionDetail = z.infer<typeof UnansweredQuestionDetailSchema>;
 

@@ -14,8 +14,7 @@ const RUN_ID = '11111111-1111-4111-8111-111111111111';
 const mockContext: ChatbotDetailContext = {
   chatbot,
   reload: vi.fn().mockResolvedValue(undefined),
-  setUnsavedGuard: vi.fn(),
-};
+  setUnsavedGuard: vi.fn(), learningSummary: null, refreshLearningSummary: vi.fn() };
 vi.mock('../../../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
 }));

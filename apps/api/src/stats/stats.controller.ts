@@ -2,6 +2,8 @@ import { Controller, Get, Query } from '@nestjs/common';
 import type {
   DashboardQuery,
   DashboardSummary,
+  FeedbackStats,
+  FeedbackStatsQuery,
   IntentStats,
   IntentStatsQuery,
   StatsDistribution,
@@ -13,6 +15,7 @@ import type {
 } from '@chat-bot/shared-types';
 import {
   DashboardQuerySchema,
+  FeedbackStatsQuerySchema,
   IntentStatsQuerySchema,
   StatsDistributionQuerySchema,
   StatsQuerySchema,
@@ -22,13 +25,16 @@ import { ZodQueryPipe } from '../common/zod-query.pipe';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { StatsService } from './stats.service';
 import { IntentStatsService } from './intents/intent-stats.service';
+import { FeedbackStatsService } from './feedback/feedback-stats.service';
 
-/** No.14 기본 통계 + No.2 대시보드(변경 없음) + No.29 챗봇 스코프 의도별 매칭. 전부 `chatbot:read`, 읽기 전용(FR-0-35). */
+/** No.14 기본 통계 + No.2 대시보드(변경 없음) + No.29 챗봇 스코프 의도별 매칭 + No.44 답변 만족도.
+ * 전부 `chatbot:read`, 읽기 전용(FR-0-35). */
 @Controller('stats')
 export class StatsController {
   constructor(
     private readonly statsService: StatsService,
     private readonly intentStatsService: IntentStatsService,
+    private readonly feedbackStatsService: FeedbackStatsService,
   ) {}
 
   @Get('dashboard')
@@ -60,5 +66,12 @@ export class StatsController {
   @RequirePermission('chatbot:read')
   getIntentStats(@Query(new ZodQueryPipe(IntentStatsQuerySchema)) query: IntentStatsQuery): Promise<IntentStats> {
     return this.intentStatsService.getIntentStats(query);
+  }
+
+  /** [신규 No.44] 답변 만족도(ADR-0038 §7) — No.14 화면 신규 섹션. 대시보드 무변경. */
+  @Get('feedback')
+  @RequirePermission('chatbot:read')
+  getFeedbackStats(@Query(new ZodQueryPipe(FeedbackStatsQuerySchema)) query: FeedbackStatsQuery): Promise<FeedbackStats> {
+    return this.feedbackStatsService.getFeedbackStats(query);
   }
 }

@@ -82,6 +82,8 @@ model Chatbot {
   cannedResponses         CannedResponse[]
   /// [신규 No.22] 역참조만 — DB 컬럼 변화 0.
   topics                  Topic[]
+  /// [신규 No.44] 역참조만 — DB 컬럼 변화 0.
+  messageFeedbacks        MessageFeedback[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -495,6 +497,14 @@ model ConversationLog {
   /// 상담 턴 = null. FK 없음 · 인덱스 없음(로그 규약, `groupId`/`matchedIntentId`와 동일한 의도적
   /// 예외) · 쓰기 주체 = `ConversationLogService.record()` 1곳 · 적재 후 불변 · 백필 없음.
   topicId         String?
+  /// [신규 No.44] 이 턴에 평가 버튼을 제공했는가(isFeedbackOffered 순수 판정 — 위젯 feedback-v1 선언 ∧
+  /// WEB 설정 feedbackEnabled ∧ BLOCK·설문·상담 턴 아님). 참여율 분모이자 평가 API 허용 근거(ADR-0038 §1).
+  /// 쓰기 주체 = record() 1곳 · 적재 후 불변 · 인덱스 없음 · 백필 없음(기존 행 = false가 사실).
+  feedbackOffered Boolean  @default(false)
+  /// [신규 No.44 — ADR-0019 §3 재검토 트리거 발동] 입력 유형 TEXT | BUTTON_MESSAGE | BUTTON_NODE
+  /// (record() 파라미터를 그대로 적재). 평가 뒤 큐 편입 판정이 버튼 턴을 로그만으로 거른다.
+  /// 기존 행 = null(기록 없음). 쓰기 주체 = record() 1곳 · 적재 후 불변 · 인덱스 없음.
+  inputKind       String?
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
@@ -630,6 +640,54 @@ model UnansweredQuestion {
   @@index([chatbotId, status, occurredCount])
   @@index([chatbotId, lastOccurredAt])
   @@map("unanswered_questions")
+}
+
+/// [신규 No.44] 답변 평가 원장 — 메시지(= ConversationLog 1행)당 1행(ADR-0038 §3).
+/// ★ 질문·답변 텍스트·sessionId·IP·User-Agent 컬럼이 없다(최소 수집 — 컬럼 허용 목록 정적 검사 F-3).
+/// 쓰기 주체 = feedback/message-feedback.service.ts 1파일 · 삭제 코드 0건 · 스냅샷·복사·분리 대상 아님.
+model MessageFeedback {
+  id                String    @id @default(uuid())
+  chatbotId         String
+  chatbot           Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// = ConversationLog.id = 공개 응답 messageId. FK 없음(로그 규약 — 로그·원장 모두 삭제 0).
+  conversationLogId String    @unique
+  /// FeedbackRating: UP | DOWN — 현재 값(마지막 변경이 이긴다)
+  rating            String
+  /// 값 변경 횟수(최초 저장 = 0). CAS 대상 — 상한 FEEDBACK_MAX_CHANGES(5)
+  changeCount       Int       @default(0)
+  // ── 턴 사실: 최초 저장 시 로그 행에서 복사, 이후 불변 ──
+  /// 대화 당시 그룹(로그 groupId 복사 — 평가 시점 소속이 아니다, AC-FB6-5)
+  groupId           String
+  /// 턴의 KST 일 버킷(로그 dayBucket 복사) — 통계 기간 기준
+  turnDayBucket     String
+  turnCreatedAt     DateTime
+  channelType       String
+  isAnswered        Boolean
+  answeredByRag     Boolean
+  apiNotice         Boolean
+  inputKind         String?
+  matchedIntentId   String?
+  matchedFaqId      String?
+  matchedNodeId     String?
+  topicId           String?
+  /// FeedbackTargetKind: NODE | FAQ | INTENT | RAG | FALLBACK | API_NOTICE | OTHER (shared-types classifyFeedbackTarget)
+  targetKind        String
+  /// NODE/FAQ/INTENT일 때 그 자산 id. FK 없음(자산 삭제 후에도 사실 기록 — 화면 "삭제됨").
+  targetId          String?
+  // ── 큐 기여: 메시지당 최대 1회(선점 상태 기계 — §9.4) ──
+  /// null(미판정) | CLAIMED | QUEUED | SKIPPED | FAILED
+  queueOutcome      String?
+  /// SKIPPED일 때 NegativeFeedbackSkipCode(ALREADY_UNANSWERED|API_NOTICE|BUTTON_NODE|EMPTY|TOO_LONG|LIMIT_REACHED) — 자유 텍스트 아님
+  queueSkipCode     String?
+  queuedAt          DateTime?
+  /// QUEUED일 때 UnansweredQuestion.id. FK 없음.
+  queueItemId       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([chatbotId, turnDayBucket])   // 통계 기간 필터(groupBy 2종 공용)
+  @@index([queueItemId])                // 부정 평가 항목 상세의 👎 추이(§11.4)
+  @@map("message_feedbacks")
 }
 
 /// [신규 2026-09-22 학습 고도화] No.16 증강 제안의 격리 저장소(ADR-0025 §5). "제안 ≠ 자산" 분리를

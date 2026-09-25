@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { resolveTurn, willSurveyConsumeInput } from '@chat-bot/dialogue-engine';
 import { CONVERSATION_STATE_VERSION, ConversationStateSchema, WIDGET_FEATURE_HANDOFF_V1 } from '@chat-bot/shared-types';
+import type { PublicFeedbackOffer } from '@chat-bot/shared-types';
+import { isFeedbackOffered } from '../feedback/lib/feedback-offer';
 import type {
   ConversationState,
   DialogOutput,
@@ -41,6 +43,9 @@ const RAG_WAITING_TEXT = '문서에서 찾아보고 있어요. 잠시만요.';
 
 /** 금지어 차단 시 반환하는 고정 안내(FR-12-38, S-11). 관리자 문구 커스터마이즈는 이번 Phase 범위 밖이다. */
 const BANNED_WORD_GUIDANCE_TEXT = '바람직하지 않은 표현이 포함되어 있습니다. 다시 입력해 주세요.';
+
+/** [신규 No.44] 평가 가능 표식(ADR-0038 §1) — 응답에 실을 때는 조건부 전개로만 채운다(§6.2). */
+const FEEDBACK_OFFER: PublicFeedbackOffer = { rateable: true };
 
 /**
  * 공개 대화 1턴 파이프라인(FR-11-14~27, §8.3). `resolveTurn` 한 경로만 호출한다(FR-0-19).
@@ -88,7 +93,7 @@ export class PublicConversationService {
   }
 
   async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string }): Promise<PublicMessageResponse> {
-    const { chatbot } = await this.access.resolve(slug);
+    const { chatbot, channel } = await this.access.resolve(slug);
     const adapter = this.adapterFactory.getAdapter('WEB');
     const inbound = adapter.normalizeInbound(dto);
 
@@ -222,6 +227,15 @@ export class PublicConversationService {
     const inputKind = resolveInputKind(inbound);
     const apiNotice = result.apiStep?.branch === 'NOTICE';
     const surveyTurn = result.surveyTurn === true;
+    // [신규 No.44] 평가 가능 판정(ADR-0038 §1) — 이 지점은 BLOCK·HANDLED 조기 반환 뒤라
+    // blockedByFilter·handoffTurn이 항상 false다(방어적으로 명시 전달).
+    const feedbackOffered = isFeedbackOffered({
+      features: dto.features,
+      webChannelConfigJson: channel.config,
+      blockedByFilter: false,
+      surveyTurn,
+      handoffTurn: false,
+    });
 
     // ⑦ [신규] 2단계(외부 RAG) 분기 판정 — 9조건(FR-N2-1) + 유량 여유(회로·동시성·레이트리밋)까지
     // 전부 통과해야 PENDING으로 넘어간다. 하나라도 막히면 기존 폴백 경로로 수렴한다(FR-0-43).
@@ -242,6 +256,7 @@ export class PublicConversationService {
         stateReset,
         features: dto.features,
         prependOutputs: handoffPrependOutputs,
+        feedbackOffered,
       });
     }
 
@@ -253,6 +268,8 @@ export class PublicConversationService {
       // §5.5 관찰 창 — 상담이 켜진 챗봇 + 위젯이 기능을 선언 + 이번 턴이 미응답(BLOCK 제외 — 이미
       // 반환됨) + 활성 상담 없음(HANDLED로 반환되지 않았다는 것 자체가 활성 상담이 없었다는 뜻이다).
       handoff: await this.buildWatchHint(chatbot.id, dto.features, isAnswered),
+      // [신규 No.44] 평가 가능 턴에만 존재한다 — 없으면 바이트 단위로 현행과 동일(§6.2, 마지막 키).
+      ...(feedbackOffered ? { feedback: FEEDBACK_OFFER } : {}),
     };
 
     // ⑩ 로그 적재 — await 하지 않는다. 실패해도 응답은 이미 유효하다(FR-11-24, NFR-P6).
@@ -271,6 +288,7 @@ export class PublicConversationService {
       inputKind,
       apiNotice,
       surveyTurn,
+      feedbackOffered,
       // [신규 No.22 — §6.6] 이미 가진(필터된 운영) 번들에서 찾는다 — 추가 조회 0 · 생성자 인자 추가 0.
       topicId: resolveAnsweredTopicId(bundle, result, isAnswered),
     });
@@ -333,6 +351,8 @@ export class PublicConversationService {
     features?: string[];
     /** G-8 전치 아웃풋(§5.3) — 보류 응답 대기 문구 앞에도 같은 규약으로 붙인다. */
     prependOutputs?: DialogOutput[];
+    /** [신규 No.44] POST 응답(대기 문구)에 표식을 싣고, 로그는 백그라운드 완료 시 같은 값으로 적재한다(§6.4). */
+    feedbackOffered: boolean;
   }): Promise<PublicMessageResponse> {
     const ttlMs = this.config.get<number>('PENDING_ANSWER_TTL_MS') ?? 300_000;
     const expiresAt = new Date(Date.now() + ttlMs);
@@ -364,6 +384,7 @@ export class PublicConversationService {
         showSources: input.settings.showSources,
         fallbackText: input.fallbackText,
         inputKind: input.inputKind,
+        feedbackOffered: input.feedbackOffered,
       },
       { record: (params) => this.logService.record(params) },
     );
@@ -377,6 +398,8 @@ export class PublicConversationService {
       // §5.5 — 결과를 모르는 보류 턴은 관찰 창을 바로 열지 않고, 위젯이 보류 폴링 실패/만료 시 연다
       // (`IF_PENDING_FAILS`). 보류 답변 폴링 서버 코드·스키마는 무변경이다(ADR-0023 경로 불가침).
       handoff: await this.buildWatchHint(input.chatbotId, input.features, false, 'IF_PENDING_FAILS'),
+      // [신규 No.44] 없으면 바이트 단위로 현행과 동일(§6.2, 마지막 키).
+      ...(input.feedbackOffered ? { feedback: FEEDBACK_OFFER } : {}),
     };
   }
 

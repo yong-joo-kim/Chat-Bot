@@ -80,6 +80,8 @@ function buildPrismaMock(tx: ReturnType<typeof buildTxMock>) {
     cannedResponse: { count: jest.fn().mockResolvedValue(0) },
     // [신규 No.22] 사전검사 13 → 14종.
     topic: { count: jest.fn().mockResolvedValue(0) },
+    // [신규 No.44] 사전검사 14 → 15종.
+    messageFeedback: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb(tx)),
   };
 }

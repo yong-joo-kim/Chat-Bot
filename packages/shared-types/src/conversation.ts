@@ -13,6 +13,7 @@ import { ChatbotSkinSchema } from './chatbot';
 import { ThresholdPreviewCandidateSchema } from './answering';
 import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from './legacy-api';
 import { queryBoolean } from './common';
+import { FeedbackRating } from './feedback';
 
 /** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
 export const SimulatedAnsweredTopicSchema = z.object({
@@ -279,6 +280,16 @@ export const PublicHandoffStateSchema = z.object({
 });
 export type PublicHandoffState = z.infer<typeof PublicHandoffStateSchema>;
 
+/**
+ * [신규 No.44] 위젯이 `POST …/messages` 요청 본문 `features`에 싣는 기능 선언 문자열(ADR-0038 §1).
+ * `PublicMessageResponseSchema`보다 먼저 선언해야 한다(같은 모듈 평가 순서 — `PublicHandoffStateSchema` 선례).
+ */
+export const WIDGET_FEATURE_FEEDBACK_V1 = 'feedback-v1';
+
+/** 응답에 싣는 평가 가능 표식 — 키 자체가 없으면(§6.2) 바이트 동일(FR-FB2-2). */
+export const PublicFeedbackOfferSchema = z.object({ rateable: z.literal(true) });
+export type PublicFeedbackOffer = z.infer<typeof PublicFeedbackOfferSchema>;
+
 /** `stateReset`이 유일하게 허용된 "내부 사정" 노출이다. 폐기 사유는 내부 구조를 드러내므로 제외한다(FR-0-18). */
 export const PublicMessageResponseSchema = z.object({
   messageId: z.string().uuid(),
@@ -301,6 +312,9 @@ export const PublicMessageResponseSchema = z.object({
   /** [신규 No.24] 상담 켜진 챗봇의 미응답·보류·상담 턴에만 존재한다(ADR-0036 §2·§5.1). 없으면
    * 바이트 단위로 현행과 동일하다(`pendingAnswer` 선례). */
   handoff: PublicHandoffStateSchema.optional(),
+  /** [신규 No.44] 평가 가능 턴에만 존재한다(ADR-0038 §1). 없으면 바이트 단위로 현행과 동일 —
+   * **마지막 키**(조건부 전개로만 채운다, §6.2). */
+  feedback: PublicFeedbackOfferSchema.optional(),
 });
 export type PublicMessageResponse = z.infer<typeof PublicMessageResponseSchema>;
 
@@ -332,6 +346,22 @@ export type PendingAnswerPollResponse = z.infer<typeof PendingAnswerPollResponse
 export const WIDGET_FEATURE_HANDOFF_V1 = 'handoff-v1';
 export const HANDOFF_SESSION_HEADER = 'x-cb-session-id';
 export const HANDOFF_TOKEN_HEADER = 'x-cb-handoff-token';
+
+/* ------------------------------------------------------------------------------------------------
+ * 피드백 기반 개선 루프(No.44) — 공개 평가 API 계약. `PUT /public/chatbots/:slug/messages/:messageId/feedback`
+ * (`@Public()` 8번째, ADR-0038 §2). `feedback-loop-설계.md` §4.2·§7.
+ * ---------------------------------------------------------------------------------------------- */
+
+export const PublicFeedbackRequestSchema = z.object({
+  sessionId: z.string().uuid(),
+  rating: FeedbackRating,
+});
+export type PublicFeedbackRequestDto = z.infer<typeof PublicFeedbackRequestSchema>;
+
+export const PublicFeedbackResponseSchema = z.object({
+  rating: FeedbackRating,
+});
+export type PublicFeedbackResponse = z.infer<typeof PublicFeedbackResponseSchema>;
 
 export const HandoffPollQuerySchema = z.object({
   after: z.coerce.number().int().min(0).default(0),

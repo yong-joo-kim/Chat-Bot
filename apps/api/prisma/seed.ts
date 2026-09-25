@@ -343,6 +343,91 @@ async function seedLearningQueue(chatbotId: string, groupId: string, now: Date):
 }
 
 /**
+ * [신규 No.44 피드백 기반 개선 루프] 답변 평가 데모(feedback-loop-설계.md §3.3) — 평가 원장 3건
+ * (👍 2 · 👎 1) + 대응 대화 로그 3건(`feedbackOffered: true`) + 👎에 대응하는 `NEGATIVE_FEEDBACK`
+ * 큐 1건(`lastFeedbackLogId` 연결 · 원장 `queueOutcome: 'QUEUED'`·`queueItemId`). "원장·큐가 있으면
+ * 로그도 있다"(ADR-0019 92행 불변식)를 시드가 지킨다. 고정 id로 멱등(재실행 시 delete 후 재생성).
+ */
+async function seedFeedbackDemo(chatbotId: string, groupId: string, now: Date): Promise<void> {
+  const logIds = {
+    up1: '00000000-0000-4000-8000-0000000f0001',
+    up2: '00000000-0000-4000-8000-0000000f0002',
+    down1: '00000000-0000-4000-8000-0000000f0003',
+  };
+
+  await prisma.messageFeedback.deleteMany({ where: { chatbotId } });
+  await prisma.conversationLog.deleteMany({ where: { id: { in: Object.values(logIds) } } });
+  await prisma.unansweredQuestion.deleteMany({ where: { chatbotId, source: 'NEGATIVE_FEEDBACK' } });
+
+  const demoQuestion = '배송이 너무 느려요';
+  const rows: Array<{ id: string; userMessage: string; botResponse: string; rating: 'UP' | 'DOWN' }> = [
+    { id: logIds.up1, userMessage: '영업시간이 어떻게 되나요', botResponse: '평일 오전 9시부터 오후 6시까지 운영합니다.', rating: 'UP' },
+    { id: logIds.up2, userMessage: '환불은 어떻게 하나요', botResponse: '환불은 마이페이지에서 신청해 주세요.', rating: 'UP' },
+    { id: logIds.down1, userMessage: demoQuestion, botResponse: '죄송합니다, 배송 지연에 대해서는 안내드리기 어렵습니다.', rating: 'DOWN' },
+  ];
+
+  const dayBucket = toKstDayBucket(now);
+  const hourBucket = toKstHourOfDay(now);
+
+  for (const row of rows) {
+    await prisma.conversationLog.create({
+      data: {
+        id: row.id,
+        chatbotId,
+        groupId,
+        channelType: 'WEB',
+        sessionId: 'feedback-demo-session',
+        userMessage: row.userMessage,
+        botResponse: row.botResponse,
+        isAnswered: true,
+        dayBucket,
+        hourBucket,
+        createdAt: now,
+        feedbackOffered: true,
+        inputKind: 'TEXT',
+      },
+    });
+  }
+
+  // 👎 대응 학습현황 큐 1건 — 상세 화면이 이 로그(lastFeedbackLogId)에서 당시 답변·대상을 읽는다.
+  const queueItem = await prisma.unansweredQuestion.create({
+    data: {
+      chatbotId,
+      questionText: demoQuestion,
+      questionNormalized: normalizeText(demoQuestion),
+      variants: JSON.stringify([demoQuestion]),
+      occurredCount: 1,
+      lastOccurredAt: now,
+      status: 'PENDING',
+      source: 'NEGATIVE_FEEDBACK',
+      channelType: 'WEB',
+      lastFeedbackLogId: logIds.down1,
+    },
+  });
+
+  for (const row of rows) {
+    await prisma.messageFeedback.create({
+      data: {
+        chatbotId,
+        conversationLogId: row.id,
+        rating: row.rating,
+        changeCount: 0,
+        groupId,
+        turnDayBucket: dayBucket,
+        turnCreatedAt: now,
+        channelType: 'WEB',
+        isAnswered: true,
+        answeredByRag: false,
+        apiNotice: false,
+        inputKind: 'TEXT',
+        targetKind: 'OTHER',
+        ...(row.rating === 'DOWN' ? { queueOutcome: 'QUEUED', queuedAt: now, queueItemId: queueItem.id } : {}),
+      },
+    });
+  }
+}
+
+/**
  * [신규 No.22 토픽 시스템] 데모 토픽 2개(topic-system-설계.md §3.3) — "배송"(활성)에 의도 2건·FAQ
  * 2건, "보험청구 — 준비 중"(비활성)에 의도 1건·노드 1건·FAQ 1건을 지정한다. 시작·폴백 노드와 기존
  * 트랙 A 자산은 공통(topicId=null)으로 그대로 둔다. 이름에 "토픽데모_" 접두를 붙여 기존 자산과
@@ -782,6 +867,8 @@ async function main(): Promise<void> {
         quickReplies: ['배송 조회', '환불 절차', '영업시간'],
         launcherPosition: 'RIGHT',
         showLauncher: true,
+        // [신규 No.44] 답변 평가 받기 — 데모는 켜 둔다(피드백 루프 수동 검증용, §3.3).
+        feedbackEnabled: true,
       }),
     },
   });
@@ -794,6 +881,9 @@ async function main(): Promise<void> {
       config: JSON.stringify({ note: '2분기 오픈빌더 심사 예정' }),
     },
   });
+
+  // [신규 No.44] 답변 평가 데모 — 원장 3건(👍 2 · 👎 1) + 대응 로그 3건 + NEGATIVE_FEEDBACK 큐 1건(§3.3).
+  await seedFeedbackDemo(supportBot.id, supportBot.groupId, now);
 
   // [신규 No.24 하이브리드 CS] 데모 상담 연계 설정(기본 꺼짐, §3.3) + 자주 쓰는 문장 3건.
   await prisma.chatbotHandoffSetting.upsert({

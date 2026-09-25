@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { shouldCollect } from './lib/collect-decision';
-import type { InputKind } from './lib/collect-decision';
+import { shouldCollect, shouldQueueNegativeFeedback } from './lib/collect-decision';
+import type { InputKind, NegativeFeedbackSkipCode } from './lib/collect-decision';
 import { mergeVariants } from './lib/variants';
 
 export interface CollectUnansweredQuestionParams {
@@ -72,10 +72,57 @@ export class UnansweredCollectorService {
     }
   }
 
+  /**
+   * [신규 No.44] 👎 확정 시 학습현황 큐에 편입한다(수집기의 두 번째 진입점, ADR-0038 §4).
+   * 호출 주체는 `MessageFeedbackService` 1곳뿐이다(F-15). 예외를 던지지 않는다 — 실패는 `FAILED`로
+   * 흡수하고 평가 응답은 그대로 `200`이다(§9.4).
+   */
+  async collectNegativeFeedback(input: {
+    chatbotId: string;
+    channelType: string;
+    /** ConversationLog.userMessage(마스킹본) — 원문 재접촉 0(ADR-0019 §2 근거 유지). */
+    questionText: string;
+    isAnswered: boolean;
+    apiNotice: boolean;
+    inputKind: string | null;
+    conversationLogId: string;
+  }): Promise<{ kind: 'QUEUED'; id: string } | { kind: 'SKIPPED'; code: NegativeFeedbackSkipCode } | { kind: 'FAILED' }> {
+    try {
+      const maxLength = this.config.get<number>('UNANSWERED_MAX_QUESTION_LENGTH') ?? 200;
+      const decision = shouldQueueNegativeFeedback({
+        isAnswered: input.isAnswered,
+        apiNotice: input.apiNotice,
+        inputKind: input.inputKind,
+        questionText: input.questionText,
+        maxLength,
+      });
+      if (!decision.queue) return { kind: 'SKIPPED', code: decision.reason };
+
+      const now = new Date();
+      const existing = await this.prisma.unansweredQuestion.findUnique({
+        where: {
+          chatbotId_source_questionNormalized: { chatbotId: input.chatbotId, source: 'NEGATIVE_FEEDBACK', questionNormalized: decision.normalized },
+        },
+      });
+
+      if (existing) {
+        await this.mergeIntoExisting(existing, input.questionText, now, input.conversationLogId);
+        return { kind: 'QUEUED', id: existing.id };
+      }
+
+      return await this.createNegativeFeedbackIfUnderLimit(input, decision.normalized, now);
+    } catch {
+      // 경고 로그에 질문 본문·예외 message를 넣지 않는다(NFR-S7·§9.4) — chatbotId만.
+      this.logger.warn(`부정 평가 큐 편입 실패: chatbotId=${input.chatbotId}`);
+      return { kind: 'FAILED' };
+    }
+  }
+
   private async mergeIntoExisting(
     existing: { id: string; variants: string; status: string },
     questionText: string,
     now: Date,
+    lastFeedbackLogId?: string,
   ): Promise<void> {
     const variants = mergeVariants(this.parseVariants(existing.variants), questionText);
     await this.prisma.unansweredQuestion.update({
@@ -86,6 +133,7 @@ export class UnansweredCollectorService {
         variants: JSON.stringify(variants),
         // 상태를 자동으로 되돌리지 않는다(FR-15-5) — RESOLVED/IGNORED 재유입은 재발생만 드러낸다.
         ...(existing.status !== 'PENDING' ? { recurredCount: { increment: 1 }, recurredAfterAt: now } : {}),
+        ...(lastFeedbackLogId ? { lastFeedbackLogId } : {}),
       },
     });
   }
@@ -123,6 +171,49 @@ export class UnansweredCollectorService {
           data: { occurredCount: { increment: 1 }, lastOccurredAt: now },
         });
         return;
+      }
+      throw e;
+    }
+  }
+
+  private async createNegativeFeedbackIfUnderLimit(
+    input: { chatbotId: string; channelType: string; questionText: string; conversationLogId: string },
+    normalized: string,
+    now: Date,
+  ): Promise<{ kind: 'QUEUED'; id: string } | { kind: 'SKIPPED'; code: NegativeFeedbackSkipCode }> {
+    const maxPending = this.config.get<number>('FEEDBACK_QUEUE_MAX_PENDING') ?? 2000;
+    const pendingCount = await this.prisma.unansweredQuestion.count({
+      where: { chatbotId: input.chatbotId, status: 'PENDING', source: 'NEGATIVE_FEEDBACK' },
+    });
+    if (pendingCount >= maxPending) {
+      this.logger.warn(`NEGATIVE_FEEDBACK PENDING 상한 도달 — 신규 추가를 건너뜁니다: chatbotId=${input.chatbotId}`);
+      return { kind: 'SKIPPED', code: 'LIMIT_REACHED' };
+    }
+
+    try {
+      const created = await this.prisma.unansweredQuestion.create({
+        data: {
+          chatbotId: input.chatbotId,
+          questionText: input.questionText,
+          questionNormalized: normalized,
+          variants: JSON.stringify([input.questionText.slice(0, 200)]),
+          occurredCount: 1,
+          lastOccurredAt: now,
+          channelType: input.channelType,
+          source: 'NEGATIVE_FEEDBACK',
+          lastFeedbackLogId: input.conversationLogId,
+        },
+      });
+      return { kind: 'QUEUED', id: created.id };
+    } catch (e) {
+      if (this.isUniqueConstraintViolation(e)) {
+        const merged = await this.prisma.unansweredQuestion.update({
+          where: {
+            chatbotId_source_questionNormalized: { chatbotId: input.chatbotId, source: 'NEGATIVE_FEEDBACK', questionNormalized: normalized },
+          },
+          data: { occurredCount: { increment: 1 }, lastOccurredAt: now, lastFeedbackLogId: input.conversationLogId },
+        });
+        return { kind: 'QUEUED', id: merged.id };
       }
       throw e;
     }

@@ -27,3 +27,4 @@ export * from './deploy-schedule';
 export * from './api-mapping';
 export * from './legacy-api';
 export * from './handoff';
+export * from './feedback';

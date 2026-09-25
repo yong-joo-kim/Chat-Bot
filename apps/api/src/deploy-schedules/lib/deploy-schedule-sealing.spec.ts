@@ -207,17 +207,17 @@ describe('운영 예약 배포(No.28) 정적 검사 — scheduled-deploy-설계.
     });
   });
 
-  describe('D-5: @Public() 총수 7(No.24 상담 폴링 6→7) · deploy-schedules 컨트롤러 0건', () => {
+  describe('D-5: @Public() 총수 8(No.44 답변 평가 7→8) · deploy-schedules 컨트롤러 0건', () => {
     function collectAllApiControllerFiles(): string[] {
       const files: string[] = [];
       walk(join(REPO_ROOT, 'apps/api/src'), ['.controller.ts'], files);
       return files;
     }
-    it('전체 @Public() 총개수가 7개다', () => {
+    it('전체 @Public() 총개수가 8개다', () => {
       const controllerFiles = collectAllApiControllerFiles();
       let total = 0;
       for (const file of controllerFiles) total += nonCommentOccurrences(readFileSync(file, 'utf8'), /@Public\(\)/g);
-      expect(total).toBe(7);
+      expect(total).toBe(8);
     });
     it('deploy-schedules 컨트롤러 2개에는 @Public()이 없다', () => {
       const files = dsFiles.filter(({ f }) => f.endsWith('.controller.ts'));

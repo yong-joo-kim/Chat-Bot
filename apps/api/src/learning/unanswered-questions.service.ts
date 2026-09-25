@@ -8,15 +8,18 @@ import type {
   BulkIgnoreDto,
   BulkResolveDto,
   BulkResult,
+  FeedbackTargetRef,
   Paginated,
   ResolveResult,
   ResolveUnansweredQuestionDto,
   UnansweredQuestionDetail,
   UnansweredQuestionListItem,
   UnansweredQuestionListQuery,
+  UnansweredQuestionStatus,
   UnansweredQuestionSummary,
+  UnansweredSource,
 } from '@chat-bot/shared-types';
-import { LEARNING_LIMITS } from '@chat-bot/shared-types';
+import { LEARNING_LIMITS, classifyFeedbackTarget } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { ApiExceptionBody } from '../common/api.exception';
@@ -135,6 +138,8 @@ export class UnansweredQuestionsService {
     const where: Prisma.UnansweredQuestionWhereInput = {
       chatbotId,
       status: { in: statusFilter },
+      // [신규 No.44] 없으면 전체 소스(하위 호환, AC-FB5-1).
+      ...(query.source && query.source.length > 0 ? { source: { in: query.source } } : {}),
       ...(query.q ? { questionText: { contains: query.q } } : {}),
       ...(query.recurredOnly ? { recurredCount: { gt: 0 } } : {}),
       ...(query.from || query.to
@@ -160,24 +165,100 @@ export class UnansweredQuestionsService {
     const intentNameById = new Map(candidates.map((c) => [c.id, c.name]));
     // 질의 임베딩은 목록 요청당 배치 1회(FR-L2-30, AC-L2-14) — 행별 호출을 하지 않는다.
     const suggestionsById = await this.resolveSuggestions(chatbotId, rows, candidates);
+    // [신규 No.44] 페이지에 NEGATIVE_FEEDBACK 행이 있을 때만 고정 3쿼리(N+1 금지, NFR-FBP5).
+    const lastFeedbackByRowId = await this.resolveLastFeedbackTargets(rows, intentNameById);
 
     const items = rows.map((row) =>
       toUnansweredQuestionListItem(row, {
         resolvedIntentName: row.resolvedIntentId ? intentNameById.get(row.resolvedIntentId) : undefined,
         // RESOLVED/IGNORED 항목은 추천이 화면에서 쓰이지 않는다 — 계산을 건너뛰어 목록 성능을 지킨다.
         suggestions: suggestionsById.get(row.id) ?? [],
+        lastFeedbackTarget: lastFeedbackByRowId.get(row.id)?.target,
+        lastFeedbackMatchedIntentId: lastFeedbackByRowId.get(row.id)?.matchedIntentId,
       }),
     );
 
     return toPaginated(items, total, query.page, query.pageSize);
   }
 
+  /**
+   * [신규 No.44] NEGATIVE_FEEDBACK 행의 최근 👎 턴 매칭 대상을 배치로 해석한다(§11.1). 로그 조회 1 +
+   * 이름 해석 최대 2(FAQ·노드 — 있을 때만) = 고정 3쿼리. 의도 이름은 이미 로드된 후보 집합에서 해석한다
+   * (추가 조회 0).
+   */
+  private async resolveLastFeedbackTargets(
+    rows: PrismaUnansweredQuestion[],
+    intentNameById: Map<string, string>,
+  ): Promise<Map<string, { target: FeedbackTargetRef; matchedIntentId?: string }>> {
+    const result = new Map<string, { target: FeedbackTargetRef; matchedIntentId?: string }>();
+    const negRows = rows.filter((r) => r.source === 'NEGATIVE_FEEDBACK' && r.lastFeedbackLogId);
+    if (negRows.length === 0) return result;
+
+    const logIds = Array.from(new Set(negRows.map((r) => r.lastFeedbackLogId as string)));
+    const logs = await this.prisma.conversationLog.findMany({
+      where: { id: { in: logIds } },
+      select: { id: true, isAnswered: true, apiNotice: true, answeredByRag: true, matchedNodeId: true, matchedFaqId: true, matchedIntentId: true },
+    });
+    const logById = new Map(logs.map((l) => [l.id, l]));
+
+    const faqIds = Array.from(new Set(logs.map((l) => l.matchedFaqId).filter((v): v is string => !!v)));
+    const nodeIds = Array.from(new Set(logs.map((l) => l.matchedNodeId).filter((v): v is string => !!v)));
+    const [faqs, nodes] = await Promise.all([
+      faqIds.length > 0 ? this.prisma.faqEntry.findMany({ where: { id: { in: faqIds } }, select: { id: true, question: true } }) : Promise.resolve([]),
+      nodeIds.length > 0 ? this.prisma.dialogNode.findMany({ where: { id: { in: nodeIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
+    ]);
+    const faqNameById = new Map(faqs.map((f) => [f.id, f.question]));
+    const nodeNameById = new Map(nodes.map((n) => [n.id, n.name]));
+
+    for (const row of negRows) {
+      const log = logById.get(row.lastFeedbackLogId as string);
+      if (!log) continue;
+      const classified = classifyFeedbackTarget(log);
+      const name = this.resolveTargetName(classified, faqNameById, nodeNameById, intentNameById);
+      result.set(row.id, {
+        target: { kind: classified.kind, id: classified.id ?? undefined, name, deleted: classified.id != null && name == null },
+        matchedIntentId: log.matchedIntentId ?? undefined,
+      });
+    }
+    return result;
+  }
+
+  private resolveTargetName(
+    classified: { kind: FeedbackTargetRef['kind']; id: string | null },
+    faqNameById: Map<string, string>,
+    nodeNameById: Map<string, string>,
+    intentNameById: Map<string, string>,
+  ): string | undefined {
+    if (!classified.id) return undefined;
+    if (classified.kind === 'NODE') return nodeNameById.get(classified.id);
+    if (classified.kind === 'FAQ') return faqNameById.get(classified.id);
+    if (classified.kind === 'INTENT') return intentNameById.get(classified.id);
+    return undefined;
+  }
+
   /** FR-15-14 — 탭 배지·대시보드 위젯 전용 경량 API. 목록 전체를 불러오지 않는다. */
   async summary(chatbotId: string): Promise<UnansweredQuestionSummary> {
     await this.scope.assertReadable(chatbotId);
-    const maxPending = this.config.get<number>('UNANSWERED_MAX_PENDING') ?? LEARNING_LIMITS.maxPendingPerChatbot;
-    const pendingCount = await this.prisma.unansweredQuestion.count({ where: { chatbotId, status: 'PENDING' } });
-    return { pendingCount, limitReached: pendingCount >= maxPending };
+    const maxPendingUnanswered = this.config.get<number>('UNANSWERED_MAX_PENDING') ?? LEARNING_LIMITS.maxPendingPerChatbot;
+    const maxPendingFeedback = this.config.get<number>('FEEDBACK_QUEUE_MAX_PENDING') ?? LEARNING_LIMITS.maxPendingNegativeFeedback;
+    // [신규 No.44] groupBy 1쿼리로 대체(기존 count 1쿼리와 쿼리 수 불변, §11.2).
+    const rows = await this.prisma.unansweredQuestion.groupBy({
+      by: ['source'],
+      where: { chatbotId, status: 'PENDING' },
+      _count: { _all: true },
+    });
+    const unansweredCount = rows.find((r) => r.source === 'UNANSWERED')?._count._all ?? 0;
+    const feedbackCount = rows.find((r) => r.source === 'NEGATIVE_FEEDBACK')?._count._all ?? 0;
+    return {
+      // 두 소스 합계(전체 탭 배지) — "미응답 대기"류 기존 표시는 bySource.UNANSWERED를 쓴다(D-9).
+      pendingCount: unansweredCount + feedbackCount,
+      // 기존 의미 그대로 UNANSWERED 기준(D-9).
+      limitReached: unansweredCount >= maxPendingUnanswered,
+      bySource: {
+        UNANSWERED: { pendingCount: unansweredCount, limitReached: unansweredCount >= maxPendingUnanswered },
+        NEGATIVE_FEEDBACK: { pendingCount: feedbackCount, limitReached: feedbackCount >= maxPendingFeedback },
+      },
+    };
   }
 
   async detail(chatbotId: string, id: string): Promise<UnansweredQuestionDetail> {
@@ -194,7 +275,24 @@ export class UnansweredQuestionsService {
     const now = new Date();
 
     let trend: Array<{ dayBucket: string; count: number }> = foldTrend([], trendDays, now);
-    if (variants.length > 0) {
+    let trendApproximated = false;
+    let trendSource: 'VARIANTS' | 'FEEDBACK_LEDGER' = 'VARIANTS';
+
+    if (row.source === 'NEGATIVE_FEEDBACK') {
+      // [신규 No.44] 원장 기반 정확 추이 — 이 항목에 기여한 👎만 센다(§11.4).
+      trendSource = 'FEEDBACK_LEDGER';
+      const fromBucket = trendStartDayBucket(trendDays, now);
+      const trendRows = await this.prisma.messageFeedback.groupBy({
+        by: ['turnDayBucket'],
+        where: { queueItemId: row.id, turnDayBucket: { gte: fromBucket } },
+        _count: { _all: true },
+      });
+      trend = foldTrend(
+        trendRows.map((r) => ({ dayBucket: r.turnDayBucket, count: r._count._all })),
+        trendDays,
+        now,
+      );
+    } else if (variants.length > 0) {
       const fromBucket = trendStartDayBucket(trendDays, now);
       const trendRows = await this.prisma.conversationLog.groupBy({
         by: ['dayBucket'],
@@ -206,20 +304,98 @@ export class UnansweredQuestionsService {
         trendDays,
         now,
       );
+      // 변형이 5건 상한에 닿아 있으면 더 있었을 수 있다 — 발생 추이가 근사임을 알린다(DD-67).
+      trendApproximated = variants.length >= LEARNING_LIMITS.variantsMax;
     }
+
+    // [신규 No.44] NEGATIVE_FEEDBACK 상세 확장 — 당시 봇 답변(마스킹본·2000자 절단)·대상.
+    let lastFeedback: UnansweredQuestionDetail['lastFeedback'];
+    let lastFeedbackTarget: FeedbackTargetRef | undefined;
+    let lastFeedbackMatchedIntentId: string | undefined;
+    if (row.source === 'NEGATIVE_FEEDBACK' && row.lastFeedbackLogId) {
+      const log = await this.prisma.conversationLog.findUnique({
+        where: { id: row.lastFeedbackLogId },
+        select: {
+          botResponse: true,
+          createdAt: true,
+          isAnswered: true,
+          apiNotice: true,
+          answeredByRag: true,
+          matchedNodeId: true,
+          matchedFaqId: true,
+          matchedIntentId: true,
+        },
+      });
+      if (log) {
+        const classified = classifyFeedbackTarget(log);
+        const [faqRow, nodeRow] = await Promise.all([
+          classified.kind === 'FAQ' && classified.id
+            ? this.prisma.faqEntry.findUnique({ where: { id: classified.id }, select: { question: true } })
+            : Promise.resolve(null),
+          classified.kind === 'NODE' && classified.id
+            ? this.prisma.dialogNode.findUnique({ where: { id: classified.id }, select: { name: true } })
+            : Promise.resolve(null),
+        ]);
+        const name =
+          classified.kind === 'FAQ'
+            ? (faqRow?.question ?? undefined)
+            : classified.kind === 'NODE'
+              ? (nodeRow?.name ?? undefined)
+              : classified.kind === 'INTENT'
+                ? (classified.id ? intentNameById.get(classified.id) : undefined)
+                : undefined;
+        lastFeedbackTarget = { kind: classified.kind, id: classified.id ?? undefined, name, deleted: classified.id != null && name == null };
+        lastFeedbackMatchedIntentId = log.matchedIntentId ?? undefined;
+        const truncated = log.botResponse.length > 2000 ? `${log.botResponse.slice(0, 2000)}…` : log.botResponse;
+        lastFeedback = { botResponse: truncated, turnAt: log.createdAt, target: lastFeedbackTarget, matchedIntentId: lastFeedbackMatchedIntentId };
+      }
+    }
+
+    // [신규 No.44] 같은 정규화 질문의 다른 소스 항목(FR-FB7-5) — 유일 키 조회 1회.
+    const counterpartSource: UnansweredSource = row.source === 'NEGATIVE_FEEDBACK' ? 'UNANSWERED' : 'NEGATIVE_FEEDBACK';
+    const counterpartRow = await this.prisma.unansweredQuestion.findUnique({
+      where: { chatbotId_source_questionNormalized: { chatbotId, source: counterpartSource, questionNormalized: row.questionNormalized } },
+      select: { id: true, source: true, status: true },
+    });
 
     const item = toUnansweredQuestionListItem(row, {
       resolvedIntentName: row.resolvedIntentId ? intentNameById.get(row.resolvedIntentId) : undefined,
       suggestions,
+      lastFeedbackTarget,
+      lastFeedbackMatchedIntentId,
     });
 
     return {
       ...item,
       variants,
       trend,
-      // 변형이 5건 상한에 닿아 있으면 더 있었을 수 있다 — 발생 추이가 근사임을 알린다(DD-67).
-      trendApproximated: variants.length >= LEARNING_LIMITS.variantsMax,
+      trendApproximated,
+      trendSource,
+      lastFeedback,
+      counterpart: counterpartRow
+        ? { id: counterpartRow.id, source: counterpartRow.source as UnansweredSource, status: counterpartRow.status as UnansweredQuestionStatus }
+        : undefined,
     };
+  }
+
+  /**
+   * [신규 No.44] "직접 수정 완료" — NEGATIVE_FEEDBACK `PENDING` → `RESOLVED`(의도 반영 없음, §11.3).
+   * UNANSWERED 항목은 반영(예문 추가)으로 처리해야 한다(400). 비감사(ADR-0019 §6).
+   */
+  async markAddressed(chatbotId: string, id: string, actorId: string | null): Promise<UnansweredQuestionListItem> {
+    await this.scope.assertWritable(chatbotId);
+    const row = await this.findRowOrThrow(chatbotId, id);
+    if (row.source !== 'NEGATIVE_FEEDBACK') {
+      throw new ApiException('INVALID_STATUS_TRANSITION', 400, '답변 못함 항목은 반영(예문 추가)으로 처리해 주세요.');
+    }
+    const now = new Date();
+    const transition = await this.prisma.unansweredQuestion.updateMany({
+      where: { id, chatbotId, status: 'PENDING', source: 'NEGATIVE_FEEDBACK' },
+      data: { status: 'RESOLVED', resolvedIntentId: null, resolvedAt: now, resolvedById: actorId },
+    });
+    if (transition.count === 0) throw new ApiException('ALREADY_RESOLVED', 409, ALREADY_PROCESSED_MESSAGE);
+    const updated = await this.findRowOrThrow(chatbotId, id);
+    return toUnansweredQuestionListItem(updated);
   }
 
   /**

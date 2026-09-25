@@ -7,6 +7,24 @@ export type CollectSkipReason = 'ANSWERED' | 'BLOCKED' | 'BUTTON_NODE' | 'EMPTY'
 
 export type CollectDecision = { collect: true; normalized: string } | { collect: false; reason: CollectSkipReason };
 
+/** [신규 No.44] 👎 편입 제외 사유(ADR-0038 §4) — `LIMIT_REACHED`는 상한 검사 단계에서만 나온다(수집기 판정). */
+export type NegativeFeedbackSkipCode = 'ALREADY_UNANSWERED' | 'API_NOTICE' | 'BUTTON_NODE' | 'EMPTY' | 'TOO_LONG' | 'LIMIT_REACHED';
+
+export type NegativeFeedbackQueueDecision =
+  | { queue: true; normalized: string }
+  | { queue: false; reason: Exclude<NegativeFeedbackSkipCode, 'LIMIT_REACHED'> };
+
+/**
+ * 정규화·빈 입력·장문 판정 1벌 — `shouldCollect()`와 `shouldQueueNegativeFeedback()`이 공유한다
+ * (복제 금지, NFR-FBM2).
+ */
+function normalizeQueueCandidate(text: string, maxLength: number): { ok: true; normalized: string } | { ok: false; reason: 'EMPTY' | 'TOO_LONG' } {
+  const normalized = normalizeText(text);
+  if (normalized.length === 0) return { ok: false, reason: 'EMPTY' };
+  if (normalized.length > maxLength) return { ok: false, reason: 'TOO_LONG' };
+  return { ok: true, normalized };
+}
+
 /**
  * 미응답 질문 수집 조건 판정(FR-15-1/2, DD-52/53) — 순수 함수, DB·Nest 무의존(NFR-M1).
  * `isAnswered` 판정은 `judgeAnswered()`(conversation/lib)의 결과를 그대로 신뢰한다 — 별도 판정을
@@ -35,9 +53,31 @@ export function shouldCollect(input: {
   if (input.blockedByFilter) return { collect: false, reason: 'BLOCKED' };
   if (input.inputKind === 'BUTTON_NODE') return { collect: false, reason: 'BUTTON_NODE' };
 
-  const normalized = normalizeText(input.questionText);
-  if (normalized.length === 0) return { collect: false, reason: 'EMPTY' };
-  if (normalized.length > input.maxLength) return { collect: false, reason: 'TOO_LONG' };
+  const normalized = normalizeQueueCandidate(input.questionText, input.maxLength);
+  if (!normalized.ok) return { collect: false, reason: normalized.reason };
 
-  return { collect: true, normalized };
+  return { collect: true, normalized: normalized.normalized };
+}
+
+/**
+ * [신규 No.44] 👎 큐 편입 판정(ADR-0038 §4) — 순수 함수. 제외 순서: `API_NOTICE`(외부 장애) →
+ * `ALREADY_UNANSWERED`(폴백은 이미 UNANSWERED로 수집됨) → `BUTTON_NODE`(`inputKind`가 TEXT·
+ * BUTTON_MESSAGE가 아님 — null 포함, 보수적) → `EMPTY`/`TOO_LONG`. 상한(`LIMIT_REACHED`)은 이
+ * 함수가 아니라 수집기가 판정한다(PENDING 건수 조회가 필요해서다).
+ */
+export function shouldQueueNegativeFeedback(input: {
+  isAnswered: boolean;
+  apiNotice: boolean;
+  inputKind: string | null;
+  questionText: string;
+  maxLength: number;
+}): NegativeFeedbackQueueDecision {
+  if (input.apiNotice) return { queue: false, reason: 'API_NOTICE' };
+  if (!input.isAnswered) return { queue: false, reason: 'ALREADY_UNANSWERED' };
+  if (input.inputKind !== 'TEXT' && input.inputKind !== 'BUTTON_MESSAGE') return { queue: false, reason: 'BUTTON_NODE' };
+
+  const normalized = normalizeQueueCandidate(input.questionText, input.maxLength);
+  if (!normalized.ok) return { queue: false, reason: normalized.reason };
+
+  return { queue: true, normalized: normalized.normalized };
 }

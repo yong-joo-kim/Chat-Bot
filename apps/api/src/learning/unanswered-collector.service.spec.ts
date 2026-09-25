@@ -92,4 +92,89 @@ describe('UnansweredCollectorService', () => {
 
     await expect(service.collect(baseInput)).resolves.toBeUndefined();
   });
+
+  /**
+   * [test-automation 추가 — No.44] collectNegativeFeedback() — collect()와 나란한 두 번째 진입점
+   * (ADR-0038 §4)의 소스별 상한·재발생 규칙을 mock Prisma로 결정적으로 검증한다. AC-FB4-1/3/4.
+   */
+  describe('collectNegativeFeedback (No.44 — AC-FB4-1/3/4)', () => {
+    const negativeInput = {
+      chatbotId: 'chatbot-1',
+      channelType: 'WEB',
+      questionText: '이 답변이 이상해요',
+      isAnswered: true,
+      apiNotice: false,
+      inputKind: 'TEXT' as const,
+      conversationLogId: 'log-1',
+    };
+
+    it('AC-FB4-1: 신규 질문이면 source=NEGATIVE_FEEDBACK·lastFeedbackLogId로 QUEUED 생성한다(UNANSWERED 상한과 무관)', async () => {
+      const create = jest.fn().mockResolvedValue({ id: 'nq-1' });
+      // count()는 실제로는 source 조건에 따라 값이 달라지지만, 여기서는 낮은 값을 반환하게 해
+      // '상한 미만'을 재현한다 — 아래에서 실제로 source: 'NEGATIVE_FEEDBACK' 조건으로 조회했는지
+      // 별도로 단언해 UNANSWERED 상한과 무관함을 확인한다.
+      const prisma = makePrisma({ create, count: jest.fn().mockResolvedValue(5) });
+      const config = makeConfig({ FEEDBACK_QUEUE_MAX_PENDING: 2000 });
+      const service = new UnansweredCollectorService(prisma, config);
+
+      const result = await service.collectNegativeFeedback(negativeInput);
+
+      expect(result).toEqual({ kind: 'QUEUED', id: 'nq-1' });
+      const createArg = (prisma.unansweredQuestion.create as jest.Mock).mock.calls[0][0];
+      expect(createArg.data.source).toBe('NEGATIVE_FEEDBACK');
+      expect(createArg.data.lastFeedbackLogId).toBe('log-1');
+      // 상한 조회 자체가 source: NEGATIVE_FEEDBACK로 한정된다(소스별 상한).
+      const countArg = (prisma.unansweredQuestion.count as jest.Mock).mock.calls[0][0];
+      expect(countArg.where.source).toBe('NEGATIVE_FEEDBACK');
+    });
+
+    it('AC-FB4-4: NEGATIVE_FEEDBACK PENDING 상한 도달 시 SKIPPED(LIMIT_REACHED)를 반환하고 create를 호출하지 않는다', async () => {
+      const prisma = makePrisma({ count: jest.fn().mockResolvedValue(2000) });
+      const config = makeConfig({ FEEDBACK_QUEUE_MAX_PENDING: 2000 });
+      const service = new UnansweredCollectorService(prisma, config);
+
+      const result = await service.collectNegativeFeedback(negativeInput);
+
+      expect(result).toEqual({ kind: 'SKIPPED', code: 'LIMIT_REACHED' });
+      expect(prisma.unansweredQuestion.create).not.toHaveBeenCalled();
+    });
+
+    it('AC-FB4-3: 기존 행이 RESOLVED면 상태를 유지한 채 recurredCount만 증가한다(재발생 신호)', async () => {
+      const existing = { id: 'nq-1', variants: '["이 답변이 이상해요"]', status: 'RESOLVED' };
+      const update = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({ findUnique: jest.fn().mockResolvedValue(existing), update });
+      const config = makeConfig({ FEEDBACK_QUEUE_MAX_PENDING: 2000 });
+      const service = new UnansweredCollectorService(prisma, config);
+
+      const result = await service.collectNegativeFeedback(negativeInput);
+
+      expect(result).toEqual({ kind: 'QUEUED', id: 'nq-1' });
+      expect(update).toHaveBeenCalledTimes(1);
+      const updateArg = update.mock.calls[0][0];
+      expect(updateArg.data.recurredCount).toEqual({ increment: 1 });
+      expect(updateArg.data.status).toBeUndefined(); // 상태 자동 복귀 없음(FR-15-5 상속)
+      expect(prisma.unansweredQuestion.create).not.toHaveBeenCalled();
+    });
+
+    it('shouldQueueNegativeFeedback이 제외 판정을 내리면 SKIPPED 사유 코드를 그대로 반환한다(예: API_NOTICE)', async () => {
+      const prisma = makePrisma();
+      const config = makeConfig({ FEEDBACK_QUEUE_MAX_PENDING: 2000 });
+      const service = new UnansweredCollectorService(prisma, config);
+
+      const result = await service.collectNegativeFeedback({ ...negativeInput, apiNotice: true });
+
+      expect(result).toEqual({ kind: 'SKIPPED', code: 'API_NOTICE' });
+      expect(prisma.unansweredQuestion.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('예상치 못한 오류(DB 다운)는 던지지 않고 FAILED로 흡수한다', async () => {
+      const prisma = makePrisma({ findUnique: jest.fn().mockRejectedValue(new Error('DB down')) });
+      const config = makeConfig({ FEEDBACK_QUEUE_MAX_PENDING: 2000 });
+      const service = new UnansweredCollectorService(prisma, config);
+
+      const result = await service.collectNegativeFeedback(negativeInput);
+
+      expect(result).toEqual({ kind: 'FAILED' });
+    });
+  });
 });

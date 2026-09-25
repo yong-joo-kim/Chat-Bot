@@ -37,4 +37,17 @@ export const MESSAGES = {
   handoffPollUnstable: '연결이 원활하지 않아요',
   handoffRestoreNotice: '이전 챗봇 대화는 다시 표시되지 않아요',
   handoffNodeSelectionPrefix: (label: string) => `[선택] ${label}`,
+  /**
+   * 피드백 기반 개선 루프(No.44) 위젯 문구 전체 목록(`feedback-loop-ui-spec.md` §3.2.5). 이 7개가
+   * 위젯이 평가와 관련해 사용자에게 보여주는 **모든** 문구다.
+   */
+  feedback: {
+    groupLabel: '답변 평가',
+    up: '도움이 됐어요',
+    down: '도움이 안 됐어요',
+    thanks: '의견을 보내 주셔서 고마워요',
+    saveFailed: '저장하지 못했어요',
+    unavailable: '지금은 의견을 받을 수 없어요',
+    locked: '더 이상 바꿀 수 없어요',
+  },
 } as const;

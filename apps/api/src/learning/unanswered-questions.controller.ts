@@ -95,6 +95,18 @@ export class UnansweredQuestionsController {
     return this.service.reopen(chatbotId, id);
   }
 
+  /** [신규 No.44] "직접 수정 완료" — 부정 평가(NEGATIVE_FEEDBACK) 항목 전용(§11.3). */
+  @Post(':id/mark-addressed')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('dialogue:write')
+  markAddressed(
+    @Param('chatbotId') chatbotId: string,
+    @Param('id') id: string,
+    @CurrentUser() actor: SessionUser,
+  ): Promise<UnansweredQuestionListItem> {
+    return this.service.markAddressed(chatbotId, id, actor.id);
+  }
+
   /** No.23 (A) 통합 반영 — 의도 + 엔티티 동시 반영. 기존 `/resolve`는 무회귀로 유지된다(FR-L2-13). */
   @Post(':id/resolve-decomposed')
   @HttpCode(HttpStatus.OK)

@@ -38,6 +38,8 @@ export interface RecordConversationLogParams {
   handoffTurn?: boolean;
   /** [신규 No.22] 답한 자산의 **대화 당시** 토픽(공통·미응답·RAG·상담 턴 = undefined → null). */
   topicId?: string;
+  /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). 기본 false. */
+  feedbackOffered?: boolean;
 }
 
 /**
@@ -94,6 +96,10 @@ export class ConversationLogService {
           apiNotice: params.apiNotice ?? false,
           // [신규 No.22 — §17 T-12] 쓰기 주체는 이 1곳뿐이다.
           topicId: params.topicId,
+          // [신규 No.44] 쓰기 주체는 이 1곳뿐이다(F-10). inputKind는 이미 필수 파라미터라 모든
+          // 호출부가 값을 넘긴다 — 신규 적재 행은 전부 TEXT/BUTTON_MESSAGE/BUTTON_NODE다(AC-FB2-3).
+          feedbackOffered: params.feedbackOffered ?? false,
+          inputKind: params.inputKind,
         },
       });
 

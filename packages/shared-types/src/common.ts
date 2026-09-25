@@ -157,6 +157,9 @@ export const ApiErrorCode = z.enum([
   'TOPIC_SYSTEM_NODE_LOCKED',
   'TOPIC_SPLIT_TOO_LARGE',
   'TOPIC_SPLIT_BUSY',
+  // 피드백 기반 개선 루프(No.44) 그룹 추가(feedback-loop-설계.md §16.3, ADR-0038) — 2종.
+  'FEEDBACK_TARGET_NOT_FOUND',
+  'FEEDBACK_CLOSED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

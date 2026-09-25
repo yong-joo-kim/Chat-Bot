@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CHANNEL_TYPE_LABELS } from '@chat-bot/shared-types';
-import type { ChannelListItem, ChannelType, UpdateChannelDto } from '@chat-bot/shared-types';
+import type { ChannelListItem, ChannelType, UpdateChannelDto, WebChannelConfig } from '@chat-bot/shared-types';
 import { channelConfigSchemaFor } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
@@ -35,7 +35,8 @@ export class ChannelsService {
 
     const existing = await this.prisma.channel.findUnique({ where: { chatbotId_type: { chatbotId, type } } });
 
-    let configValue = existing ? parseChannelConfig(type, existing.config) : defaultChannelConfig(type);
+    const beforeConfig = existing ? parseChannelConfig(type, existing.config) : defaultChannelConfig(type);
+    let configValue = beforeConfig;
 
     if (dto.config !== undefined) {
       const parsed = channelConfigSchemaFor(type).safeParse(dto.config);
@@ -58,6 +59,17 @@ export class ChannelsService {
       : await this.prisma.channel.create({ data: { chatbotId, type, enabled, config: serializedConfig } });
 
     // 채널은 상태 머신이 아니다 — enabled 변화도 STATUS_CHANGE가 아니라 UPDATE + summary로 표기한다(§9.5).
+    // [신규 No.44] feedbackEnabled 변화도 같은 summary에 ` · `로 합성한다(ADR-0038 §5 — 화이트리스트 무변경).
+    const summaryParts: string[] = [];
+    if (existing && existing.enabled !== row.enabled) {
+      summaryParts.push(`사용 여부 변경: ${existing.enabled} → ${row.enabled}`);
+    }
+    if (existing && type === 'WEB') {
+      const before = (beforeConfig as WebChannelConfig).feedbackEnabled === true;
+      const after = (configValue as WebChannelConfig).feedbackEnabled === true;
+      if (before !== after) summaryParts.push(`답변 평가 받기 변경: ${before} → ${after}`);
+    }
+
     await this.auditLogService.record({
       action: existing ? 'UPDATE' : 'CREATE',
       targetType: 'Channel',
@@ -66,7 +78,7 @@ export class ChannelsService {
       chatbotId,
       before: existing ?? undefined,
       after: row,
-      ...(existing && existing.enabled !== row.enabled ? { summary: `사용 여부 변경: ${existing.enabled} → ${row.enabled}` } : {}),
+      ...(summaryParts.length > 0 ? { summary: summaryParts.join(' · ') } : {}),
     });
 
     return toChannelListItem(type, row);

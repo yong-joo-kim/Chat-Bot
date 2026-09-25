@@ -67,6 +67,9 @@ export const WebChannelConfigSchema = z
     quickReplies: z.array(z.string().trim().min(1).max(20)).max(5).default([]),
     launcherPosition: z.enum(['RIGHT', 'LEFT']).default('RIGHT'),
     showLauncher: z.boolean().default(true),
+    /** [신규 No.44] 답변 평가(👍/👎) 받기 — 선택 키, **`.default(false)` 금지**(ADR-0038 §5).
+     * 키 없음 = 꺼짐. 기본값을 주면 기존 채널 응답·파싱 결과 바이트가 바뀐다(FR-0-139). */
+    feedbackEnabled: z.boolean().optional(),
   })
   .strict(); // ← 미정의 필드는 통과시키지 않는다(EX-11-2) — 자격증명 필드를 보내면 400으로 정직하게 알린다.
 export type WebChannelConfig = z.infer<typeof WebChannelConfigSchema>;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { StatsDistribution, StatsGranularity, StatsQuestions, StatsSummary } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
+import { useAuth } from '../../context/AuthContext';
 import { statsApi } from '../../api/stats';
 import { ApiError } from '../../api/client';
 import { MESSAGES } from '../../constants/messages';
@@ -16,6 +17,7 @@ import { ChannelDistribution } from './ChannelDistribution';
 import { HourWeekdayPanel } from './HourWeekdayPanel';
 import { TopQuestionsPanel } from './TopQuestionsPanel';
 import { IntentMatchSection } from './IntentMatchSection';
+import { AnswerFeedbackSection } from './AnswerFeedbackSection';
 import { useLatestRequest } from '../../lib/useLatestRequest';
 
 interface AsyncSlice<T> {
@@ -32,6 +34,7 @@ function initialSlice<T>(): AsyncSlice<T> {
 /** S1 — 기본 통계 화면(FR-14-*, stats-learning-ui-spec.md §3). 3개 API는 독립 호출·부분 렌더된다(F-3). */
 export function StatsOverviewPage(): JSX.Element {
   const { chatbot } = useChatbotDetailContext();
+  const { can } = useAuth();
   const [granularity, setGranularity] = useState<StatsGranularity>('DAY');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -214,6 +217,9 @@ export function StatsOverviewPage(): JSX.Element {
 
       {/* No.29(J-13) — 기존 섹션과 무관하게 항상 렌더되는 독립 섹션(FR-0-90, FR-I8-5). */}
       <IntentMatchSection chatbotId={chatbot.id} from={from} to={to} />
+
+      {/* [신규 No.44] "답변 만족도" — 4번째 독립 섹션(feedback-loop-ui-spec.md §3.4). */}
+      <AnswerFeedbackSection chatbotId={chatbot.id} from={from} to={to} canWriteChannel={can('channel:write')} />
     </div>
   );
 }

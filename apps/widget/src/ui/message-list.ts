@@ -5,6 +5,7 @@ import { renderOutputView, type ButtonGroupOptions } from './renderers';
 import { renderSourceList } from './renderers/sources';
 import { renderButtonGroup } from './renderers/button';
 import { createPendingIndicator, removePendingIndicator as removePendingIndicatorDom } from './renderers/pending-indicator';
+import { createFeedbackBar, type FeedbackBarBinding } from './feedback-bar';
 import { MESSAGES } from '../constants/messages';
 
 function sleep(ms: number): Promise<void> {
@@ -39,23 +40,28 @@ export interface MessageListController {
    * `PAUSE` 아웃풋만큼 지연 후 다음 아웃풋을 렌더한다(FR-W-7). `onTyping`으로 대기 상태를 알린다.
    * `buttonGroupOptions`는 이 호출로 렌더되는 `BUTTON` 아웃풋 전부에 적용된다(예: 인사말 퀵리플라이는
    * `{ allowStackedLayout: false }`로 되묻기 전용 세로 스택 레이아웃에서 제외한다).
+   * `feedback`(No.44, 선택)이 있을 때만 — 서버 응답에 `feedback.rateable === true`가 있던
+   * 말풍선에만 — 렌더 직후 같은 삽입 동작으로 평가 막대를 붙인다(`feedback-loop-ui-spec.md` §3.2.1).
    */
   addBotOutputs(
     views: OutputView[],
     onButtonAction: (action: ButtonActionView) => void,
     onTyping?: (active: boolean) => void,
     buttonGroupOptions?: ButtonGroupOptions,
+    feedback?: FeedbackBarBinding,
   ): Promise<void>;
   /**
    * PENDING 최종 답변(§4.4.2-4) — 아웃풋 + 출처를 같은 말풍선에 렌더한다. `messageId`는 이번
    * 답변이 그 이전의 인터림 안내 말풍선과 구분되는 **새 노드**임을 보장하기 위한 식별용일 뿐,
-   * 기존 노드를 찾아 수정하지 않는다(`aria-relevant="additions"` 계약 유지).
+   * 기존 노드를 찾아 수정하지 않는다(`aria-relevant="additions"` 계약 유지). `feedback`(No.44,
+   * 선택)은 보류 RAG 최종 답변(READY·FAILED)에만 — 인터림 안내·정리 문구에는 전달하지 않는다.
    */
   addBotAnswer(
     messageId: string,
     views: OutputView[],
     sources: PendingAnswerSource[] | undefined,
     onButtonAction: (action: ButtonActionView) => void,
+    feedback?: FeedbackBarBinding,
   ): Promise<void>;
   /** 진행 인디케이터를 봇 메시지 다음에 추가한다(§4.4.2-2). */
   addPendingIndicator(messageId: string): void;
@@ -126,19 +132,27 @@ export function createMessageList(): MessageListController {
       root.appendChild(el);
       scrollToEnd();
     },
-    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions) {
+    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions, feedback) {
       const el = wrapMessage('bot');
       const b = bubble();
       el.appendChild(b);
+      // [No.44] 말풍선이 #cb-messages에 추가되는 같은 삽입 동작 안에서 평가 막대를 붙인다 —
+      // root.appendChild(el) 이후 새 노드를 추가하지 않는다(재낭독 방지, §3.2.1).
+      if (feedback) {
+        el.appendChild(createFeedbackBar(feedback));
+      }
       root.appendChild(el);
       scrollToEnd();
       await renderViewsIntoBubble(b, views, onButtonAction, onTyping, buttonGroupOptions);
       scrollToEnd();
     },
-    async addBotAnswer(_messageId, views, sources, onButtonAction) {
+    async addBotAnswer(_messageId, views, sources, onButtonAction, feedback) {
       const el = wrapMessage('bot');
       const b = bubble();
       el.appendChild(b);
+      if (feedback) {
+        el.appendChild(createFeedbackBar(feedback));
+      }
       root.appendChild(el);
       scrollToEnd();
       await renderViewsIntoBubble(b, views, onButtonAction);

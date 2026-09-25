@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
 
-**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 23, 25, 24(하이브리드 CS), 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 22(토픽 시스템), 23, 24(하이브리드 CS), 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
 
 ### 코드 구조
 pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
@@ -20,7 +20,7 @@ pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘�
 
 ### 문서 구조 (`docs/`)
 1. `docs/00-source/` — 원본 참고 문서(ROCHA 매뉴얼/제품소개서, 정부 UIUX 가이드라인, 기능분류 초안)
-2. `docs/01-requirements/기능요구사항.md` — **기능 47종**(기본 15 / 확장 14 / 옵션·트렌드 10 / 타사 벤치마킹 보완 8), GPU 필요도, 구축형/구독형 적합도. 보완 8종(No.40~47)은 Dialogflow CX/Copilot Studio/watsonx Assistant/카카오 i 오픈빌더 등 타 챗봇 플랫폼 웹조사 기반 제안으로, §4-1에서 사용자 확인 대기 중
+2. `docs/01-requirements/기능요구사항.md` — **기능 47종**(기본 15 / 확장 14 / 옵션·트렌드 10 / 타사 벤치마킹 보완 8), GPU 필요도, 구축형/구독형 적합도. 보완 8종(No.40~47)은 Dialogflow CX/Copilot Studio/watsonx Assistant/카카오 i 오픈빌더 등 타 챗봇 플랫폼 웹조사 기반 제안으로, §4-1에서 사용자 확인 대기 중(단 **No.44는 2026-09-25 도입 확정**)
 3. `docs/02-spec/개발명세서.md` — 아키텍처(모노레포 구조), 데이터모델, API 설계, 비기능요구사항. **§6에 사용자 확인이 필요한 미결정 사항**(스택 확정 여부, 구축형/구독형 우선순위, 1차 개발범위)이 정리되어 있으니 구현 착수 전 반드시 확인할 것.
 4. `docs/03-design/UIUX_준수기준.md` — 정부 UIUX 가이드라인에서 추출한 챗봇 위젯/관리자 콘솔 준수 규칙
 5. `docs/04-test/` — 시험계획.md / 시험항목.md / 시험데이터.md / 자동시험_전략.md / 오류검출_프로세스.md

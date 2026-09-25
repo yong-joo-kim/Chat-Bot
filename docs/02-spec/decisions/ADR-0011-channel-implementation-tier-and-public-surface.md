@@ -141,3 +141,16 @@ interface ChannelAdapter {
 2. **§6 확장**: `HandoffPollResponse`·`PublicHandoffState`에는 상담원 이름·이메일·사용자 id·상담 내부 id·전체 `sessionId`·원문이 **타입상 들어갈 수 없다**(키 집합 정적 검사 — `handoff-sealing.spec.ts` H-14).
 3. **§5 보론**: 세션 식별자와 상담 토큰을 URL이 아니라 **요청 헤더**(`x-cb-session-id`·`x-cb-handoff-token`)로 받는다(접근 로그 유출 방지). 커스텀 헤더는 CORS 프리플라이트를 유발하므로 **공개 표면 분기의 CORS 옵션에 `maxAge: 600`만 추가**한다 — `origin: '*'`·무자격증명·공개 경로 판정은 그대로이며, 인가는 여전히 서버 가드다.
 4. **레이트리밋**: 폴링 경로(보류 답변 포함)는 기존 `ip`·`session` 버킷을 소비하지 않고 **`poll-ip`(600/분) + 경로 키 버킷**만 소비한다 — 같은 NAT 뒤 폴링이 일반 대화 전송을 `429`로 만드는 것을 막는다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.44: 공개 경로 8번째 = 답변 평가 · 평가 전용 버킷 · WEB 설정 스위치)
+
+피드백 기반 개선 루프(No.44, **ADR-0038 §2·§5·§6**). §4(404/403)·§5(Origin 인가 = 서버 가드)·§6(공개 응답 별도 스키마)은 **불변**이다.
+
+1. **`PUT /public/chatbots/:slug/messages/:messageId/feedback`** — 공개 대화 컨트롤러의 5번째 핸들러이며 `@Public()` 전체는 **8곳**이다. 레이트리밋 → Origin 가드 순서·`404`/`403` 규약·`Cache-Control: no-store`를 상속한다. 쓰기 경로이지만 **대화 데이터를 돌려주지 않는다**(응답 = 평가값 에코).
+2. **§4 보론 — 단일 404**: 슬러그 미존재·비공개·채널 닫힘은 기존 규약(404/403)이다. 그 뒤의 기능 꺼짐·비UUID·로그 없음·챗봇/세션 불일치·평가 불가 턴은 **전부 같은 `404 FEEDBACK_TARGET_NOT_FOUND`** 다 — 공개 표면이지만 "남의 메시지 존재"는 슬러그와 달리 공개 값이 아니므로 ADR-0003의 은닉 규약을 그대로 적용한다.
+3. **§6 확장**: `PublicFeedbackRequest`(`sessionId`·`rating`) · `PublicFeedbackResponse`(`rating`) · 응답 선택 필드 `feedback`(`rateable`)의 키 집합은 정적 검사가 **정확히** 단언한다(내부 id·텍스트·집계가 타입상 들어갈 수 없다).
+4. **§2 보론 — WEB config 선택 키 `feedbackEnabled`**: 자격증명 성격이 아닌 표시 설정이며 `.strict()` 스키마에 선택 키로 추가한다(없음 = 꺼짐). `.default(false)`를 쓰지 않아 기존 채널 응답·파싱 결과 바이트가 바뀌지 않는다.
+5. **레이트리밋**: 평가는 기존 `ip`·`session`·`poll-ip` 버킷을 소비하지 않고 **`fb-ip`(120/분) + `fb-key:msg:{messageId}`(10/분)**만 소비한다.
