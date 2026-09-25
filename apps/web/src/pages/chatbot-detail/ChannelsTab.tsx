@@ -8,12 +8,13 @@ import { useAuth } from '../../context/AuthContext';
 import { SeverityBadge } from '../../components/SeverityBadge';
 import { SkeletonCard } from '../../components/Skeleton';
 import { ErrorState } from '../../components/ErrorState';
+import { EnvironmentScopeNotice } from '../../components/EnvironmentScopeNotice';
 import { MESSAGES } from '../../constants/messages';
 import { ChannelCard } from './channels/ChannelCard';
 
 /** CH1 — 채널 관리(`/chatbots/:chatbotId/channels`, FR-11-1~13). 항상 8종 카드를 렌더한다(AC-11-1). */
 export function ChannelsTab(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { showToast } = useToast();
   const { can } = useAuth();
   const [items, setItems] = useState<ChannelListItem[] | null>(null);
@@ -62,6 +63,7 @@ export function ChannelsTab(): JSX.Element {
 
   return (
     <div className="channels-tab">
+      <EnvironmentScopeNotice visible={environmentStatus?.enabled === true} />
       <h2>{MESSAGES.channels.title}</h2>
       {isArchived && <SeverityBadge severity="WARNING" label={MESSAGES.channels.archivedBanner} />}
       {loadError && !items && <ErrorState title={MESSAGES.channels.loadFailed} onRetry={() => void load()} />}

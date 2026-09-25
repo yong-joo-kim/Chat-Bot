@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
-import type { IntentSuggestion, Topic, UnansweredQuestionDetail, UnansweredQuestionListItem, UnansweredQuestionStatus } from '@chat-bot/shared-types';
-import { UNANSWERED_STATUS_LABELS } from '@chat-bot/shared-types';
+import type { IntentSuggestion, ProdReflection, Topic, UnansweredQuestionDetail, UnansweredQuestionListItem, UnansweredQuestionStatus } from '@chat-bot/shared-types';
+import { UNANSWERED_STATUS_LABELS, shouldShowRecurredAfterApply } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../constants/messages';
 import { formatDate, formatRelativeTime } from '../../lib/date';
 import { SkeletonRow } from '../../components/Skeleton';
@@ -46,12 +46,36 @@ function UnansweredStatusBadge({ status, resolvedDirectly }: { status: Unanswere
   );
 }
 
-/** FR-15-5 — 반영 후 재발생 신호. `recurredCount > 0`일 때만 렌더한다. */
-function RecurredBadge({ recurredCount }: { recurredCount: number }): JSX.Element | null {
-  if (recurredCount <= 0) return null;
+/**
+ * FR-15-5 — 반영 후 재발생 신호. [신규 No.40 — §4.16, §15.1] 렌더 조건을
+ * `shouldShowRecurredAfterApply()`(shared-types 순수 함수, FE/BE 공용)로 교체했다 — 모드 켜진
+ * 챗봇에서는 "운영 미반영" 동안의 재발생을 재유입으로 오표시하지 않는다. 모드 꺼진 챗봇
+ * (`item.prodReflection`이 아예 없음)은 함수 내부에서 기존 규칙(`recurredCount > 0`)으로 폴백하므로
+ * 동작이 완전히 같다(AC-EN1-1 무회귀).
+ */
+function RecurredBadge({
+  recurredCount,
+  lastOccurredAt,
+  reflection,
+}: {
+  recurredCount: number;
+  lastOccurredAt: Date;
+  reflection?: ProdReflection;
+}): JSX.Element | null {
+  if (!shouldShowRecurredAfterApply({ recurredCount, lastOccurredAt, reflection })) return null;
   return (
     <span className="recurred-badge">
       <span aria-hidden="true">⚠</span> {MESSAGES.learning.recurredBadge(recurredCount)}
+    </span>
+  );
+}
+
+/** [신규 No.40 — §4.16] "운영 미반영" 배지. `PENDING_SWITCH`일 때만(`REFLECTED`·모드 꺼짐 = 렌더 안 함). */
+function ProdReflectionBadge({ reflection }: { reflection?: ProdReflection }): JSX.Element | null {
+  if (!reflection || reflection.status !== 'PENDING_SWITCH') return null;
+  return (
+    <span className="prod-reflection-badge" aria-label={MESSAGES.learning.prodReflectionAriaLabel}>
+      <span aria-hidden="true">🕓</span> {MESSAGES.learning.prodReflectionBadge}
     </span>
   );
 }
@@ -152,7 +176,8 @@ export function UnansweredTable({
                 </td>
                 <td>
                   {item.questionText}
-                  <RecurredBadge recurredCount={item.recurredCount} />
+                  <RecurredBadge recurredCount={item.recurredCount} lastOccurredAt={item.lastOccurredAt} reflection={item.prodReflection} />
+                  <ProdReflectionBadge reflection={item.prodReflection} />
                   {/* [신규 No.44] 목록 단계에서도 원인을 가늠할 수 있게(FR-FB7-2). 답변 본문 자체는 없다. */}
                   {isNegativeFeedback && item.lastFeedbackTarget && (
                     <p className="field-hint negative-feedback-list-target">

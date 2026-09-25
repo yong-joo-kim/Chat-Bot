@@ -33,6 +33,17 @@ export function classifyExecutionError(e: unknown): ClassifiedError {
         return { kind: 'PERMANENT', reason: 'CHATBOT_ARCHIVED' };
       case 'INVALID_STATUS_TRANSITION':
         return { kind: 'PERMANENT', reason: 'INVALID_TRANSITION' };
+      // [신규 No.40] 환경 분리 — 운영 버전 전환 실행기(§11.4).
+      case 'ENV_SWITCH_BUSY':
+        return { kind: 'TRANSIENT', reason: 'DB_BUSY' };
+      case 'ENV_POINTER_STALE':
+        return { kind: 'PERMANENT', reason: 'STATE_CHANGED' };
+      case 'ENV_GATE_NOT_PASSED':
+        return { kind: 'PERMANENT', reason: 'GATE_NOT_PASSED' };
+      case 'ENV_MODE_DISABLED':
+        return { kind: 'PERMANENT', reason: 'STATE_CHANGED' };
+      case 'ENV_TARGET_NOT_STAGING':
+        return { kind: 'PERMANENT', reason: 'TARGET_VERSION_MISSING' };
       case 'INTERNAL_ERROR':
         return { kind: 'PERMANENT', reason: 'INTERNAL_ERROR', detailCode: body.code };
       default:

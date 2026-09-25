@@ -133,6 +133,7 @@ export function VersionListPage(): JSX.Element {
           <option value="MANUAL">{msg.filterManual}</option>
           <option value="AUTO">{msg.filterAuto}</option>
           <option value="RESTORE_BACKUP">{msg.filterRestoreBackup}</option>
+          <option value="ENVIRONMENT">{msg.filterEnvironment}</option>
         </select>
       </div>
       <p aria-live="polite" className="sr-only">

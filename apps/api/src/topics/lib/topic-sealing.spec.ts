@@ -365,9 +365,9 @@ describe('토픽 시스템(No.22) 정적 검사 — topic-system-설계.md §17'
     });
   });
 
-  describe('T-10: Permission 17종 불변 · topic: 접두 권한 문자열 0 · AuditAction 14종 불변', () => {
-    it('Permission.options.length === 17', () => {
-      expect(Permission.options.length).toBe(17);
+  describe('T-10: Permission 18종(No.40 chatbot:deploy 신설) · topic: 접두 권한 문자열 0 · AuditAction 14종 불변', () => {
+    it('Permission.options.length === 18', () => {
+      expect(Permission.options.length).toBe(18);
     });
     it('topic: 접두 권한 문자열이 없다', () => {
       expect(Permission.options.some((p) => p.startsWith('topic:'))).toBe(false);

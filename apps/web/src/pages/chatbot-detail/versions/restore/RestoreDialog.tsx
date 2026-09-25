@@ -147,7 +147,9 @@ export function RestoreDialog({
   const topicExposureWarning = preview?.warnings.find((w) => w.code === 'TOPIC_EXPOSURE_CHANGE');
   const needsAckTopicExposure = Boolean(topicExposureWarning);
   const acceptedWarning = preview?.warnings.find((w) => w.code === 'ACCEPTED_SUGGESTIONS_NOT_RESUGGESTED');
-  const otherWarnings = preview?.warnings.filter((w) => w.code !== 'ACCEPTED_SUGGESTIONS_NOT_RESUGGESTED') ?? [];
+  // [신규 No.40] `ENV_DRAFT_ONLY`는 다른 경고와 분리해 강조 배너로 먼저 보여준다(§4.11 — 확인 체크박스는 요구하지 않는다).
+  const envDraftOnlyWarning = preview?.warnings.find((w) => w.code === 'ENV_DRAFT_ONLY');
+  const otherWarnings = preview?.warnings.filter((w) => w.code !== 'ACCEPTED_SUGGESTIONS_NOT_RESUGGESTED' && w.code !== 'ENV_DRAFT_ONLY') ?? [];
 
   return (
     <Modal
@@ -196,6 +198,11 @@ export function RestoreDialog({
             </ul>
           ) : (
             <>
+              {envDraftOnlyWarning && (
+                <p className="modal-banner modal-banner--info" role="status">
+                  <span aria-hidden="true">ⓘ</span> {warningText(envDraftOnlyWarning)}
+                </p>
+              )}
               <p>{msg.laterChangesNotice(preview.changesUndone)}</p>
               <p className="restore-diff-summary">{summaryLine(preview.diffSummary.rows)}</p>
 

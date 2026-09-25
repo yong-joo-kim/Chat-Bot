@@ -38,7 +38,7 @@ function nextKey(): string {
 
 /** D1a/D1b — 노드 생성/편집 폼(ui-spec §4.2). */
 export function NodeFormPage(): JSX.Element {
-  const { chatbot, setUnsavedGuard } = useChatbotDetailContext();
+  const { chatbot, setUnsavedGuard, environmentStatus } = useChatbotDetailContext();
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -448,6 +448,7 @@ export function NodeFormPage(): JSX.Element {
         chatbotId={chatbot.id}
         isArchived={isArchived}
         overlay={buildOverlay()}
+        environmentStatus={environmentStatus}
       />
     </div>
   );

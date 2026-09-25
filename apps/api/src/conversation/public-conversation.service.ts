@@ -37,6 +37,13 @@ import { shouldRunRag } from '../rag/lib/should-run-rag';
 import { LegacyApiService } from '../legacy-api/legacy-api.service';
 import { SurveyResponseService } from '../survey-responses/survey-response.service';
 import { HandoffGateService } from '../handoff/handoff-gate.service';
+import { bundleSourceOf } from '../environment/serving/lib/bundle-source';
+import { VersionBundleService, ServingVersionUnavailableError } from '../environment/serving/version-bundle.service';
+import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
+
+/** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
+ * 않는다 — packages/dialogue-engine 변경 0). */
+const VERSION_UNAVAILABLE_FALLBACK_TEXT = '죄송해요, 잠시 답변을 준비하지 못했어요. 잠시 후 다시 시도해 주세요.';
 
 /** 대기 안내 문구(FR-N2-34, S-4) — "RAG"·"LLM"·"벡터" 같은 내부 용어를 쓰지 않는다(FR-N2-24). */
 const RAG_WAITING_TEXT = '문서에서 찾아보고 있어요. 잠시만요.';
@@ -73,17 +80,58 @@ export class PublicConversationService {
     // [No.27 선례를 따라 15번째 인자로 추가 — No.24] 단언 변경 0(E-7). 상담 폴링(`HandoffPublicPollService`)
     // 은 이 서비스에 주입하지 않는다 — `pollHandoff` 핸들러가 직접 호출한다(생성자 인자 +1만 유지).
     private readonly handoffGate: HandoffGateService,
+    // [신규 No.40 — 16번째 인자(끝), 선택] 초안 경로 호출 불변 — 이 서비스가 버전 경로 유일 진입점이다
+    // (E-9). 선택 인자라 기존 15인자 생성자 호출(단위 시험)은 무수정 통과한다(§24.2 회귀 감시).
+    private readonly versionBundles?: VersionBundleService,
   ) {}
+
+  /**
+   * [신규 No.40] §7.2 — 공개 경로의 소스 선택 지점 1곳. `bundleSourceOf(` · `.getCached(` ·
+   * `versionBundles.get(` 각 정확히 1회(정적 검사 E-9). 초안 경로는 기존 두 호출을 **같은 순서로** 한다.
+   * 버전 경로의 `semanticSlots`는 호출자가 `SemanticMatchService.score()`의 5번째 인자를 조립할 때 쓴다.
+   */
+  private async loadServing(chatbot: Awaited<ReturnType<PublicAccessService['resolve']>>['chatbot']): Promise<{
+    bundle: DialogueBundle;
+    index: Awaited<ReturnType<DialogueBundleService['getCached']>>['index'];
+    settings: Awaited<ReturnType<AnswerSettingsCacheService['get']>>;
+    versionId: string | null;
+    semanticSource?: SemanticMatchVectorSource;
+  }> {
+    const source = bundleSourceOf(chatbot);
+    if (source.kind === 'DRAFT') {
+      const { bundle, index } = await this.bundleService.getCached(chatbot.id);
+      const settings = await this.answerSettingsCache.get(chatbot.id);
+      return { bundle, index, settings, versionId: null };
+    }
+
+    const s = await this.versionBundles!.get(chatbot.id, source.versionId, { topics: 'ACTIVE_ONLY' });
+    return { bundle: s.bundle, index: s.index, settings: s.settings, versionId: source.versionId, semanticSource: s.semanticSource };
+  }
 
   async getConfig(slug: string): Promise<PublicChatbotConfig> {
     const { chatbot, channel } = await this.access.resolve(slug);
-    const { skin } = parseSkin(chatbot.skin);
     const config = parseChannelConfig('WEB', channel.config) as WebChannelConfig;
+
+    // [신규 No.40 · P-10] 모드 켜짐 = 표시 3필드(이름·아바타·스킨) 출처는 운영 버전 프로필. 버전
+    // 읽기 실패 시 챗봇 행 값으로 폴백한다(표시 설정은 답변이 아니므로 가용성 우선, §16).
+    let name = chatbot.name;
+    let avatarUrl = chatbot.avatarUrl ?? undefined;
+    let skin = parseSkin(chatbot.skin).skin;
+    if (chatbot.prodVersionId) {
+      try {
+        const core = await this.versionBundles!.getCore(chatbot.prodVersionId, chatbot.id);
+        name = core.profile.name;
+        avatarUrl = core.profile.avatarUrl ?? undefined;
+        skin = core.profile.skin;
+      } catch {
+        // 폴백 — 챗봇 행 값 그대로.
+      }
+    }
 
     return {
       slug: chatbot.slug,
-      name: chatbot.name,
-      avatarUrl: chatbot.avatarUrl ?? undefined,
+      name,
+      avatarUrl,
       skin,
       greetingMessage: config.greetingMessage,
       quickReplies: config.quickReplies,
@@ -118,6 +166,7 @@ export class PublicConversationService {
         isAnswered: false,
         blockedByFilter: true,
         inputKind: resolveInputKind(inbound),
+        servedVersionId: chatbot.prodVersionId ?? undefined,
       });
 
       // 슬롯이 채워지지 않고 세션도 끊기지 않는다 — 요청에 실려온 상태를 그대로 반환한다(EX-12-26).
@@ -155,6 +204,7 @@ export class PublicConversationService {
         isAnswered: true,
         inputKind: resolveInputKind(inbound),
         handoffTurn: true,
+        servedVersionId: chatbot.prodVersionId ?? undefined,
       });
       return gateResult.response;
     }
@@ -163,8 +213,33 @@ export class PublicConversationService {
     // 앞에 전치할 TEXT 아웃풋을 게이트가 실어 보낸다(코드리뷰 1회차 Medium #4). 없으면 빈 배열.
     const handoffPrependOutputs = gateResult.prependOutputs ?? [];
 
-    const { bundle, index } = await this.bundleService.getCached(chatbot.id);
-    const settings = await this.answerSettingsCache.get(chatbot.id);
+    let serving;
+    try {
+      serving = await this.loadServing(chatbot);
+    } catch (e) {
+      if (e instanceof ServingVersionUnavailableError) {
+        // §7.6 — 초안으로 몰래 대체하지 않는다. 엔진을 호출하지 않고 고정 폴백 문구로 응답한다.
+        const messageId = randomUUID();
+        const outputs = await this.bannedWordFilter.maskOutbound([...handoffPrependOutputs, { type: 'TEXT' as const, payload: { text: VERSION_UNAVAILABLE_FALLBACK_TEXT } }]);
+        void this.logService.record({
+          id: messageId,
+          chatbotId: chatbot.id,
+          groupId: chatbot.groupId,
+          channelType: 'WEB',
+          sessionId: dto.sessionId,
+          rawUserMessage: resolveUserMessageText(inbound),
+          rawBotResponse: VERSION_UNAVAILABLE_FALLBACK_TEXT,
+          isAnswered: false,
+          inputKind: resolveInputKind(inbound),
+          servedVersionId: chatbot.prodVersionId ?? undefined,
+        });
+        const parsedState = ConversationStateSchema.safeParse(inbound.state);
+        const preservedState: ConversationState = parsedState.success ? parsedState.data : { version: CONVERSATION_STATE_VERSION, contextSession: null };
+        return { messageId, outputs, state: preservedState, stateReset: false };
+      }
+      throw e;
+    }
+    const { bundle, index, settings } = serving;
     const now = new Date();
     const turnInput = inbound.buttonAction ? { buttonAction: inbound.buttonAction } : { message: inbound.message ?? '' };
 
@@ -174,14 +249,17 @@ export class PublicConversationService {
 
     // ③④ [신규] 1단계 의미 유사도 점수 주입(ADR-0020) — `NODE` 버튼(=filterableText undefined)은
     // 후보 대상이 아니다. `semanticEnabled=false`이면 엔진은 저하 모드(현행 규칙 매칭)로 동작한다.
+    // [신규 No.40] 버전 경로는 5번째 인자로 리졸버 결과를 넘긴다(초안 경로는 4인자 그대로, `undefined`).
     const semanticText = filterableText;
     const semantic =
       !surveyExpected && settings.semanticEnabled && semanticText !== undefined
-        ? await this.semanticMatch.score(chatbot.id, semanticText, bundle, {
-            accept: settings.acceptThreshold,
-            low: settings.lowThreshold,
-            margin: settings.marginThreshold,
-          })
+        ? await this.semanticMatch.score(
+            chatbot.id,
+            semanticText,
+            bundle,
+            { accept: settings.acceptThreshold, low: settings.lowThreshold, margin: settings.marginThreshold },
+            serving.semanticSource,
+          )
         : undefined;
 
     let result = resolveTurn(turnInput, inbound.state, bundle, now, { index, semantic });
@@ -257,6 +335,7 @@ export class PublicConversationService {
         features: dto.features,
         prependOutputs: handoffPrependOutputs,
         feedbackOffered,
+        servedVersionId: serving.versionId ?? undefined,
       });
     }
 
@@ -291,6 +370,8 @@ export class PublicConversationService {
       feedbackOffered,
       // [신규 No.22 — §6.6] 이미 가진(필터된 운영) 번들에서 찾는다 — 추가 조회 0 · 생성자 인자 추가 0.
       topicId: resolveAnsweredTopicId(bundle, result, isAnswered),
+      // [신규 No.40] R-4 — 엔진·BLOCK·상담 턴 공통으로 이 시점 운영 포인터를 적재한다(§14).
+      servedVersionId: serving.versionId ?? undefined,
     });
 
     return response;
@@ -353,6 +434,8 @@ export class PublicConversationService {
     prependOutputs?: DialogOutput[];
     /** [신규 No.44] POST 응답(대기 문구)에 표식을 싣고, 로그는 백그라운드 완료 시 같은 값으로 적재한다(§6.4). */
     feedbackOffered: boolean;
+    /** [신규 No.40] POST 시점의 운영 포인터 — 백그라운드 완료 시 같은 값으로 적재한다(§14). */
+    servedVersionId?: string;
   }): Promise<PublicMessageResponse> {
     const ttlMs = this.config.get<number>('PENDING_ANSWER_TTL_MS') ?? 300_000;
     const expiresAt = new Date(Date.now() + ttlMs);
@@ -385,6 +468,7 @@ export class PublicConversationService {
         fallbackText: input.fallbackText,
         inputKind: input.inputKind,
         feedbackOffered: input.feedbackOffered,
+        servedVersionId: input.servedVersionId,
       },
       { record: (params) => this.logService.record(params) },
     );

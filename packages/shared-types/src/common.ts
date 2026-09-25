@@ -160,6 +160,15 @@ export const ApiErrorCode = z.enum([
   // 피드백 기반 개선 루프(No.44) 그룹 추가(feedback-loop-설계.md §16.3, ADR-0038) — 2종.
   'FEEDBACK_TARGET_NOT_FOUND',
   'FEEDBACK_CLOSED',
+  // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §19.3, ADR-0039) — 8종.
+  'ENV_MODE_DISABLED',
+  'ENV_MODE_ALREADY_ENABLED',
+  'ENV_POINTER_STALE',
+  'ENV_TARGET_NOT_STAGING',
+  'ENV_GATE_NOT_PASSED',
+  'ENV_SWITCH_BUSY',
+  'ENV_DRAFT_NOT_RESTORED',
+  'VERSION_REFERENCED_BY_ENVIRONMENT',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

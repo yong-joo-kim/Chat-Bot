@@ -114,10 +114,13 @@ export function AnswerSettingsPage({
   chatbotId,
   isArchived,
   setUnsavedGuard,
+  environmentEnabled = false,
 }: {
   chatbotId: string;
   isArchived: boolean;
   setUnsavedGuard: (guard: (() => boolean) | null) => void;
+  /** [신규 No.40] 상담 연계 섹션의 환경 밖 자산 배너용(§4.15) — 기본값 false(호출부가 안 넘기는 시험은 영향 없음). */
+  environmentEnabled?: boolean;
 }): JSX.Element {
   const { can } = useAuth();
   const { showToast } = useToast();
@@ -480,7 +483,7 @@ export function AnswerSettingsPage({
         요청을 합치지 않는다(`ChatbotHandoffSetting`은 버전 스냅샷·복원 대상 밖의 별도 행,
         hybrid-cs-설계.md §26 D-1) — 독립된 `<form>`·저장 버튼을 갖는다.
       */}
-      <HandoffSettingsSection chatbotId={chatbotId} isArchived={isArchived} />
+      <HandoffSettingsSection chatbotId={chatbotId} isArchived={isArchived} environmentEnabled={environmentEnabled} />
 
       <AnswerSettingsPreviewPanel
         onPreview={(message) => answerSettingsApi.preview(chatbotId, { message })}

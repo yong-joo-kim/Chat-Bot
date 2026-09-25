@@ -4,6 +4,12 @@ import { UNANSWERED_STATUS_LABELS, UNANSWERED_SOURCE_LABELS } from '@chat-bot/sh
 import { MESSAGES } from '../../constants/messages';
 import { formatDateTime } from '../../lib/date';
 
+/**
+ * [신규 No.40 — §4.16, §15.2] 부정 평가 상세 1건 조회에서만 채워지는 초안 대비 정보. 목록은 버전을
+ * 읽지 않아 이 필드들을 채우지 않는다(그대로 `FeedbackTargetRef` 상위호환 — 값이 없으면 기존과 동일).
+ */
+export type FeedbackTargetRefWithDraftInfo = FeedbackTargetRef & { deletedInDraft?: true; nameFromVersion?: string };
+
 /** [신규 No.44] 답변 대상 유형 라벨(`FeedbackTargetRef.kind`) — `feedback-loop-ui-spec.md` §2.2 공용. */
 function targetKindLabel(kind: FeedbackTargetRef['kind']): string {
   return MESSAGES.stats.feedbackTargetKind[kind] ?? kind;
@@ -11,10 +17,11 @@ function targetKindLabel(kind: FeedbackTargetRef['kind']): string {
 
 /**
  * [신규 No.44] FAQ/노드/의도면 해당 편집 화면 href 링크. RAG·폴백·연동 안내·기타·삭제됨이면 링크 없음
- * (FR-FB7-7, feedback-loop-ui-spec.md §2.2).
+ * (FR-FB7-7, feedback-loop-ui-spec.md §2.2). [신규 No.40] `deletedInDraft`(초안에 없음)일 때도 렌더하지
+ * 않는다 — 초안에 없는 대상을 편집 화면으로 보내도 편집할 대상이 없다.
  */
-export function FeedbackTargetEditLink({ chatbotId, target }: { chatbotId: string; target: FeedbackTargetRef }): JSX.Element | null {
-  if (target.deleted || !target.id) return null;
+export function FeedbackTargetEditLink({ chatbotId, target }: { chatbotId: string; target: FeedbackTargetRefWithDraftInfo }): JSX.Element | null {
+  if (target.deleted || !target.id || target.deletedInDraft) return null;
   switch (target.kind) {
     case 'FAQ':
       return <Link to={`/chatbots/${chatbotId}/dialogue/faqs?edit=${target.id}`}>{MESSAGES.learning.targetEditLinkFaq}</Link>;
@@ -29,8 +36,15 @@ export function FeedbackTargetEditLink({ chatbotId, target }: { chatbotId: strin
   }
 }
 
-/** [신규 No.44] 답변 대상 표시 텍스트 — "FAQ '환불 안내'" 또는 삭제됨. */
-export function feedbackTargetLabel(target: FeedbackTargetRef): string {
+/**
+ * [신규 No.44] 답변 대상 표시 텍스트 — "FAQ '환불 안내'" 또는 삭제됨. [신규 No.40 — §4.16] 모드 켜진
+ * 챗봇의 상세 조회로 `deletedInDraft`/`nameFromVersion`을 얻으면(초안에서만 삭제, 운영엔 있음) "삭제됨"
+ * 대신 "초안에 없음(운영 버전에는 '{이름}'으로 있음)"으로 구체화한다.
+ */
+export function feedbackTargetLabel(target: FeedbackTargetRefWithDraftInfo): string {
+  if (target.deletedInDraft && target.nameFromVersion) {
+    return MESSAGES.learning.targetDeletedInDraftLabel(targetKindLabel(target.kind), target.nameFromVersion);
+  }
   if (target.deleted || !target.name) return `${targetKindLabel(target.kind)} · ${MESSAGES.learning.targetDeletedLabel}`;
   return MESSAGES.learning.lastFeedbackTargetPrefix(targetKindLabel(target.kind), target.name);
 }
@@ -48,7 +62,7 @@ export function LastFeedbackAnswerPanel({
   chatbotId: string;
   botResponse: string;
   turnAt: string | Date;
-  target: FeedbackTargetRef;
+  target: FeedbackTargetRefWithDraftInfo;
 }): JSX.Element {
   return (
     <div className="last-feedback-answer-panel">

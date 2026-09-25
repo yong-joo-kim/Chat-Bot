@@ -14,7 +14,7 @@ import type {
   VersionContentQuery,
   VersionCurrentStatus,
 } from '@chat-bot/shared-types';
-import { VERSION_TRIGGER_GROUPS, redactLegacyApiOutputs } from '@chat-bot/shared-types';
+import { VERSION_TRIGGER_GROUPS, redactLegacyApiOutputs, deriveEnvironmentBadges } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
@@ -24,6 +24,8 @@ import { VersionCaptureService } from './capture/version-capture.service';
 import { VersionRetentionService } from './capture/version-retention.service';
 import { VersionPayloadReader } from './read/version-payload.reader';
 import { hydrateSnapshot } from './lib/snapshot-hydrate';
+import { diffSnapshots } from './lib/version-diff';
+import type { SnapshotEnvelope } from './lib/snapshot-envelope';
 import { toVersionDetailDto, toVersionListItemDto } from './version.mapper';
 
 const NOT_FOUND_MESSAGE = '요청하신 버전을 찾을 수 없습니다.';
@@ -45,8 +47,23 @@ export class VersionService {
     return this.config.get<number>('VERSION_PINNED_MAX') ?? 10;
   }
 
+  /** [신규 No.40 — §13.3] 모드 켜짐일 때만(2쿼리 추가) 환경 배지 판정 입력을 모은다. */
+  private async loadBadgeContext(chatbotId: string, prodVersionId: string): Promise<{ prodVersionId: string; stagingVersionId: string | null; prodHistoryIds: ReadonlySet<string> }> {
+    const [env, historyDesc] = await Promise.all([
+      this.prisma.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { stagingVersionId: true } }),
+      this.prisma.environmentSwitchLog.findMany({
+        where: { chatbotId, environment: 'PROD' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: { toVersionId: true },
+      }),
+    ]);
+    const prodHistoryIds = new Set(historyDesc.map((h) => h.toVersionId).filter((v): v is string => !!v));
+    return { prodVersionId, stagingVersionId: env?.stagingVersionId ?? null, prodHistoryIds };
+  }
+
   async list(chatbotId: string, query: ChatbotVersionListQuery): Promise<Paginated<ChatbotVersionListItem>> {
-    await this.scope.assertReadable(chatbotId);
+    const { prodVersionId } = await this.scope.assertReadable(chatbotId);
 
     const triggers = query.triggerGroup?.flatMap((g) => VERSION_TRIGGER_GROUPS[g]) as ChatbotVersionTrigger[] | undefined;
 
@@ -66,20 +83,51 @@ export class VersionService {
       this.prisma.chatbotVersion.count({ where }),
     ]);
 
-    return toPaginated(rows.map(toVersionListItemDto), total, query.page, query.pageSize);
+    const items = rows.map(toVersionListItemDto);
+    if (prodVersionId) {
+      const badgeCtx = await this.loadBadgeContext(chatbotId, prodVersionId);
+      for (const item of items) {
+        const badges = deriveEnvironmentBadges(item.id, badgeCtx);
+        if (badges.length > 0) item.environmentBadges = badges;
+      }
+    }
+
+    return toPaginated(items, total, query.page, query.pageSize);
   }
 
   async current(chatbotId: string): Promise<VersionCurrentStatus> {
-    await this.scope.assertReadable(chatbotId);
+    const { prodVersionId } = await this.scope.assertReadable(chatbotId);
     const data = await this.versionCapture.captureSnapshotData(chatbotId);
     const latestRow = await this.prisma.chatbotVersion.findFirst({ where: { chatbotId }, orderBy: { versionNo: 'desc' } });
     const latestVersion = latestRow ? toVersionListItemDto(latestRow) : null;
+    const stagingDiff = prodVersionId ? await this.loadStagingDiff(chatbotId, data) : undefined;
     return {
       contentHash: data.contentHash,
       counts: data.counts,
       latestVersion,
       hasUnsavedChanges: latestVersion === null || latestVersion.contentHash !== data.contentHash,
+      ...(stagingDiff ? { stagingDiff } : {}),
     };
+  }
+
+  /**
+   * [신규 No.40 — ui-spec §4.5] 모드 켜짐일 때만(추가 쿼리 1~2 + 스테이징이 초안과 다를 때만 본문
+   * 읽기 1회) "지금 스테이징 → 지금 초안" 변경 요약을 계산한다. 스테이징이 없거나 초안과 이미
+   * 같으면(대개 승격 직후) 본문을 읽지 않는다. 본문 읽기 실패는 흡수한다(가용성 우선 — `current()`는
+   * payload 오류로 실패하지 않는다, §16 V-7 payload 미접근 원칙과 별개로 이 지점은 예외적으로
+   * `VersionPayloadReader`를 거친다 — `detail()`의 `loadForContent` 선례와 같다).
+   */
+  private async loadStagingDiff(chatbotId: string, draft: { envelope: SnapshotEnvelope; contentHash: string; integrityWarningCount: number }) {
+    const env = await this.prisma.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { stagingVersionId: true } });
+    if (!env?.stagingVersionId) return undefined;
+    const stagingRow = await this.prisma.chatbotVersion.findUnique({ where: { id: env.stagingVersionId }, select: { contentHash: true, integrityWarningCount: true } });
+    if (!stagingRow || stagingRow.contentHash === draft.contentHash) return undefined;
+    try {
+      const loaded = await this.payloadReader.loadStrict(env.stagingVersionId);
+      return diffSnapshots(loaded.envelope, draft.envelope, stagingRow.integrityWarningCount, draft.integrityWarningCount).summary;
+    } catch {
+      return undefined;
+    }
   }
 
   private async findRowOrThrow(chatbotId: string, versionId: string) {
@@ -89,7 +137,7 @@ export class VersionService {
   }
 
   async detail(chatbotId: string, versionId: string): Promise<ChatbotVersionDetail> {
-    await this.scope.assertReadable(chatbotId);
+    const { prodVersionId } = await this.scope.assertReadable(chatbotId);
     const row = await this.findRowOrThrow(chatbotId, versionId);
 
     let payloadStatus: 'OK' | 'CORRUPT' | 'SCHEMA_UNSUPPORTED' = 'OK';
@@ -100,7 +148,13 @@ export class VersionService {
       payloadStatus = 'CORRUPT';
     }
 
-    return toVersionDetailDto(row, payloadStatus);
+    const dto = toVersionDetailDto(row, payloadStatus);
+    if (prodVersionId) {
+      const badgeCtx = await this.loadBadgeContext(chatbotId, prodVersionId);
+      const badges = deriveEnvironmentBadges(row.id, badgeCtx);
+      if (badges.length > 0) dto.environmentBadges = badges;
+    }
+    return dto;
   }
 
   async create(chatbotId: string, dto: CreateChatbotVersionDto): Promise<CreateChatbotVersionResponse> {

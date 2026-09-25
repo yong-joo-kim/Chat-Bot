@@ -32,6 +32,8 @@ export interface RagAnswerRunInput {
   inputKind: InputKind;
   /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). */
   feedbackOffered?: boolean;
+  /** [신규 No.40] POST 시점의 운영 포인터(§14 — 그 사이 전환돼도 POST 시점 버전이 적재된다). */
+  servedVersionId?: string;
 }
 
 type CallResult =
@@ -166,6 +168,7 @@ export class RagAnswerService {
         answeredByRag: true,
         inputKind: input.inputKind,
         feedbackOffered: input.feedbackOffered,
+        ...(input.servedVersionId ? { servedVersionId: input.servedVersionId } : {}),
       });
     } finally {
       this.gate.release();
@@ -187,6 +190,7 @@ export class RagAnswerService {
       answeredByRag: false,
       inputKind: input.inputKind,
       feedbackOffered: input.feedbackOffered,
+      ...(input.servedVersionId ? { servedVersionId: input.servedVersionId } : {}),
     });
   }
 

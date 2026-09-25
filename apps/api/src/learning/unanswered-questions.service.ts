@@ -10,6 +10,7 @@ import type {
   BulkResult,
   FeedbackTargetRef,
   Paginated,
+  ProdReflection,
   ResolveResult,
   ResolveUnansweredQuestionDto,
   UnansweredQuestionDetail,
@@ -19,7 +20,9 @@ import type {
   UnansweredQuestionSummary,
   UnansweredSource,
 } from '@chat-bot/shared-types';
-import { LEARNING_LIMITS, classifyFeedbackTarget } from '@chat-bot/shared-types';
+import { LEARNING_LIMITS, classifyFeedbackTarget, judgeProdReflection } from '@chat-bot/shared-types';
+import { EnvironmentReadService } from '../environment/core/environment-read.service';
+import { VersionBundleService } from '../environment/serving/version-bundle.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { ApiExceptionBody } from '../common/api.exception';
@@ -50,7 +53,32 @@ export class UnansweredQuestionsService {
     private readonly config: ConfigService,
     private readonly classifierPredict: ClassifierPredictService,
     private readonly versionCapture: VersionCaptureService,
+    // [신규 No.40 — §15.1/15.2] 목록 "운영 미반영" 판정 · 상세 "초안에서 삭제됨" 버전 코어 조회.
+    private readonly environmentRead: EnvironmentReadService,
+    private readonly versionBundles: VersionBundleService,
   ) {}
+
+  /**
+   * [신규 No.40 — §15.1] 모드 켜짐일 때만 PROD 전환 이력 최근 50행을 1쿼리로 읽어 RESOLVED 행별
+   * `prodReflection`을 계산한다(요청당 쿼리 1개, 표시 단계 판정 — 수집기 불변).
+   */
+  private async resolveProdReflections(
+    chatbotId: string,
+    rows: PrismaUnansweredQuestion[],
+    prodVersionId: string | null,
+  ): Promise<Map<string, ProdReflection>> {
+    const result = new Map<string, ProdReflection>();
+    if (!prodVersionId) return result; // 모드 꺼짐 — 계산하지 않는다(응답 바이트 불변).
+    const resolvedRows = rows.filter((r) => r.status === 'RESOLVED' && r.resolvedAt);
+    if (resolvedRows.length === 0) return result;
+
+    const historyDesc = await this.environmentRead.getProdHistoryDesc(chatbotId);
+    const prodSwitchesDesc = historyDesc.map((h) => ({ at: h.createdAt, toVersionCapturedAt: h.toVersionCapturedAt }));
+    for (const row of resolvedRows) {
+      result.set(row.id, judgeProdReflection({ resolvedAt: row.resolvedAt as Date, prodSwitchesDesc }));
+    }
+    return result;
+  }
 
   private async findRowOrThrow(chatbotId: string, id: string): Promise<PrismaUnansweredQuestion> {
     const row = await this.prisma.unansweredQuestion.findFirst({ where: { id, chatbotId } });
@@ -132,7 +160,7 @@ export class UnansweredQuestionsService {
   }
 
   async list(chatbotId: string, query: UnansweredQuestionListQuery): Promise<Paginated<UnansweredQuestionListItem>> {
-    await this.scope.assertReadable(chatbotId);
+    const scopeResult = await this.scope.assertReadable(chatbotId);
 
     const statusFilter = query.status && query.status.length > 0 ? query.status : ['PENDING'];
     const where: Prisma.UnansweredQuestionWhereInput = {
@@ -167,6 +195,8 @@ export class UnansweredQuestionsService {
     const suggestionsById = await this.resolveSuggestions(chatbotId, rows, candidates);
     // [신규 No.44] 페이지에 NEGATIVE_FEEDBACK 행이 있을 때만 고정 3쿼리(N+1 금지, NFR-FBP5).
     const lastFeedbackByRowId = await this.resolveLastFeedbackTargets(rows, intentNameById);
+    // [신규 No.40 — §15.1] 모드 켜짐만, 요청당 쿼리 1개.
+    const prodReflectionByRowId = await this.resolveProdReflections(chatbotId, rows, scopeResult.prodVersionId);
 
     const items = rows.map((row) =>
       toUnansweredQuestionListItem(row, {
@@ -175,6 +205,7 @@ export class UnansweredQuestionsService {
         suggestions: suggestionsById.get(row.id) ?? [],
         lastFeedbackTarget: lastFeedbackByRowId.get(row.id)?.target,
         lastFeedbackMatchedIntentId: lastFeedbackByRowId.get(row.id)?.matchedIntentId,
+        prodReflection: prodReflectionByRowId.get(row.id),
       }),
     );
 
@@ -236,6 +267,28 @@ export class UnansweredQuestionsService {
     return undefined;
   }
 
+  /**
+   * [신규 No.40 — §15.2] 초안에서 못 찾은 대상 이름을 그 턴이 서빙된 버전 코어(L1, 대개 추가 조회
+   * 0)에서 찾는다. 버전 읽기 실패는 조용히 무시한다(상세 화면 가용성 우선 — 이름을 못 찾으면
+   * "삭제됨" 표시를 그대로 유지한다).
+   */
+  private async resolveNameFromVersion(
+    chatbotId: string,
+    servedVersionId: string,
+    classified: { kind: FeedbackTargetRef['kind']; id: string | null },
+  ): Promise<string | undefined> {
+    if (!classified.id) return undefined;
+    try {
+      const core = await this.versionBundles.getCore(servedVersionId, chatbotId);
+      if (classified.kind === 'FAQ') return core.bundle.faqs.find((f) => f.id === classified.id)?.question;
+      if (classified.kind === 'NODE') return core.bundle.dialogNodes.find((n) => n.id === classified.id)?.name;
+      if (classified.kind === 'INTENT') return core.bundle.intents.find((i) => i.id === classified.id)?.name;
+      return undefined;
+    } catch {
+      return undefined; // 버전 삭제·읽기 오류 — "초안에 없음" 승격을 포기하고 기존 "삭제됨"을 유지한다.
+    }
+  }
+
   /** FR-15-14 — 탭 배지·대시보드 위젯 전용 경량 API. 목록 전체를 불러오지 않는다. */
   async summary(chatbotId: string): Promise<UnansweredQuestionSummary> {
     await this.scope.assertReadable(chatbotId);
@@ -262,7 +315,7 @@ export class UnansweredQuestionsService {
   }
 
   async detail(chatbotId: string, id: string): Promise<UnansweredQuestionDetail> {
-    await this.scope.assertReadable(chatbotId);
+    const scopeResult = await this.scope.assertReadable(chatbotId);
     const row = await this.findRowOrThrow(chatbotId, id);
 
     const candidates = await this.loadSuggestionCandidates(chatbotId);
@@ -324,6 +377,8 @@ export class UnansweredQuestionsService {
           matchedNodeId: true,
           matchedFaqId: true,
           matchedIntentId: true,
+          // [신규 No.40 — §15.2] 초안에서 이름을 못 찾을 때만 이 버전 코어에서 이름을 찾는다.
+          servedVersionId: true,
         },
       });
       if (log) {
@@ -344,10 +399,20 @@ export class UnansweredQuestionsService {
               : classified.kind === 'INTENT'
                 ? (classified.id ? intentNameById.get(classified.id) : undefined)
                 : undefined;
-        lastFeedbackTarget = { kind: classified.kind, id: classified.id ?? undefined, name, deleted: classified.id != null && name == null };
+        const deleted = classified.id != null && name == null;
+        lastFeedbackTarget = { kind: classified.kind, id: classified.id ?? undefined, name, deleted };
+        // [신규 No.40 — §15.2] 초안에 없음 + 그 턴이 서빙된 버전이 있을 때만, 상세 1건 한정 버전 코어 조회.
+        // `lastFeedback.target`만 확장한다 — 목록 echo(`lastFeedbackTarget`)의 계약은 바뀌지 않는다.
+        let detailTarget: UnansweredQuestionDetail['lastFeedback'] extends { target: infer T } | undefined ? T : never = lastFeedbackTarget;
+        if (deleted && log.servedVersionId) {
+          const nameFromVersion = await this.resolveNameFromVersion(chatbotId, log.servedVersionId, classified);
+          if (nameFromVersion) {
+            detailTarget = { ...lastFeedbackTarget, deletedInDraft: true, nameFromVersion };
+          }
+        }
         lastFeedbackMatchedIntentId = log.matchedIntentId ?? undefined;
         const truncated = log.botResponse.length > 2000 ? `${log.botResponse.slice(0, 2000)}…` : log.botResponse;
-        lastFeedback = { botResponse: truncated, turnAt: log.createdAt, target: lastFeedbackTarget, matchedIntentId: lastFeedbackMatchedIntentId };
+        lastFeedback = { botResponse: truncated, turnAt: log.createdAt, target: detailTarget, matchedIntentId: lastFeedbackMatchedIntentId };
       }
     }
 
@@ -358,11 +423,15 @@ export class UnansweredQuestionsService {
       select: { id: true, source: true, status: true },
     });
 
+    // [신규 No.40 — §15.1] 상세도 목록과 같은 판정을 싣는다(단건 — 조건 충족 시에만 1쿼리).
+    const prodReflectionByRowId = await this.resolveProdReflections(chatbotId, [row], scopeResult.prodVersionId);
+
     const item = toUnansweredQuestionListItem(row, {
       resolvedIntentName: row.resolvedIntentId ? intentNameById.get(row.resolvedIntentId) : undefined,
       suggestions,
       lastFeedbackTarget,
       lastFeedbackMatchedIntentId,
+      prodReflection: prodReflectionByRowId.get(row.id),
     });
 
     return {

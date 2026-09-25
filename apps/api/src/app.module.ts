@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { EnvironmentCacheEventsModule } from './common/events/environment-cache-events.module';
 import { HealthModule } from './health/health.module';
 import { ChatbotGroupsModule } from './chatbot-groups/chatbot-groups.module';
 import { ChatbotsModule } from './chatbots/chatbots.module';
@@ -39,6 +40,7 @@ import { LegacyApiModule } from './legacy-api/legacy-api.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { TopicsModule } from './topics/topics.module';
 import { AssetTransferModule } from './asset-transfer/asset-transfer.module';
+import { EnvironmentModule } from './environment/environment.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -50,6 +52,7 @@ import { validate } from './config/env.validation';
     // 시험(jest.isolate-env.js)은 `.env` 자동 로드를 끈다 — 로컬 시연용 값이 spec 설정을 덮지 않게.
     ConfigModule.forRoot({ isGlobal: true, validate, ignoreEnvFile: process.env.CHATBOT_API_IGNORE_ENV_FILE === '1' }),
     PrismaModule,
+    EnvironmentCacheEventsModule,
     RequestContextModule,
     RateLimitModule,
     CommonAuthModule,
@@ -86,6 +89,7 @@ import { validate } from './config/env.validation';
     SurveysModule,
     AssetTransferModule,
     TopicsModule,
+    EnvironmentModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

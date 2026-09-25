@@ -115,6 +115,9 @@ const EnvSchema = z.object({
   DEPLOY_SCHEDULE_MISFIRE_GRACE_MINUTES: z.coerce.number().int().min(0).max(1440).default(10),
   DEPLOY_SCHEDULE_RETRY_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   DEPLOY_SCHEDULE_LEASE_MINUTES: z.coerce.number().int().min(1).default(5),
+  // 환경 분리 / 버전 관리(No.40) 그룹 추가 — 전부 선택(기본값 있음, FR-0-159). 기동 조건이 아니다.
+  ENV_PROD_HISTORY_PROTECTED: z.coerce.number().int().min(1).max(20).default(5),
+  ENV_VERSION_BUNDLE_CACHE_MAX: z.coerce.number().int().min(10).max(500).default(50),
   // 레거시 API 연동(No.26) 그룹 추가 — 전부 선택(기본값 있음, FR-0-103). 하나도 설정하지 않으면
   // 활성화·타임아웃 3초(상한 10초)·응답 256KB·회로 5회/60초·사설 대역 allowlist 빈 값(구축형은
   // 운영자가 채운다)으로 정상 동작한다. 연결 시크릿 전용 환경변수(접두사 규약, `legacy-api-secret

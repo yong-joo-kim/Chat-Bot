@@ -33,7 +33,7 @@ function emptySlot(): SlotRow {
 
 /** D4a/D4b — 컨텍스트 생성/편집 폼(ui-spec §4.6). */
 export function ContextFormPage(): JSX.Element {
-  const { chatbot, setUnsavedGuard } = useChatbotDetailContext();
+  const { chatbot, setUnsavedGuard, environmentStatus } = useChatbotDetailContext();
   const { contextId } = useParams<{ contextId: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -321,6 +321,7 @@ export function ContextFormPage(): JSX.Element {
         chatbotId={chatbot.id}
         isArchived={isArchived}
         overlay={buildOverlay()}
+        environmentStatus={environmentStatus}
       />
     </div>
   );

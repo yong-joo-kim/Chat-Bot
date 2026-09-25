@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
 
-**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 22(토픽 시스템), 23, 24(하이브리드 CS), 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 22(토픽 시스템), 23, 24(하이브리드 CS), 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖), 44(피드백 기반 개선 루프). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
 
 ### 코드 구조
 pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
@@ -20,7 +20,7 @@ pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘�
 
 ### 문서 구조 (`docs/`)
 1. `docs/00-source/` — 원본 참고 문서(ROCHA 매뉴얼/제품소개서, 정부 UIUX 가이드라인, 기능분류 초안)
-2. `docs/01-requirements/기능요구사항.md` — **기능 47종**(기본 15 / 확장 14 / 옵션·트렌드 10 / 타사 벤치마킹 보완 8), GPU 필요도, 구축형/구독형 적합도. 보완 8종(No.40~47)은 Dialogflow CX/Copilot Studio/watsonx Assistant/카카오 i 오픈빌더 등 타 챗봇 플랫폼 웹조사 기반 제안으로, §4-1에서 사용자 확인 대기 중(단 **No.44는 2026-09-25 도입 확정**)
+2. `docs/01-requirements/기능요구사항.md` — **기능 47종**(기본 15 / 확장 14 / 옵션·트렌드 10 / 타사 벤치마킹 보완 8), GPU 필요도, 구축형/구독형 적합도. 보완 8종(No.40~47)은 Dialogflow CX/Copilot Studio/watsonx Assistant/카카오 i 오픈빌더 등 타 챗봇 플랫폼 웹조사 기반 제안으로, **2026-09-25 전부 도입 확정**(No.44 완료)
 3. `docs/02-spec/개발명세서.md` — 아키텍처(모노레포 구조), 데이터모델, API 설계, 비기능요구사항. **§6에 사용자 확인이 필요한 미결정 사항**(스택 확정 여부, 구축형/구독형 우선순위, 1차 개발범위)이 정리되어 있으니 구현 착수 전 반드시 확인할 것.
 4. `docs/03-design/UIUX_준수기준.md` — 정부 UIUX 가이드라인에서 추출한 챗봇 위젯/관리자 콘솔 준수 규칙
 5. `docs/04-test/` — 시험계획.md / 시험항목.md / 시험데이터.md / 자동시험_전략.md / 오류검출_프로세스.md
@@ -37,7 +37,7 @@ pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘�
 
 **원칙**: 코드는 항상 `docs/01-requirements`/`docs/02-spec`/`docs/03-design` 문서에 근거해 구현하며, 설계 변경은 반드시 `system-architect`를 통해 문서에 먼저 반영한다. 커밋은 사용자가 명시적으로 요청했을 때만 `git-manager`가 수행하고, CI 연동(3단계)·실 배포(4단계)는 사용자가 플랫폼/자격증명을 명시하기 전에는 착수하지 않는다(`docs/05-ops/자동배포.md` §1).
 
-**다음 단계**(2026-09-24 사용자 지시 — 남은 작업 단계적 진행): ① 후속 정리(시험 격리·통계 화면 요청 경합 가드·미자동화 시험·운영 문서) → ② GPU 1~2 기능 No.26 → No.27 → No.24 → No.22 → No.44 순. No.40~47(타사 벤치마킹 보완)은 `기능요구사항.md` §4-1의 사용자 확인 후, GPU 고사양 기능(No.17·21·31~38)은 인프라 결정 후 착수한다.
+**다음 단계**(2026-09-25 사용자 지시): Stage B(No.26·27·24·22·44) 완료. 타사 벤치마킹 보완 7종을 **No.40 → No.45 → No.41 → No.42 → No.46 → No.43 → No.47** 순으로 `/new-feature` 진행한다(그룹별 PM 결정은 요구사항 단계에서 확인). GPU 고사양 기능(No.17·21·31~38)은 인프라 결정 후 착수한다.
 
 It sits alongside sibling projects in `D:\2. Team Source\`:
 - `Auto QA` — pnpm monorepo (apps/api, apps/web, packages/*) — 이 프로젝트가 컨벤션을 재사용하는 대상

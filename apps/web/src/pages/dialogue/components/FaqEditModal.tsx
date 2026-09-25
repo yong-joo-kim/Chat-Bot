@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DialogueOverlay, FaqCategory, FaqSuggestion, Topic } from '@chat-bot/shared-types';
+import type { DialogueOverlay, EnvironmentStatus, FaqCategory, FaqSuggestion, Topic } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ChipListEditor } from '../../../components/ChipListEditor';
@@ -24,6 +24,11 @@ export interface FaqEditModalProps {
   isArchived?: boolean;
   prefillQuestion?: string;
   onJumpToFaq?: (faqId: string, prefillAltQuestion: string) => void;
+  /**
+   * [신규 No.40 — §4.13, R1 L-1] `ChatbotDetailContext.environmentStatus`를 그대로 넘긴다(별도 조회 없음).
+   * `SimulatorDrawer`의 대상 선택 컨트롤(오버레이 켜짐이면 `aria-disabled` + 사유 툴팁, AC-EN6-2)에 쓰인다.
+   */
+  environmentStatus?: EnvironmentStatus | null;
 }
 
 const CATEGORIES: FaqCategory[] = ['FAQ', 'SMALL_TALK', 'SELF_SERVICE', 'ERROR_RESPONSE'];
@@ -40,6 +45,7 @@ export function FaqEditModal({
   isArchived = false,
   prefillQuestion,
   onJumpToFaq,
+  environmentStatus,
 }: FaqEditModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.faqs;
   const { showToast } = useToast();
@@ -285,6 +291,7 @@ export function FaqEditModal({
         chatbotId={chatbotId}
         isArchived={isArchived}
         overlay={buildOverlay()}
+        environmentStatus={environmentStatus}
       />
     </>
   );

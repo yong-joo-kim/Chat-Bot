@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { hasPermission } from '@chat-bot/shared-types';
-import type { PostRunTestOutcome, RoleName } from '@chat-bot/shared-types';
+import type { BundleTarget, PostRunTestOutcome, RoleName } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApiException } from '../../common/api.exception';
 import { TestRunService } from '../../validation/test-run.service';
@@ -19,7 +19,12 @@ export class PostRunTestStarter {
     private readonly testRunService: TestRunService,
   ) {}
 
-  async start(chatbotId: string, postRunTestSetId: string, actorRole: RoleName): Promise<PostRunTestOutcome> {
+  /**
+   * [신규 No.40 — §11.3 ⑥] `target`이 있으면(SWITCH_PROD_VERSION 성공 직후) 그 버전을 대상으로
+   * TC를 실행한다(새 운영 버전 — 초안이 아니다). 생략하면(RESTORE_VERSION·PUBLISH) 기존처럼 초안
+   * 대상이다(하위호환 — 응답 바이트 불변).
+   */
+  async start(chatbotId: string, postRunTestSetId: string, actorRole: RoleName, target?: BundleTarget): Promise<PostRunTestOutcome> {
     try {
       if (!hasPermission(actorRole, POST_RUN_TEST_PERMISSION)) {
         return { status: 'SKIPPED', reason: 'CREATOR_NOT_AUTHORIZED' };
@@ -32,7 +37,7 @@ export class PostRunTestStarter {
       if (caseCount === 0) {
         return { status: 'SKIPPED', reason: 'TEST_SET_EMPTY' };
       }
-      const result = await this.testRunService.start(chatbotId, postRunTestSetId, { overlaySource: 'NONE', useRag: false });
+      const result = await this.testRunService.start(chatbotId, postRunTestSetId, { overlaySource: 'NONE', useRag: false, ...(target ? { target } : {}) });
       return { status: 'STARTED', testRunId: result.runId };
     } catch (e) {
       if (e instanceof ApiException) {

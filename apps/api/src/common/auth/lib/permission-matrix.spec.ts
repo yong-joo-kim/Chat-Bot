@@ -13,7 +13,7 @@ describe('hasPermission / ROLE_PERMISSIONS — ADR-0015', () => {
     expect(hasPermission('EDITOR', 'user:write')).toBe(false);
   });
 
-  it('ADMIN은 전체 권한(Permission 유니온, 하이브리드 CS 그룹부터 17종)을 전부 가진다(NFR-S5)', () => {
+  it('ADMIN은 전체 권한(Permission 유니온, 환경분리 그룹부터 18종)을 전부 가진다(NFR-S5)', () => {
     for (const permission of Permission.options) {
       expect(hasPermission('ADMIN', permission)).toBe(true);
     }
@@ -26,8 +26,8 @@ describe('hasPermission / ROLE_PERMISSIONS — ADR-0015', () => {
     }
   });
 
-  it('Permission 유니온은 정확히 17종으로 고정된다(No.24 cs:read·cs:write 신설로 15→17). 새 권한 추가/삭제 시 이 값도 의도적으로 갱신해야 한다', () => {
-    expect(Permission.options).toHaveLength(17);
+  it('Permission 유니온은 정확히 18종으로 고정된다(No.40 chatbot:deploy 신설로 17→18). 새 권한 추가/삭제 시 이 값도 의도적으로 갱신해야 한다', () => {
+    expect(Permission.options).toHaveLength(18);
     expect(Permission.options).toEqual(
       expect.arrayContaining([
         'chatbot:read',
@@ -47,6 +47,7 @@ describe('hasPermission / ROLE_PERMISSIONS — ADR-0015', () => {
         'audit:read',
         'cs:read',
         'cs:write',
+        'chatbot:deploy',
       ]),
     );
   });

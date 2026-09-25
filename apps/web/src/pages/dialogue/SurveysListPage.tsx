@@ -14,13 +14,14 @@ import { ConfirmDialog } from '../../components/Modal';
 import { MESSAGES } from '../../constants/messages';
 import { useLatestRequest } from '../../lib/useLatestRequest';
 import { formatSurveyPeriod } from '../../lib/surveyDisplay';
+import { EnvironmentScopeNotice } from '../../components/EnvironmentScopeNotice';
 import { SurveyStatusBadge, SurveyLockedBadge } from './components/survey/badges';
 
 const STATUS_OPTIONS: SurveyStatus[] = ['DRAFT', 'OPEN', 'CLOSED'];
 
 /** SV1 — 설문 목록(`/chatbots/:chatbotId/dialogue/surveys`, ui-spec §3.1). */
 export function SurveysListPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -134,6 +135,7 @@ export function SurveysListPage(): JSX.Element {
 
   return (
     <div>
+      <EnvironmentScopeNotice visible={environmentStatus?.enabled === true} />
       <div className="dialogue-toolbar">
         <div className="dialogue-search-row">
           <label htmlFor="survey-search" className="sr-only">

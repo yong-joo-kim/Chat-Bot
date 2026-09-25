@@ -152,6 +152,26 @@ export class DeployScheduleRepository {
     await this.holdSuccessorsWithin(tx, chatbotId, cancelledScheduledAt, now, 'PREDECESSOR_CANCELLED', cancelledId, { restoreOnly: true });
   }
 
+  /** [신규 No.40] 환경 모드 켜기(§11.6, C-4) — 활성 PENDING RESTORE_VERSION 예약을
+   * HELD(ENV_MODE_CHANGED)로 바꾼다. 반환값 = 보류된 건수. */
+  async holdRestoreForEnvModeChange(tx: Prisma.TransactionClient, chatbotId: string, now: Date): Promise<number> {
+    const { count } = await tx.deploySchedule.updateMany({
+      where: { chatbotId, action: 'RESTORE_VERSION', status: 'PENDING' },
+      data: { status: 'HELD', heldReason: 'ENV_MODE_CHANGED', heldByScheduleId: null, heldAt: now },
+    });
+    return count;
+  }
+
+  /** [신규 No.40] 환경 모드 끄기(§5.4) — 활성(PENDING·HELD) SWITCH_PROD_VERSION 예약을 CANCELLED로
+   * 바꾼다. 반환값 = 취소된 건수. */
+  async cancelSwitchForEnvDisable(tx: Prisma.TransactionClient, chatbotId: string, actor: { id: string | null; email: string } | null, now: Date): Promise<number> {
+    const { count } = await tx.deploySchedule.updateMany({
+      where: { chatbotId, action: 'SWITCH_PROD_VERSION', status: { in: ['PENDING', 'HELD'] } },
+      data: { status: 'CANCELLED', cancelledAt: now, cancelledById: actor?.id ?? null, cancelledByEmail: actor?.email ?? null },
+    });
+    return count;
+  }
+
   private async holdSuccessorsWithin(
     tx: Prisma.TransactionClient,
     chatbotId: string,

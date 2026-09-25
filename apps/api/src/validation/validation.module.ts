@@ -21,6 +21,8 @@ import { TestRunRagService } from './run/test-run-rag.service';
 import { TestRunStatusSink } from './run/test-run-status.sink';
 import { TestRunCancelRegistry } from './run/test-run-cancel.registry';
 import { TestRunCompareService } from './compare/test-run-compare.service';
+import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
+import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 
 /**
  * 검증/품질 고도화(No.19 대화검증시스템·TC테스트 / No.20 학습영향도 TEST) 모듈(validation-regression-설계.md §2).
@@ -33,7 +35,18 @@ import { TestRunCompareService } from './compare/test-run-compare.service';
  * 주입하지 않는다 — `EmbeddingModule`/`RagModule`을 import해도 그 두 서비스는 **소비하지 않는다**.
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, AnswerSettingsModule, RagModule, TrainingJobsModule, ApiConnectionCatalogModule],
+  imports: [
+    ChatbotsModule,
+    DialogueCommonModule,
+    EmbeddingModule,
+    AnswerSettingsModule,
+    RagModule,
+    TrainingJobsModule,
+    ApiConnectionCatalogModule,
+    // [신규 No.40 — §12.2] 대상 선택 — 읽기 전용 EnvironmentReadService·VersionBundleService만 쓴다.
+    EnvironmentCoreModule,
+    EnvironmentServingModule,
+  ],
   controllers: [TestSetsController, TestCasesController, TestRunsController],
   providers: [
     TestSetService,

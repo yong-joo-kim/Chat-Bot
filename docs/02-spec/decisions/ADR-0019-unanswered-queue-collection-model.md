@@ -165,3 +165,14 @@ record() ─ ① 금지어 마스킹 → ② PII 마스킹 → ③ 버킷 계산
 5. **§3 판정 1벌 공유**: `collect-decision.ts`에 `shouldQueueNegativeFeedback()`을 더하고 정규화·빈 입력·장문 판정을 `shouldCollect()`와 같은 내부 함수로 공유한다. 부정 평가 제외 사유 = `API_NOTICE` → `ALREADY_UNANSWERED`(폴백은 이미 미응답으로 수집됨) → `BUTTON_NODE`(`TEXT`·`BUTTON_MESSAGE`가 아니면 — null 포함) → `EMPTY` → `TOO_LONG`(+ 상한 `LIMIT_REACHED`). `shouldCollect()`의 동작·사유 순서는 불변.
 6. **§5 상한의 소스별 분리**: `UNANSWERED` = `UNANSWERED_MAX_PENDING`(5,000 — 계수에 소스 조건만 추가, 도입 전과 같은 값) · `NEGATIVE_FEEDBACK` = `FEEDBACK_QUEUE_MAX_PENDING`(2,000). 한 소스의 상한이 다른 소스 수집을 막지 않는다. 요약 API의 `limitReached`는 기존 의미(미응답 기준)를 유지하고 `bySource`를 더한다.
 7. **새 전이 "직접 수정 완료"**: `NEGATIVE_FEEDBACK` 항목의 원인이 "매칭은 맞는데 답변 내용이 틀림"이면 예문 추가가 무의미하므로, `PENDING → RESOLVED`(`resolvedIntentId = null`, CAS)를 둔다(`dialogue:write`). `UNANSWERED` 항목에는 허용하지 않는다(`400 INVALID_STATUS_TRANSITION`). **§6 그대로 감사하지 않는다.**
+
+
+---
+
+## 갱신 (2026-09-25 — No.40: 환경 모드의 "운영 미반영"·재유입 표시는 표시 단계 판정)
+
+환경 분리/버전관리(No.40, **ADR-0039 §8**). 결정 §1~§6과 쓰기 파일 3개 집합은 **불변**이다.
+
+1. 환경 모드 챗봇에서 반영(예문 추가·직접 수정 완료)은 **초안**에 들어가고 운영에는 다음 운영 전환 때 반영된다. 큐는 여전히 운영 대화 로그에서 모인다.
+2. 목록 응답(모드 켜짐 · `RESOLVED` 항목)에 `prodReflection`(`PENDING_SWITCH` | `REFLECTED` + `reflectedAt`)을 싣는다 — 판정은 순수 함수가 **전환 이력의 대상 버전 캡처 시각**(비정규화 컬럼)과 반영 시각을 비교한다(요청당 1쿼리 · 수집기 무변경).
+3. §5 "반영 후 재발생" 배지는 모드 켜짐이면 `PENDING_SWITCH` 동안 띄우지 않고, `REFLECTED`면 `lastOccurredAt > reflectedAt`일 때만 띄운다. `recurredCount` 숫자·`recurredOnly` 필터는 미반영 기간의 발생을 포함한다(수집기 봉인 우선 — 알려진 한계).

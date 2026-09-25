@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ReferenceCheckService } from './reference-check.service';
 import { DialogueBundleService } from './dialogue-bundle.service';
 import { InMemoryDialogueBundleCache } from './dialogue-bundle.cache';
+import { InMemoryVersionServingBundleCache } from './version-serving-bundle.cache';
 import { CsvSheetReader } from './import/csv-sheet-reader';
 import { XlsxSheetReader } from './import/xlsx-sheet-reader';
 import { InMemoryImportStagingStore } from './import/import-staging.store';
@@ -34,7 +35,14 @@ import { EmbeddingModule } from '../embedding/embedding.module';
         new InMemoryDialogueBundleCache(config.get<number>('DIALOGUE_BUNDLE_CACHE_TTL_MS') ?? 60000, 10),
       inject: [ConfigService],
     },
+    // [신규 No.40 — §7.3] 버전 서빙 L2 합성 캐시 — `environment/serving`이 이 토큰으로 주입받는다.
+    {
+      provide: 'VersionServingBundleCache',
+      useFactory: (config: ConfigService) =>
+        new InMemoryVersionServingBundleCache(config.get<number>('DIALOGUE_BUNDLE_CACHE_TTL_MS') ?? 60000, config.get<number>('ENV_VERSION_BUNDLE_CACHE_MAX') ?? 200),
+      inject: [ConfigService],
+    },
   ],
-  exports: [ReferenceCheckService, DialogueBundleService, CsvSheetReader, XlsxSheetReader, 'ImportStagingStore'],
+  exports: [ReferenceCheckService, DialogueBundleService, CsvSheetReader, XlsxSheetReader, 'ImportStagingStore', 'VersionServingBundleCache'],
 })
 export class DialogueCommonModule {}

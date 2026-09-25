@@ -48,8 +48,26 @@ function buildDeps() {
   const cancelRegistry = { isCancelled: jest.fn().mockReturnValue(false), cancel: jest.fn(), clear: jest.fn() };
   const config = { get: jest.fn().mockReturnValue(undefined) };
   const apiConnectionCatalog = { loadMockSources: jest.fn().mockResolvedValue(new Map()) };
+  // [신규 No.40 — §12.2] 대상 선택 관련 협력자(초안 경로 기본 테스트에서는 호출되지 않는다).
+  const versionBundles = { get: jest.fn(), getCore: jest.fn(), warm: jest.fn() };
+  const versionVectorResolver = { resolve: jest.fn().mockResolvedValue({ entries: [], missing: 0 }) };
 
-  return { prisma, bundleService, embeddingFactory, vectorCache, answerSettingsCache, runEmbedding, overlayBuilder, ragService, cancelRegistry, config, apiConnectionCatalog, storedResults };
+  return {
+    prisma,
+    bundleService,
+    embeddingFactory,
+    vectorCache,
+    answerSettingsCache,
+    runEmbedding,
+    overlayBuilder,
+    ragService,
+    cancelRegistry,
+    config,
+    apiConnectionCatalog,
+    versionBundles,
+    versionVectorResolver,
+    storedResults,
+  };
 }
 
 describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () => {
@@ -68,6 +86,8 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.cancelRegistry as never,
       deps.config as never,
       deps.apiConnectionCatalog as never,
+      deps.versionBundles as never,
+      deps.versionVectorResolver as never,
     );
 
     const result = await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -88,6 +108,8 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.cancelRegistry as never,
       deps.config as never,
       deps.apiConnectionCatalog as never,
+      deps.versionBundles as never,
+      deps.versionVectorResolver as never,
     );
 
     const result = await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -114,6 +136,8 @@ describe('TestRunExecutor — SINGLE 모드 기본 실행(J-4, ADR-0030)', () =>
       deps.cancelRegistry as never,
       deps.config as never,
       deps.apiConnectionCatalog as never,
+      deps.versionBundles as never,
+      deps.versionVectorResolver as never,
     );
 
     await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: false });
@@ -163,6 +187,8 @@ describe('TestRunExecutor — RAG 실행당 상한 강제(FR-V2-20, AC-V3-11)', 
       deps.cancelRegistry as never,
       deps.config as never,
       deps.apiConnectionCatalog as never,
+      deps.versionBundles as never,
+      deps.versionVectorResolver as never,
     );
 
     await executor.execute({ chatbotId: 'bot-1', runId: 'run-1', setId: 'set-1', mode: 'SINGLE', overlaySource: 'NONE', useRag: true });

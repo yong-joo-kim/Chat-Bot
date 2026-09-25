@@ -105,6 +105,15 @@ export class DeployScheduleService {
         ]);
       }
     }
+    // [신규 No.40 R1 — H-1] SWITCH_PROD_VERSION 예약 생성(§11.2) — 경고가 있으면 `acknowledgeWarnings`
+    // 필수(운영 전환 확정의 acknowledge 규칙과 같은 지점, 이전에는 검사가 없어 경고 없이도 예약이
+    // 만들어질 수 있었다). 실행 시점(`SwitchProdVersionExecutor`)은 이 확인을 이미 마친 예약이므로
+    // `acknowledgeWarnings: true`를 그대로 실어 보낸다(§9.3 ④ 주석 "예약 실행은 생성 시 확인").
+    if (previewResp.switchProd && previewResp.switchProd.warnings.length > 0 && !('acknowledgeWarnings' in dto && dto.acknowledgeWarnings === true)) {
+      throw new ApiException('VALIDATION_FAILED', 400, '경고 사항을 확인했는지 체크해 주세요.', [
+        { field: 'acknowledgeWarnings', message: '확인이 필요합니다.' },
+      ]);
+    }
     if (previewResp.preconditionFailures.length > 0) {
       throw new ApiException(
         'DEPLOY_SCHEDULE_PRECONDITION_FAILED',
@@ -128,7 +137,7 @@ export class DeployScheduleService {
       created = await this.prisma.$transaction(async (tx) => {
         const activeRows = await tx.deploySchedule.findMany({
           where: { chatbotId, status: { in: ACTIVE } },
-          select: { id: true, action: true, scheduledAt: true, targetContentHash: true },
+          select: { id: true, action: true, scheduledAt: true, targetContentHash: true, targetVersionId: true },
         });
 
         const timeViolations = checkScheduleTimeRules({ scheduledAt: dto.scheduledAt, now, otherActiveTimes: activeRows.map((r) => r.scheduledAt) });
@@ -143,9 +152,12 @@ export class DeployScheduleService {
           chatbotId,
           scheduledAt: dto.scheduledAt,
           params,
-          previewedContentHash: 'previewedContentHash' in dto ? dto.previewedContentHash : undefined,
+          // [신규 No.40] SWITCH_PROD_VERSION은 `previewedProdVersionId`(체인 기준 확인, §11.2).
+          previewedContentHash: 'previewedContentHash' in dto ? dto.previewedContentHash : 'previewedProdVersionId' in dto ? dto.previewedProdVersionId : undefined,
           now,
           activeRestoreSiblings: activeRows.filter((r) => r.action === 'RESTORE_VERSION').map((r) => ({ id: r.id, scheduledAt: r.scheduledAt, targetContentHash: r.targetContentHash })),
+          // [신규 No.40 — §11.2] 전환 체인 기준 판정용.
+          activeSwitchSiblings: activeRows.filter((r) => r.action === 'SWITCH_PROD_VERSION').map((r) => ({ id: r.id, scheduledAt: r.scheduledAt, targetVersionId: r.targetVersionId })),
           activeSiblingActions: activeRows.map((r) => r.action as never),
         });
 
@@ -270,7 +282,8 @@ export class DeployScheduleService {
       const row = await tx.deploySchedule.update({ where: { id: scheduleId }, data: { status: 'CANCELLED', cancelledAt: now, cancelledById: user.id, cancelledByEmail: user.email } });
       // R6 — targetVersionId가 있으면(RESTORE_VERSION) 후속 PENDING RESTORE_VERSION만 HELD. 인라인
       // 재구현 대신 repository의 단일 구현을 재사용한다(code-review 1라운드 L3 — 죽은 코드 제거).
-      if (row.targetVersionId !== null) {
+      // [신규 No.40] targetVersionId 컬럼은 SWITCH_PROD_VERSION도 재사용하므로 action도 함께 본다.
+      if (row.action === 'RESTORE_VERSION' && row.targetVersionId !== null) {
         await this.repository.holdRestoreSuccessorsOnCancel(tx, chatbotId, row.scheduledAt, now, scheduleId);
       }
       return row;
@@ -324,7 +337,9 @@ export class DeployScheduleService {
           throw new ApiException('DEPLOY_SCHEDULE_INVALID_TIME', 400, '예약 시각이 규칙을 위반했습니다.', timeViolations.map((v) => ({ field: 'scheduledAt', message: v.rule })));
         }
 
-        if (current.targetVersionId !== null) {
+        // [신규 No.40] targetVersionId 컬럼은 SWITCH_PROD_VERSION도 재사용한다 — 두 동작 모두 재개
+        // 시점에 체인 기준을 다시 계산한다(§11.2).
+        if (current.action === 'RESTORE_VERSION' && current.targetVersionId !== null) {
           if (dto.previewedContentHash === undefined) {
             throw new ApiException('VALIDATION_FAILED', 400, '복원 예약 재개는 새 미리보기 해시가 필요합니다.', [{ field: 'previewedContentHash', message: '필수 값입니다.' }]);
           }
@@ -339,7 +354,28 @@ export class DeployScheduleService {
             previewedContentHash: dto.previewedContentHash,
             now,
             activeRestoreSiblings: activeRestores,
+            activeSwitchSiblings: [],
             activeSiblingActions: activeRestores.map(() => 'RESTORE_VERSION' as never),
+          });
+          derivedExpectedHash = derived.expectedContentHash ?? null;
+          derivedPredecessorId = derived.predecessorScheduleId ?? null;
+        } else if (current.action === 'SWITCH_PROD_VERSION' && current.targetVersionId !== null) {
+          if (dto.previewedContentHash === undefined) {
+            throw new ApiException('VALIDATION_FAILED', 400, '전환 예약 재개는 새 미리보기 기준값이 필요합니다.', [{ field: 'previewedContentHash', message: '필수 값입니다.' }]);
+          }
+          const activeSwitches = await tx.deploySchedule.findMany({
+            where: { chatbotId, action: 'SWITCH_PROD_VERSION', status: { in: ACTIVE }, id: { not: scheduleId } },
+            select: { id: true, scheduledAt: true, targetVersionId: true },
+          });
+          const derived = await executor.resolveForInsert(tx, {
+            chatbotId,
+            scheduledAt: dto.scheduledAt,
+            params: currentParams as never,
+            previewedContentHash: dto.previewedContentHash,
+            now,
+            activeRestoreSiblings: [],
+            activeSwitchSiblings: activeSwitches,
+            activeSiblingActions: activeSwitches.map(() => 'SWITCH_PROD_VERSION' as never),
           });
           derivedExpectedHash = derived.expectedContentHash ?? null;
           derivedPredecessorId = derived.predecessorScheduleId ?? null;

@@ -492,7 +492,7 @@ publish(chatbotId, { enableWebChannel }, invocation) → { changed, statusBefore
 
 | 향후 동작 | 추가할 것 | 바뀌지 않는 것 |
 |---|---|---|
-| **No.40 "포인터 전환"**(published = 특정 `ChatbotVersion`) | `DeployScheduleAction`에 값 1개 · params 스키마 · 실행기 파일 1개 · 레지스트리 1줄 · `required-permissions.ts` 1분기 | 엔진·planner·분류기 골격·상태 기계·API 경로·테이블 |
+| **No.40 "포인터 전환"**(published = 특정 `ChatbotVersion`) **[2026-09-25 이행 — `SWITCH_PROD_VERSION` · ADR-0039]** | `DeployScheduleAction`에 값 1개 · params 스키마 · 실행기 파일 1개 · 레지스트리 1줄 · `required-permissions.ts` 1분기 | 엔진·planner·분류기 골격·상태 기계·API 경로·테이블 |
 | 채널 일반화 `SET_CHANNEL(type)` | 새 동작으로 추가(`SET_WEB_CHANNEL`은 호환 유지) · `CHANNEL_IMPLEMENTATION` 확장(ADR-0011) | 동일 |
 | 반복 예약 | **이 설계의 확장 대상이 아니다** — misfire·체인 의미가 다르다(요구사항 §9). 도입 시 별도 ADR(`@nestjs/schedule` 재검토) | — |
 
@@ -1222,7 +1222,7 @@ DeployScheduleStateCheck = {
 
 | # | 제한 | 완화 / 재검토 트리거 |
 |---|---|---|
-| L-1 | **(a) 경로의 준비 편집이 운영에 보인다**(P-2 수용) — 편집 → 버전 저장 → 즉시 원복 사이 | 콘솔 안내. 트리거: "준비 중 노출 불가" 요구 → **No.40 우선 착수**("포인터 전환" 동작 추가, §5.6) |
+| L-1 | **(a) 경로의 준비 편집이 운영에 보인다**(P-2 수용) — 편집 → 버전 저장 → 즉시 원복 사이 | 콘솔 안내. 트리거: "준비 중 노출 불가" 요구 → **No.40 우선 착수**("포인터 전환" 동작 추가, §5.6) **[2026-09-25] No.40 설계 완료 — 환경 모드 챗봇에서 해소(ADR-0039)** |
 | L-2 | 엄격 바인딩 때문에 **장기 예약은 그 사이 편집이 있으면 실패**한다 | 편집 화면 배너 · `LONG_HORIZON` 경고 · `state-check`. 트리거: `STATE_CHANGED` 실패 반복 보고 → `acceptLaterChanges` 재검토(P-4, 요구사항 §9) |
 | L-3 | 엔진 비활성 인스턴스만 떠 있으면 예약이 실행되지 않는다(기한 후 MISSED) | `meta.overduePendingCount` 경고 배너 |
 | L-4 | 선행 예약이 재시도로 늦어지면 **후속 예약의 유예가 자기 예정 시각 기준으로 소진**되어 MISSED가 될 수 있다 | 보수적·예측 가능 선택. 트리거: 운영에서 이 경로의 MISSED가 관측되면 "선행 종결 시각 기준 유예"로 planner 1곳 수정 |

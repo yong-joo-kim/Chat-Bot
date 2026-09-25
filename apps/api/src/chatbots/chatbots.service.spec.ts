@@ -55,6 +55,10 @@ function buildTxMock() {
     chatbotVersionSequence: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     deploySchedule: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbotHandoffSetting: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // [신규 No.40] 환경 분리 / 버전 관리 그룹 추가 — 16 → 19테이블.
+    embeddingTextVector: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    environmentSwitchLog: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    chatbotEnvironment: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
 }
@@ -93,7 +97,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('16개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다', async () => {
+  it('19개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -118,6 +122,9 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.chatbotVersionSequence.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.deploySchedule.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbotHandoffSetting.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.embeddingTextVector.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.environmentSwitchLog.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.chatbotEnvironment.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는

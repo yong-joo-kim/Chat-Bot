@@ -14,6 +14,7 @@ import { ThresholdPreviewCandidateSchema } from './answering';
 import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from './legacy-api';
 import { queryBoolean } from './common';
 import { FeedbackRating } from './feedback';
+import { BundleTargetSchema, ResolvedBundleTargetSchema } from './bundle-target';
 
 /** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
 export const SimulatedAnsweredTopicSchema = z.object({
@@ -99,6 +100,9 @@ export const SimulateRequestSchema = z
     surveyPreview: z.boolean().default(false),
     /** [신규 No.22] 켜면 `getCachedUnfiltered()`로 비활성 토픽 자산도 후보에 포함한다(P-13). TC 실행에는 없다. */
     includeInactiveTopics: z.boolean().default(false),
+    /** [신규 No.40] 대상 선택(§12.1) — 미지정 = 초안(DRAFT, 기존과 동일). STAGING/PROD/VERSION은
+     * 환경 분리 모드가 켜진 챗봇에서만 유효하다. */
+    target: BundleTargetSchema.optional(),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -108,6 +112,15 @@ export const SimulateRequestSchema = z
         code: z.ZodIssueCode.custom,
         message: 'message 또는 buttonAction 중 정확히 하나를 지정해 주세요.',
         path: ['message'],
+      });
+    }
+    // [신규 No.40 — AC-EN6-2] 오버레이는 초안 전용이다 — 비초안 대상과 함께 쓸 수 없다.
+    const hasOverlay = val.overlay !== undefined && !isOverlayEmpty(val.overlay);
+    if (hasOverlay && val.target !== undefined && val.target.kind !== 'DRAFT') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '오버레이는 초안 대상에서만 사용할 수 있습니다.',
+        path: ['target'],
       });
     }
   });
@@ -164,6 +177,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   surveyStep: SurveyStepViewSchema.optional(),
   /** [신규 No.22] 답한 자산의 topicId가 있을 때만 채워진다(공통 답변·토픽 없는 챗봇 = undefined, §6.5). */
   answeredTopic: SimulatedAnsweredTopicSchema.optional(),
+  /** [신규 No.40] 비초안 대상일 때만 채워진다(§12.1). */
+  target: ResolvedBundleTargetSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 

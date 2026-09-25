@@ -16,6 +16,7 @@ import { toPaginated } from '../common/pagination';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { TrainingJobQueue } from '../training-jobs/training-job.queue';
 import { assertOverlaySize } from '../simulation/lib/overlay-convert';
+import { EnvironmentReadService } from '../environment/core/environment-read.service';
 import { TestSetService } from './test-set.service';
 import { TargetNameResolverService } from './target-name-resolver.service';
 import type { TargetRef } from './target-name-resolver.service';
@@ -45,6 +46,8 @@ export class TestRunService implements OnModuleInit {
     private readonly cancelRegistry: TestRunCancelRegistry,
     private readonly nameResolver: TargetNameResolverService,
     private readonly config: ConfigService,
+    // [신규 No.40 — §12.2, 생성자 끝] 대상 해석(읽기 전용).
+    private readonly environmentRead: EnvironmentReadService,
   ) {}
 
   /** 기동 시 고아 실행 정리(ADR-0029 §4, `TrainingJobService`의 고아 Job 정리와 같은 규약·시점). */
@@ -85,6 +88,31 @@ export class TestRunService implements OnModuleInit {
 
     if (dto.overlaySource === 'INLINE') assertOverlaySize(dto.overlay);
 
+    // [신규 No.40 — §12.2] 시작 시점의 포인터를 해석해 고정한다(실행 중 전환이 결과 해석을 흔들지 않게).
+    let targetKind: 'DRAFT' | 'STAGING' | 'PROD' | 'VERSION' = 'DRAFT';
+    let targetVersionId: string | null = null;
+    let targetVersionNo: number | null = null;
+    if (dto.target && dto.target.kind !== 'DRAFT') {
+      if (dto.target.kind === 'VERSION') {
+        const versionRow = await this.prisma.chatbotVersion.findUnique({ where: { id: dto.target.versionId }, select: { id: true, chatbotId: true, versionNo: true } });
+        if (!versionRow || versionRow.chatbotId !== chatbotId) throw new ApiException('NOT_FOUND', 404, '요청하신 버전을 찾을 수 없습니다.');
+        targetKind = 'VERSION';
+        targetVersionId = versionRow.id;
+        targetVersionNo = versionRow.versionNo;
+      } else {
+        const pointer = await this.environmentRead.getPointerStatus(chatbotId);
+        const versionId = dto.target.kind === 'PROD' ? pointer.prodVersionId : pointer.stagingVersionId;
+        if (!pointer.prodVersionId || !versionId) {
+          throw new ApiException('ENV_MODE_DISABLED', 409, '환경 분리 모드가 꺼져 있습니다.');
+        }
+        const versionRow = await this.prisma.chatbotVersion.findUnique({ where: { id: versionId }, select: { id: true, versionNo: true } });
+        if (!versionRow) throw new ApiException('NOT_FOUND', 404, '요청하신 버전을 찾을 수 없습니다.');
+        targetKind = dto.target.kind;
+        targetVersionId = versionRow.id;
+        targetVersionNo = versionRow.versionNo;
+      }
+    }
+
     const mode = dto.overlaySource === 'NONE' ? 'SINGLE' : 'OVERLAY_COMPARE';
     let created: { id: string };
     try {
@@ -97,6 +125,9 @@ export class TestRunService implements OnModuleInit {
           status: 'QUEUED',
           totalCount: runnableCount,
           useRag: dto.useRag,
+          targetKind,
+          targetVersionId,
+          targetVersionNo,
         },
       });
     } catch (e) {
@@ -122,6 +153,7 @@ export class TestRunService implements OnModuleInit {
           overlay: dto.overlay,
           suggestionIds: dto.suggestionIds,
           useRag: dto.useRag,
+          ...(targetVersionId ? { target: { kind: targetKind as 'STAGING' | 'PROD' | 'VERSION', versionId: targetVersionId } } : {}),
         }),
       this.statusSink,
     );

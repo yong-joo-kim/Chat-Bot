@@ -8,6 +8,7 @@ import type { DialogueBundleCache } from './dialogue-bundle.cache';
 import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
 import { VectorCacheService } from '../embedding/vector-cache.service';
 import { filterInactiveTopicAssets } from './lib/topic-bundle-filter';
+import type { VersionServingBundleCache } from './version-serving-bundle.cache';
 
 /** `build()`의 두 번째 인자로 받을 수 있는 클라이언트 종류 — 기본 프로퍼티(PrismaService) 또는 인터랙티브 트랜잭션 클라이언트. */
 type DbClient = PrismaService | Prisma.TransactionClient;
@@ -40,6 +41,8 @@ export class DialogueBundleService {
     private readonly vectorCache?: VectorCacheService,
     // [신규 No.22] 비필터 번들 전용 소형 캐시(별도 인스턴스 — 운영 캐시와 키 공유 0, §6.2).
     @Optional() @Inject('DialogueBundleUnfilteredCache') private readonly unfilteredCache?: DialogueBundleCache,
+    // [신규 No.40 — §7.3] 버전 서빙 L2 합성 캐시(선택 주입) — 무효화 지점을 여기서 공유한다.
+    @Optional() @Inject('VersionServingBundleCache') private readonly versionServingCache?: VersionServingBundleCache,
   ) {}
 
   /**
@@ -82,6 +85,8 @@ export class DialogueBundleService {
     this.unfilteredCache?.invalidate(chatbotId);
     this.vectorCache?.invalidate(chatbotId);
     this.reindexQueue?.schedule(chatbotId);
+    // [신규 No.40 — §7.3 AC-EN2-3/4] 토픽·설문 편집이 이미 이 지점을 호출한다 — 버전 서빙 L2도 같이 비운다.
+    this.versionServingCache?.invalidateChatbot(chatbotId);
   }
 
   private safeParseArray<T>(json: string, context: string): T[] {

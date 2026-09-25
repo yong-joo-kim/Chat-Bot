@@ -310,6 +310,10 @@ a:focus-visible {
   background: #fef3c7;
   color: #92400e;
 }
+.modal-banner--info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
 
 /* 토스트 */
 .toast-region {
@@ -3832,4 +3836,133 @@ a:focus-visible {
   font-weight: 600;
   color: var(--color-text-secondary, #6b7280);
   margin: 0 0 12px;
+}
+
+/* ── 환경 분리 / 버전 관리(No.40) ── */
+.environment-badge,
+.gate-result-badge-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.environment-badge-list {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+.gate-result-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gate-result-badge-reason {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.environment-mode-indicator {
+  color: #166534;
+  font-size: 10px;
+  margin-left: 2px;
+}
+.detail-header-environment-badge {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+.environment-scope-notice {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.environment-off-panel ul {
+  margin: 8px 0 16px;
+  padding-left: 20px;
+}
+.environment-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+/* [R1 M-2] `environment-separation-ui-spec.md` §11.1 — 데스크톱(>=1024px) 3열,
+   태블릿(640~1023px) 2열+1열(초안·스테이징 / 운영), 모바일(<640px) 세로 1열(초안→스테이징→운영 순서 고정).
+   모바일 우선 기본값(1열)에서 시작해 뷰포트가 넓어질수록 열을 늘린다. */
+.environment-status-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+.environment-status-card {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+}
+.environment-status-card h2 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+.environment-draft-same {
+  color: #166534;
+}
+.environment-draft-diff {
+  color: #92400e;
+}
+.environment-active-schedule {
+  background: var(--color-bg-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.gate-settings-panel {
+  margin: 12px 0;
+}
+.gate-settings-form {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 8px;
+}
+.environment-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 8px;
+}
+.environment-history-table-el {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.environment-history-table-el th,
+.environment-history-table-el td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+/* 태블릿(640~1023px) — 2열, 세 번째 카드(운영)만 전체 폭을 차지해 아래 줄에 홀로 놓인다. */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .environment-status-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .environment-status-cards > .environment-status-card:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+/* 데스크톱(>=1024px) — 3열 가로 배치. */
+@media (min-width: 1024px) {
+  .environment-status-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }

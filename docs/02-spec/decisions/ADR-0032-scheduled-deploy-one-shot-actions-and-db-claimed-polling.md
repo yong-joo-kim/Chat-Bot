@@ -135,3 +135,16 @@ API는 오프셋 포함 ISO 8601만 받는다(오프셋 없는 로컬 시각은 
 - **60초 상담 정리 루프**: 시간 기반 상담 종료 판정(조회 시점 판정과 같은 순수 함수)·만료 원문 필드 소거·`draining` 해제. 기동 즉시 `runOnce()` 1회.
 - **선점(claim)을 쓰지 않는다** — 예약 실행과 달리 모든 연산이 조건부 갱신이라 멱등이다. 모든 인스턴스가 실행하며 같은 상담을 두 인스턴스가 동시에 종료해도 CAS가 1회만 통과시킨다. 임대·RUNNING 부분 유니크는 필요 없다.
 - `CLOCK` 포트를 `HandoffModule`에서도 제공한다(같은 토큰 — 통합 시험의 `overrideProvider(CLOCK)`가 두 모듈에 함께 적용된다). tick 예외는 코드만 남긴 새 오류로 넘긴다(원문·메시지 인자를 `PollingLoop` 경고 로그에 흘리지 않는다).
+
+
+---
+
+## 갱신 (2026-09-25 — No.40: draft/published 기각의 대체 · 동작 `SWITCH_PROD_VERSION` · 모드 변경 시 예약 처리)
+
+환경 분리/버전관리(No.40, **ADR-0039 §5·§7**). 엔진(폴링·CAS 선점·임대)·엄격 바인딩·fail-stop·misfire·재시도 분류·권한 재검증·예약자 명의 감사는 **불변**이다.
+
+1. **§1 "draft/published 기각 → No.40"을 ADR-0039가 대체**한다 — 자산 이중화가 아니라 **운영 포인터(`Chatbot.prodVersionId`)**다. 감수 비용 1(준비 편집이 운영에 잠시 보인다)은 **모드 켜진 챗봇에서 해소**된다.
+2. **동작 `SWITCH_PROD_VERSION`**: params `{ targetVersionId, expectedProdVersionId }` · 실행기 1파일 + 레지스트리 1줄 + `requiredPermissions` 1분기(`chatbot:deploy`) · `targetVersionId`/`No` 비정규화 컬럼 재사용(스키마 변경 0). 바인딩 = 예약 시 운영 버전 id(체인이면 선행 전환 예약의 대상 — 복원 체인과 같은 규칙). 실행 시 불일치 → `FAILED(STATE_CHANGED)` · 게이트 차단 → `FAILED(GATE_NOT_PASSED)`(신규 영구 사유) · BUSY → 일시적. 미리보기 blocker는 전제 조건 사유 `SWITCH_BLOCKED`(신규)로 보고한다.
+3. **실행기는 포인터를 직접 쓰지 않는다** — 예약 모듈의 Prisma 쓰기 대상은 `deploySchedule`뿐이라는 봉인(D-1)을 지키기 위해 `environment/core`의 전환 서비스를 호출한다. 임대 만료 회수는 전환 이력의 `deployScheduleId`(포인터와 같은 트랜잭션) 존재로 `RECOVERED`를 판정한다(복원의 백업 흔적 판정과 같은 원리).
+4. **모드 변경 시 예약 처리**: 켜기 트랜잭션에서 활성(`PENDING`) `RESTORE_VERSION` → `HELD(ENV_MODE_CHANGED)`(신규 보류 사유 — 효과 대상이 운영 → 초안으로 바뀌므로 재확인), 끄기 트랜잭션에서 활성 `SWITCH_PROD_VERSION` → `CANCELLED`. 두 쓰기는 `deploy-schedule.repository.ts`의 메서드 2개이며 쓰기 파일 수(2)는 불변이다. 모드 켜진 챗봇의 `RESTORE_VERSION` 생성에는 준비도 경고 `ENV_DRAFT_ONLY`가 붙는다.
+5. **실행 직후 TC(G3)**: `SWITCH_PROD_VERSION`에도 허용하며 대상은 새 운영 버전이다. 대안표의 "실행 전 TC 게이트는 스냅샷 번들 TC 모드가 생길 때" 트리거가 **발동**했다 — 게이트는 ADR-0039 §5(경고 기본 · 챗봇별 차단 · 자동 롤백 없음).

@@ -70,3 +70,28 @@ describe('K-1: DialogueBundleService.build() 결정적 정렬', () => {
     expect(prisma.topic.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { chatbotId: 'chatbot-1', enabled: false } }));
   });
 });
+
+/**
+ * [신규 No.40 — §7.3 AC-EN2-3/4] `invalidate()` 1곳이 버전 서빙 L2 합성 캐시도 함께 비운다 —
+ * 토픽·설문 편집이 이 지점을 호출하는 기존 배선(코드 변경 0)을 그대로 타면서, 운영 서빙 L2도 즉시
+ * 무효화된다.
+ */
+describe('DialogueBundleService.invalidate() — 버전 서빙 L2 공유 무효화(§7.3)', () => {
+  it('versionServingCache가 주입돼 있으면 invalidate(chatbotId) 호출 시 invalidateChatbot(chatbotId)도 호출한다', () => {
+    const prisma = buildPrismaMock();
+    const cache = { get: jest.fn(), set: jest.fn(), invalidate: jest.fn() };
+    const versionServingCache = { get: jest.fn(), set: jest.fn(), invalidateChatbot: jest.fn() };
+    const service = new DialogueBundleService(prisma as never, cache as never, undefined, undefined, undefined, versionServingCache as never);
+
+    service.invalidate('chatbot-1');
+
+    expect(versionServingCache.invalidateChatbot).toHaveBeenCalledWith('chatbot-1');
+    expect(cache.invalidate).toHaveBeenCalledWith('chatbot-1');
+  });
+
+  it('versionServingCache가 주입되지 않았으면(선택 의존성) invalidate()가 예외 없이 동작한다(모드 꺼진 배포 — 응답 바이트·쿼리 수 불변)', () => {
+    const prisma = buildPrismaMock();
+    const service = new DialogueBundleService(prisma as never);
+    expect(() => service.invalidate('chatbot-1')).not.toThrow();
+  });
+});

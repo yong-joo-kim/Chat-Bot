@@ -28,6 +28,9 @@ export const ChatbotVersionTrigger = z.enum([
   'BEFORE_AUGMENT_ACCEPT',
   'BEFORE_LEARNING_BULK_APPLY',
   'BEFORE_RESTORE',
+  // [신규 No.40] 환경 분리 — 켜기(자동 캡처) · 스테이징 승격.
+  'ENV_INIT',
+  'PROMOTE',
 ]);
 export type ChatbotVersionTrigger = z.infer<typeof ChatbotVersionTrigger>;
 
@@ -38,16 +41,19 @@ export const CHATBOT_VERSION_TRIGGER_LABELS: Record<ChatbotVersionTrigger, strin
   BEFORE_AUGMENT_ACCEPT: '증강 승인 직전(자동)',
   BEFORE_LEARNING_BULK_APPLY: '학습현황 일괄반영 직전(자동)',
   BEFORE_RESTORE: '복원 직전 백업(자동)',
+  ENV_INIT: '환경 분리 시작(자동)',
+  PROMOTE: '스테이징 승격',
 };
 
-/** 목록 필터(FR-H2-1) — MANUAL / 자동 4종 / 복원 직전 백업으로 묶는다. */
-export const VersionTriggerGroup = z.enum(['MANUAL', 'AUTO', 'RESTORE_BACKUP']);
+/** 목록 필터(FR-H2-1) — MANUAL / 자동 4종 / 복원 직전 백업 / 환경(No.40)으로 묶는다. */
+export const VersionTriggerGroup = z.enum(['MANUAL', 'AUTO', 'RESTORE_BACKUP', 'ENVIRONMENT']);
 export type VersionTriggerGroup = z.infer<typeof VersionTriggerGroup>;
 
 export const VERSION_TRIGGER_GROUPS: Record<VersionTriggerGroup, readonly ChatbotVersionTrigger[]> = {
   MANUAL: ['MANUAL'],
   AUTO: ['BEFORE_IMPORT', 'BEFORE_BULK_DELETE', 'BEFORE_AUGMENT_ACCEPT', 'BEFORE_LEARNING_BULK_APPLY'],
   RESTORE_BACKUP: ['BEFORE_RESTORE'],
+  ENVIRONMENT: ['ENV_INIT', 'PROMOTE'],
 };
 
 /** 자동 스냅샷 트리거 문맥(FR-H1-9) — 문장 원문은 담지 않는다. */
@@ -159,6 +165,8 @@ export const ChatbotVersionListItemSchema = z.object({
   createdByEmail: z.string().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
+  /** [신규 No.40] 환경 배지(포인터·이력 파생) — 모드 켜짐일 때만 키가 존재한다(FR-EN4-6). */
+  environmentBadges: z.array(z.enum(['PROD', 'STAGING', 'PROD_HISTORY'])).optional(),
 });
 export type ChatbotVersionListItem = z.infer<typeof ChatbotVersionListItemSchema>;
 
@@ -174,14 +182,6 @@ export const ChatbotVersionListQuerySchema = PaginationQuerySchema.extend({
   pinned: queryBoolean().optional(),
 });
 export type ChatbotVersionListQuery = z.infer<typeof ChatbotVersionListQuerySchema>;
-
-export const VersionCurrentStatusSchema = z.object({
-  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
-  counts: VersionCountsSchema,
-  latestVersion: ChatbotVersionListItemSchema.nullable(),
-  hasUnsavedChanges: z.boolean(),
-});
-export type VersionCurrentStatus = z.infer<typeof VersionCurrentStatusSchema>;
 
 /* ------------------------------------------------------------------------------------------------
  * 수동 생성 / 라벨·메모·고정 수정
@@ -234,6 +234,23 @@ export const VersionDiffSummarySchema = z.object({
   identical: z.boolean(),
 });
 export type VersionDiffSummary = z.infer<typeof VersionDiffSummarySchema>;
+
+export const VersionCurrentStatusSchema = z.object({
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  counts: VersionCountsSchema,
+  latestVersion: ChatbotVersionListItemSchema.nullable(),
+  hasUnsavedChanges: z.boolean(),
+  /**
+   * [신규 No.40 — 2026-09-25 프론트 계약 보강, environment-separation-ui-spec.md §4.5] 환경 분리
+   * 모드 켜짐 + 스테이징 포인터가 있을 때만 싣는다(값이 있을 때만 키 — 모드 꺼진 챗봇 응답 바이트
+   * 불변). "지금 스테이징인 버전" → "지금 초안(이 응답의 값들)" 사이 차이 요약이다 —
+   * `StagingPromoteDialog`가 이 값을 그대로 그린다(추가 조회 없음, `+ 의도 0 − 키워드 3 ~ 의도 1`).
+   * 스테이징 본문을 못 읽으면(손상 등) 생략한다(가용성 우선 — `current()`는 payload 오류로 실패하지
+   * 않는다).
+   */
+  stagingDiff: VersionDiffSummarySchema.optional(),
+});
+export type VersionCurrentStatus = z.infer<typeof VersionCurrentStatusSchema>;
 
 export const VersionDiffQuerySchema = PaginationQuerySchema.extend({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
@@ -388,6 +405,8 @@ export const RestoreWarningSchema = z.discriminatedUnion('code', [
   // 확인 체크(`acknowledgeTopicExposure`) 없이는 복원을 거부한다(PM 확정 2026-09-25 — §25 D-4 강화).
   z.object({ code: z.literal('TOPIC_MISSING'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('TOPIC_EXPOSURE_CHANGE'), exposed: z.number().int().nonnegative(), hidden: z.number().int().nonnegative() }),
+  // [No.40 신설] 환경 분리 — 모드 켜짐일 때만. 복원은 초안에만 적용된다(운영·스테이징 불변, §13.1).
+  z.object({ code: z.literal('ENV_DRAFT_ONLY'), prodVersionNo: z.number().int().positive(), stagingVersionNo: z.number().int().positive().nullable() }),
 ]);
 export type RestoreWarning = z.infer<typeof RestoreWarningSchema>;
 

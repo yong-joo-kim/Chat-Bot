@@ -1,8 +1,9 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { NavLink } from 'react-router-dom';
-import type { UnansweredQuestionSummary } from '@chat-bot/shared-types';
+import type { EnvironmentStatus, UnansweredQuestionSummary } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../constants/messages';
 import { AttentionCountBadge } from '../../components/AttentionCountBadge';
+import { EnvironmentModeIndicator } from '../../components/EnvironmentModeIndicator';
 import { deploySchedulesApi } from '../../api/deploySchedules';
 import { NavPendingBadge } from '../stats/NavPendingBadge';
 import { NegativeFeedbackNavBadge } from '../stats/NegativeFeedbackNavBadge';
@@ -15,6 +16,7 @@ import { NegativeFeedbackNavBadge } from '../stats/NegativeFeedbackNavBadge';
 export function TabNav({
   chatbotId,
   learningSummary,
+  environmentStatus,
   onBeforeNavigate,
 }: {
   chatbotId: string;
@@ -25,6 +27,8 @@ export function TabNav({
    * 액션 뒤 `StatsSubNav` 배지와 항상 같은 값을 보여주기 위함).
    */
   learningSummary: UnansweredQuestionSummary | null;
+  /** [No.40] "환경" 탭의 소형 점 표시용(§1.4) — `ChatbotDetailLayout`이 내려주는 공유 상태. */
+  environmentStatus: EnvironmentStatus | null;
   onBeforeNavigate?: () => boolean;
 }): JSX.Element {
   const tabClassName = ({ isActive }: { isActive: boolean }): string =>
@@ -118,6 +122,9 @@ export function TabNav({
         </NavLink>
         <NavLink to={`/chatbots/${chatbotId}/deploy-schedules`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabDeploySchedules} <AttentionCountBadge count={needsAttentionCount} />
+        </NavLink>
+        <NavLink to={`/chatbots/${chatbotId}/environment`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabEnvironment} <EnvironmentModeIndicator status={environmentStatus} />
         </NavLink>
       </div>
     </nav>

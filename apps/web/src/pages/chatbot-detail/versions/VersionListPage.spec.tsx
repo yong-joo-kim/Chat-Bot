@@ -304,4 +304,51 @@ describe('VersionListPage', () => {
     expect(await screen.findByText('이 버전을 대상으로 하는 예약이 있어 삭제할 수 없습니다. 먼저 예약을 취소해 주세요.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '예약 배포에서 보기' })).toHaveAttribute('href', '/chatbots/bot-1/deploy-schedules');
   });
+
+  // [신규 No.40] 환경(운영·스테이징·운영 이력) 배지·삭제 보호(`environment-separation-ui-spec.md` §4.10·§4.12).
+  it('environmentBadges가 있으면 버전 번호 옆에 환경 배지를 렌더한다(모드 켜짐)', async () => {
+    mockList.mockResolvedValue({ items: [makeItem({ environmentBadges: ['PROD', 'STAGING'] })], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    renderPage();
+
+    await screen.findByText('v14');
+    expect(screen.getByText('운영')).toBeInTheDocument();
+    expect(screen.getByText('스테이징')).toBeInTheDocument();
+  });
+
+  it('environmentBadges 필드 자체가 없으면(모드 꺼짐) 환경 배지를 렌더하지 않는다(응답 바이트 불변 원칙)', async () => {
+    mockList.mockResolvedValue({ items: [makeItem()], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    renderPage();
+
+    await screen.findByText('v14');
+    expect(screen.queryByText('운영')).not.toBeInTheDocument();
+    expect(screen.queryByText('스테이징')).not.toBeInTheDocument();
+  });
+
+  it('VERSION_REFERENCED_BY_ENVIRONMENT(409) — 삭제 시 환경이 참조 중이면 인라인 오류와 환경 탭 링크가 표시된다(§4.12)', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({ can: () => true });
+    mockList.mockResolvedValue({ items: [makeItem({ environmentBadges: ['PROD'] })], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    mockRemove.mockRejectedValue(new ApiError(409, '환경이 참조 중입니다.', 'VERSION_REFERENCED_BY_ENVIRONMENT'));
+    renderPage();
+
+    await screen.findByText('v14');
+    await user.click(screen.getByRole('button', { name: 'v14 관리' }));
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+    await user.click(await screen.findByRole('button', { name: '삭제' }));
+
+    expect(await screen.findByText('이 버전은 환경(운영·스테이징·운영 이력)이 참조하고 있어 삭제할 수 없습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '환경 탭에서 보기' })).toHaveAttribute('href', '/chatbots/bot-1/environment');
+  });
+
+  it('필터 셀렉트에 "환경" 그룹 옵션이 있다(트리거 필터, §4.10)', async () => {
+    mockList.mockResolvedValue({ items: [makeItem()], total: 1, page: 1, pageSize: 20 });
+    mockCurrent.mockResolvedValue(makeCurrent());
+    renderPage();
+
+    await screen.findByText('v14');
+    expect(screen.getByRole('option', { name: '환경' })).toBeInTheDocument();
+  });
 });

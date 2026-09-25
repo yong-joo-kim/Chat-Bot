@@ -84,6 +84,16 @@ model Chatbot {
   topics                  Topic[]
   /// [신규 No.44] 역참조만 — DB 컬럼 변화 0.
   messageFeedbacks        MessageFeedback[]
+  /// [신규 No.40] 운영 포인터(ADR-0039 §2) — 값 있음 = 환경 모드 켜짐, 공개 대화·상담 힌트가 이 버전을
+  /// 서빙한다. null = 모드 꺼짐(현행 라이브 서빙 — 바이트 동일). FK 없음(보호는 앱 레벨 409 —
+  /// DeploySchedule.targetVersionId 선례). ★ 쓰기 주체 = environment/core/environment-pointer.writer.ts
+  /// 1파일(정적 검사 E-1) · 조건부 갱신(CAS)만. access.resolve()가 이미 읽는 행이라 공개 경로 추가
+  /// 조회 0. 전환 시 @updatedAt이 갱신된다(수용 — §9.5).
+  prodVersionId           String?
+  /// [신규 No.40] 역참조만 — DB 컬럼 변화 0.
+  environment             ChatbotEnvironment?
+  environmentSwitchLogs   EnvironmentSwitchLog[]
+  embeddingTextVectors    EmbeddingTextVector[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -505,6 +515,9 @@ model ConversationLog {
   /// (record() 파라미터를 그대로 적재). 평가 뒤 큐 편입 판정이 버튼 턴을 로그만으로 거른다.
   /// 기존 행 = null(기록 없음). 쓰기 주체 = record() 1곳 · 적재 후 불변 · 인덱스 없음.
   inputKind       String?
+  /// [신규 No.40] 이 턴을 처리할 때의 운영 포인터(모드 켜짐) — 엔진·BLOCK·상담 턴 공통. null = 라이브
+  /// 서빙(모드 꺼짐). FK 없음 · 인덱스 없음(1차 = 적재만) · 쓰기 주체 record() 1곳 · 적재 후 불변 · 백필 없음.
+  servedVersionId String?
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
@@ -871,8 +884,17 @@ model TestRun {
 
   results TestRunResult[]
 
+  /// [신규 No.40] 실행 대상: DRAFT(기존 행 전부) | STAGING | PROD | VERSION. STAGING/PROD는 시작
+  /// 시점의 포인터를 해석해 저장한다.
+  targetKind        String   @default("DRAFT")
+  /// 대상 버전(DRAFT = null). FK 없음(버전 정리와 실행 보존 분리 — caseId 선례).
+  targetVersionId   String?
+  /// 표시용 스냅샷(버전이 정리돼도 "v44 대상" 표기 유지).
+  targetVersionNo   Int?
+
   @@index([chatbotId, setId, createdAt])
   @@index([chatbotId, status])
+  @@index([chatbotId, targetVersionId])
   @@map("test_runs")
 }
 
@@ -1020,6 +1042,84 @@ model ChatbotVersionSequence {
   lastVersionNo Int     @default(0)
 
   @@map("chatbot_version_sequences")
+}
+
+/// [신규 No.40] 챗봇별 환경 설정(1:1, ADR-0039 §2). 행은 처음 켤 때 만들고 끌 때 지우지 않는다(게이트
+/// 설정 보존). 모드 켜짐 판정은 Chatbot.prodVersionId 1곳이다 — 불변식: prodVersionId ≠ null ⇒
+/// 이 행 존재 ∧ enabledAt ≠ null. 쓰기 주체 = environment-pointer.writer.ts 1파일. 스냅샷·복사·토픽
+/// 분리 대상 아님. 영구삭제 시 동반 삭제.
+model ChatbotEnvironment {
+  chatbotId        String    @id
+  chatbot          Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 스테이징 포인터. FK 없음. 모드 꺼짐 = null.
+  stagingVersionId String?
+  enabledAt        DateTime?
+  /// 켠 사람 스냅샷(FK 없음 — AuditLog.actorId 규약).
+  enabledById      String?
+  enabledByEmail   String?
+  /// WARN | BLOCK (zod EnvironmentGateMode)
+  gateMode         String    @default("WARN")
+  /// 필수 TC 세트(FK 없음 — 세트 삭제는 정당한 동작, BLOCK이면 "게이트 설정 오류"로 전환 거부).
+  gateTestSetId    String?
+  /// 최소 합격률(%, 0~100)
+  gateMinPassRate  Int       @default(95)
+  /// 결과 유효 기간(시간, 1~168)
+  gateValidHours   Int       @default(24)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("chatbot_environments")
+}
+
+/// [신규 No.40] 환경 포인터 전환 이력(append-only, ADR-0039 §5). 삭제·갱신 코드 0건(영구삭제 동반
+/// 삭제만). ★ 자산 본문·사용자 발화 컬럼 없음. reason은 API 응답에만(서버 로그 금지).
+model EnvironmentSwitchLog {
+  id                  String    @id @default(uuid())
+  chatbotId           String
+  chatbot             Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// STAGING | PROD
+  environment         String
+  /// INIT | PROMOTE | IMMEDIATE | SCHEDULED | ROLLBACK | DISABLE
+  method              String
+  fromVersionId       String?
+  fromVersionNo       Int?
+  /// DISABLE = null(포인터 제거)
+  toVersionId         String?
+  toVersionNo         Int?
+  /// 대상 버전 createdAt(캡처 시각) 비정규화 — 학습 큐 "운영 미반영" 판정 입력(조인 없이).
+  toVersionCapturedAt DateTime?
+  /// SCHEDULED일 때 예약 id(FK 없음)
+  deployScheduleId    String?
+  /// DISABLE일 때 KEEP_PROD | PROMOTE_DRAFT
+  disableMode         String?
+  actorId             String?
+  actorEmail          String?
+  /// 사유 메모(≤200 코드 포인트, 제어문자 금지 — MemoSchema 재사용)
+  reason              String?
+  createdAt           DateTime  @default(now())
+
+  @@index([chatbotId, environment, createdAt])
+  @@map("environment_switch_logs")
+}
+
+/// [신규 No.40] 문장 해시 주소 벡터 보존 저장소(ADR-0039 §4). 환경 포인터·운영 이력·전환 예약이
+/// 참조하는 버전의 질문 측 문장 벡터를 "초안 편집·재색인과 무관하게" 보존한다. EmbeddingVector
+/// (슬롯 테이블)와 색인기는 무변경. ★ 원문 텍스트 컬럼 없음 · 모드 꺼진 챗봇 = 0행 · 쓰기 주체 =
+/// embedding-text-vector.service.ts 1파일.
+model EmbeddingTextVector {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  modelId   String
+  /// normalizeText(원문)의 sha256 — EmbeddingVector.textHash와 같은 함수(textHashOf).
+  textHash  String
+  dimension Int
+  /// L2 정규화 Float32Array base64(EmbeddingVector.vector와 같은 코덱).
+  vector    String
+  createdAt DateTime @default(now())
+
+  @@unique([chatbotId, modelId, textHash])
+  @@map("embedding_text_vectors")
 }
 
 /// [신규 2026-09-23 No.28 운영 예약 배포] 1회성 운영 예약 배포(ADR-0032). 1행 = 동작 1개 = 실행 최대

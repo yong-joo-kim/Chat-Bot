@@ -43,7 +43,7 @@ export class DeploySchedulePreviewService {
         status: { in: ACTIVE },
         ...(dto.excludeScheduleId ? { id: { not: dto.excludeScheduleId } } : {}),
       },
-      select: { id: true, action: true, status: true, scheduledAt: true, targetContentHash: true },
+      select: { id: true, action: true, status: true, scheduledAt: true, targetContentHash: true, targetVersionId: true },
     });
 
     const timeViolations = checkScheduleTimeRules({
@@ -66,6 +66,8 @@ export class DeploySchedulePreviewService {
       params: params as never,
       now,
       activeRestoreSiblings: activeRows.filter((r) => r.action === 'RESTORE_VERSION').map((r) => ({ id: r.id, scheduledAt: r.scheduledAt, targetContentHash: r.targetContentHash })),
+      // [신규 No.40 — §11.2] 전환 체인 기준 판정용.
+      activeSwitchSiblings: activeRows.filter((r) => r.action === 'SWITCH_PROD_VERSION').map((r) => ({ id: r.id, scheduledAt: r.scheduledAt, targetVersionId: r.targetVersionId })),
       earlierActivePublishExists: activeRows.some((r) => r.action === 'PUBLISH' && r.scheduledAt.getTime() < dto.scheduledAt.getTime()),
       activeSiblingActions: activeRows.map((r) => r.action as never),
     });
@@ -90,6 +92,10 @@ export class DeploySchedulePreviewService {
       restore: actionPreview.restore,
       publish: actionPreview.publish,
       setWebChannel: actionPreview.setWebChannel,
+      // [버그수정 No.40 — 2026-09-25 프론트 계약 보강] 실행기가 계산한 switchProd가 이 지점에서
+      // 누락돼 있었다 — HTTP 미리보기 응답에 한 번도 실리지 않았다(콘솔이 체인 기준
+      // expectedProdVersionId를 받을 방법이 없었던 근본 원인).
+      switchProd: actionPreview.switchProd,
     };
   }
 }

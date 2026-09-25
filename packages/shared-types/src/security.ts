@@ -44,6 +44,9 @@ export const Permission = z.enum([
   'audit:read',
   'cs:read',
   'cs:write',
+  // [신규 2026-09-25 환경분리 No.40] `chatbot:deploy`(17→18) — 운영 전환·롤백·켜기/끄기·예약 전환·
+  // 게이트 설정 전용 권한(ADMIN 기본). 스테이징 승격은 기존 dialogue:write+chatbot:write로 충분하다.
+  'chatbot:deploy',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -85,6 +88,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
     'audit:read',
     'cs:read',
     'cs:write',
+    // [신규 No.40] ADMIN에만 부여한다.
+    'chatbot:deploy',
   ],
 };
 

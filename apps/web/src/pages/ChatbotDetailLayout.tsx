@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Outlet, useOutletContext, useParams } from 'react-router-dom';
-import type { Chatbot, ChatbotGroupWithCount, UnansweredQuestionSummary } from '@chat-bot/shared-types';
+import type { Chatbot, ChatbotGroupWithCount, EnvironmentStatus, UnansweredQuestionSummary } from '@chat-bot/shared-types';
 import { chatbotsApi } from '../api/chatbots';
 import { groupsApi } from '../api/groups';
 import { learningApi } from '../api/learning';
+import { environmentApi } from '../api/environment';
 import { ApiError } from '../api/client';
 import { ConfirmDialog } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -32,6 +33,14 @@ export interface ChatbotDetailContext {
   learningSummary: UnansweredQuestionSummary | null;
   /** 반영/무시/되돌리기/일괄처리 등 변경 액션 뒤 최신값을 다시 받아오기 위해 하위 화면이 호출한다. */
   refreshLearningSummary: () => void;
+  /**
+   * [No.40] 환경 분리 현황 — `learningSummary`와 동일한 관행(챗봇 상세 마운트당 1회 조회, 폴링 없음,
+   * `useLatestRequest`로 경합 방지). 헤더 배지·TabNav 표시·EN1·환경 밖 자산 배너 4곳이 공유한다
+   * (`environment-separation-ui-spec.md` §4.2/§4.17/§4.15/§9).
+   */
+  environmentStatus: EnvironmentStatus | null;
+  /** 켜기/끄기/승격/전환/롤백/게이트 저장 등 변경 액션 뒤 하위 화면이 호출한다. */
+  refreshEnvironmentStatus: () => void;
 }
 
 export function useChatbotDetailContext(): ChatbotDetailContext {
@@ -94,6 +103,36 @@ export function ChatbotDetailLayout(): JSX.Element {
   useEffect(() => {
     refreshLearningSummary();
   }, [refreshLearningSummary]);
+
+  // [No.40] 환경 분리 현황 — 챗봇 상세 마운트당 1회 조회, chatbotId 변경 시 재조회. `dialogue:read`가
+  // 없으면 호출하지 않는다(EnvironmentController가 `chatbot:read`+`dialogue:read`를 요구한다).
+  const [environmentStatus, setEnvironmentStatus] = useState<EnvironmentStatus | null>(null);
+  const environmentStatusGuard = useLatestRequest();
+
+  const refreshEnvironmentStatus = useCallback(() => {
+    if (!chatbotId || !canReadDialogue) {
+      setEnvironmentStatus(null);
+      return;
+    }
+    const reqId = environmentStatusGuard.next();
+    environmentApi
+      .getStatus(chatbotId)
+      .then((res) => {
+        if (environmentStatusGuard.isStale(reqId)) return;
+        setEnvironmentStatus(res);
+      })
+      .catch(() => {
+        // 배지·배너는 보조 정보다 — 실패해도 화면 전체를 막지 않는다(EN1 본체는 자체적으로 재조회한다).
+      });
+  }, [chatbotId, canReadDialogue, environmentStatusGuard]);
+
+  useEffect(() => {
+    setEnvironmentStatus(null);
+  }, [chatbotId]);
+
+  useEffect(() => {
+    refreshEnvironmentStatus();
+  }, [refreshEnvironmentStatus]);
 
   const load = useCallback(async () => {
     if (!chatbotId) return;
@@ -166,7 +205,7 @@ export function ChatbotDetailLayout(): JSX.Element {
 
   return (
     <div className="chatbot-detail-shell">
-      <ChatbotDetailHeader chatbot={chatbot} groupName={groupName} onBeforeNavigate={confirmNavigation} />
+      <ChatbotDetailHeader chatbot={chatbot} groupName={groupName} onBeforeNavigate={confirmNavigation} environmentStatus={environmentStatus} />
       <StatusTransitionControls
         status={chatbot.status}
         onActivate={() => handleStatusChange('ACTIVE')}
@@ -194,11 +233,24 @@ export function ChatbotDetailLayout(): JSX.Element {
           initialAction="PUBLISH"
         />
       )}
-      <TabNav chatbotId={chatbot.id} learningSummary={learningSummary} onBeforeNavigate={confirmNavigation} />
+      <TabNav
+        chatbotId={chatbot.id}
+        learningSummary={learningSummary}
+        environmentStatus={environmentStatus}
+        onBeforeNavigate={confirmNavigation}
+      />
       <div className="tab-content">
         <Outlet
           context={
-            { chatbot, reload: load, setUnsavedGuard, learningSummary, refreshLearningSummary } satisfies ChatbotDetailContext
+            {
+              chatbot,
+              reload: load,
+              setUnsavedGuard,
+              learningSummary,
+              refreshLearningSummary,
+              environmentStatus,
+              refreshEnvironmentStatus,
+            } satisfies ChatbotDetailContext
           }
         />
       </div>

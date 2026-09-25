@@ -230,3 +230,14 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 
 - **`@Public()` 7 → 8** — 답변 평가(`PUT …/messages/:messageId/feedback`). 인증 대상이 아니라 **3요소 결합 검증**(챗봇·세션·서버 발급 `messageId` + `feedbackOffered`)·단일 404·평가 전용 버킷의 보상 통제다. 개수 고정 테스트는 무력화하지 않고 8로 갱신한다(숫자 단언 5파일 + 제목 1파일 — `feedback-loop-설계.md` §21.2).
 - 스위치 = `channel:write` · 부정 평가 항목 조회 `dialogue:read` / 직접 수정 완료 `dialogue:write`(바꾸는 자원 = 학습 큐) · 만족도 통계 `chatbot:read`(AGENT 포함 — 통계와 같은 도메인).
+
+
+---
+
+## 갱신 (2026-09-25 — No.40 환경 분리: 권한 17 → 18종 `chatbot:deploy` · `@Public()` 8 유지)
+
+환경 분리/버전관리(No.40, **ADR-0039 §8**)는 **신규 권한 1종**을 만든다(PM 확정 P-4 (2)). 역할 4종 · fail-closed 판정 순서 · `@Public()` 8곳은 불변이다.
+
+- **`chatbot:deploy`**(ADMIN 전용) — 운영 전환·롤백·운영 전환 예약·환경 모드 켜기/끄기·게이트 설정. "편집자 = 배포자"를 분리하는 최소 단위이며, 역할 신설("배포 관리자")은 매트릭스 전체 파급 때문에 기각했다. 명명은 기존 챗봇 도메인(`chatbot:*`)을 따른다.
+- 스테이징 승격 = 기존 `dialogue:write` AND `chatbot:write`(편집자 가능) · 현황·미리보기 = `chatbot:read` AND `dialogue:read` · 이력 = `chatbot:read` · 긴급 차단 = 기존 `channel:write`(WEB 채널 닫기).
+- 예약 전환의 실행 직전 재검증은 `chatbot:deploy`를 본다. 개수 고정 테스트 2파일(`permission-matrix.spec.ts`·`topic-sealing.spec.ts` T-10)은 무력화하지 않고 18로 갱신한다.

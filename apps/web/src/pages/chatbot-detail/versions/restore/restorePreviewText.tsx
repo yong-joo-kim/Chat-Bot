@@ -97,6 +97,9 @@ export function warningText(warning: RestoreWarning): string {
       return msg.warnings.TOPIC_MISSING(warning.count);
     case 'TOPIC_EXPOSURE_CHANGE':
       return msg.warnings.TOPIC_EXPOSURE_CHANGE(warning.exposed, warning.hidden);
+    // [신규 No.40] 환경 분리 — 모드 켜짐일 때만. `RestoreDialog`가 이 경고를 강조 배너로 따로 렌더한다(§4.11).
+    case 'ENV_DRAFT_ONLY':
+      return msg.envDraftOnlyBanner(warning.prodVersionNo, warning.stagingVersionNo);
     default:
       return '';
   }

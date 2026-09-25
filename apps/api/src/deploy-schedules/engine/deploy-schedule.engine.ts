@@ -215,7 +215,11 @@ export class DeploySchedulesEngine implements OnApplicationBootstrap, OnModuleDe
       let summary = outcome.summary;
       let testRunId: string | undefined;
       if (outcome.kind === 'APPLIED' && row.postRunTestSetId && isPostRunTestApplicable(action)) {
-        const postRunTest = await this.postRunTestStarter.start(row.chatbotId, row.postRunTestSetId, actor.role);
+        // [신규 No.40 — §11.3 ⑥] SWITCH_PROD_VERSION 성공 직후는 새 운영 버전을 대상으로 한다
+        // (params.targetVersionId = 방금 전환된 버전). 그 외 동작(RESTORE_VERSION·PUBLISH)은
+        // 기존처럼 대상 생략(초안) — 계약 불변.
+        const target = action === 'SWITCH_PROD_VERSION' ? ({ kind: 'VERSION' as const, versionId: (paramsResult.data as { targetVersionId: string }).targetVersionId }) : undefined;
+        const postRunTest = await this.postRunTestStarter.start(row.chatbotId, row.postRunTestSetId, actor.role, target);
         testRunId = postRunTest.testRunId;
         summary = { ...summary, postRunTest } as typeof summary;
       }

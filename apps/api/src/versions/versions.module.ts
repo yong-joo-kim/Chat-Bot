@@ -12,7 +12,7 @@ import { VersionDiffService } from './diff/version-diff.service';
 import { VersionRestoreService } from './restore/version-restore.service';
 import { VersionRestoreApplier } from './restore/version-restore.applier';
 import { RestoreWarningsService } from './restore/restore-warnings.service';
-import { RestoreLockRegistry } from './restore/restore-lock.registry';
+import { RestoreLockModule } from './restore/restore-lock.module';
 
 /**
  * 컨트롤러·조회·차이·복원(§2.1). `VersionCaptureModule`을 import한다(캡처는 재사용, 대화 자산 쓰기는
@@ -21,9 +21,9 @@ import { RestoreLockRegistry } from './restore/restore-lock.registry';
  * import하지 않는다**(§2.2 봉인 — §16 V-5).
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, AnswerSettingsModule, EmbeddingModule, BannedWordsModule, VersionCaptureModule, VersionReadModule],
+  imports: [ChatbotsModule, DialogueCommonModule, AnswerSettingsModule, EmbeddingModule, BannedWordsModule, VersionCaptureModule, VersionReadModule, RestoreLockModule],
   controllers: [VersionsController],
-  providers: [VersionService, VersionDiffService, VersionRestoreService, VersionRestoreApplier, RestoreWarningsService, RestoreLockRegistry],
+  providers: [VersionService, VersionDiffService, VersionRestoreService, VersionRestoreApplier, RestoreWarningsService],
   // [신규 2026-09-23 No.28] 운영 예약 배포 모듈이 재사용한다(§2.2). applier는 export하지 않는다
   // (구조적 봉인 — §9.4 #1, §16 D-15).
   exports: [VersionRestoreService, VersionDiffService],

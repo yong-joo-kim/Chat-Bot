@@ -397,6 +397,11 @@ export class ChatbotsService {
       // 운영 예약 배포(No.28) 그룹 추가(scheduled-deploy-설계.md §4.6, AC-D5-3) — 동반 삭제 대상이다
       // (사전검사 409 대상이 아니다). 13 → 14테이블. `chatbot.delete` 직전.
       await tx.deploySchedule.deleteMany({ where: { chatbotId: id } });
+      // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §3.1) — 동반 삭제 대상이다
+      // (사전검사 409 대상이 아니다). 16 → 19테이블. `chatbot.delete` 직전.
+      await tx.embeddingTextVector.deleteMany({ where: { chatbotId: id } });
+      await tx.environmentSwitchLog.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotEnvironment.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

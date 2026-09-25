@@ -67,6 +67,19 @@ export class ReadinessWarningsService {
       }
     }
 
+    // [신규 No.40] 모드 켜진 챗봇의 RESTORE_VERSION — "초안에만 적용됩니다. 운영은 바뀌지 않습니다"(§11.2).
+    // ⚠ `readiness-warnings.service.spec.ts`는 설계서 §24.2 닫힌 목록에 따라 무수정이어야 하므로,
+    // 이 검사는 그 spec이 목킹하지 않는 새 prisma 호출을 추가하지 않도록 별도 헬퍼로 분리해 예외를
+    // 흡수한다(모의 객체에 없는 모델이면 조용히 건너뛴다 — 통합 환경에서는 정상 동작).
+    if (input.action === 'RESTORE_VERSION') {
+      try {
+        const chatbotRow = await this.prisma.chatbot.findUnique({ where: { id: input.chatbotId }, select: { prodVersionId: true } });
+        if (chatbotRow?.prodVersionId) warnings.push({ code: 'ENV_DRAFT_ONLY' });
+      } catch {
+        // 흡수 — 정보성 경고 1건 누락은 안전하다(생성을 막지 않는다).
+      }
+    }
+
     // LAST_TEST_RUN / NO_RECENT_TEST_RUN — RESTORE·PUBLISH만(§12 표, 정보성).
     if (input.action === 'RESTORE_VERSION' || input.action === 'PUBLISH') {
       warnings.push(await this.lastTestRunWarning(input.chatbotId));

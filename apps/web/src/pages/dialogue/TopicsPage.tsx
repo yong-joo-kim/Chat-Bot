@@ -9,6 +9,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { MESSAGES } from '../../constants/messages';
 import { topicsApi } from '../../api/topics';
 import { ApiError } from '../../api/client';
+import { EnvironmentScopeNotice } from '../../components/EnvironmentScopeNotice';
 import { TopicStatusBadge } from './components/topicBadges';
 import { TopicForm } from './components/TopicForm';
 import { DeleteTopicConfirmDialog } from './components/DeleteTopicConfirmDialog';
@@ -24,7 +25,7 @@ type Dialog =
 
 /** TP0 — 토픽 관리(`topic-system-ui-spec.md` §3.1, `DialogueShell` 서브내비 8번째). */
 export function TopicsPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const msg = MESSAGES.topics;
@@ -89,6 +90,7 @@ export function TopicsPage(): JSX.Element {
 
   return (
     <div className="topics-page">
+      <EnvironmentScopeNotice visible={environmentStatus?.enabled === true} variant="topic" />
       <div className="dialogue-toolbar">
         <h2>
           {msg.pageTitle} {data && <span className="topics-limit-label">{msg.limitLabel(data.items.length, data.limit)}</span>}

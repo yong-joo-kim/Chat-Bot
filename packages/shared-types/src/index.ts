@@ -28,3 +28,5 @@ export * from './api-mapping';
 export * from './legacy-api';
 export * from './handoff';
 export * from './feedback';
+export * from './bundle-target';
+export * from './environment';

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ChatbotVersionDetail, ChatbotVersionListItem, VersionAuditCount } from '@chat-bot/shared-types';
 import { VERSION_LIMITS } from '@chat-bot/shared-types';
 import { VersionTriggerBadge } from '../../../components/VersionTriggerBadge';
+import { EnvironmentBadgeList } from '../../../components/EnvironmentBadge';
 import { KebabMenu } from '../../../components/KebabMenu';
 import { ConfirmDialog } from '../../../components/Modal';
 import { formatDateTime } from '../../../lib/date';
@@ -64,6 +65,8 @@ export function VersionRow({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
   const [deleteReferencedBySchedule, setDeleteReferencedBySchedule] = useState(false);
+  // [신규 No.40] 환경(운영·스테이징·운영 이력)이 참조하는 버전은 409 VERSION_REFERENCED_BY_ENVIRONMENT.
+  const [deleteReferencedByEnvironment, setDeleteReferencedByEnvironment] = useState(false);
 
   const [detail, setDetail] = useState<ChatbotVersionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -138,6 +141,7 @@ export function VersionRow({
   async function handleDeleteConfirm(): Promise<void> {
     setDeleteError(undefined);
     setDeleteReferencedBySchedule(false);
+    setDeleteReferencedByEnvironment(false);
     try {
       await versionsApi.remove(chatbotId, item.id);
       setDeleteConfirmOpen(false);
@@ -149,6 +153,10 @@ export function VersionRow({
         // No.28: 이 버전을 대상으로 하는 예약이 있으면 삭제할 수 없다(`scheduled-deploy-ui-spec.md` §5.7).
         setDeleteError(msg.deleteReferencedByScheduleError);
         setDeleteReferencedBySchedule(true);
+      } else if (e instanceof ApiError && e.code === 'VERSION_REFERENCED_BY_ENVIRONMENT') {
+        // [신규 No.40] 환경(운영·스테이징·운영 이력)이 참조하는 버전(§4.12).
+        setDeleteError(msg.deleteReferencedByEnvironmentError);
+        setDeleteReferencedByEnvironment(true);
       } else {
         setDeleteError(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
         setDeleteConfirmOpen(false);
@@ -163,7 +171,7 @@ export function VersionRow({
         <button type="button" className="version-row-toggle" aria-expanded={expanded} onClick={() => void handleToggle()}>
           <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>{' '}
           <VersionTriggerBadge trigger={item.trigger} triggerContext={item.triggerContext} restoredFromVersionNo={item.restoredFromVersionNo} />{' '}
-          <span className="version-row-no">v{item.versionNo}</span>{' '}
+          <span className="version-row-no">v{item.versionNo}</span> <EnvironmentBadgeList badges={item.environmentBadges} />{' '}
           <span className="version-row-timestamp">
             {formatDateTime(item.createdAt)} · {item.createdByEmail ?? '—'}
           </span>
@@ -309,6 +317,12 @@ export function VersionRow({
                 <>
                   {' '}
                   <Link to={`/chatbots/${chatbotId}/deploy-schedules`}>{msg.deleteReferencedByScheduleLink}</Link>
+                </>
+              )}
+              {deleteReferencedByEnvironment && (
+                <>
+                  {' '}
+                  <Link to={`/chatbots/${chatbotId}/environment`}>{msg.deleteReferencedByEnvironmentLink}</Link>
                 </>
               )}
             </p>

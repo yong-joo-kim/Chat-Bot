@@ -20,11 +20,14 @@ export function ActionPickerStep({ options, onSelect }: { options: ActionPickerO
     RESTORE_VERSION: { title: msg.RESTORE_VERSION, desc: msg.RESTORE_VERSION_DESC },
     PUBLISH: { title: msg.PUBLISH, desc: msg.PUBLISH_DESC },
     SET_WEB_CHANNEL: { title: msg.SET_WEB_CHANNEL, desc: msg.SET_WEB_CHANNEL_DESC },
+    // [신규 No.40] 환경 분리 — 운영 버전 전환 예약 카드.
+    SWITCH_PROD_VERSION: { title: msg.SWITCH_PROD_VERSION, desc: msg.SWITCH_PROD_VERSION_DESC },
   };
   const disabledHints: Record<DeployScheduleAction, string> = {
     RESTORE_VERSION: msg.RESTORE_VERSION_DISABLED_HINT,
     PUBLISH: msg.PUBLISH_DISABLED_HINT,
     SET_WEB_CHANNEL: '',
+    SWITCH_PROD_VERSION: msg.SWITCH_PROD_VERSION_DISABLED_HINT_OFF,
   };
 
   function handleKeyDown(e: React.KeyboardEvent, index: number): void {

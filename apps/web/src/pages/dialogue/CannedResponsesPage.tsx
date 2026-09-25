@@ -11,6 +11,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorState } from '../../components/ErrorState';
 import { Modal, ConfirmDialog } from '../../components/Modal';
 import { InlineFieldError } from '../../components/InlineFieldError';
+import { EnvironmentScopeNotice } from '../../components/EnvironmentScopeNotice';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { MESSAGES } from '../../constants/messages';
 
@@ -26,7 +27,7 @@ const EMPTY_FORM: FormState = { title: '', body: '', category: '', shortcut: '',
 
 /** CR1 — 자주 쓰는 문장 관리(hybrid-cs-ui-spec.md §3.6, `DialogueShell` 서브내비 7번째). */
 export function CannedResponsesPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const msg = MESSAGES.cannedResponses;
@@ -139,6 +140,7 @@ export function CannedResponsesPage(): JSX.Element {
 
   return (
     <div className="canned-responses-page">
+      <EnvironmentScopeNotice visible={environmentStatus?.enabled === true} />
       <div className="dialogue-toolbar">
         <h2>{msg.pageTitle}</h2>
         {canWrite && (

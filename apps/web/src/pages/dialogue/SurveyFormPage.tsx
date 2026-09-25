@@ -17,6 +17,7 @@ import {
   displayDateInputToActiveFromIso,
   displayDateInputToActiveToIso,
 } from '../../lib/surveyDisplay';
+import { EnvironmentScopeNotice } from '../../components/EnvironmentScopeNotice';
 import { SurveyTabs } from './components/survey/SurveyTabs';
 import { SurveyStructureLockBanner, SurveyTimeoutRetroactiveHint } from './components/survey/SurveyFormBanners';
 import { SurveyQuestionListEditor } from './components/survey/SurveyQuestionEditors';
@@ -25,7 +26,7 @@ import { questionToDraft, draftToQuestionInput, type SurveyQuestionDraft } from 
 
 /** SV2 — 설문 편집기(생성/수정, ui-spec §3.2). */
 export function SurveyFormPage(): JSX.Element {
-  const { chatbot, setUnsavedGuard } = useChatbotDetailContext();
+  const { chatbot, setUnsavedGuard, environmentStatus } = useChatbotDetailContext();
   const { surveyId } = useParams<{ surveyId: string }>();
   const navigate = useNavigate();
   const { can } = useAuth();
@@ -187,6 +188,7 @@ export function SurveyFormPage(): JSX.Element {
   return (
     <div className="survey-form-layout">
       <div>
+        <EnvironmentScopeNotice visible={environmentStatus?.enabled === true} />
         <Link to={`/chatbots/${chatbot.id}/dialogue/surveys`} className="detail-back-link">
           {MESSAGES.common.backToList}
         </Link>

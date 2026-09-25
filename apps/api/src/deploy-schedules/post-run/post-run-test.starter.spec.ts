@@ -31,6 +31,29 @@ describe('PostRunTestStarter(§11 G3)', () => {
     expect(testRunService.start).toHaveBeenCalledWith('bot-1', 'set-1', { overlaySource: 'NONE', useRag: false });
   });
 
+  it('[신규 No.40 — §11.3 ⑥] target을 넘기면 TestRunService.start()에 그대로 전달한다(SWITCH_PROD_VERSION 성공 직후 새 운영 버전 대상)', async () => {
+    const { prisma, testRunService } = makeDeps();
+    const starter = new PostRunTestStarter(prisma as never, testRunService as never);
+
+    const result = await starter.start('bot-1', 'set-1', 'EDITOR', { kind: 'VERSION', versionId: 'v-9' });
+
+    expect(result).toEqual({ status: 'STARTED', testRunId: 'run-1' });
+    expect(testRunService.start).toHaveBeenCalledWith('bot-1', 'set-1', {
+      overlaySource: 'NONE',
+      useRag: false,
+      target: { kind: 'VERSION', versionId: 'v-9' },
+    });
+  });
+
+  it('target을 생략하면(RESTORE_VERSION·PUBLISH) 기존처럼 target 필드 없이 호출한다(응답 바이트 불변)', async () => {
+    const { prisma, testRunService } = makeDeps();
+    const starter = new PostRunTestStarter(prisma as never, testRunService as never);
+
+    await starter.start('bot-1', 'set-1', 'EDITOR');
+
+    expect(testRunService.start).toHaveBeenCalledWith('bot-1', 'set-1', { overlaySource: 'NONE', useRag: false });
+  });
+
   it('예약자 역할이 simulation:write를 잃었으면 SKIPPED(CREATOR_NOT_AUTHORIZED)다(TestRunService를 호출하지 않는다)', async () => {
     const { prisma, testRunService } = makeDeps();
     const starter = new PostRunTestStarter(prisma as never, testRunService as never);

@@ -4,10 +4,12 @@ import { buildDialogueIndex, judgeBand, mergeOverlay, normalizeText, resolveTurn
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import {
   isApiConditionV2,
+  type ChatbotAnswerSetting,
   type DialogOutput,
   type DialogOutputType,
   type DialogueBundle,
   type DialogueOverlay,
+  type ResolvedBundleTarget,
   type TestCaseExpectedKind,
   type TestCaseResultKind,
   type TestRunOverlaySource,
@@ -25,6 +27,10 @@ import { VectorCacheService } from '../../embedding/vector-cache.service';
 import type { CachedVectorEntry } from '../../embedding/vector-cache.service';
 import { AnswerSettingsCacheService } from '../../answer-settings/answer-settings-cache.service';
 import { assembleSemanticInput } from '../../embedding/lib/assemble-semantic-input';
+import { textHashOf } from '../../embedding/lib/text-hash';
+import { VersionBundleService } from '../../environment/serving/version-bundle.service';
+import { VersionVectorResolver } from '../../embedding/version-vectors/version-vector.resolver';
+import type { SemanticMatchVectorSource } from '../../embedding/semantic-match.service';
 import { assertOverlaySize, toBundleOverlayPatch } from '../../simulation/lib/overlay-convert';
 import { serializeOutputsForDiff } from '../../common/lib/output-diff';
 import { detect, decide } from '../../banned-words/lib/banned-word-filter';
@@ -51,6 +57,8 @@ export interface TestRunExecutionParams {
   overlay?: DialogueOverlay;
   suggestionIds?: string[];
   useRag: boolean;
+  /** [신규 No.40 — §12.2] 시작 시점에 해석·고정된 대상(미지정 = 초안, 기존과 동일). */
+  target?: { kind: 'STAGING' | 'PROD' | 'VERSION'; versionId: string };
 }
 
 interface SideOutcome {
@@ -117,6 +125,9 @@ export class TestRunExecutor {
     private readonly cancelRegistry: TestRunCancelRegistry,
     private readonly config: ConfigService,
     private readonly apiConnectionCatalog: ApiConnectionCatalogService,
+    // [신규 No.40 — §12.2, 생성자 끝] 대상 선택 — 초안 경로 호출 순서·인자는 불변이다.
+    private readonly versionBundles: VersionBundleService,
+    private readonly versionVectorResolver: VersionVectorResolver,
   ) {}
 
   /** [No.26] 번들의 v2 API_CONDITION이 참조하는 연결 id를 모은다(목 원천 로드 대상 산출). */
@@ -141,9 +152,41 @@ export class TestRunExecutor {
 
     await this.prisma.testRun.update({ where: { id: runId }, data: { totalCount: cases.length } });
 
-    const { bundle: bundleA, index: indexA } = await this.bundleService.getCached(chatbotId);
+    // [신규 No.40 — §12.2] 대상이 있으면(비초안) 버전 번들에서 A측을 조립한다. 초안 경로는 기존
+    // 두 호출(getCached·answerSettingsCache)을 그대로 한다.
+    let bundleA: DialogueBundle;
+    let indexA: DialogueIndex;
+    let settings: ChatbotAnswerSetting;
+    let versionSemanticSource: SemanticMatchVectorSource | undefined;
+    let resolvedTarget: (ResolvedBundleTarget & { contentHash: string }) | undefined;
+    if (params.target) {
+      let s;
+      try {
+        s = await this.versionBundles.get(chatbotId, params.target.versionId, { topics: 'ACTIVE_ONLY' });
+      } catch {
+        // [신규 No.40 — §7.6] 버전 읽기 실패 — 초안으로 대체하지 않는다.
+        return { status: 'FAILED', failureReason: 'TARGET_VERSION_UNREADABLE' };
+      }
+      bundleA = s.bundle;
+      indexA = s.index;
+      settings = s.settings;
+      versionSemanticSource = s.semanticSource;
+      const semanticMissing = s.slots.length - (s.semanticSource?.entries.length ?? 0);
+      resolvedTarget = {
+        kind: params.target.kind,
+        versionId: s.version.id,
+        versionNo: s.version.versionNo,
+        legacyTiebreak: s.version.legacyTiebreak,
+        semanticMissing: Math.max(semanticMissing, 0),
+        contentHash: s.version.contentHash,
+      };
+    } else {
+      const r = await this.bundleService.getCached(chatbotId);
+      bundleA = r.bundle;
+      indexA = r.index;
+      settings = await this.answerSettingsCache.get(chatbotId);
+    }
     const liveIdsA = buildLiveIds(bundleA);
-    const settings = await this.answerSettingsCache.get(chatbotId);
     const thresholds = { accept: settings.acceptThreshold, low: settings.lowThreshold, margin: settings.marginThreshold };
 
     let bundleB: DialogueBundle | undefined;
@@ -183,6 +226,10 @@ export class TestRunExecutor {
       if (embeddingMap === null) {
         degradedMode = true;
         this.logger.warn(`실행 ${runId} — 배치 임베딩 실패로 저하 모드(규칙 매칭만)로 전환합니다.`);
+      } else if (params.target) {
+        // [신규 No.40 — §8.3] 버전 대상 — 리졸버가 이미 조립한 "보존 ∪ 초안 같은 해시" 벡터를 쓴다.
+        entriesA = (versionSemanticSource?.entries ?? []).map((e) => ({ ...e, textHash: '' }));
+        entriesB = entriesA;
       } else {
         const cached = await this.vectorCache.get(chatbotId, provider.modelId);
         entriesA = cached?.entries ?? [];
@@ -198,6 +245,8 @@ export class TestRunExecutor {
               ownerId: t.intentId,
               slotIndex: t.slotIndex,
               vector: vectors[i],
+              // [신규 No.40] 오버레이 임시 항목 — 보존 저장소 대상이 아니므로 해시는 조립에만 쓰인다.
+              textHash: textHashOf(t.text),
             }));
             entriesB = [...entriesA, ...overlayEntries];
           }
@@ -301,6 +350,7 @@ export class TestRunExecutor {
       degradedMode,
       useRag,
       overlaySource,
+      target: resolvedTarget,
     });
 
     await this.prisma.testRun.update({

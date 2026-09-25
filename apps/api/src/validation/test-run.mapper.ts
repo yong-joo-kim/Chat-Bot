@@ -24,6 +24,12 @@ function parseJson<T>(json: string | null | undefined): T | null {
 export function toTestRunDto(row: PrismaTestRun): TestRun {
   const elapsedMs =
     row.startedAt && row.finishedAt ? Math.max(0, row.finishedAt.getTime() - row.startedAt.getTime()) : null;
+  // [신규 No.40 — §12.2] 비초안 실행만 채운다. legacyTiebreak/semanticMissing의 권위 있는 값은
+  // envFingerprint.target에 있다 — 여기는 목록·상세 표시용 요약이다.
+  const target =
+    row.targetKind !== 'DRAFT' && row.targetVersionId && row.targetVersionNo
+      ? { kind: row.targetKind as 'STAGING' | 'PROD' | 'VERSION', versionId: row.targetVersionId, versionNo: row.targetVersionNo, legacyTiebreak: false, semanticMissing: 0 }
+      : undefined;
   return {
     id: row.id,
     chatbotId: row.chatbotId,
@@ -45,6 +51,7 @@ export function toTestRunDto(row: PrismaTestRun): TestRun {
     startedAt: row.startedAt ?? null,
     finishedAt: row.finishedAt ?? null,
     createdAt: row.createdAt,
+    ...(target ? { target } : {}),
   };
 }
 

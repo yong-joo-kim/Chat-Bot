@@ -43,6 +43,7 @@ import { VersionDiffPage } from './pages/chatbot-detail/versions/diff/VersionDif
 import { VersionContentPage } from './pages/chatbot-detail/versions/content/VersionContentPage';
 import { DeployScheduleListPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleListPage';
 import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedules/DeployScheduleDetailPage';
+import { EnvironmentTab } from './pages/chatbot-detail/environment/EnvironmentTab';
 import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
@@ -118,6 +119,7 @@ export function App(): JSX.Element {
             <Route path="simulator" element={<SimulatorTab />} />
             <Route path="channels" element={<ChannelsTab />} />
             <Route path="deploy-schedules" element={<DeployScheduleListPage />} />
+            <Route path="environment" element={<EnvironmentTab />} />
             <Route path="deploy-schedules/:scheduleId" element={<DeployScheduleDetailPage />} />
             <Route path="dialogue" element={<DialogueShell />}>
               <Route index element={<Navigate to="nodes" replace />} />

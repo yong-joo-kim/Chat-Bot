@@ -18,6 +18,14 @@ export interface ActiveRestoreSibling {
   targetContentHash: string | null;
 }
 
+/** [신규 No.40 — §11.2] "같은 챗봇의 활성 SWITCH_PROD_VERSION 형제 예약" — RESTORE_VERSION 체인과
+ * 같은 규칙(뒤에만 붙는다)을 쓴다. 기준은 content hash가 아니라 대상 버전 id다. */
+export interface ActiveSwitchSibling {
+  id: string;
+  scheduledAt: Date;
+  targetVersionId: string | null;
+}
+
 export interface PreviewContext<A extends DeployScheduleAction> {
   chatbotId: string;
   chatbotStatus: ChatbotStatus;
@@ -25,6 +33,8 @@ export interface PreviewContext<A extends DeployScheduleAction> {
   params: DeployScheduleParamsOf<A>;
   now: Date;
   activeRestoreSiblings: readonly ActiveRestoreSibling[];
+  /** [신규 No.40] SWITCH_PROD_VERSION 체인 기준 판정용(§11.2). */
+  activeSwitchSiblings: readonly ActiveSwitchSibling[];
   /** RESTORE_VERSION 전용(FR-D2-4) — 이 예약보다 이른 활성 PUBLISH 예약 존재 여부. */
   earlierActivePublishExists: boolean;
   /** PUBLISH 전용(R7) — 같은 챗봇의 다른 활성 예약 동작 목록(자기 자신 제외). */
@@ -36,6 +46,8 @@ export interface ActionPreviewResult {
   restore?: NonNullable<DeploySchedulePreviewResponse['restore']>;
   publish?: NonNullable<DeploySchedulePreviewResponse['publish']>;
   setWebChannel?: NonNullable<DeploySchedulePreviewResponse['setWebChannel']>;
+  /** [신규 No.40] SWITCH_PROD_VERSION 전용. */
+  switchProd?: NonNullable<DeploySchedulePreviewResponse['switchProd']>;
 }
 
 export interface InsertContext<A extends DeployScheduleAction> {
@@ -46,6 +58,8 @@ export interface InsertContext<A extends DeployScheduleAction> {
   previewedContentHash?: string;
   now: Date;
   activeRestoreSiblings: readonly ActiveRestoreSibling[];
+  /** [신규 No.40] §11.2. */
+  activeSwitchSiblings: readonly ActiveSwitchSibling[];
   activeSiblingActions: readonly DeployScheduleAction[];
 }
 

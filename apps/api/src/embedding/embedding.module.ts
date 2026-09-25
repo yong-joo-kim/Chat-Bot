@@ -8,6 +8,9 @@ import { SemanticMatchService } from './semantic-match.service';
 import { IndexerService } from './index/indexer.service';
 import { ReindexQueueService } from './index/reindex-queue.service';
 import { EmbeddingStatusService } from './index/embedding-status.service';
+import { EmbeddingTextVectorService } from './text-vector/embedding-text-vector.service';
+import { TextVectorCacheService } from './text-vector/text-vector.cache';
+import { VersionVectorResolver } from './version-vectors/version-vector.resolver';
 
 /**
  * 1단계(NLU 의미 유사도 매칭) 모듈(nlu-rag-answering-설계.md §7.1). `dialogue-common`을
@@ -25,7 +28,20 @@ import { EmbeddingStatusService } from './index/embedding-status.service';
     IndexerService,
     ReindexQueueService,
     EmbeddingStatusService,
+    // [신규 No.40] C-2 — 문장 해시 주소 벡터 보존 저장소.
+    EmbeddingTextVectorService,
+    TextVectorCacheService,
+    VersionVectorResolver,
   ],
-  exports: [EmbeddingProviderFactory, QueryEmbeddingService, VectorCacheService, SemanticMatchService, ReindexQueueService, EmbeddingStatusService],
+  exports: [
+    EmbeddingProviderFactory,
+    QueryEmbeddingService,
+    VectorCacheService,
+    SemanticMatchService,
+    ReindexQueueService,
+    EmbeddingStatusService,
+    EmbeddingTextVectorService,
+    VersionVectorResolver,
+  ],
 })
 export class EmbeddingModule {}

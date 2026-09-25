@@ -40,6 +40,8 @@ export interface RecordConversationLogParams {
   topicId?: string;
   /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). 기본 false. */
   feedbackOffered?: boolean;
+  /** [신규 No.40] 이 턴을 처리할 때의 운영 포인터(모드 켜짐) — 없으면 라이브 서빙(모드 꺼짐, §14). */
+  servedVersionId?: string;
 }
 
 /**
@@ -100,6 +102,8 @@ export class ConversationLogService {
           // 호출부가 값을 넘긴다 — 신규 적재 행은 전부 TEXT/BUTTON_MESSAGE/BUTTON_NODE다(AC-FB2-3).
           feedbackOffered: params.feedbackOffered ?? false,
           inputKind: params.inputKind,
+          // [신규 No.40] 쓰기 주체는 이 1곳뿐이다(E-8). 적재 후 불변.
+          servedVersionId: params.servedVersionId ?? null,
         },
       });
 

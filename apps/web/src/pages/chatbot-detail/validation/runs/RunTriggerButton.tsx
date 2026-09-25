@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { BundleTarget, EnvironmentStatus } from '@chat-bot/shared-types';
 import { ApiError } from '../../../../api/client';
 import { testRunsApi } from '../../../../api/validation';
 import { Modal } from '../../../../components/Modal';
 import { InlineFieldError } from '../../../../components/InlineFieldError';
+import { TargetSelectField } from '../../../../components/TargetSelectField';
+import { deriveEnvironmentStatusView } from '../../../../lib/environmentStatus';
 import { MESSAGES } from '../../../../constants/messages';
 
 export interface RunTriggerButtonProps {
@@ -15,18 +18,24 @@ export interface RunTriggerButtonProps {
   disabledReason?: string;
   label?: string;
   onStarted: (runId: string) => void;
+  /** [신규 No.40 — §4.14] 고급 옵션의 대상 선택 컨트롤 렌더 여부·보기값 산출용. */
+  environmentStatus?: EnvironmentStatus | null;
 }
 
 /**
  * `RunTriggerButton` + `RunTriggerDialog`(ui-spec §4.2.3, §4.3) — 버튼과 대화상자를 한 컴포넌트로
  * 묶어 V2(세트 상세)·V3(실행 목록)가 동일하게 재사용한다.
  */
-export function RunTriggerButton({ chatbotId, sets, defaultSetId, disabled, disabledReason, label, onStarted }: RunTriggerButtonProps): JSX.Element {
+export function RunTriggerButton({ chatbotId, sets, defaultSetId, disabled, disabledReason, label, onStarted, environmentStatus }: RunTriggerButtonProps): JSX.Element {
   const msg = MESSAGES.validation.runTrigger;
+  const envView = deriveEnvironmentStatusView(environmentStatus);
   const [open, setOpen] = useState(false);
   const [setId, setSetId] = useState(defaultSetId ?? sets[0]?.id ?? '');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [useRag, setUseRag] = useState(false);
+  // [신규 No.40 — §4.14] 실행 대상. 기본 초안. 이 버튼은 오버레이를 지원하지 않으므로(overlaySource
+  // 항상 'NONE') 상호배제 로직은 불필요하다.
+  const [target, setTarget] = useState<BundleTarget>({ kind: 'DRAFT' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [inProgressRunId, setInProgressRunId] = useState<string | null>(null);
@@ -36,6 +45,7 @@ export function RunTriggerButton({ chatbotId, sets, defaultSetId, disabled, disa
   function openDialog(): void {
     setSetId(defaultSetId ?? sets[0]?.id ?? '');
     setUseRag(false);
+    setTarget({ kind: 'DRAFT' });
     setAdvancedOpen(false);
     setError(undefined);
     setInProgressRunId(null);
@@ -48,7 +58,11 @@ export function RunTriggerButton({ chatbotId, sets, defaultSetId, disabled, disa
     setError(undefined);
     setInProgressRunId(null);
     try {
-      const res = await testRunsApi.start(chatbotId, setId, { overlaySource: 'NONE', useRag });
+      const res = await testRunsApi.start(chatbotId, setId, {
+        overlaySource: 'NONE',
+        useRag,
+        target: target.kind === 'DRAFT' ? undefined : target,
+      });
       setOpen(false);
       onStarted(res.runId);
     } catch (e) {
@@ -108,6 +122,14 @@ export function RunTriggerButton({ chatbotId, sets, defaultSetId, disabled, disa
               {msg.ragCheckboxLabel}
             </label>
             <p className="field-hint">{msg.ragCheckboxHint}</p>
+            <TargetSelectField
+              chatbotId={chatbotId}
+              value={target}
+              onChange={setTarget}
+              environmentEnabled={envView.isEnabled}
+              stagingVersionNo={envView.stagingVersionNo}
+              prodVersionNo={envView.prodVersionNo}
+            />
           </div>
         )}
 

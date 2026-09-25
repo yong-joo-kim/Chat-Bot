@@ -22,5 +22,7 @@ export interface ConversationLogPort {
     inputKind: InputKind;
     /** [신규 No.44] 이 턴에 평가 버튼을 제공했는가(ADR-0038 §1). 선택 — 기존 시험의 `objectContaining` 단언 불변. */
     feedbackOffered?: boolean;
+    /** [신규 No.40] POST 시점의 운영 포인터(값이 있을 때만 키 — 조건부 전개, §14). */
+    servedVersionId?: string;
   }): Promise<void>;
 }

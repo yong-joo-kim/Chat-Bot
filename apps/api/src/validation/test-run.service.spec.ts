@@ -31,6 +31,8 @@ function buildService(prismaOverrides: Record<string, unknown> = {}, configOverr
   const cancelRegistry = { cancel: jest.fn(), isCancelled: jest.fn(), clear: jest.fn() };
   const nameResolver = { resolveNames: jest.fn().mockResolvedValue(new Map()) };
   const config = { get: jest.fn((key: string) => configOverrides[key]) };
+  // [신규 No.40 — §12.2] 대상 해석(읽기 전용) — 이 스위트의 시나리오는 target 미지정(초안)이라 호출되지 않는다.
+  const environmentRead = { getPointerStatus: jest.fn().mockResolvedValue({ prodVersionId: null, stagingVersionId: null, enabledAt: null, gate: { mode: 'WARN', testSetId: null, minPassRate: 95, validHours: 24 } }) };
 
   const service = new TestRunService(
     prisma as never,
@@ -42,6 +44,7 @@ function buildService(prismaOverrides: Record<string, unknown> = {}, configOverr
     cancelRegistry as never,
     nameResolver as never,
     config as never,
+    environmentRead as never,
   );
   return { service, prisma, scope, setService, queue, cancelRegistry, config };
 }

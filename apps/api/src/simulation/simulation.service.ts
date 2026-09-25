@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { buildDialogueIndex, judgeBand, mergeOverlay, resolveTurn } from '@chat-bot/dialogue-engine';
+import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import type { ApiCallSuspension, DialogueTurnResult } from '@chat-bot/dialogue-engine';
 import { maskPii } from '@chat-bot/pii-mask';
 import {
@@ -9,12 +10,14 @@ import {
   isOverlayEmpty,
   type ApiConditionOutputPayloadV2,
   type ApiStepView,
+  type ChatbotAnswerSetting,
   type CompareRequestDto,
   type CompareResponse,
   type CompareTurnResult,
   type DialogOutput,
   type DialogueBundle,
   type MatchTrace,
+  type ResolvedBundleTarget,
   type SimulateApiMode,
   type SimulateRequestDto,
   type SimulateResponse,
@@ -26,6 +29,7 @@ import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.servic
 import { TopicLookupService } from '../topics/topic-lookup.service';
 import { resolveAnsweredTopicId } from '../conversation/lib/answered-topic';
 import { SemanticMatchService } from '../embedding/semantic-match.service';
+import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
 import { AnswerSettingsCacheService } from '../answer-settings/answer-settings-cache.service';
 import { RagHttpClient } from '../rag/rag-http.client';
 import { RagGateService } from '../rag/rag-gate.service';
@@ -41,6 +45,8 @@ import { assertOverlaySize, toBundleOverlayPatch } from './lib/overlay-convert';
 import { compareDiff } from './lib/compare-diff';
 import { computeAssetCounts, enrichNames } from './lib/resolution-enrich';
 import { buildSurveyStepView } from './lib/survey-step';
+import { EnvironmentReadService } from '../environment/core/environment-read.service';
+import { VersionBundleService } from '../environment/serving/version-bundle.service';
 
 /**
  * No.10 응답 테스트/시뮬레이션(FR-10-1~31). **읽기 전용** — `ConversationLogService`를 주입하지
@@ -65,6 +71,11 @@ export class SimulationService {
     private readonly apiConnectionCatalog: ApiConnectionCatalogService,
     private readonly config: ConfigService,
     private readonly topicLookup: TopicLookupService,
+    // [신규 No.40 — §12.1] 대상 선택. 포인터 해석(읽기 전용, EnvironmentReadService)과 버전 번들
+    // 조회(VersionBundleService) 2개를 추가한다(설계서는 1개만 언급했으나 STAGING/PROD 포인터
+    // 해석에 둘 다 필요하다 — §27 I-6 참고).
+    private readonly environmentRead: EnvironmentReadService,
+    private readonly versionBundles: VersionBundleService,
   ) {}
 
   /** [신규 No.22 — §6.5] 답한 자산의 topicId가 있을 때만 `{id,name,enabled}`를 채운다(추가 조회 0 — 맵은 호출부가 1회 조회). */
@@ -80,16 +91,66 @@ export class SimulationService {
     return this.topicLookup.mapForChatbot(chatbotId);
   }
 
+  /** [신규 No.40 — §12.1] `target` 소스 해석 — DRAFT(기존 코드 그대로) 또는 STAGING/PROD/VERSION. */
+  private async resolveSimulationSource(
+    chatbotId: string,
+    target: SimulateRequestDto['target'],
+    includeInactiveTopics: boolean,
+  ): Promise<{
+    bundle: DialogueBundle;
+    index: DialogueIndex;
+    settings: ChatbotAnswerSetting;
+    semanticSource?: SemanticMatchVectorSource;
+    resolvedTarget?: ResolvedBundleTarget;
+  }> {
+    if (!target || target.kind === 'DRAFT') {
+      const { bundle, index } = includeInactiveTopics ? await this.bundleService.getCachedUnfiltered(chatbotId) : await this.bundleService.getCached(chatbotId);
+      const settings = await this.answerSettingsCache.get(chatbotId);
+      return { bundle, index, settings };
+    }
+
+    let versionId: string;
+    if (target.kind === 'VERSION') {
+      versionId = target.versionId;
+    } else {
+      const pointer = await this.environmentRead.getPointerStatus(chatbotId);
+      if (!pointer.prodVersionId) throw new ApiException('ENV_MODE_DISABLED', 409, '환경 분리 모드가 꺼져 있습니다.');
+      if (target.kind === 'STAGING') {
+        if (!pointer.stagingVersionId) throw new ApiException('ENV_MODE_DISABLED', 409, '환경 분리 모드가 꺼져 있습니다.');
+        versionId = pointer.stagingVersionId;
+      } else {
+        versionId = pointer.prodVersionId;
+      }
+    }
+
+    const s = await this.versionBundles.get(chatbotId, versionId, { topics: includeInactiveTopics ? 'ALL' : 'ACTIVE_ONLY' });
+    const semanticMissing = s.slots.length - (s.semanticSource?.entries.length ?? 0);
+    return {
+      bundle: s.bundle,
+      index: s.index,
+      settings: s.settings,
+      semanticSource: s.semanticSource,
+      resolvedTarget: {
+        kind: target.kind === 'VERSION' ? 'VERSION' : target.kind,
+        versionId: s.version.id,
+        versionNo: s.version.versionNo,
+        legacyTiebreak: s.version.legacyTiebreak,
+        semanticMissing: Math.max(semanticMissing, 0),
+      },
+    };
+  }
+
   async simulate(chatbotId: string, dto: SimulateRequestDto, actor: SessionUser): Promise<SimulateResponse> {
     await this.scope.assertReadable(chatbotId);
     assertOverlaySize(dto.overlay);
 
     const now = new Date();
     const start = Date.now();
-    // [신규 No.22 — P-13] "비활성 토픽 포함" — 켜면 필터 없는 번들(별도 소형 캐시)을 쓴다.
-    const { bundle: baseBundle, index: baseIndex } = dto.includeInactiveTopics
-      ? await this.bundleService.getCachedUnfiltered(chatbotId)
-      : await this.bundleService.getCached(chatbotId);
+    // [신규 No.40 — §7.1] 소스 선택 — DRAFT는 기존 두 호출(getCached(Unfiltered)·answerSettingsCache)을
+    // 그대로 한다. 오버레이 + 비초안 대상은 스키마 단계(superRefine)에서 이미 400으로 거부된다.
+    const source = await this.resolveSimulationSource(chatbotId, dto.target, dto.includeInactiveTopics);
+    const baseBundle = source.bundle;
+    const baseIndex = source.index;
 
     const overlayApplied = !!dto.overlay && !isOverlayEmpty(dto.overlay);
     let bundle: DialogueBundle = baseBundle;
@@ -100,13 +161,13 @@ export class SimulationService {
       index = buildDialogueIndex(bundle);
     }
 
-    const settings = await this.answerSettingsCache.get(chatbotId);
+    const settings = source.settings;
     const thresholds = { accept: settings.acceptThreshold, low: settings.lowThreshold, margin: settings.marginThreshold };
     // NODE 버튼은 의미 매칭 후보가 아니다(공개 대화 경로와 동일한 분기, 복제가 아니라 같은 판단 재적용).
     const semanticText = dto.buttonAction?.kind === 'NODE' ? undefined : dto.buttonAction?.kind === 'MESSAGE' ? dto.buttonAction.text : dto.message;
     const semantic =
       settings.semanticEnabled && semanticText !== undefined && semanticText.length > 0
-        ? await this.semanticMatch.score(chatbotId, semanticText, bundle, thresholds)
+        ? await this.semanticMatch.score(chatbotId, semanticText, bundle, thresholds, source.semanticSource)
         : undefined;
 
     const turnInput = dto.buttonAction ? { buttonAction: dto.buttonAction } : { message: dto.message ?? '' };
@@ -157,6 +218,7 @@ export class SimulationService {
       apiStep,
       surveyStep: buildSurveyStepView(result.trace, result.surveyEvents, bundle, dto.surveyPreview),
       answeredTopic,
+      ...(source.resolvedTarget ? { target: source.resolvedTarget } : {}),
     };
   }
 

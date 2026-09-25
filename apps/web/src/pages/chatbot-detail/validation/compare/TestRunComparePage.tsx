@@ -115,7 +115,7 @@ export function TestRunComparePage(): JSX.Element {
         </button>
       </p>
 
-      <EnvFingerprintDiffBanner diffs={data.fingerprintDiff} />
+      <EnvFingerprintDiffBanner diffs={data.fingerprintDiff} baseTarget={data.base.target} targetTarget={data.target.target} />
 
       <p className="test-run-summary-bar">{msg.summaryDelta(basePass, targetPass, targetPass - basePass)}</p>
       <p className="field-hint">

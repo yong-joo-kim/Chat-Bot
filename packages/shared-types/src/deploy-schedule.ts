@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PaginationQuerySchema, csvEnumArray, queryBoolean } from './common';
 import { RestoreBlockerSchema, RestoreWarningSchema, VersionDiffSummarySchema } from './version';
 import { ChatbotStatus } from './chatbot';
+import { GateEvaluationSchema, ProdSwitchWarningSchema } from './environment';
 
 /**
  * 운영 예약 배포(No.28) — `scheduled-deploy-설계.md` §3, ADR-0032.
@@ -13,13 +14,15 @@ import { ChatbotStatus } from './chatbot';
  * 동작·상태·결과 유니온 — 판별값 단일 소스
  * ---------------------------------------------------------------------------------------------- */
 
-export const DeployScheduleAction = z.enum(['RESTORE_VERSION', 'PUBLISH', 'SET_WEB_CHANNEL']);
+export const DeployScheduleAction = z.enum(['RESTORE_VERSION', 'PUBLISH', 'SET_WEB_CHANNEL', 'SWITCH_PROD_VERSION']);
 export type DeployScheduleAction = z.infer<typeof DeployScheduleAction>;
 
 export const DEPLOY_SCHEDULE_ACTION_LABELS: Record<DeployScheduleAction, string> = {
   RESTORE_VERSION: '버전 복원',
   PUBLISH: '공개 시작',
   SET_WEB_CHANNEL: '웹 채널 열기/닫기',
+  // [신규 No.40] 환경 분리 — 운영 버전 전환.
+  SWITCH_PROD_VERSION: '운영 버전 전환',
 };
 
 export const DeployScheduleStatus = z.enum(['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'MISSED', 'HELD', 'CANCELLED']);
@@ -57,14 +60,17 @@ export const DeployScheduleFailureReason = z.enum([
   'BLOCKED_TOO_LONG',
   'INTERRUPTED',
   'INTERNAL_ERROR',
+  // [신규 No.40] 실행 시 차단 게이트 재평가 미달 — 영구(재시도 없음).
+  'GATE_NOT_PASSED',
 ]);
 export type DeployScheduleFailureReason = z.infer<typeof DeployScheduleFailureReason>;
 
 export const DeployScheduleTransientReason = z.enum(['DB_BUSY', 'ACTIVE_JOB', 'RESTORE_LOCKED']);
 export type DeployScheduleTransientReason = z.infer<typeof DeployScheduleTransientReason>;
 
-/** `PREDECESSOR_HELD` 추가(§21 D-5) — 보류가 해제되지 않은 선행이 있는 채로 도래한 경우. */
-export const DeployScheduleHeldReason = z.enum(['PREDECESSOR_FAILED', 'PREDECESSOR_MISSED', 'PREDECESSOR_CANCELLED', 'PREDECESSOR_HELD']);
+/** `PREDECESSOR_HELD` 추가(§21 D-5) — 보류가 해제되지 않은 선행이 있는 채로 도래한 경우.
+ * [신규 No.40] `ENV_MODE_CHANGED` — 모드 켜기 시 활성 RESTORE_VERSION 예약이 보류된다(C-4). */
+export const DeployScheduleHeldReason = z.enum(['PREDECESSOR_FAILED', 'PREDECESSOR_MISSED', 'PREDECESSOR_CANCELLED', 'PREDECESSOR_HELD', 'ENV_MODE_CHANGED']);
 export type DeployScheduleHeldReason = z.infer<typeof DeployScheduleHeldReason>;
 
 export const DeploySchedulePreconditionReason = z.enum([
@@ -76,6 +82,14 @@ export const DeploySchedulePreconditionReason = z.enum([
   'DUPLICATE_PUBLISH',
   'TEST_SET_INVALID',
   'TEST_SET_NOT_APPLICABLE',
+  /**
+   * [신규 No.40] 운영 전환 미리보기(`switchProd`)가 blocker를 낸 상태에서 예약을 생성하려는 경우.
+   * `RESTORE_BLOCKED`와 같은 2단 구조다 — 생성 409의 `details[].message`는 항상 이 일반 코드뿐이고
+   * (개별 사유를 담지 않는다), 개별 사유는 `POST .../deploy-schedules/preview` 응답의
+   * `switchProd.blockers`(열거형 배열)에서 읽는다 — 콘솔은 생성 이전에 그 미리보기를 이미 렌더링해
+   * 두었어야 한다(같은 화면 흐름).
+   */
+  'SWITCH_BLOCKED',
 ]);
 export type DeploySchedulePreconditionReason = z.infer<typeof DeploySchedulePreconditionReason>;
 
@@ -104,11 +118,19 @@ export type PublishParams = z.infer<typeof PublishParamsSchema>;
 export const SetWebChannelParamsSchema = z.object({ enabled: z.boolean() });
 export type SetWebChannelParams = z.infer<typeof SetWebChannelParamsSchema>;
 
+/** [신규 No.40] 저장 params = `{ targetVersionId }`만(RestoreVersionParamsSchema와 같은 패턴 — 식별자만).
+ * 기준(`expectedProdVersionId`)은 생성 트랜잭션 안에서 재계산되어 `expectedContentHash` 컬럼(재사용)에
+ * 저장된다 — RESTORE_VERSION이 `expectedContentHash`에 기준 해시를 저장하는 것과 같은 재사용 규약. */
+export const SwitchProdVersionParamsSchema = z.object({ targetVersionId: z.string().uuid() });
+export type SwitchProdVersionParams = z.infer<typeof SwitchProdVersionParamsSchema>;
+
 export type DeployScheduleParamsOf<A extends DeployScheduleAction> = A extends 'RESTORE_VERSION'
   ? RestoreVersionParams
   : A extends 'PUBLISH'
     ? PublishParams
-    : SetWebChannelParams;
+    : A extends 'SET_WEB_CHANNEL'
+      ? SetWebChannelParams
+      : SwitchProdVersionParams;
 
 /* ------------------------------------------------------------------------------------------------
  * 시각 · 메모 — 공용 입력 스키마(J-12, J-13)
@@ -157,6 +179,15 @@ const SetWebChannelCreateFields = z.object({
   enabled: z.boolean(),
 });
 
+/** [신규 No.40] `previewedProdVersionId` — 미리보기 시점의 기준(현재 운영 버전) 확인용(RESTORE_VERSION의
+ * `previewedContentHash`와 같은 역할). 경고가 있으면 `acknowledgeWarnings` 필수(§11.2). */
+const SwitchProdVersionCreateFields = z.object({
+  action: z.literal('SWITCH_PROD_VERSION'),
+  targetVersionId: z.string().uuid(),
+  previewedProdVersionId: z.string().uuid(),
+  acknowledgeWarnings: z.boolean().optional(),
+});
+
 const CommonCreateFields = z.object({
   scheduledAt: OffsetDateTimeSchema,
   memo: MemoSchema.optional(),
@@ -167,6 +198,7 @@ export const CreateDeployScheduleSchema = z.discriminatedUnion('action', [
   RestoreVersionCreateFields.merge(CommonCreateFields),
   PublishCreateFields.merge(CommonCreateFields),
   SetWebChannelCreateFields.merge(CommonCreateFields),
+  SwitchProdVersionCreateFields.merge(CommonCreateFields),
 ]);
 export type CreateDeployScheduleDto = z.infer<typeof CreateDeployScheduleSchema>;
 
@@ -181,6 +213,7 @@ export const PreviewDeployScheduleSchema = z.discriminatedUnion('action', [
   RestoreVersionCreateFields.omit({ previewedContentHash: true }).extend({ scheduledAt: OffsetDateTimeSchema, excludeScheduleId: z.string().uuid().optional() }),
   PublishCreateFields.extend({ scheduledAt: OffsetDateTimeSchema, excludeScheduleId: z.string().uuid().optional() }),
   SetWebChannelCreateFields.extend({ scheduledAt: OffsetDateTimeSchema, excludeScheduleId: z.string().uuid().optional() }),
+  SwitchProdVersionCreateFields.omit({ previewedProdVersionId: true }).extend({ scheduledAt: OffsetDateTimeSchema, excludeScheduleId: z.string().uuid().optional() }),
 ]);
 export type PreviewDeployScheduleDto = z.infer<typeof PreviewDeployScheduleSchema>;
 
@@ -261,6 +294,13 @@ export const DeployScheduleResultSummarySchema = z.discriminatedUnion('kind', [
     channelBefore: z.boolean().nullable(),
     channelAfter: z.boolean(),
   }),
+  // [신규 No.40] 환경 분리 — 운영 버전 전환.
+  z.object({
+    kind: z.literal('SWITCH_PROD'),
+    fromVersionNo: z.number().int().positive(),
+    toVersionNo: z.number().int().positive(),
+    postRunTest: PostRunTestOutcomeSchema.optional(),
+  }),
 ]);
 export type DeployScheduleResultSummary = z.infer<typeof DeployScheduleResultSummarySchema>;
 
@@ -278,6 +318,8 @@ export const ReadinessWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('LONG_HORIZON'), days: z.number().int().positive() }),
   z.object({ code: z.literal('PREDECESSOR_HELD'), heldScheduleId: z.string().uuid() }),
   z.object({ code: z.literal('ENGINE_DISABLED_ON_THIS_INSTANCE') }),
+  // [신규 No.40] 모드 켜진 챗봇의 RESTORE_VERSION 예약 — "초안에만 적용됩니다. 운영은 바뀌지 않습니다".
+  z.object({ code: z.literal('ENV_DRAFT_ONLY') }),
 ]);
 export type ReadinessWarning = z.infer<typeof ReadinessWarningSchema>;
 
@@ -292,8 +334,8 @@ export const DeployScheduleListItemSchema = z.object({
   action: DeployScheduleAction,
   status: DeployScheduleStatus,
   scheduledAt: z.coerce.date(),
-  /** RESTORE_VERSION일 때만 채워진다(그 외 null) — "지금 다시 예약" 진입점이 상세를 추가 조회하지
-   * 않고 목록만으로 버전을 알 수 있게 한다(code-review 2라운드 Low). */
+  /** RESTORE_VERSION·SWITCH_PROD_VERSION일 때만 채워진다(그 외 null) — "지금 다시 예약" 진입점이
+   * 상세를 추가 조회하지 않고 목록만으로 버전을 알 수 있게 한다(code-review 2라운드 Low). */
   targetVersionId: z.string().uuid().nullable(),
   targetVersionNo: z.number().int().positive().nullable(),
   enableWebChannel: z.boolean().nullable(),
@@ -313,7 +355,7 @@ export const DeployScheduleListItemSchema = z.object({
 export type DeployScheduleListItem = z.infer<typeof DeployScheduleListItemSchema>;
 
 export const DeployScheduleDetailSchema = DeployScheduleListItemSchema.extend({
-  params: z.union([RestoreVersionParamsSchema, PublishParamsSchema, SetWebChannelParamsSchema]),
+  params: z.union([RestoreVersionParamsSchema, PublishParamsSchema, SetWebChannelParamsSchema, SwitchProdVersionParamsSchema]),
   acknowledgeActive: z.boolean(),
   expectedContentHash: z.string().nullable(),
   targetContentHash: z.string().nullable(),
@@ -351,6 +393,24 @@ export const DeploySchedulePreviewResponseSchema = z.object({
     .optional(),
   publish: z.object({ currentStatus: ChatbotStatus, webChannelConfigured: z.boolean(), webChannelEnabled: z.boolean() }).optional(),
   setWebChannel: z.object({ currentEnabled: z.boolean() }).optional(),
+  // [신규 No.40] 환경 분리 — 운영 버전 전환 예약 미리보기.
+  switchProd: z
+    .object({
+      base: z.enum(['CURRENT', 'SCHEDULE']),
+      /**
+       * [신규 No.40 — 2026-09-25 프론트 계약 보강] 이 예약이 "실제 실행 시" 비교할 기준 운영 버전
+       * id — `base==='SCHEDULE'`이면 앞선(체인) 예약의 대상 버전 id, `base==='CURRENT'`면 지금의
+       * 실제 운영 버전 id다. 생성 요청(`POST .../deploy-schedules`)의 `previewedProdVersionId`에
+       * **이 값을 그대로** 보내야 한다 — 체인일 때 현재 운영 버전 id를 보내면 서버가 트랜잭션에서
+       * 다시 계산한 기준과 달라 `409 ENV_POINTER_STALE`를 반환한다(§11.2).
+       */
+      expectedProdVersionId: z.string().uuid(),
+      targetVersion: z.object({ id: z.string().uuid(), versionNo: z.number().int().positive() }),
+      gate: GateEvaluationSchema,
+      blockers: z.array(z.enum(['TARGET_NOT_ALLOWED', 'GATE_BLOCKED', 'GATE_CONFIG_ERROR', 'TARGET_UNREADABLE', 'CHATBOT_ARCHIVED', 'ENV_MODE_DISABLED'])),
+      warnings: z.array(ProdSwitchWarningSchema),
+    })
+    .optional(),
 });
 export type DeploySchedulePreviewResponse = z.infer<typeof DeploySchedulePreviewResponseSchema>;
 

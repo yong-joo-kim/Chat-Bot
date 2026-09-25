@@ -3,6 +3,10 @@ import type { DialogueBundle, MatchingThresholds, SemanticMatchInput } from '@ch
 import { QueryEmbeddingService } from './query-embedding.service';
 import { VectorCacheService } from './vector-cache.service';
 import { assembleSemanticInput } from './lib/assemble-semantic-input';
+import type { AssembleVectorEntry } from './lib/assemble-semantic-input';
+
+/** [신규 No.40] 벡터 소스 — 미지정 = 현행 경로(초안 벡터 캐시). `VERSION`은 버전 슬롯 리졸버 결과다. */
+export type SemanticMatchVectorSource = { kind: 'VERSION'; entries: readonly AssembleVectorEntry[]; modelId: string };
 
 /**
  * 1단계 점수 맵 조립(§3 파이프라인 ③④, ADR-0020) — `apps/api`가 턴마다 계산해
@@ -25,13 +29,25 @@ export class SemanticMatchService {
    * `semanticEnabled=false`이거나 임베딩/색인이 준비되지 않았으면 `undefined`를 반환한다 —
    * 그 경우 엔진은 `semantic` 미주입 상태(저하 모드)로 동작한다(FR-0-44).
    */
-  async score(chatbotId: string, text: string, bundle: DialogueBundle, thresholds: MatchingThresholds): Promise<SemanticMatchInput | undefined> {
+  async score(
+    chatbotId: string,
+    text: string,
+    bundle: DialogueBundle,
+    thresholds: MatchingThresholds,
+    source?: SemanticMatchVectorSource,
+  ): Promise<SemanticMatchInput | undefined> {
     const embedded = await this.queryEmbedding.embed(text);
     if (!embedded) return undefined;
+    if (embedded.vector.length !== embedded.dimension) return undefined;
+
+    // [신규 No.40] 버전 경로 — 질의 임베딩은 그대로(턴당 1회), 후보 벡터만 버전 슬롯 기준.
+    if (source) {
+      if (source.entries.length === 0) return undefined;
+      return assembleSemanticInput(embedded.vector, source.entries, bundle, thresholds, source.modelId);
+    }
 
     const vectors = await this.vectorCache.get(chatbotId, embedded.modelId);
     if (!vectors || vectors.entries.length === 0) return undefined;
-    if (embedded.vector.length !== embedded.dimension) return undefined;
 
     return assembleSemanticInput(embedded.vector, vectors.entries, bundle, thresholds, embedded.modelId);
   }

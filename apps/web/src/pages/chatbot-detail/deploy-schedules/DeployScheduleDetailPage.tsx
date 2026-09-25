@@ -33,7 +33,7 @@ function toLocalTimeParts(instant: Date, timezone: string): { date: string; hour
 
 /** S2 — 예약 상세(`scheduled-deploy-ui-spec.md` §4.2). */
 export function DeployScheduleDetailPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { scheduleId } = useParams<{ scheduleId: string }>();
   const { can } = useAuth();
   const { showToast } = useToast();
@@ -312,6 +312,7 @@ export function DeployScheduleDetailPage(): JSX.Element {
           versionId={detail.targetVersionId ?? undefined}
           versionNo={detail.targetVersionNo ?? undefined}
           enabled={detail.action === 'SET_WEB_CHANNEL' ? (detail.channelEnabled ?? undefined) : undefined}
+          environmentStatus={environmentStatus}
         />
       )}
 
@@ -329,6 +330,7 @@ export function DeployScheduleDetailPage(): JSX.Element {
           versionId={detail.targetVersionId ?? undefined}
           versionNo={detail.targetVersionNo ?? undefined}
           enabled={detail.action === 'SET_WEB_CHANNEL' ? (detail.channelEnabled ?? undefined) : undefined}
+          environmentStatus={environmentStatus}
         />
       )}
     </div>

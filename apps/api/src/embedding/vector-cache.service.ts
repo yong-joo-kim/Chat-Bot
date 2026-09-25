@@ -7,6 +7,9 @@ export interface CachedVectorEntry {
   ownerId: string;
   slotIndex: number;
   vector: Float32Array;
+  /** [신규 No.40] 조회 행에 이미 존재하는 컬럼 — `VersionVectorResolver`가 "같은 해시 초안 벡터"
+   * 대체에 쓴다(추가 조회 0). */
+  textHash: string;
 }
 
 export interface CachedVectorSet {
@@ -38,7 +41,7 @@ export class VectorCacheService {
     for (const row of rows) {
       const vec = decodeVector(row.vector, row.dimension);
       if (!vec) continue; // EX-N1-3 — 파싱 실패 벡터만 제외하고 계속한다(예외 없음).
-      entries.push({ ownerType: row.ownerType, ownerId: row.ownerId, slotIndex: row.slotIndex, vector: vec });
+      entries.push({ ownerType: row.ownerType, ownerId: row.ownerId, slotIndex: row.slotIndex, vector: vec, textHash: row.textHash });
     }
     const result: CachedVectorSet = { modelId, dimension: entries[0]?.vector.length ?? 0, entries, cachedAt: Date.now() };
     this.store.set(chatbotId, result);

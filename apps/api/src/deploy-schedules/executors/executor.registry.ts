@@ -3,12 +3,14 @@ import type { DeployScheduleAction } from '@chat-bot/shared-types';
 import { RestoreVersionExecutor } from './restore-version.executor';
 import { PublishExecutor } from './publish.executor';
 import { SetWebChannelExecutor } from './set-web-channel.executor';
+import { SwitchProdVersionExecutor } from './switch-prod-version.executor';
 import type { DeployActionExecutor } from './deploy-action-executor';
 
 type ExecutorMap = {
   RESTORE_VERSION: DeployActionExecutor<'RESTORE_VERSION'>;
   PUBLISH: DeployActionExecutor<'PUBLISH'>;
   SET_WEB_CHANNEL: DeployActionExecutor<'SET_WEB_CHANNEL'>;
+  SWITCH_PROD_VERSION: DeployActionExecutor<'SWITCH_PROD_VERSION'>;
 };
 
 /**
@@ -19,8 +21,13 @@ type ExecutorMap = {
 export class ExecutorRegistry {
   private readonly map: ExecutorMap;
 
-  constructor(restoreVersion: RestoreVersionExecutor, publish: PublishExecutor, setWebChannel: SetWebChannelExecutor) {
-    this.map = { RESTORE_VERSION: restoreVersion, PUBLISH: publish, SET_WEB_CHANNEL: setWebChannel };
+  constructor(
+    restoreVersion: RestoreVersionExecutor,
+    publish: PublishExecutor,
+    setWebChannel: SetWebChannelExecutor,
+    switchProdVersion: SwitchProdVersionExecutor,
+  ) {
+    this.map = { RESTORE_VERSION: restoreVersion, PUBLISH: publish, SET_WEB_CHANNEL: setWebChannel, SWITCH_PROD_VERSION: switchProdVersion };
   }
 
   get<A extends DeployScheduleAction>(action: A): DeployActionExecutor<A> {

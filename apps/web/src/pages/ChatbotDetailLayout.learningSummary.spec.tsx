@@ -57,6 +57,14 @@ vi.mock('../api/learning', () => ({
   },
 }));
 
+// [No.40] ChatbotDetailLayout이 environmentStatus를 함께 조회한다 — 이 스위트는 학습현황 배지만
+// 검증하므로 항상 꺼짐 상태로 고정해 무관한 네트워크 호출을 만들지 않는다.
+vi.mock('../api/environment', () => ({
+  environmentApi: {
+    getStatus: vi.fn().mockResolvedValue({ enabled: false, gate: null }),
+  },
+}));
+
 vi.mock('../api/dialogue', () => ({
   intentsApi: {
     list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 }),

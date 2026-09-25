@@ -41,6 +41,8 @@ import { CannedResponsesController } from '../../canned-responses/canned-respons
 // [신규 No.22] 토픽 시스템 컨트롤러 2개 — 둘 다 @Public() 0건(topic-system-설계.md §17 T-9).
 import { TopicsController } from '../../topics/topics.controller';
 import { TopicAssignmentsController } from '../../topics/topic-assignments.controller';
+// [신규 No.40] 환경 분리 컨트롤러 1개 — @Public() 0건(environment-separation-설계.md E-6).
+import { EnvironmentController } from '../../environment/environment.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -92,7 +94,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 34개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다', () => {
+  it('전수 스캔: 등록된 35개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -134,6 +136,8 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       // [신규 No.22] 2개 추가 — 32 → 34.
       TopicsController,
       TopicAssignmentsController,
+      // [신규 No.40] 1개 추가 — 34 → 35.
+      EnvironmentController,
     ];
 
     const publicHandlers: string[] = [];

@@ -60,6 +60,17 @@ export function ScheduleResultSummaryPanel({ chatbotId, detail }: { chatbotId: s
     );
   }
 
+  // [신규 No.40] 환경 분리 — 운영 버전 전환 예약 결과 요약(§4.9 "결과 요약 확장").
+  if (summary.kind === 'SWITCH_PROD') {
+    return (
+      <div className="schedule-result-summary">
+        <p>{msg.switchProdSummary(summary.fromVersionNo, summary.toVersionNo)}</p>
+        {detail.outcome === 'NOOP' && <p>{msg.noopNotice}</p>}
+        {summary.postRunTest && <PostRunTestResult chatbotId={chatbotId} outcome={summary.postRunTest} />}
+      </div>
+    );
+  }
+
   return (
     <div className="schedule-result-summary">
       <p>

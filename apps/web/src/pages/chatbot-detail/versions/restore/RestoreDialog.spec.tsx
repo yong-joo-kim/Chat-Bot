@@ -332,4 +332,14 @@ describe('RestoreDialog', () => {
 
     expect(await screen.findByRole('button', { name: 'v27로 복원' })).toBeInTheDocument();
   });
+
+  // [신규 No.40] 환경 분리 — 모드 켜진 챗봇의 복원은 초안에만 적용된다(§4.11). 강조 배너로 먼저 보여준다.
+  it('ENV_DRAFT_ONLY 경고가 있으면 강조 배너로 안내하고, 확인 절차(체크박스·확정 버튼)는 그대로 유지된다', async () => {
+    mockRestorePreview.mockResolvedValue(basePreview({ warnings: [{ code: 'ENV_DRAFT_ONLY', prodVersionNo: 43, stagingVersionNo: 44 }] }));
+    renderDialog();
+
+    await screen.findByText('이 챗봇은 환경 분리가 켜져 있습니다. 이 복원은 초안에만 적용됩니다. 운영(v43)·스테이징(v44)은 바뀌지 않습니다.');
+    const confirmButton = await screen.findByRole('button', { name: 'v27로 복원' });
+    expect(confirmButton).not.toBeDisabled();
+  });
 });

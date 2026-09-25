@@ -262,3 +262,15 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 3. **일괄 지정(최대 1,000건)은 대상 토픽(공통이면 `Chatbot`)에 `UPDATE` 1건**이며 before/after 없이 **summary 문자열**에 종류·건수·대상 토픽 이름만 담는다(자산 이름 목록·원문 0). 요약 액션 분기(`BULK_DELETE`·`IMPORT`·`RESTORE`)를 늘리지 않고 화이트리스트도 우회하지 않는다. "공통으로 옮기고 삭제"는 요약 `UPDATE` + `DELETE` 2건이다.
 4. **분리는 새 `Chatbot`에 기존 `COPY` 1건**(after = 챗봇 행 — 기존 `copy()`와 같음, summary에 원본 id 앞 8자·토픽 수·종류별 건수·동반 수·잘라낸 연결 수). 원본에는 기록하지 않는다(변경 없음).
 5. 영향 미리보기·분리 미리보기·토픽 목록은 읽기라 기록하지 않는다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.40: `ChatbotEnvironment` 대상 · 액션 재사용)
+
+환경 분리/버전관리(No.40, **ADR-0039 §8**). 기록 위치·트랜잭션 경계·화이트리스트 규약은 불변이다.
+
+1. **`AuditTargetType`에 `ChatbotEnvironment`**(라벨 "환경", 1종 추가). 켜기/끄기 `STATUS_CHANGE` · 스테이징 승격·운영 전환·롤백·게이트 설정 `UPDATE`. **`AuditAction` 추가 0**(14종 — `topic-sealing.spec.ts` T-10 불변).
+2. 화이트리스트 = `enabled`·`stagingVersionNo`·`prodVersionNo`·`gateMode`·`gateTestSetId`·`gateMinPassRate`·`gateValidHours`. **사유 메모 본문은 담지 않는다**(summary에 유무만).
+3. 예약 전환 실행은 주체 = 예약자(`actorOverride`) + summary 접두 `[예약 실행 #…]`(ADR-0032 §5 규약 그대로).
+4. NOOP·미리보기·이력 조회·보존 정리·벡터 보존/GC와 `ENV_INIT`/`PROMOTE` 버전 생성 자체는 기록하지 않는다(환경 감사 1건에 버전 번호로 포함 — 자동 스냅샷 비감사 선례).

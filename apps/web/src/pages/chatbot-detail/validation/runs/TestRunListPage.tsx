@@ -10,6 +10,7 @@ import { MESSAGES } from '../../../../constants/messages';
 import { SkeletonRow } from '../../../../components/Skeleton';
 import { ErrorState } from '../../../../components/ErrorState';
 import { EmptyState } from '../../../../components/EmptyState';
+import { TargetBadge } from '../../../../components/TargetBadge';
 import { RunTriggerButton } from './RunTriggerButton';
 import { TestRunProgressBar } from './TestRunProgressBar';
 
@@ -26,7 +27,7 @@ function formatElapsed(ms: number | null | undefined): string {
 
 /** V3 — 실행 목록(ui-spec §4.3). 세트 필터 · 실행 진행 폴링 · 비교 대상 2건 선택. */
 export function TestRunListPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -122,6 +123,7 @@ export function TestRunListPage(): JSX.Element {
             defaultSetId={setIdFilter || undefined}
             label={msg.newRunButton}
             onStarted={(runId) => navigate(`/chatbots/${chatbot.id}/validation/runs/${runId}`)}
+            environmentStatus={environmentStatus}
           />
         )}
       </div>
@@ -193,7 +195,16 @@ export function TestRunListPage(): JSX.Element {
                     <td>
                       <Link to={`/chatbots/${chatbot.id}/validation/runs/${run.id}`}>{new Date(run.createdAt).toLocaleString('ko-KR')}</Link>
                     </td>
-                    <td>{msg.modeLabel[run.mode]}</td>
+                    <td>
+                      {msg.modeLabel[run.mode]}
+                      {/* [신규 No.40 — §4.14] 대상이 초안이 아닐 때만 배지를 덧붙인다. */}
+                      {run.target && (
+                        <>
+                          {' '}
+                          <TargetBadge target={run.target} />
+                        </>
+                      )}
+                    </td>
                     <td>
                       {msg.statusLabel[run.status]}
                       {run.status === 'CANCELLED' && ` · ${msg.cancelledProcessedLabel(run.processedCount, run.totalCount)}`}

@@ -30,7 +30,7 @@ function makeLearningSummary(overrides: Partial<{ pendingCount: number; unanswer
 function renderTabNav(learningSummary: UnansweredQuestionSummary | null): ReturnType<typeof render> {
   return render(
     <MemoryRouter initialEntries={[`/chatbots/${CHATBOT_ID}/dashboard`]}>
-      <TabNav chatbotId={CHATBOT_ID} learningSummary={learningSummary} />
+      <TabNav chatbotId={CHATBOT_ID} learningSummary={learningSummary} environmentStatus={null} />
     </MemoryRouter>,
   );
 }
@@ -75,5 +75,53 @@ describe('TabNav — "통계" 탭 부정 피드백/미응답 배지(No.44 R2)', 
 
     await screen.findByLabelText('대기 중인 부정 평가 2건');
     expect(await axe(container, { rules: { 'color-contrast': { enabled: false } } })).toHaveNoViolations();
+  });
+});
+
+/** [신규 No.40] "배포" 그룹 4번째 탭 "환경"(§1.4). */
+describe('TabNav — "환경" 탭(No.40)', () => {
+  it('"배포" 그룹에 "환경" 탭이 렌더된다', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/chatbots/${CHATBOT_ID}/dashboard`]}>
+        <TabNav chatbotId={CHATBOT_ID} learningSummary={null} environmentStatus={null} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('link', { name: /환경/ })).toHaveAttribute('href', `/chatbots/${CHATBOT_ID}/environment`);
+  });
+
+  it('environmentStatus가 없으면(모드 꺼짐) 소형 점 표시가 렌더되지 않는다', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={[`/chatbots/${CHATBOT_ID}/dashboard`]}>
+        <TabNav chatbotId={CHATBOT_ID} learningSummary={null} environmentStatus={{ enabled: false, gate: null }} />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('link', { name: /환경/ });
+    expect(container.querySelector('.environment-mode-indicator')).not.toBeInTheDocument();
+  });
+
+  it('environmentStatus.enabled=true면 소형 점 표시가 렌더된다(순수 장식, aria-hidden)', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={[`/chatbots/${CHATBOT_ID}/dashboard`]}>
+        <TabNav
+          chatbotId={CHATBOT_ID}
+          learningSummary={null}
+          environmentStatus={
+            {
+              enabled: true,
+              enabledAt: new Date(),
+              prod: { versionId: 'v1', versionNo: 1, capturedAt: new Date(), label: null, switchedAt: new Date(), legacyTiebreak: false, readFailed: false, semanticPending: 0 },
+              staging: null,
+              draft: { contentHash: 'a'.repeat(64), sameAsProd: true, sameAsStaging: true },
+              gate: { mode: 'WARN', testSetId: null, minPassRate: 95, validHours: 24 },
+              activeSwitchSchedule: null,
+            } as never
+          }
+        />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('link', { name: /환경/ });
+    const indicator = container.querySelector('.environment-mode-indicator');
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveAttribute('aria-hidden', 'true');
   });
 });

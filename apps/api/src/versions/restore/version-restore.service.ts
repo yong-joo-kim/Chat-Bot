@@ -47,10 +47,25 @@ export class VersionRestoreService {
     private readonly retention: VersionRetentionService,
   ) {}
 
-  private async assertScope(chatbotId: string): Promise<{ id: string; name: string; status: string }> {
-    const row = await this.prisma.chatbot.findUnique({ where: { id: chatbotId }, select: { id: true, name: true, status: true } });
+  /** [신규 No.40] select에 `prodVersionId` 추가(경고 입력 전달만 — 복원 의미론 무변경). */
+  private async assertScope(chatbotId: string): Promise<{ id: string; name: string; status: string; prodVersionId: string | null }> {
+    const row = await this.prisma.chatbot.findUnique({ where: { id: chatbotId }, select: { id: true, name: true, status: true, prodVersionId: true } });
     if (!row) throw new ApiException('NOT_FOUND', 404, '요청하신 챗봇을 찾을 수 없습니다.');
     return row;
+  }
+
+  /** [신규 No.40 — §13.1] 모드 켜짐일 때만 `ENV_DRAFT_ONLY` 경고를 만든다(버전 번호 조회). */
+  private async buildEnvDraftOnlyWarning(chatbotId: string, prodVersionId: string): Promise<{ code: 'ENV_DRAFT_ONLY'; prodVersionNo: number; stagingVersionNo: number | null }> {
+    const [prodRow, envRow] = await Promise.all([
+      this.prisma.chatbotVersion.findUnique({ where: { id: prodVersionId }, select: { versionNo: true } }),
+      this.prisma.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { stagingVersionId: true } }),
+    ]);
+    let stagingVersionNo: number | null = null;
+    if (envRow?.stagingVersionId) {
+      const stagingRow = await this.prisma.chatbotVersion.findUnique({ where: { id: envRow.stagingVersionId }, select: { versionNo: true } });
+      stagingVersionNo = stagingRow?.versionNo ?? null;
+    }
+    return { code: 'ENV_DRAFT_ONLY', prodVersionNo: prodRow?.versionNo ?? 0, stagingVersionNo };
   }
 
   private async findActiveJobs(chatbotId: string): Promise<Array<{ source: 'TRAINING_JOB' | 'TEST_RUN'; kind: string; status: string; progress: number }>> {
@@ -144,6 +159,11 @@ export class VersionRestoreService {
     }
 
     if (currentData.contentHash === targetContentHash) blockers.push({ code: 'NO_CHANGES' });
+
+    // [신규 No.40 — §13.1] 모드 켜짐 — 복원은 초안에만 적용된다는 경고.
+    if (chatbot.prodVersionId) {
+      warnings = [...warnings, await this.buildEnvDraftOnlyWarning(chatbotId, chatbot.prodVersionId)];
+    }
 
     const laterVersionCount = await this.prisma.chatbotVersion.count({ where: { chatbotId, versionNo: { gt: versionRow.versionNo } } });
 

@@ -9,6 +9,7 @@ import { LegacyApiModule } from '../legacy-api/legacy-api.module';
 import { SurveyResponsesModule } from '../survey-responses/survey-responses.module';
 import { HandoffModule } from '../handoff/handoff.module';
 import { FeedbackModule } from '../feedback/feedback.module';
+import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -41,6 +42,7 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     SurveyResponsesModule,
     HandoffModule,
     FeedbackModule,
+    EnvironmentServingModule,
   ],
   controllers: [PublicConversationController],
   providers: [

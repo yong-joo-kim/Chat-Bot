@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PaginationQuerySchema, queryBoolean } from './common';
-import { DialogueOverlaySchema } from './conversation';
+import { DialogueOverlaySchema, isOverlayEmpty } from './conversation';
+import { BundleTargetSchema, ResolvedBundleTargetSchema } from './bundle-target';
 
 /**
  * 검증/품질 고도화 (No.19 대화검증시스템·TC테스트 / No.20 학습영향도 TEST) 계약.
@@ -175,6 +176,8 @@ export const TestRunEnvFingerprintSchema = z.object({
   useRag: z.boolean(),
   overlaySource: TestRunOverlaySource,
   engineVersion: z.string().optional(),
+  /** [신규 No.40] 비초안 실행만(§12.2) — 초안 실행 지문 바이트는 불변이다. */
+  target: ResolvedBundleTargetSchema.extend({ contentHash: z.string() }).optional(),
 });
 export type TestRunEnvFingerprint = z.infer<typeof TestRunEnvFingerprintSchema>;
 
@@ -216,6 +219,8 @@ export const TestRunSchema = z.object({
   startedAt: z.coerce.date().nullable(),
   finishedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
+  /** [신규 No.40] 비초안 실행만(§12.2). */
+  target: ResolvedBundleTargetSchema.optional(),
 });
 export type TestRun = z.infer<typeof TestRunSchema>;
 
@@ -232,6 +237,8 @@ export const StartTestRunRequestSchema = z
     overlay: DialogueOverlaySchema.optional(),
     suggestionIds: z.array(z.string()).max(VALIDATION_LIMITS.maxSuggestionIds).optional(),
     useRag: z.boolean().default(false),
+    /** [신규 No.40] 대상 선택(§12.2) — 미지정 = 초안(기존과 동일). */
+    target: BundleTargetSchema.optional(),
   })
   .superRefine((val, ctx) => {
     if (val.overlaySource === 'INLINE' && !val.overlay) {
@@ -243,6 +250,11 @@ export const StartTestRunRequestSchema = z
         message: 'overlaySource가 AUGMENTATION_SUGGESTIONS이면 suggestionIds가 필요합니다.',
         path: ['suggestionIds'],
       });
+    }
+    // [신규 No.40 — AC-EN6-2] 오버레이 모드 + 비초안 대상은 거부한다.
+    const overlayApplied = val.overlaySource !== 'NONE' || (val.overlay !== undefined && !isOverlayEmpty(val.overlay));
+    if (overlayApplied && val.target !== undefined && val.target.kind !== 'DRAFT') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: '오버레이 모드는 초안 대상에서만 사용할 수 있습니다.', path: ['target'] });
     }
   });
 export type StartTestRunRequestDto = z.infer<typeof StartTestRunRequestSchema>;

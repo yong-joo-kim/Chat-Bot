@@ -5,6 +5,7 @@ import { AnswerSettingsModule } from '../answer-settings/answer-settings.module'
 import { EmbeddingModule } from '../embedding/embedding.module';
 import { DialogueCommonModule } from '../dialogue-common/dialogue-common.module';
 import { CannedResponsesModule } from '../canned-responses/canned-responses.module';
+import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 import { CLOCK, SystemClock } from '../common/polling/clock';
 import { LiveSessionsController } from './live-sessions.controller';
 import { HandoffsController } from './handoffs.controller';
@@ -34,7 +35,7 @@ import { SessionRefResolverService } from './session-ref-resolver.service';
  * import하지 않는다(DI 격리, FR-0-123, §18 H-12).
  */
 @Module({
-  imports: [ChatbotsModule, BannedWordsModule, AnswerSettingsModule, EmbeddingModule, DialogueCommonModule, CannedResponsesModule],
+  imports: [ChatbotsModule, BannedWordsModule, AnswerSettingsModule, EmbeddingModule, DialogueCommonModule, CannedResponsesModule, EnvironmentServingModule],
   controllers: [LiveSessionsController, HandoffsController, HandoffSettingsController, HandoffConsoleController],
   providers: [
     HandoffThreadService,

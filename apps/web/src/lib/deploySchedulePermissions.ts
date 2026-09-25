@@ -16,6 +16,9 @@ export function deployScheduleRequiredPermissions(action: DeployScheduleAction, 
       return params.enableWebChannel ? ['chatbot:write', 'channel:write'] : ['chatbot:write'];
     case 'SET_WEB_CHANNEL':
       return ['channel:write'];
+    // [신규 No.40] 환경 분리 — 운영 버전 전환 예약(§17 권한 매트릭스).
+    case 'SWITCH_PROD_VERSION':
+      return ['chatbot:deploy'];
     default:
       return [];
   }

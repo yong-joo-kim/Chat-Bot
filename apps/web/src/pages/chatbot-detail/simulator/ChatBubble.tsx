@@ -79,7 +79,9 @@ export function ChatBubble({
       {message.answeredTopic && (
         <p className="field-hint">{MESSAGES.topics.simulatorAnsweredTopic(message.answeredTopic.name, topicStatusLabel(message.answeredTopic.enabled ? 'ACTIVE' : 'INACTIVE'))}</p>
       )}
-      {message.trace && <TracePanel trace={message.trace} chatbotId={chatbotId} matchTrace={message.matchTrace} />}
+      {(message.trace || message.target) && (
+        <TracePanel trace={message.trace ?? []} chatbotId={chatbotId} matchTrace={message.matchTrace} target={message.target} />
+      )}
       {message.apiStep && <ApiStepPanel apiStep={message.apiStep} />}
       {message.surveyStep && <SurveyStepPanel step={message.surveyStep} />}
     </div>

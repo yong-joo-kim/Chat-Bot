@@ -3,6 +3,7 @@ import { ApiErrorCode, PaginationQuerySchema, SortOrder, csvEnumArray, queryBool
 import { ExampleConflictSchema } from './dialogue';
 import { AutoSnapshotOutcomeSchema } from './version';
 import { FeedbackTargetRefSchema } from './feedback';
+import { ProdReflectionSchema } from './environment';
 
 /**
  * No.15 학습현황(관리자 보조 재학습) 도메인 스키마.
@@ -84,6 +85,11 @@ export const UnansweredQuestionListItemSchema = z.object({
   lastFeedbackMatchedIntentId: z.string().uuid().optional(),
   /** [신규 No.44] "직접 수정 완료"로 처리된 행만 true. */
   resolvedDirectly: z.literal(true).optional(),
+  /**
+   * [신규 No.40 — §15.1] 환경 분리 모드 켜짐 · `status = RESOLVED` 항목에만 싣는다(표시 단계
+   * 판정, 수집기 불변). 값이 없으면 모드 꺼짐이거나 대상 외 상태다(하위호환).
+   */
+  prodReflection: ProdReflectionSchema.optional(),
 });
 export type UnansweredQuestionListItem = z.infer<typeof UnansweredQuestionListItemSchema>;
 
@@ -128,7 +134,15 @@ export const UnansweredQuestionDetailSchema = UnansweredQuestionListItemSchema.e
     .object({
       botResponse: z.string().max(2001),
       turnAt: z.coerce.date(),
-      target: FeedbackTargetRefSchema,
+      /**
+       * [신규 No.40 — §15.2] 환경 분리 모드 켜짐 + 초안에서 이름을 못 찾았을 때만, 그 턴이 서빙된
+       * 버전 코어에서 찾은 이름을 싣는다(상세 1건 한정 조회, AC-EN7-4). 콘솔은 이때 "삭제됨" 대신
+       * "초안에 없음" 문구로 표시한다.
+       */
+      target: FeedbackTargetRefSchema.extend({
+        deletedInDraft: z.literal(true).optional(),
+        nameFromVersion: z.string().optional(),
+      }),
       matchedIntentId: z.string().uuid().optional(),
     })
     .optional(),

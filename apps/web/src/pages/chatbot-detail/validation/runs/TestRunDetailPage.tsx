@@ -16,6 +16,7 @@ import { Pagination } from '../../../../components/Pagination';
 import { ResultCsvExportButton } from '../ResultCsvExportButton';
 import { ClassificationBadge } from '../compare/ClassificationBadge';
 import { SurveyPreviewJudgmentBadge } from '../../../dialogue/components/survey/badges';
+import { TargetBadge } from '../../../../components/TargetBadge';
 import { TestRunProgressBar } from './TestRunProgressBar';
 import { TestRunSummaryBar } from './TestRunSummaryBar';
 import { EnvFingerprintBadgeGroup } from './EnvFingerprintBadgeGroup';
@@ -219,6 +220,12 @@ export function TestRunDetailPage(): JSX.Element {
             )}
           </p>
           <EnvFingerprintBadgeGroup fingerprint={run.envFingerprint} />
+          {/* [신규 No.40 — §4.14] 비초안 실행만(target이 있을 때만) "대상: ..." 줄을 기존 환경 지문 섹션에 추가한다. */}
+          {run.envFingerprint?.target && (
+            <p className="field-hint">
+              <TargetBadge target={run.envFingerprint.target} />
+            </p>
+          )}
 
           {run.mode === 'SINGLE' && run.summary && (
             <>

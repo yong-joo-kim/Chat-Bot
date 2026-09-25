@@ -160,3 +160,14 @@ No.14와 같은 방식(DB `groupBy` + 순수 함수)을 **`where` 절만 넓혀*
 3. **L3 정적 검사**(`feedback-sealing.spec.ts`): 원장의 `delete`/`deleteMany`/원시 `DELETE` **0건** · 쓰기 1파일 · 컬럼 이름 허용 목록(텍스트·`sessionId` 없음). **로그 `update*` 0건(R-10)은 유지된다** — 평가값은 로그에 쓰지 않고 별도 원장에 둔다. 로그에 새로 생기는 `feedbackOffered`·`inputKind`는 `groupId`와 같이 **적재 시점에 확정되는 사실**이며 `record()` 1곳에서만 쓴다.
 4. **결정 4 재사용**: `MessageFeedback.groupId` = 로그의 `groupId` 복사(**대화 당시** 그룹 — 평가 시점 소속이 아니다). 그룹·전역 만족도는 1차 범위 밖이지만 후속 통합이 과거를 소급 변경하지 않도록 지금 적재한다.
 5. **롤업 규약**: 향후 원장 삭제(No.45 보존기간·파기)도 단일 서비스 + 같은 트랜잭션의 수치 롤업 선적재로만 추가한다 — 평가 롤업 = `(chatbotId, turnDayBucket, targetKind, targetId)` 키의 👍/👎 건수 + `groupId` 스냅샷(텍스트·세션 ID 없음).
+
+
+---
+
+## 갱신 (2026-09-25 — No.40: 로그 `servedVersionId` · 봉인 불변)
+
+환경 분리/버전관리(No.40, **ADR-0039 §8**). 결정 1~8은 불변이다.
+
+1. **`ConversationLog.servedVersionId`**: 턴 처리 시점의 운영 포인터(모드 켜짐 — 엔진·BLOCK·상담 턴 공통 · 모드 꺼짐 = null). `groupId`·`topicId`와 같이 **적재 시점에 확정되는 사실**이며 `record()` 1곳에서만 쓰고 적재 후 바꾸지 않는다(R-9/R-10 불변). FK·인덱스 없음 · 백필 없음.
+2. 1차는 적재만 한다 — 버전별 통계 비교·비율 분할은 2차이며, 그때 인덱스와 세션 귀속 규칙을 이 컬럼 위에 올린다. 누적 통계·그룹 귀속 집계는 불변이다.
+3. 환경 전환 이력(`EnvironmentSwitchLog`)은 운영 이력이지 대화 원천이 아니다 — 삭제·갱신 코드 0(영구삭제 동반 삭제만).

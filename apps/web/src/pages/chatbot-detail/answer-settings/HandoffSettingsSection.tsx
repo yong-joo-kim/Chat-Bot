@@ -8,6 +8,7 @@ import { useToast } from '../../../components/Toast';
 import { SkeletonCard } from '../../../components/Skeleton';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ResourcePickerField } from '../../../components/ResourcePickerField';
+import { EnvironmentScopeNotice } from '../../../components/EnvironmentScopeNotice';
 import { MESSAGES } from '../../../constants/messages';
 
 interface FormState {
@@ -62,7 +63,16 @@ function toDto(f: FormState): UpdateHandoffSettingsDto {
  * (`GET/PUT /chatbots/:chatbotId/handoff-settings`)이므로 답변 설정 저장 요청과 절대 합치지 않는다
  * (설계서 §26 D-1 — `ChatbotHandoffSetting`은 버전 스냅샷·복원 대상 밖의 별도 행이다).
  */
-export function HandoffSettingsSection({ chatbotId, isArchived }: { chatbotId: string; isArchived: boolean }): JSX.Element {
+export function HandoffSettingsSection({
+  chatbotId,
+  isArchived,
+  environmentEnabled = false,
+}: {
+  chatbotId: string;
+  isArchived: boolean;
+  /** [신규 No.40] 환경 밖 자산 배너용(§4.15) — 상담 설정은 스냅샷 밖이라 저장 즉시 운영에 반영된다. */
+  environmentEnabled?: boolean;
+}): JSX.Element {
   const { can } = useAuth();
   const { showToast } = useToast();
   const msg = MESSAGES.handoffSettings;
@@ -129,6 +139,7 @@ export function HandoffSettingsSection({ chatbotId, isArchived }: { chatbotId: s
 
   return (
     <section className="answer-settings-section">
+      <EnvironmentScopeNotice visible={environmentEnabled} />
       <form onSubmit={(e) => void handleSubmit(e)} noValidate>
         <fieldset disabled={!canWrite} className="answer-settings-fieldset">
           <legend className="answer-settings-section-header">

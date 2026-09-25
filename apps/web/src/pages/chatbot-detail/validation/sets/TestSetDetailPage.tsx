@@ -23,7 +23,7 @@ const PAGE_SIZE = 50;
 /** V2 — TC 세트 상세(TC 표 + 대량 업로드 + 실행 시작, ui-spec §4.2). */
 export function TestSetDetailPage(): JSX.Element {
   const { setId } = useParams<{ setId: string }>();
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -231,6 +231,7 @@ export function TestSetDetailPage(): JSX.Element {
             disabled={set.caseCount === 0 || hasInProgressRun}
             disabledReason={set.caseCount === 0 ? msg.runDisabledEmptyReason : hasInProgressRun ? msg.runDisabledInProgressReason : undefined}
             onStarted={(runId) => navigate(`/chatbots/${chatbot.id}/validation/runs/${runId}`)}
+            environmentStatus={environmentStatus}
           />
         )}
       </div>

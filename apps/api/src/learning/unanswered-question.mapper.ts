@@ -1,5 +1,12 @@
 import type { UnansweredQuestion as PrismaUnansweredQuestion } from '@prisma/client';
-import type { FeedbackTargetRef, IntentSuggestion, UnansweredQuestionListItem, UnansweredQuestionStatus, UnansweredSource } from '@chat-bot/shared-types';
+import type {
+  FeedbackTargetRef,
+  IntentSuggestion,
+  ProdReflection,
+  UnansweredQuestionListItem,
+  UnansweredQuestionStatus,
+  UnansweredSource,
+} from '@chat-bot/shared-types';
 
 export function parseVariantsJson(json: string): string[] {
   try {
@@ -19,6 +26,8 @@ export function toUnansweredQuestionListItem(
     /** [신규 No.44] NEGATIVE_FEEDBACK 행만 — 최근 👎 턴의 답변 대상. */
     lastFeedbackTarget?: FeedbackTargetRef;
     lastFeedbackMatchedIntentId?: string;
+    /** [신규 No.40 — §15.1] 환경 분리 모드 켜짐 · `status = RESOLVED` 항목에만 싣는다. */
+    prodReflection?: ProdReflection;
   } = {},
 ): UnansweredQuestionListItem {
   return {
@@ -42,5 +51,6 @@ export function toUnansweredQuestionListItem(
     lastFeedbackMatchedIntentId: opts.lastFeedbackMatchedIntentId,
     // "직접 수정 완료" = RESOLVED인데 resolvedIntentId가 없다(반영 흐름은 항상 값을 채운다 — 파생 판정, 컬럼 추가 0).
     resolvedDirectly: row.status === 'RESOLVED' && row.resolvedIntentId == null ? true : undefined,
+    prodReflection: opts.prodReflection,
   };
 }

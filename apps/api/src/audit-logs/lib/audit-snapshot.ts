@@ -79,6 +79,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   CannedResponse: ['title', 'category', 'shortcut', 'enabled', 'sortOrder', 'bodyLength'],
   // 토픽 시스템(No.22) 그룹 추가(topic-system-설계.md §15).
   Topic: ['name', 'description', 'sortOrder', 'enabled'],
+  // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §18) — 사유 메모 본문·
+  // 자산 본문·발화는 화이트리스트에 없다(FR-0-155).
+  ChatbotEnvironment: ['enabled', 'stagingVersionNo', 'prodVersionNo', 'gateMode', 'gateTestSetId', 'gateMinPassRate', 'gateValidHours'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

@@ -27,7 +27,7 @@ const CATEGORIES: FaqCategory[] = ['FAQ', 'SMALL_TALK', 'SELF_SERVICE', 'ERROR_R
 
 /** D5 — FAQ 관리(ui-spec §4.7). */
 export function FaqsPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const isArchived = chatbot.status === 'ARCHIVED';
@@ -355,6 +355,7 @@ export function FaqsPage(): JSX.Element {
         readOnly={isArchived}
         isArchived={isArchived}
         onJumpToFaq={handleJumpToFaq}
+        environmentStatus={environmentStatus}
       />
       <BulkImportModal resourceType="FAQ" chatbotId={chatbot.id} isOpen={importOpen} onClose={() => setImportOpen(false)} onCommitted={load} topics={topics} />
       <BulkTopicAssignModal

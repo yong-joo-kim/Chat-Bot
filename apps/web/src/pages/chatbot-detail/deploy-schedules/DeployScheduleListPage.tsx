@@ -25,11 +25,12 @@ const PAGE_SIZE = 20;
 const POLL_INTERVAL_MS = 5000;
 
 const STATUS_OPTIONS: DeployScheduleStatus[] = ['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'MISSED', 'HELD', 'CANCELLED'];
-const ACTION_OPTIONS: DeployScheduleAction[] = ['RESTORE_VERSION', 'PUBLISH', 'SET_WEB_CHANNEL'];
+// [신규 No.40] 환경 분리 — 운영 버전 전환 예약도 동작 필터에 추가한다.
+const ACTION_OPTIONS: DeployScheduleAction[] = ['RESTORE_VERSION', 'PUBLISH', 'SET_WEB_CHANNEL', 'SWITCH_PROD_VERSION'];
 
 /** S1 — 챗봇별 예약 목록(`scheduled-deploy-ui-spec.md` §4.1). */
 export function DeployScheduleListPage(): JSX.Element {
-  const { chatbot } = useChatbotDetailContext();
+  const { chatbot, environmentStatus } = useChatbotDetailContext();
   const { can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -242,6 +243,7 @@ export function DeployScheduleListPage(): JSX.Element {
           onCreated={handleCreated}
           timezone={meta.timezone}
           chatbotStatus={chatbot.status}
+          environmentStatus={environmentStatus}
         />
       )}
 
@@ -257,6 +259,7 @@ export function DeployScheduleListPage(): JSX.Element {
           versionId={retryTarget.versionId}
           versionNo={retryTarget.item.targetVersionNo ?? undefined}
           enabled={retryTarget.item.action === 'SET_WEB_CHANNEL' ? (retryTarget.item.channelEnabled ?? undefined) : undefined}
+          environmentStatus={environmentStatus}
         />
       )}
 

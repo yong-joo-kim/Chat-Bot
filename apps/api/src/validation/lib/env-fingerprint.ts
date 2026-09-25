@@ -1,4 +1,4 @@
-import type { DialogueBundle, MatchingThresholds, TestRunEnvFingerprint, TestRunOverlaySource } from '@chat-bot/shared-types';
+import type { DialogueBundle, MatchingThresholds, ResolvedBundleTarget, TestRunEnvFingerprint, TestRunOverlaySource } from '@chat-bot/shared-types';
 
 export interface BuildEnvFingerprintInput {
   bundle: Pick<DialogueBundle, 'intents' | 'keywords' | 'homonyms' | 'contexts' | 'dialogNodes' | 'faqs'>;
@@ -8,6 +8,8 @@ export interface BuildEnvFingerprintInput {
   degradedMode: boolean;
   useRag: boolean;
   overlaySource: TestRunOverlaySource;
+  /** [신규 No.40] 비초안 실행만(§12.2) — 초안 실행 지문 바이트는 불변이다(선택 필드). */
+  target?: ResolvedBundleTarget & { contentHash: string };
 }
 
 /**
@@ -29,6 +31,7 @@ export function buildEnvFingerprint(input: BuildEnvFingerprintInput): TestRunEnv
     degradedMode: input.degradedMode,
     useRag: input.useRag,
     overlaySource: input.overlaySource,
+    ...(input.target ? { target: input.target } : {}),
   };
 }
 

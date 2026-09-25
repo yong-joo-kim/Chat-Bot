@@ -13,6 +13,8 @@ export function deployScheduleActionText({ action, targetVersionNo, enableWebCha
   const msg = MESSAGES.deploySchedules.actionLabel;
   if (action === 'RESTORE_VERSION') return msg.RESTORE_VERSION(targetVersionNo ?? null);
   if (action === 'PUBLISH') return enableWebChannel ? msg.PUBLISH_WITH_CHANNEL : msg.PUBLISH;
+  // [신규 No.40] 환경 분리 — 운영 버전 전환 예약.
+  if (action === 'SWITCH_PROD_VERSION') return msg.SWITCH_PROD_VERSION(targetVersionNo ?? null);
   return channelEnabled ? msg.SET_WEB_CHANNEL_OPEN : msg.SET_WEB_CHANNEL_CLOSE;
 }
 

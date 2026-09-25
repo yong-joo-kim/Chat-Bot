@@ -19,7 +19,10 @@ import { ExecutorRegistry } from './executors/executor.registry';
 import { RestoreVersionExecutor } from './executors/restore-version.executor';
 import { PublishExecutor } from './executors/publish.executor';
 import { SetWebChannelExecutor } from './executors/set-web-channel.executor';
+import { SwitchProdVersionExecutor } from './executors/switch-prod-version.executor';
 import { PostRunTestStarter } from './post-run/post-run-test.starter';
+import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
+import { EnvironmentScheduleHooks } from './env-hooks/environment-schedule.hooks';
 
 /**
  * [신규 2026-09-23 No.28] 운영 예약 배포(ADR-0032, §2.1). 자산·상태·채널을 **직접 쓰지 않는다** —
@@ -29,7 +32,7 @@ import { PostRunTestStarter } from './post-run/post-run-test.starter';
  * import하지 않는다(§2.2 봉인 — §16 D-2).
  */
 @Module({
-  imports: [VersionsModule, VersionCaptureModule, ChannelsModule, ChatbotsModule, ValidationModule, EmbeddingModule],
+  imports: [VersionsModule, VersionCaptureModule, ChannelsModule, ChatbotsModule, ValidationModule, EmbeddingModule, EnvironmentCoreModule],
   controllers: [DeploySchedulesController, DeploySchedulesGlobalController],
   providers: [
     { provide: CLOCK, useClass: SystemClock },
@@ -44,7 +47,11 @@ import { PostRunTestStarter } from './post-run/post-run-test.starter';
     RestoreVersionExecutor,
     PublishExecutor,
     SetWebChannelExecutor,
+    SwitchProdVersionExecutor,
     PostRunTestStarter,
+    EnvironmentScheduleHooks,
   ],
+  // [신규 No.40] `environment.module.ts`(모드 켜기/끄기)가 재사용한다(§11.6, C-4).
+  exports: [EnvironmentScheduleHooks],
 })
 export class DeploySchedulesModule {}

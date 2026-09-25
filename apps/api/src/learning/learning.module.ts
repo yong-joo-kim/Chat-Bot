@@ -12,6 +12,8 @@ import { DecompositionService } from './decomposition.service';
 import { DecomposedResolveService } from './decomposed-resolve.service';
 import { MorphAnalyzerFactory } from './morph/morph-analyzer.factory';
 import { VersionCaptureModule } from '../versions/capture/version-capture.module';
+import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
+import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 
 /**
  * No.15 학습현황(관리자 보조 재학습) + No.23 요소분해/추천 출처 확장(2026-09-22) — 신규 쓰기 모듈(DD-57).
@@ -21,7 +23,18 @@ import { VersionCaptureModule } from '../versions/capture/version-capture.module
  * `learning`은 대화 파이프라인을 호출하지 않는다(역방향 의존 금지, code-reviewer 점검 항목).
  */
 @Module({
-  imports: [ChatbotsModule, IntentsModule, KeywordsModule, DialogueCommonModule, ClassifierModule, VersionCaptureModule],
+  imports: [
+    ChatbotsModule,
+    IntentsModule,
+    KeywordsModule,
+    DialogueCommonModule,
+    ClassifierModule,
+    VersionCaptureModule,
+    // [신규 No.40 — §15.1/15.2] 목록 prodReflection(EnvironmentReadService.getProdHistoryDesc) ·
+    // 상세 "초안에서 삭제됨"(VersionBundleService.getCore()).
+    EnvironmentCoreModule,
+    EnvironmentServingModule,
+  ],
   controllers: [UnansweredQuestionsController],
   providers: [
     UnansweredQuestionsService,

@@ -80,6 +80,9 @@ export const AuditTargetType = z.enum([
   'CannedResponse',
   // 토픽 시스템(No.22) 그룹 추가(topic-system-설계.md §15) — 토픽 CRUD·순서·활성 전환 감사 대상.
   'Topic',
+  // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §18) — 켜기/끄기·승격·
+  // 운영 전환/롤백·게이트 설정 감사 대상(targetId = chatbotId). 액션은 기존 STATUS_CHANGE·UPDATE 재사용.
+  'ChatbotEnvironment',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -104,6 +107,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   HandoffSession: '상담',
   CannedResponse: '자주 쓰는 문장',
   Topic: '토픽',
+  ChatbotEnvironment: '환경',
 };
 
 /**

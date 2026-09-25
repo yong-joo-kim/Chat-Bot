@@ -47,8 +47,10 @@ export interface PersistMeta {
   actor?: { id: string; email: string };
 }
 
-/** 자동 스냅샷 5종 중 `MANUAL`·`BEFORE_RESTORE`를 제외한 나머지(§6.4 훅 8지점이 넘기는 트리거). */
-export type AutoCaptureTrigger = Exclude<ChatbotVersionTrigger, 'MANUAL' | 'BEFORE_RESTORE'>;
+/** 자동 스냅샷 5종 중 `MANUAL`·`BEFORE_RESTORE`를 제외한 나머지(§6.4 훅 8지점이 넘기는 트리거).
+ * [신규 No.40] `ENV_INIT`·`PROMOTE`도 제외한다 — 이 둘은 환경 모듈이 `persistWithin()`을 직접
+ * 호출한다(자동 스냅샷 훅 경로가 아니다, §5.3 · §9.2). */
+export type AutoCaptureTrigger = Exclude<ChatbotVersionTrigger, 'MANUAL' | 'BEFORE_RESTORE' | 'ENV_INIT' | 'PROMOTE'>;
 
 /**
  * 캡처 모듈의 유일한 서비스(§2.1) — 일관 읽기 캡처 · 영속화(수동/자동/BEFORE_RESTORE 공용).

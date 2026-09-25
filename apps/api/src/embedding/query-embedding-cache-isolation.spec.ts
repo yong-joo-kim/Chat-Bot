@@ -92,6 +92,9 @@ describe('AC-V4-3 — 대량 TC 실행이 전역 질의 임베딩 캐시를 오�
     const ragService = { attempt: jest.fn().mockResolvedValue({ wouldUseRag: false }) };
     const cancelRegistry = { isCancelled: jest.fn().mockReturnValue(false), cancel: jest.fn(), clear: jest.fn() };
     const apiConnectionCatalog = { loadMockSources: jest.fn().mockResolvedValue(new Map()) };
+    // [신규 No.40 — §12.2] 대상 선택 관련 협력자(이 시험은 초안 경로만 실행 — 호출되지 않는다).
+    const versionBundles = { get: jest.fn(), getCore: jest.fn(), warm: jest.fn() };
+    const versionVectorResolver = { resolve: jest.fn().mockResolvedValue({ entries: [], missing: 0 }) };
 
     const executor = new TestRunExecutor(
       prisma as never,
@@ -105,6 +108,8 @@ describe('AC-V4-3 — 대량 TC 실행이 전역 질의 임베딩 캐시를 오�
       cancelRegistry as never,
       config as never,
       apiConnectionCatalog as never,
+      versionBundles as never,
+      versionVectorResolver as never,
     );
 
     const callsBeforeExecution = embedSpy.mock.calls.length;

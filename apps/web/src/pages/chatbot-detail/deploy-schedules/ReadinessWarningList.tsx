@@ -54,6 +54,10 @@ export function ReadinessWarningList({ warnings }: { warnings: ReadinessWarning[
           case 'ENGINE_DISABLED_ON_THIS_INSTANCE':
             text = msg.ENGINE_DISABLED_ON_THIS_INSTANCE;
             break;
+          // [신규 No.40] 모드 켜진 챗봇의 RESTORE_VERSION 예약 — 복원 예약이 초안에만 적용된다는 의미 변화 안내.
+          case 'ENV_DRAFT_ONLY':
+            text = msg.ENV_DRAFT_ONLY;
+            break;
           default:
             text = '';
         }
