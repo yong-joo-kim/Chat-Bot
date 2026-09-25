@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { ExampleConflict, ResourceRef } from '@chat-bot/shared-types';
+import type { ExampleConflict, ResourceRef, Topic } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ChipListEditor } from '../../../components/ChipListEditor';
+import { TopicSelectField } from '../../../components/TopicSelectField';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { intentsApi } from '../../../api/dialogue';
@@ -15,18 +16,21 @@ export interface IntentEditModalProps {
   isOpen: boolean;
   chatbotId: string;
   intentId: string | null;
+  /** [신규 No.22] `TopicSelectField`용 — 챗봇 전체 토픽(호출부가 1회 로드해 전달). */
+  topics?: Topic[];
   onClose: () => void;
   onSaved: () => void;
   readOnly?: boolean;
 }
 
 /** D2a — 의도 편집 모달(ui-spec §4.3.1). */
-export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved, readOnly = false }: IntentEditModalProps): JSX.Element {
+export function IntentEditModal({ isOpen, chatbotId, intentId, topics = [], onClose, onSaved, readOnly = false }: IntentEditModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.intents;
   const { showToast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [examples, setExamples] = useState<string[]>([]);
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [linkedNodes, setLinkedNodes] = useState<ResourceRef[]>([]);
   const [conflicts, setConflicts] = useState<ExampleConflict[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -45,6 +49,7 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
           setName(detail.name);
           setDescription(detail.description ?? '');
           setExamples(detail.examples);
+          setTopicId(detail.topicId ?? null);
           setLinkedNodes(detail.linkedNodes);
         })
         .catch(() => showToast(MESSAGES.errors.generic))
@@ -53,6 +58,7 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
       setName('');
       setDescription('');
       setExamples([]);
+      setTopicId(null);
       setLinkedNodes([]);
     }
   }, [isOpen, intentId, chatbotId, showToast]);
@@ -69,8 +75,8 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
     setSaving(true);
     try {
       const result = intentId
-        ? await intentsApi.update(chatbotId, intentId, { name, description: description || null, examples })
-        : await intentsApi.create(chatbotId, { name, description: description || undefined, examples });
+        ? await intentsApi.update(chatbotId, intentId, { name, description: description || null, examples, topicId })
+        : await intentsApi.create(chatbotId, { name, description: description || undefined, examples, topicId: topicId ?? undefined });
       setConflicts(result.meta.conflicts);
       showToast(msg.saveSuccess);
       onSaved();
@@ -80,6 +86,7 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
         const details = fieldErrorsFromApiError(e2);
         if (Object.keys(details).length > 0) setFieldErrors(details);
         else if (e2.code === 'DUPLICATE_NAME') setFieldErrors({ name: e2.message });
+        else if (e2.code === 'INVALID_REFERENCE') setFieldErrors({ topicId: MESSAGES.topics.topicFieldInvalidReference });
         else showToast(e2.message || MESSAGES.errors.generic);
       } else {
         showToast(MESSAGES.errors.generic);
@@ -122,6 +129,16 @@ export function IntentEditModal({ isOpen, chatbotId, intentId, onClose, onSaved,
               />
               <p className="char-counter">{description.length}/300자</p>
             </div>
+
+            <TopicSelectField
+              id="intent-topic"
+              label={MESSAGES.topics.topicFieldLabel}
+              topics={topics}
+              value={topicId}
+              onChange={setTopicId}
+              disabled={readOnly}
+              errorMessage={fieldErrors.topicId}
+            />
 
             <ChipListEditor
               id="intent-examples"

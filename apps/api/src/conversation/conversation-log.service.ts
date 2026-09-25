@@ -36,6 +36,8 @@ export interface RecordConversationLogParams {
   /** [No.24] 상담 구간(개입 중·검증된 발신) 사용자 턴인가(ADR-0036 §1) — 질문 순위·미응답 수집에서
    * 제외, 응답출처 OTHER 불변. 기본 false. */
   handoffTurn?: boolean;
+  /** [신규 No.22] 답한 자산의 **대화 당시** 토픽(공통·미응답·RAG·상담 턴 = undefined → null). */
+  topicId?: string;
 }
 
 /**
@@ -90,6 +92,8 @@ export class ConversationLogService {
           surveyTurn: params.surveyTurn ?? false,
           handoffTurn: params.handoffTurn ?? false,
           apiNotice: params.apiNotice ?? false,
+          // [신규 No.22 — §17 T-12] 쓰기 주체는 이 1곳뿐이다.
+          topicId: params.topicId,
         },
       });
 

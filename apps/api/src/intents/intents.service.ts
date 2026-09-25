@@ -29,6 +29,8 @@ import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { VersionCaptureService } from '../versions/capture/version-capture.service';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 import type { ImportStagingStore } from '../dialogue-common/import/import-staging.store';
 import { CsvSheetReader } from '../dialogue-common/import/csv-sheet-reader';
 import { XlsxSheetReader } from '../dialogue-common/import/xlsx-sheet-reader';
@@ -72,11 +74,14 @@ export class IntentsService {
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
     private readonly versionCapture: VersionCaptureService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
 
-  /** 감사 스냅샷용 — 원문 예문 배열이 아니라 건수로 대체한다(FR-13-11, ADR-0016 §9.6). */
-  private toAuditSnapshot(row: { id: string; name: string; description: string | null; examples: string }) {
-    return { ...row, exampleCount: this.parseExamplesJson(row.examples).length };
+  /** 감사 스냅샷용 — 원문 예문 배열이 아니라 건수로 대체한다(FR-13-11, ADR-0016 §9.6).
+   * [신규 No.22] topicId는 값이 있을 때만 넣는다 — 토픽 없는 챗봇의 감사 본문을 바이트 동일하게 유지한다. */
+  private toAuditSnapshot(row: { id: string; name: string; description: string | null; examples: string; topicId?: string | null }) {
+    const { topicId, ...rest } = row;
+    return { ...rest, exampleCount: this.parseExamplesJson(row.examples).length, ...(topicId ? { topicId } : {}) };
   }
 
   private parseExamplesJson(json: string): string[] {
@@ -91,10 +96,11 @@ export class IntentsService {
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.intent.findFirst({
       where: { chatbotId, nameNormalized, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true },
+      select: { id: true, topic: { select: { name: true } } },
     });
     if (existing) {
-      throw new ApiException('DUPLICATE_NAME', 409, '이미 같은 이름의 의도가 있습니다.');
+      const suffix = existing.topic ? `(토픽: ${existing.topic.name})` : '';
+      throw new ApiException('DUPLICATE_NAME', 409, `이미 같은 이름의 의도가 있습니다.${suffix}`);
     }
   }
 
@@ -102,12 +108,17 @@ export class IntentsService {
     if (examples.length === 0) return [];
     const others = await this.prisma.intent.findMany({
       where: { chatbotId, ...(intentId ? { id: { not: intentId } } : {}) },
-      select: { id: true, name: true, examples: true },
+      select: { id: true, name: true, examples: true, topicId: true, topic: { select: { name: true } } },
     });
     return findExampleConflicts(
       intentId,
       examples,
-      others.map((o) => ({ id: o.id, name: o.name, examples: this.parseExamplesJson(o.examples) })),
+      others.map((o) => ({
+        id: o.id,
+        name: o.name,
+        examples: this.parseExamplesJson(o.examples),
+        ...(o.topicId ? { topicId: o.topicId, topicName: o.topic?.name } : {}),
+      })),
     );
   }
 
@@ -117,6 +128,7 @@ export class IntentsService {
     const trimmedName = dto.name.trim();
     const nameNormalized = normalizeText(trimmedName);
     await this.assertNameFree(chatbotId, nameNormalized);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const { examples, deduplicatedCount } = dedupeExamples(dto.examples ?? []);
     if (examples.length > MAX_EXAMPLES) {
@@ -132,6 +144,7 @@ export class IntentsService {
         nameNormalized,
         description: dto.description,
         examples: JSON.stringify(examples),
+        topicId: dto.topicId ?? undefined,
       },
     });
     this.bundleService.invalidate(chatbotId);
@@ -151,9 +164,11 @@ export class IntentsService {
     await this.scope.assertReadable(chatbotId);
 
     const where: Prisma.IntentWhereInput = { chatbotId };
-    if (query.q) {
-      where.OR = [{ name: { contains: query.q } }, { description: { contains: query.q } }];
-    }
+    const andConditions: Prisma.IntentWhereInput[] = [];
+    if (query.q) andConditions.push({ OR: [{ name: { contains: query.q } }, { description: { contains: query.q } }] });
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) andConditions.push(topicWhere as Prisma.IntentWhereInput);
+    if (andConditions.length > 0) where.AND = andConditions;
     const orderBy = { [query.sort]: query.order } as Prisma.IntentOrderByWithRelationInput;
 
     const [rows, total] = await Promise.all([
@@ -211,6 +226,13 @@ export class IntentsService {
       conflicts = await this.computeConflicts(chatbotId, id, examples);
     }
 
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    // [신규 No.22 — §5.2] topicId만 바뀌는 수정은 updatedAt을 보존한다 — 엔진 동점 순위(rankNodes
+    // `updatedAt desc`)가 분류 변경으로 흔들리지 않게 한다(FR-TP2-6, §25 D-3).
+    const onlyTopicIdChanged = dto.topicId !== undefined && dto.name === undefined && dto.description === undefined && dto.examples === undefined;
+
     const row = await this.prisma.intent.update({
       where: { id },
       data: {
@@ -218,6 +240,8 @@ export class IntentsService {
         nameNormalized,
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.examples !== undefined ? { examples: JSON.stringify(examples) } : {}),
+        ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+        ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
       },
     });
 
@@ -509,6 +533,7 @@ export class IntentsService {
     if (!staged || staged.chatbotId !== chatbotId || staged.resourceType !== 'INTENT') {
       throw new ApiException('IMPORT_TOKEN_EXPIRED', 400, '검증 결과가 만료되었습니다(10분). 파일을 다시 검증해 주세요.');
     }
+    if (dto.newItemTopicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.newItemTopicId);
     const { plan, errors } = staged.plan as StagedIntentPayload;
 
     if (dto.errorPolicy === 'ABORT_ON_ERROR' && errors.length > 0) {
@@ -553,6 +578,7 @@ export class IntentsService {
               nameNormalized: item.nameNormalized,
               description: item.description,
               examples: JSON.stringify(capped),
+              topicId: dto.newItemTopicId ?? undefined,
             },
           });
           createdItems += 1;
@@ -588,9 +614,10 @@ export class IntentsService {
     return { content: buildCsv(INTENT_TEMPLATE_HEADERS, []), filename: 'intent-template.csv', mimeType: 'text/csv; charset=utf-8' };
   }
 
-  async export(chatbotId: string): Promise<{ content: string; filename: string; mimeType: string }> {
+  async export(chatbotId: string, topicIds?: string[]): Promise<{ content: string; filename: string; mimeType: string }> {
     await this.scope.assertReadable(chatbotId);
-    const rows = await this.prisma.intent.findMany({ where: { chatbotId } });
+    const topicWhere = buildTopicIdsWhere(topicIds);
+    const rows = await this.prisma.intent.findMany({ where: { chatbotId, ...(topicWhere ?? {}) } });
     const lines: string[][] = [];
     for (const row of rows) {
       const examples = this.parseExamplesJson(row.examples);

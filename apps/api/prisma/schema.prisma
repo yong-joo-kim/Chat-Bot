@@ -80,6 +80,8 @@ model Chatbot {
   handoffSetting          ChatbotHandoffSetting?
   handoffSessions         HandoffSession[]
   cannedResponses         CannedResponse[]
+  /// [신규 No.22] 역참조만 — DB 컬럼 변화 0.
+  topics                  Topic[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -103,8 +105,13 @@ model Intent {
   /// DD-5 / ADR-0005 — 역참조(이 의도를 쓰는 노드) 전용.
   nodeLinks DialogNodeIntent[]
 
+  /// [신규 No.22] null = 공통(항상 활성). 같은 챗봇의 토픽만(서비스 검사 — FK는 Topic.id만 본다).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, nameNormalized])
   @@index([chatbotId, updatedAt])
+  @@index([topicId])
   @@map("intents")
 }
 
@@ -122,8 +129,13 @@ model Keyword {
 
   nodeLinks DialogNodeKeyword[]
 
+  /// [신규 No.22] null = 공통(항상 활성). 같은 챗봇의 토픽만(서비스 검사 — FK는 Topic.id만 본다).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, nameNormalized])
   @@index([chatbotId, updatedAt])
+  @@index([topicId])
   @@map("keywords")
 }
 
@@ -145,8 +157,13 @@ model HomonymDictionary {
   /// DD-1 — 기존 행 백필을 위해 @default(now())를 함께 둔다.
   updatedAt      DateTime @default(now()) @updatedAt
 
+  /// [신규 No.22] null = 공통(항상 활성). 같은 챗봇의 토픽만(서비스 검사 — FK는 Topic.id만 본다).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, wordNormalized])
   @@index([chatbotId, updatedAt])
+  @@index([topicId])
   @@map("homonym_dictionaries")
 }
 
@@ -179,9 +196,14 @@ model DialogNode {
   intentLinks  DialogNodeIntent[]
   keywordLinks DialogNodeKeyword[]
 
+  /// [신규 No.22] null = 공통(항상 활성). START/FALLBACK은 항상 null(서비스 검사 — §5.2).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, nameNormalized])
   @@index([chatbotId, priority])
   @@index([chatbotId, nodeType])
+  @@index([topicId])
   @@map("dialog_nodes")
 }
 
@@ -228,8 +250,13 @@ model ContextVariable {
 
   dialogNodes DialogNode[]
 
+  /// [신규 No.22] null = 공통(항상 활성). 같은 챗봇의 토픽만(서비스 검사 — FK는 Topic.id만 본다).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, nameNormalized])
   @@index([chatbotId, updatedAt])
+  @@index([topicId])
   @@map("context_variables")
 }
 
@@ -249,10 +276,42 @@ model FaqEntry {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  /// [신규 No.22] null = 공통(항상 활성). 같은 챗봇의 토픽만(서비스 검사 — FK는 Topic.id만 본다).
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@unique([chatbotId, questionNormalized])
   @@index([chatbotId, category])
   @@index([chatbotId, updatedAt])
+  @@index([topicId])
   @@map("faq_entries")
+}
+
+/// [신규 No.22] 챗봇 안의 평면 토픽(ADR-0037 §1). 스냅샷 대상이 아니다(정의·활성 상태 모두).
+/// 쓰기 주체 = topics.service.ts 1파일(+ 분리 적재기의 생성). 챗봇당 50개(서비스 검사).
+model Topic {
+  id             String   @id @default(uuid())
+  chatbotId      String
+  chatbot        Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name           String
+  nameNormalized String
+  description    String?
+  sortOrder      Int
+  /// false면 소속 노드·의도·FAQ가 getCached() 번들에서 빠진다. 키워드·컨텍스트·동음이의어는 빠지지 않는다.
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  intents          Intent[]
+  keywords         Keyword[]
+  homonyms         HomonymDictionary[]
+  dialogNodes      DialogNode[]
+  contextVariables ContextVariable[]
+  faqs             FaqEntry[]
+
+  @@unique([chatbotId, nameNormalized])
+  @@index([chatbotId, sortOrder])
+  @@map("topics")
 }
 
 model Channel {
@@ -432,6 +491,10 @@ model ConversationLog {
   /// 진행 중 목록의 "마지막 미응답 사유 = 연동 실패"의 유일한 근거(파생 불가). 인덱스 없음.
   /// 기존 행은 false(사유 미상 → "답변 못함" 표시, K-14).
   apiNotice       Boolean  @default(false)
+  /// [신규 No.22] 답한 자산(노드 → FAQ → 의도 순 첫 매칭)의 **대화 당시** 토픽. 공통·미응답·RAG·
+  /// 상담 턴 = null. FK 없음 · 인덱스 없음(로그 규약, `groupId`/`matchedIntentId`와 동일한 의도적
+  /// 예외) · 쓰기 주체 = `ConversationLogService.record()` 1곳 · 적재 후 불변 · 백필 없음.
+  topicId         String?
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])

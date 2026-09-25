@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { ResourceRef } from '@chat-bot/shared-types';
+import type { ResourceRef, Topic } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ChipListEditor } from '../../../components/ChipListEditor';
+import { TopicSelectField } from '../../../components/TopicSelectField';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { keywordsApi } from '../../../api/dialogue';
@@ -14,18 +15,21 @@ export interface KeywordEditModalProps {
   isOpen: boolean;
   chatbotId: string;
   keywordId: string | null;
+  /** [신규 No.22] `TopicSelectField`용 — 챗봇 전체 토픽. */
+  topics?: Topic[];
   onClose: () => void;
   onSaved: () => void;
   readOnly?: boolean;
 }
 
 /** D2b — 키워드 편집 모달(ui-spec §4.3). */
-export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSaved, readOnly = false }: KeywordEditModalProps): JSX.Element {
+export function KeywordEditModal({ isOpen, chatbotId, keywordId, topics = [], onClose, onSaved, readOnly = false }: KeywordEditModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.intents;
   const { showToast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [synonyms, setSynonyms] = useState<string[]>([]);
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [linkedNodes, setLinkedNodes] = useState<ResourceRef[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [conflictBanner, setConflictBanner] = useState<string | undefined>(undefined);
@@ -44,6 +48,7 @@ export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSave
           setName(detail.name);
           setDescription(detail.description ?? '');
           setSynonyms(detail.synonyms);
+          setTopicId(detail.topicId ?? null);
           setLinkedNodes(detail.linkedNodes);
         })
         .catch(() => showToast(MESSAGES.errors.generic))
@@ -52,6 +57,7 @@ export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSave
       setName('');
       setDescription('');
       setSynonyms([]);
+      setTopicId(null);
       setLinkedNodes([]);
     }
   }, [isOpen, keywordId, chatbotId, showToast]);
@@ -69,9 +75,9 @@ export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSave
     setConflictBanner(undefined);
     try {
       if (keywordId) {
-        await keywordsApi.update(chatbotId, keywordId, { name, description: description || null, synonyms });
+        await keywordsApi.update(chatbotId, keywordId, { name, description: description || null, synonyms, topicId });
       } else {
-        await keywordsApi.create(chatbotId, { name, description: description || undefined, synonyms });
+        await keywordsApi.create(chatbotId, { name, description: description || undefined, synonyms, topicId: topicId ?? undefined });
       }
       showToast(msg.saveSuccess);
       onSaved();
@@ -85,6 +91,8 @@ export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSave
           setFieldErrors(details);
         } else if (e2.code === 'DUPLICATE_NAME') {
           setFieldErrors({ name: e2.message });
+        } else if (e2.code === 'INVALID_REFERENCE') {
+          setFieldErrors({ topicId: MESSAGES.topics.topicFieldInvalidReference });
         } else {
           showToast(e2.message || MESSAGES.errors.generic);
         }
@@ -134,6 +142,16 @@ export function KeywordEditModal({ isOpen, chatbotId, keywordId, onClose, onSave
               />
               <p className="char-counter">{description.length}/300자</p>
             </div>
+
+            <TopicSelectField
+              id="keyword-topic"
+              label={MESSAGES.topics.topicFieldLabel}
+              topics={topics}
+              value={topicId}
+              onChange={setTopicId}
+              disabled={readOnly}
+              errorMessage={fieldErrors.topicId}
+            />
 
             <ChipListEditor
               id="keyword-synonyms"

@@ -18,6 +18,8 @@ import { ReferenceCheckService } from '../dialogue-common/reference-check.servic
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { toContextEntity, toContextListItem } from './context.mapper';
 import { findInvalidKeywordIds } from './lib/slot-definition';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 
 const NOT_FOUND_MESSAGE = '요청하신 컨텍스트를 찾을 수 없습니다.';
 
@@ -29,9 +31,10 @@ export class ContextsService {
     private readonly referenceCheck: ReferenceCheckService,
     private readonly bundleService: DialogueBundleService,
     private readonly auditLogService: AuditLogService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
 
-  private toAuditSnapshot(row: { id: string; name: string; slots: string; cancelKeywords: string; sessionTimeoutMinutes: number }) {
+  private toAuditSnapshot(row: { id: string; name: string; slots: string; cancelKeywords: string; sessionTimeoutMinutes: number; topicId?: string | null }) {
     let slotCount = 0;
     try {
       const parsed = JSON.parse(row.slots);
@@ -39,15 +42,19 @@ export class ContextsService {
     } catch {
       slotCount = 0;
     }
-    return { ...row, slotCount };
+    const { topicId, ...rest } = row;
+    return { ...rest, slotCount, ...(topicId ? { topicId } : {}) };
   }
 
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.contextVariable.findFirst({
       where: { chatbotId, nameNormalized, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true },
+      select: { id: true, topic: { select: { name: true } } },
     });
-    if (existing) throw new ApiException('DUPLICATE_NAME', 409, '이미 같은 이름의 컨텍스트가 있습니다.');
+    if (existing) {
+      const suffix = existing.topic ? `(토픽: ${existing.topic.name})` : '';
+      throw new ApiException('DUPLICATE_NAME', 409, `이미 같은 이름의 컨텍스트가 있습니다.${suffix}`);
+    }
   }
 
   private async assertKeywordRefsValid(chatbotId: string, slots: CreateContextDto['slots']): Promise<void> {
@@ -71,6 +78,7 @@ export class ContextsService {
     const nameNormalized = normalizeText(trimmedName);
     await this.assertNameFree(chatbotId, nameNormalized);
     await this.assertKeywordRefsValid(chatbotId, dto.slots);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const row = await this.prisma.contextVariable.create({
       data: {
@@ -82,6 +90,7 @@ export class ContextsService {
         completionMessage: dto.completionMessage,
         cancelKeywords: JSON.stringify(dto.cancelKeywords ?? ['취소', '그만', '처음으로']),
         sessionTimeoutMinutes: dto.sessionTimeoutMinutes ?? 30,
+        topicId: dto.topicId ?? undefined,
       },
     });
     this.bundleService.invalidate(chatbotId);
@@ -99,7 +108,11 @@ export class ContextsService {
   async list(chatbotId: string, query: ContextListQuery): Promise<Paginated<ContextListItem>> {
     await this.scope.assertReadable(chatbotId);
     const where: Prisma.ContextVariableWhereInput = { chatbotId };
-    if (query.q) where.OR = [{ name: { contains: query.q } }, { description: { contains: query.q } }];
+    const andConditions: Prisma.ContextVariableWhereInput[] = [];
+    if (query.q) andConditions.push({ OR: [{ name: { contains: query.q } }, { description: { contains: query.q } }] });
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) andConditions.push(topicWhere as Prisma.ContextVariableWhereInput);
+    if (andConditions.length > 0) where.AND = andConditions;
     const orderBy = { [query.sort]: query.order } as Prisma.ContextVariableOrderByWithRelationInput;
 
     const [rows, total] = await Promise.all([
@@ -134,6 +147,17 @@ export class ContextsService {
     if (dto.slots !== undefined) {
       await this.assertKeywordRefsValid(chatbotId, dto.slots);
     }
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    const onlyTopicIdChanged =
+      dto.topicId !== undefined &&
+      dto.name === undefined &&
+      dto.description === undefined &&
+      dto.slots === undefined &&
+      dto.completionMessage === undefined &&
+      dto.cancelKeywords === undefined &&
+      dto.sessionTimeoutMinutes === undefined;
 
     const row = await this.prisma.contextVariable.update({
       where: { id },
@@ -145,6 +169,8 @@ export class ContextsService {
         ...(dto.completionMessage !== undefined ? { completionMessage: dto.completionMessage } : {}),
         ...(dto.cancelKeywords !== undefined ? { cancelKeywords: JSON.stringify(dto.cancelKeywords) } : {}),
         ...(dto.sessionTimeoutMinutes !== undefined ? { sessionTimeoutMinutes: dto.sessionTimeoutMinutes } : {}),
+        ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+        ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
       },
     });
     this.bundleService.invalidate(chatbotId);

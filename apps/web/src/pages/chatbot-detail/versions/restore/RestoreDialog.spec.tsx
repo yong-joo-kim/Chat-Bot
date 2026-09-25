@@ -114,6 +114,53 @@ describe('RestoreDialog', () => {
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(baseRestoreResponse()));
   });
 
+  it('TOPIC_EXPOSURE_CHANGE 경고가 있으면 체크 전에는 확정 버튼이 비활성이고, 체크 후 확정 시 acknowledgeTopicExposure:true가 전달된다(No.22)', async () => {
+    const user = userEvent.setup();
+    mockRestorePreview.mockResolvedValue(basePreview({ warnings: [{ code: 'TOPIC_EXPOSURE_CHANGE', exposed: 18, hidden: 3 }] }));
+    mockRestore.mockResolvedValue(baseRestoreResponse());
+    const onRestored = vi.fn();
+    renderDialog(onRestored);
+
+    const confirmButton = await screen.findByRole('button', { name: 'v27로 복원' });
+    expect(confirmButton).toBeDisabled();
+    expect(screen.getByText(/준비 중\(비활성\) 토픽의 자산 18건이 운영에 노출되고, 3건이 운영에서 숨겨집니다/)).toBeInTheDocument();
+    // [코드 리뷰 1회차 L-6] 비활성 사유(체크박스 라벨)가 aria-describedby로 연결된다.
+    expect(confirmButton).toHaveAttribute('aria-describedby', 'restore-ack-topic-exposure-label');
+
+    const checkbox = screen.getByRole('checkbox', { name: /준비 중이던 자산 18건이 운영에 노출된다는 점을 확인했습니다/ });
+    await user.click(checkbox);
+    expect(confirmButton).not.toBeDisabled();
+    expect(confirmButton).not.toHaveAttribute('aria-describedby');
+
+    await user.click(confirmButton);
+
+    await waitFor(() =>
+      expect(mockRestore).toHaveBeenCalledWith('bot-1', 'ver-27', {
+        expectedCurrentHash: 'a'.repeat(64),
+        acknowledgeActive: undefined,
+        acknowledgeTopicExposure: true,
+      }),
+    );
+    await waitFor(() => expect(onRestored).toHaveBeenCalledWith(baseRestoreResponse()));
+  });
+
+  it('ACTIVE_CHATBOT과 TOPIC_EXPOSURE_CHANGE가 둘 다 있으면 둘 다 체크해야 확정 버튼이 활성화된다', async () => {
+    const user = userEvent.setup();
+    mockRestorePreview.mockResolvedValue(
+      basePreview({ warnings: [{ code: 'ACTIVE_CHATBOT' }, { code: 'TOPIC_EXPOSURE_CHANGE', exposed: 5, hidden: 0 }] }),
+    );
+    renderDialog();
+
+    const confirmButton = await screen.findByRole('button', { name: 'v27로 복원' });
+    expect(confirmButton).toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox', { name: /현재 운영 중입니다/ }));
+    expect(confirmButton).toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox', { name: /준비 중이던 자산 5건이 운영에 노출된다는 점을 확인했습니다/ }));
+    expect(confirmButton).not.toBeDisabled();
+  });
+
   it('ACTIVE 경고가 없으면 체크박스 없이 확정 버튼이 곧바로 활성 상태다', async () => {
     mockRestorePreview.mockResolvedValue(basePreview());
     renderDialog();
@@ -163,6 +210,32 @@ describe('RestoreDialog', () => {
     expect(mockRestorePreview).toHaveBeenCalledTimes(2);
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'v27로 복원' })).toBeInTheDocument();
+  });
+
+  it('[No.22 L-7] 400 VALIDATION_FAILED(field=acknowledgeTopicExposure)면 미리보기를 재조회하고 체크박스를 다시 미체크로 보여준다', async () => {
+    const user = userEvent.setup();
+    mockRestorePreview
+      .mockResolvedValueOnce(basePreview({ warnings: [{ code: 'TOPIC_EXPOSURE_CHANGE', exposed: 5, hidden: 0 }] }))
+      .mockResolvedValueOnce(basePreview({ warnings: [{ code: 'TOPIC_EXPOSURE_CHANGE', exposed: 9, hidden: 1 }] }));
+    mockRestore.mockRejectedValue(
+      new ApiError(400, '노출 값이 변경되었습니다.', 'VALIDATION_FAILED', [{ field: 'acknowledgeTopicExposure', message: '다시 확인해 주세요.' }]),
+    );
+    const onClose = vi.fn();
+    renderDialog(vi.fn(), onClose);
+
+    const confirmButton = await screen.findByRole('button', { name: 'v27로 복원' });
+    await user.click(screen.getByRole('checkbox', { name: /준비 중이던 자산 5건/ }));
+    expect(confirmButton).not.toBeDisabled();
+    await user.click(confirmButton);
+
+    await screen.findByText('미리보기 이후 자산이 변경되었습니다. 최신 내용으로 다시 확인합니다.');
+    expect(mockRestorePreview).toHaveBeenCalledTimes(2);
+    expect(onClose).not.toHaveBeenCalled();
+    // 최신 미리보기(노출 9건)로 다시 렌더되고, 확인 체크는 초기화되어 확정 버튼이 다시 비활성이다.
+    expect(await screen.findByText(/준비 중\(비활성\) 토픽의 자산 9건이 운영에 노출되고, 1건이 운영에서 숨겨집니다/)).toBeInTheDocument();
+    const checkboxAfter = screen.getByRole('checkbox', { name: /준비 중이던 자산 9건/ });
+    expect(checkboxAfter).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'v27로 복원' })).toBeDisabled();
   });
 
   it('409 RESTORE_IN_PROGRESS면 다이얼로그를 닫고 안내 토스트를 띄운다', async () => {

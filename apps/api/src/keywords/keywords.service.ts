@@ -45,6 +45,8 @@ import { buildXlsxTemplate } from '../dialogue-common/import/lib/xlsx-writer';
 import { toKeywordDetail, toKeywordEntity, toKeywordListItem } from './keyword.mapper';
 import { dedupeSynonyms, findSynonymConflict } from './lib/synonym-set';
 import type { UploadedFile } from '../intents/intents.service';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 
 const NOT_FOUND_MESSAGE = '요청하신 키워드를 찾을 수 없습니다.';
 const MAX_SYNONYMS = 200;
@@ -66,10 +68,12 @@ export class KeywordsService {
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
     private readonly versionCapture: VersionCaptureService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
 
-  private toAuditSnapshot(row: { id: string; name: string; description: string | null; synonyms: string }) {
-    return { ...row, synonymCount: this.parseSynonymsJson(row.synonyms).length };
+  private toAuditSnapshot(row: { id: string; name: string; description: string | null; synonyms: string; topicId?: string | null }) {
+    const { topicId, ...rest } = row;
+    return { ...rest, synonymCount: this.parseSynonymsJson(row.synonyms).length, ...(topicId ? { topicId } : {}) };
   }
 
   private parseSynonymsJson(json: string): string[] {
@@ -84,15 +88,18 @@ export class KeywordsService {
   private async assertNameFree(chatbotId: string, nameNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.keyword.findFirst({
       where: { chatbotId, nameNormalized, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true },
+      select: { id: true, topic: { select: { name: true } } },
     });
-    if (existing) throw new ApiException('DUPLICATE_NAME', 409, '이미 같은 이름의 키워드가 있습니다.');
+    if (existing) {
+      const suffix = existing.topic ? `(토픽: ${existing.topic.name})` : '';
+      throw new ApiException('DUPLICATE_NAME', 409, `이미 같은 이름의 키워드가 있습니다.${suffix}`);
+    }
   }
 
   private async assertSynonymFree(chatbotId: string, name: string, synonyms: string[], excludeId?: string): Promise<void> {
     const others = await this.prisma.keyword.findMany({
       where: { chatbotId, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true, name: true, synonyms: true },
+      select: { id: true, name: true, synonyms: true, topic: { select: { name: true } } },
     });
     const conflict = findSynonymConflict(
       excludeId,
@@ -101,10 +108,13 @@ export class KeywordsService {
       others.map((o) => ({ id: o.id, name: o.name, synonyms: this.parseSynonymsJson(o.synonyms) })),
     );
     if (conflict) {
+      // [신규 No.22 — §7.5] 상대 키워드의 토픽 이름을 덧붙인다.
+      const owner = others.find((o) => o.name === conflict.conflictKeywordName);
+      const suffix = owner?.topic ? `(토픽: ${owner.topic.name})` : '';
       throw new ApiException(
         'SYNONYM_CONFLICT',
         409,
-        `동의어 '${conflict.term}'은(는) 키워드 '${conflict.conflictKeywordName}'에서 이미 사용 중입니다.`,
+        `동의어 '${conflict.term}'은(는) 키워드 '${conflict.conflictKeywordName}'${suffix}에서 이미 사용 중입니다.`,
       );
     }
   }
@@ -114,6 +124,7 @@ export class KeywordsService {
     const trimmedName = dto.name.trim();
     const nameNormalized = normalizeText(trimmedName);
     await this.assertNameFree(chatbotId, nameNormalized);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const { synonyms } = dedupeSynonyms(dto.synonyms ?? []);
     if (synonyms.length > MAX_SYNONYMS) {
@@ -122,7 +133,7 @@ export class KeywordsService {
     await this.assertSynonymFree(chatbotId, trimmedName, synonyms);
 
     const row = await this.prisma.keyword.create({
-      data: { chatbotId, name: trimmedName, nameNormalized, description: dto.description, synonyms: JSON.stringify(synonyms) },
+      data: { chatbotId, name: trimmedName, nameNormalized, description: dto.description, synonyms: JSON.stringify(synonyms), topicId: dto.topicId ?? undefined },
     });
     this.bundleService.invalidate(chatbotId);
     await this.auditLogService.record({
@@ -139,7 +150,11 @@ export class KeywordsService {
   async list(chatbotId: string, query: KeywordListQuery): Promise<Paginated<KeywordListItem>> {
     await this.scope.assertReadable(chatbotId);
     const where: Prisma.KeywordWhereInput = { chatbotId };
-    if (query.q) where.OR = [{ name: { contains: query.q } }, { description: { contains: query.q } }];
+    const andConditions: Prisma.KeywordWhereInput[] = [];
+    if (query.q) andConditions.push({ OR: [{ name: { contains: query.q } }, { description: { contains: query.q } }] });
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) andConditions.push(topicWhere as Prisma.KeywordWhereInput);
+    if (andConditions.length > 0) where.AND = andConditions;
     const orderBy = { [query.sort]: query.order } as Prisma.KeywordOrderByWithRelationInput;
 
     const [rows, total] = await Promise.all([
@@ -194,6 +209,10 @@ export class KeywordsService {
     if (dto.name !== undefined || dto.synonyms !== undefined) {
       await this.assertSynonymFree(chatbotId, name, synonyms, id);
     }
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    const onlyTopicIdChanged = dto.topicId !== undefined && dto.name === undefined && dto.description === undefined && dto.synonyms === undefined;
 
     const row = await this.prisma.keyword.update({
       where: { id },
@@ -202,6 +221,8 @@ export class KeywordsService {
         nameNormalized,
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.synonyms !== undefined ? { synonyms: JSON.stringify(synonyms) } : {}),
+        ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+        ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
       },
     });
     const links = await this.prisma.dialogNodeKeyword.findMany({
@@ -369,6 +390,7 @@ export class KeywordsService {
     if (!staged || staged.chatbotId !== chatbotId || staged.resourceType !== 'KEYWORD') {
       throw new ApiException('IMPORT_TOKEN_EXPIRED', 400, '검증 결과가 만료되었습니다(10분). 파일을 다시 검증해 주세요.');
     }
+    if (dto.newItemTopicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.newItemTopicId);
     const { plan, errors } = staged.plan as StagedKeywordPayload;
     // 동의어 충돌 항목(SYNONYM_CONFLICT)이 하나라도 있는 키워드 묶음은 통째로 건너뛴다(FR-6-16 — 모호성 비허용).
     const conflictTerms = new Set(errors.filter((e) => e.code === 'SYNONYM_CONFLICT').map((e) => normalizeText(e.value)));
@@ -417,6 +439,7 @@ export class KeywordsService {
               nameNormalized: item.nameNormalized,
               description: item.description,
               synonyms: JSON.stringify(capped),
+              topicId: dto.newItemTopicId ?? undefined,
             },
           });
           createdItems += 1;
@@ -459,9 +482,10 @@ export class KeywordsService {
     return { content: buildCsv(KEYWORD_TEMPLATE_HEADERS, []), filename: 'keyword-template.csv', mimeType: 'text/csv; charset=utf-8' };
   }
 
-  async export(chatbotId: string): Promise<{ content: string; filename: string; mimeType: string }> {
+  async export(chatbotId: string, topicIds?: string[]): Promise<{ content: string; filename: string; mimeType: string }> {
     await this.scope.assertReadable(chatbotId);
-    const rows = await this.prisma.keyword.findMany({ where: { chatbotId } });
+    const topicWhere = buildTopicIdsWhere(topicIds);
+    const rows = await this.prisma.keyword.findMany({ where: { chatbotId, ...(topicWhere ?? {}) } });
     const lines: string[][] = [];
     for (const row of rows) {
       const synonyms = this.parseSynonymsJson(row.synonyms);

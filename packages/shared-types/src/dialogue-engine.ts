@@ -273,17 +273,38 @@ export const DesignIssueCode = z.enum([
   'SURVEY_ONLY_OUTPUT',
   'SURVEY_LEGACY_FORMAT',
   'SURVEY_EMPTY',
+  // [신규 No.22] 토픽 점검 규칙 4종 — API 계층 순수 함수(`topics/lib/topic-boundary.ts`)가 산출하고
+  // 엔진 결과 뒤에 합친다(엔진 코드 변경 0 · topic-system-설계.md §7.2/§25 D-13).
+  'INACTIVE_TOPIC_REFERENCE',
+  'CROSS_TOPIC_REFERENCE',
+  'CROSS_TOPIC_DUPLICATE_EXAMPLE',
+  'NO_LIVE_ENTRY_POINT',
 ]);
 export type DesignIssueCode = z.infer<typeof DesignIssueCode>;
+
+/** [신규 No.22] 토픽 규칙 이슈의 간선 상세(§7.1~§7.2) — 값이 있을 때만 채워진다(기존 이슈는 불변). */
+export const DesignIssueTopicRefSchema = z.object({
+  edge: z.string(),
+  sourceTopicName: z.string(),
+  targetResourceType: z.string(),
+  targetResourceId: z.string(),
+  targetResourceName: z.string(),
+  targetTopicId: z.string().uuid().nullable(),
+  targetTopicName: z.string(),
+});
+export type DesignIssueTopicRef = z.infer<typeof DesignIssueTopicRefSchema>;
 
 export const DesignIssueSchema = z.object({
   code: DesignIssueCode,
   severity: DesignIssueSeverity,
-  resourceType: z.enum(['NODE', 'INTENT', 'KEYWORD', 'CONTEXT', 'FAQ', 'CHATBOT']),
+  // [신규 No.22] 'HOMONYM' 추가 — 규칙 ①(HOMONYM_INTENT 간선)의 출발 자산 표시용.
+  resourceType: z.enum(['NODE', 'INTENT', 'KEYWORD', 'CONTEXT', 'FAQ', 'CHATBOT', 'HOMONYM']),
   resourceId: z.string().optional(),
   resourceName: z.string().optional(),
   path: z.array(z.string()).optional(),
   message: z.string(),
+  /** [신규 No.22] 토픽 규칙이 낸 이슈에만 존재한다. */
+  topicRef: DesignIssueTopicRefSchema.optional(),
 });
 export type DesignIssue = z.infer<typeof DesignIssueSchema>;
 
@@ -295,6 +316,8 @@ export const DesignValidationReportSchema = z.object({
     info: z.number().int().nonnegative(),
   }),
   checkedAt: z.coerce.date(),
+  /** [신규 No.22] 토픽 규칙이 상위 50건으로 잘렸을 때만 채워진다(EX-TP-23) — 그 외에는 키 자체가 없다. */
+  ruleTotals: z.record(DesignIssueCode, z.number().int().nonnegative()).optional(),
 });
 export type DesignValidationReport = z.infer<typeof DesignValidationReportSchema>;
 

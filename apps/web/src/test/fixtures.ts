@@ -187,3 +187,31 @@ export function makeAuditLogDetail(overrides: Partial<AuditLogDetail> = {}): Aud
     ...overrides,
   };
 }
+
+/* ── 토픽 시스템(No.22) 픽스처 ── */
+import type { Topic, TopicListItem } from '@chat-bot/shared-types';
+
+export function makeTopic(overrides: Partial<Topic> = {}): Topic {
+  return {
+    id: '55555555-5555-4555-8555-555555555555',
+    chatbotId: '22222222-2222-4222-8222-222222222222',
+    name: '배송',
+    description: undefined,
+    sortOrder: 0,
+    enabled: true,
+    createdAt: new Date('2026-09-20T00:00:00.000Z'),
+    updatedAt: new Date('2026-09-20T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+export function makeTopicListItem(overrides: Partial<TopicListItem> = {}): TopicListItem {
+  const topic = makeTopic(overrides);
+  return {
+    ...topic,
+    counts: { intents: 0, keywords: 0, homonyms: 0, contexts: 0, dialogNodes: 0, faqs: 0 },
+    outgoingCrossRefs: 0,
+    incomingCrossRefs: 0,
+    ...overrides,
+  };
+}

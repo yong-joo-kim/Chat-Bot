@@ -23,6 +23,8 @@ import { ApiException } from '../common/api.exception';
 import type { SessionUser } from '../common/auth/session-context';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { resolveAnsweredTopicId } from '../conversation/lib/answered-topic';
 import { SemanticMatchService } from '../embedding/semantic-match.service';
 import { AnswerSettingsCacheService } from '../answer-settings/answer-settings-cache.service';
 import { RagHttpClient } from '../rag/rag-http.client';
@@ -62,7 +64,21 @@ export class SimulationService {
     private readonly legacyApiService: LegacyApiService,
     private readonly apiConnectionCatalog: ApiConnectionCatalogService,
     private readonly config: ConfigService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
+
+  /** [신규 No.22 — §6.5] 답한 자산의 topicId가 있을 때만 `{id,name,enabled}`를 채운다(추가 조회 0 — 맵은 호출부가 1회 조회). */
+  private answeredTopicFromMap(topics: Map<string, { id: string; name: string; enabled: boolean }>, topicId: string | undefined): SimulateResponse['answeredTopic'] {
+    if (!topicId) return undefined;
+    const topic = topics.get(topicId);
+    if (!topic) return undefined;
+    return { id: topic.id, name: topic.name, enabled: topic.enabled };
+  }
+
+  /** 답한 자산이 있을 가능성이 있을 때만(토픽이 1개 이상 있을 때만) 토픽 맵을 조회한다(§6.5 — 요청당 최대 1회). */
+  private async loadTopicsIfAny(chatbotId: string): Promise<Map<string, { id: string; name: string; enabled: boolean }>> {
+    return this.topicLookup.mapForChatbot(chatbotId);
+  }
 
   async simulate(chatbotId: string, dto: SimulateRequestDto, actor: SessionUser): Promise<SimulateResponse> {
     await this.scope.assertReadable(chatbotId);
@@ -70,7 +86,10 @@ export class SimulationService {
 
     const now = new Date();
     const start = Date.now();
-    const { bundle: baseBundle, index: baseIndex } = await this.bundleService.getCached(chatbotId);
+    // [신규 No.22 — P-13] "비활성 토픽 포함" — 켜면 필터 없는 번들(별도 소형 캐시)을 쓴다.
+    const { bundle: baseBundle, index: baseIndex } = dto.includeInactiveTopics
+      ? await this.bundleService.getCachedUnfiltered(chatbotId)
+      : await this.bundleService.getCached(chatbotId);
 
     const overlayApplied = !!dto.overlay && !isOverlayEmpty(dto.overlay);
     let bundle: DialogueBundle = baseBundle;
@@ -109,6 +128,9 @@ export class SimulationService {
         : undefined;
 
     const elapsedMs = Date.now() - start;
+    const matchedTopicId = resolveAnsweredTopicId(bundle, result, true);
+    const topicsMap = matchedTopicId ? await this.loadTopicsIfAny(chatbotId) : new Map<string, { id: string; name: string; enabled: boolean }>();
+    const answeredTopic = this.answeredTopicFromMap(topicsMap, matchedTopicId);
 
     return {
       input: result.input,
@@ -134,6 +156,7 @@ export class SimulationService {
       matchTrace,
       apiStep,
       surveyStep: buildSurveyStepView(result.trace, result.surveyEvents, bundle, dto.surveyPreview),
+      answeredTopic,
     };
   }
 
@@ -307,7 +330,10 @@ export class SimulationService {
 
     const now = new Date();
     const start = Date.now();
-    const { bundle: bundleA, index: indexA } = await this.bundleService.getCached(chatbotId);
+    // [신규 No.22 — §6.5] 비교도 단건과 같은 토글 의미다.
+    const { bundle: bundleA, index: indexA } = dto.includeInactiveTopics
+      ? await this.bundleService.getCachedUnfiltered(chatbotId)
+      : await this.bundleService.getCached(chatbotId);
     const patch = toBundleOverlayPatch(chatbotId, dto.overlay, now);
     const bundleB = mergeOverlay(bundleA, patch);
     const indexB = buildDialogueIndex(bundleB);
@@ -332,6 +358,8 @@ export class SimulationService {
     let stateB: unknown = dto.initialState;
     const turns: CompareResponse['turns'] = [];
     let same = 0;
+    // [신규 No.22 — §6.5] 요청당 조회 최대 1회 — 턴마다 새로 조회하지 않는다.
+    const topicsMap = await this.loadTopicsIfAny(chatbotId);
 
     for (let i = 0; i < dto.messages.length; i++) {
       const message = dto.messages[i];
@@ -346,11 +374,14 @@ export class SimulationService {
       const diff = compareDiff(a, b);
       if (diff.status === 'SAME') same += 1;
 
+      const answeredTopicA = this.answeredTopicFromMap(topicsMap, resolveAnsweredTopicId(bundleA, a, true));
+      const answeredTopicB = this.answeredTopicFromMap(topicsMap, resolveAnsweredTopicId(bundleB, b, true));
+
       turns.push({
         index: i,
         message,
-        a: toCompareTurnResult(bundleA, a),
-        b: toCompareTurnResult(bundleB, b),
+        a: { ...toCompareTurnResult(bundleA, a), answeredTopic: answeredTopicA },
+        b: { ...toCompareTurnResult(bundleB, b), answeredTopic: answeredTopicB },
         diff,
       });
     }

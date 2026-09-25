@@ -7,6 +7,7 @@ import { BannedWordFilterService } from '../../banned-words/banned-word-filter.s
 import { ReindexQueueService } from '../../embedding/index/reindex-queue.service';
 import type { SnapshotEnvelope } from '../lib/snapshot-envelope';
 import { stableStringify } from '../lib/snapshot-canonical';
+import { computeTopicExposureChange } from '../lib/topic-exposure';
 
 /**
  * 복원 경고(§8.1) — **읽기 전용**(제안·TC·금지어·RAG 설정). 대화 자산을 쓰지 않는다.
@@ -38,6 +39,22 @@ export class RestoreWarningsService {
     return texts;
   }
 
+  /** [신규 No.22 — §11.3] 대상이 없는 토픽을 가리켜 공통으로 적재되는 건수 + 노출 변화(공통 판정
+   * 기준 = 현재 DB의 토픽 활성 상태). `target`은 **정규화된** 스냅샷을 넘겨야 한다. */
+  private computeTopicWarnings(
+    topics: Array<{ id: string; enabled: boolean }>,
+    current: SnapshotEnvelope,
+    normalizedTarget: SnapshotEnvelope,
+    missingCount: number,
+  ): RestoreWarning[] {
+    const warnings: RestoreWarning[] = [];
+    if (missingCount > 0) warnings.push({ code: 'TOPIC_MISSING', count: missingCount });
+
+    const { exposed, hidden } = computeTopicExposureChange(topics, current, normalizedTarget);
+    if (exposed > 0 || hidden > 0) warnings.push({ code: 'TOPIC_EXPOSURE_CHANGE', exposed, hidden });
+    return warnings;
+  }
+
   async computeWarnings(
     chatbotId: string,
     chatbotStatus: string,
@@ -46,8 +63,10 @@ export class RestoreWarningsService {
     targetIntegrityWarningCount: number,
     upcastedFrom: number | undefined,
     currentSchemaVersion: number,
+    topicContext?: { topics: Array<{ id: string; enabled: boolean }>; missingCount: number },
   ): Promise<RestoreWarning[]> {
     const warnings: RestoreWarning[] = [];
+    if (topicContext) warnings.push(...this.computeTopicWarnings(topicContext.topics, current, target, topicContext.missingCount));
 
     if (chatbotStatus === 'ACTIVE') warnings.push({ code: 'ACTIVE_CHATBOT' });
 

@@ -380,6 +380,10 @@ export const RestoreWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('SURVEY_MISSING'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('SURVEY_NOT_OPEN'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('SURVEY_LEGACY_FORMAT'), count: z.number().int().nonnegative() }),
+  // [No.22 신설] 토픽 시스템 — §11.3. 둘 다 blocker 아님. `TOPIC_EXPOSURE_CHANGE`는 값이 있으면
+  // 확인 체크(`acknowledgeTopicExposure`) 없이는 복원을 거부한다(PM 확정 2026-09-25 — §25 D-4 강화).
+  z.object({ code: z.literal('TOPIC_MISSING'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('TOPIC_EXPOSURE_CHANGE'), exposed: z.number().int().nonnegative(), hidden: z.number().int().nonnegative() }),
 ]);
 export type RestoreWarning = z.infer<typeof RestoreWarningSchema>;
 
@@ -405,6 +409,9 @@ export type RestorePreviewResponse = z.infer<typeof RestorePreviewResponseSchema
 export const RestoreRequestSchema = z.object({
   expectedCurrentHash: z.string().regex(/^[0-9a-f]{64}$/, '현재 해시 형식이 올바르지 않습니다.'),
   acknowledgeActive: z.boolean().optional(),
+  /** [신규 No.22 — PM 확정 2026-09-25] 미리보기 경고 `TOPIC_EXPOSURE_CHANGE`가 해당하는데 true가
+   * 아니면 `400 VALIDATION_FAILED`로 거부한다(`acknowledgeActive`와 같은 패턴, §11.3). */
+  acknowledgeTopicExposure: z.boolean().optional(),
 });
 export type RestoreRequestDto = z.infer<typeof RestoreRequestSchema>;
 

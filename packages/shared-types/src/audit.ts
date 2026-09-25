@@ -78,6 +78,8 @@ export const AuditTargetType = z.enum([
   // 자주 쓰는 문장 CRUD·이동(CannedResponse) 감사 대상.
   'HandoffSession',
   'CannedResponse',
+  // 토픽 시스템(No.22) 그룹 추가(topic-system-설계.md §15) — 토픽 CRUD·순서·활성 전환 감사 대상.
+  'Topic',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -101,6 +103,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   Survey: '설문',
   HandoffSession: '상담',
   CannedResponse: '자주 쓰는 문장',
+  Topic: '토픽',
 };
 
 /**

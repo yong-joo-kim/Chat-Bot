@@ -69,3 +69,15 @@ contextVariableId String?                  // FK 아님, 단순 문자열
 - `dialogue-common/reference-check.service.ts`: 삭제 사전검사 단일 진입점(상위 5건 `ResourceRef` 반환 — FR-0-10 UI 바로가기).
 - `all-exceptions.filter.ts`: `P2003` → `409 *_IN_USE` 매핑 확장(기존 `CHATBOT_HAS_CHILDREN` 분기에 대상별 코드 추가).
 - 후속: 캔버스 Phase에서 `DialogNodeEdge`(명시적 엣지) 도입을 검토할 때, 본 ADR의 조인 테이블 패턴을 그대로 재사용한다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.22: 토픽 소속은 FK 컬럼 · API 계층 참조 열거 1벌 · 노드 참조 두 벌은 동등성 시험으로 고정)
+
+토픽 시스템(No.22, **ADR-0037**). 조인 테이블·`contextVariableId` FK·아웃풋 JSON 참조 결정은 **불변**이다.
+
+1. **자산 6종 → `Topic`은 단일 열 FK(`topicId`, `Restrict`)**다 — 자산당 토픽 0~1개라 조인 테이블이 필요 없다. 비어 있지 않은 토픽 삭제를 DB가 막는다(사전검사 `409 TOPIC_NOT_EMPTY` + `P2003` 매핑). 교차 챗봇 토픽은 서비스 1곳이 막는다(복합 FK 기각 — `chatbotId`를 두 관계가 공유하면 관계 쓰기가 까다롭다).
+2. **아웃풋 JSON 참조 목록에 누락이 있었다** — v2 `API_CONDITION`의 슬롯 바인딩(`bindings[].contextVariableId`)이 컨텍스트를 가리킨다(E-12). 토픽 점검·영향 미리보기·분리 폐포는 이런 누락에 강하도록 **API 계층 참조 열거 1벌(`dialogue-common/lib/asset-ref-graph.ts`)**을 쓴다 — 노드→노드는 `getOutgoingNodeRefs()`를 호출하고, 나머지 JSON 참조는 **번들 자산 id와 정확히 같은 UUID 문자열 잎**으로 찾는다. 분리·병합의 참조 재작성도 같은 잎 규칙이다(새 참조 종류가 생겨도 갱신 불필요).
+3. **K-2 — 노드→노드 참조 추출 두 벌**(`getOutgoingNodeRefs()` vs 저장 검증): 저장 검증은 오류 상세에 필드 경로가 필요하고 엔진은 이번에 수정하지 않으므로 **합치지 않는다.** 대신 저장 검증의 수집을 `dialog-nodes/lib/node-target-refs.ts`로 동작 불변 추출하고 **동등성 시험**(모든 아웃풋 유형에서 두 id 집합이 같다)으로 고정한다. 단일화 트리거 = 엔진을 닫힌 목록으로 수정하는 다음 그룹이 `getOutgoingNodeRefs()`에 위치 정보를 더할 때.
+4. 새 참조 종류 추가 체크리스트(5곳)를 개발명세서 §3.1에 둔다.

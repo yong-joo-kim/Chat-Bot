@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { DialogueOverlay, FaqCategory, FaqSuggestion } from '@chat-bot/shared-types';
+import type { DialogueOverlay, FaqCategory, FaqSuggestion, Topic } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ChipListEditor } from '../../../components/ChipListEditor';
+import { TopicSelectField } from '../../../components/TopicSelectField';
 import { useToast } from '../../../components/Toast';
 import { useDebouncedValue } from '../../../lib/useDebouncedValue';
 import { MESSAGES } from '../../../constants/messages';
@@ -14,6 +15,8 @@ export interface FaqEditModalProps {
   isOpen: boolean;
   chatbotId: string;
   faqId: string | null;
+  /** [신규 No.22] `TopicSelectField`용 — 챗봇 전체 토픽. */
+  topics?: Topic[];
   onClose: () => void;
   onSaved: () => void;
   readOnly?: boolean;
@@ -30,6 +33,7 @@ export function FaqEditModal({
   isOpen,
   chatbotId,
   faqId,
+  topics = [],
   onClose,
   onSaved,
   readOnly = false,
@@ -44,6 +48,7 @@ export function FaqEditModal({
   const [answer, setAnswer] = useState('');
   const [altQuestions, setAltQuestions] = useState<string[]>([]);
   const [enabled, setEnabled] = useState(true);
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,6 +72,7 @@ export function FaqEditModal({
           setAnswer(detail.answer);
           setAltQuestions(prefillQuestion ? [...detail.altQuestions, prefillQuestion] : detail.altQuestions);
           setEnabled(detail.enabled);
+          setTopicId(detail.topicId ?? null);
         })
         .catch(() => showToast(MESSAGES.errors.generic))
         .finally(() => setLoading(false));
@@ -76,6 +82,7 @@ export function FaqEditModal({
       setAnswer('');
       setAltQuestions([]);
       setEnabled(true);
+      setTopicId(null);
     }
   }, [isOpen, faqId, chatbotId, prefillQuestion, showToast]);
 
@@ -109,9 +116,9 @@ export function FaqEditModal({
     setSaving(true);
     try {
       if (faqId) {
-        await faqsApi.update(chatbotId, faqId, { category, question, answer, altQuestions, enabled });
+        await faqsApi.update(chatbotId, faqId, { category, question, answer, altQuestions, enabled, topicId });
       } else {
-        await faqsApi.create(chatbotId, { category, question, answer, altQuestions, enabled });
+        await faqsApi.create(chatbotId, { category, question, answer, altQuestions, enabled, topicId: topicId ?? undefined });
       }
       showToast(msg.saveSuccess);
       onSaved();
@@ -120,6 +127,8 @@ export function FaqEditModal({
       if (e2 instanceof ApiError) {
         if (e2.code === 'DUPLICATE_FAQ') {
           setFieldErrors({ question: msg.duplicateQuestionError });
+        } else if (e2.code === 'INVALID_REFERENCE') {
+          setFieldErrors({ topicId: MESSAGES.topics.topicFieldInvalidReference });
         } else {
           showToast(e2.message || MESSAGES.errors.generic);
         }
@@ -147,6 +156,7 @@ export function FaqEditModal({
           answer,
           altQuestions,
           enabled,
+          topicId: topicId ?? undefined,
         },
       ],
     };
@@ -244,6 +254,16 @@ export function FaqEditModal({
                 <input id="faq-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
                 <label htmlFor="faq-enabled">{msg.enabledLabel}</label>
               </div>
+
+              <TopicSelectField
+                id="faq-topic"
+                label={MESSAGES.topics.topicFieldLabel}
+                topics={topics}
+                value={topicId}
+                onChange={setTopicId}
+                disabled={readOnly}
+                errorMessage={fieldErrors.topicId}
+              />
             </fieldset>
 
             <div className="modal-actions">

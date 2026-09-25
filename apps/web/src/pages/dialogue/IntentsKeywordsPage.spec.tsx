@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { Chatbot, IntentListItem, KeywordListItem } from '@chat-bot/shared-types';
 import { ToastProvider } from '../../components/Toast';
 import { ApiError } from '../../api/client';
@@ -21,6 +21,7 @@ vi.mock('../../api/dialogue', () => ({
     list: (...args: unknown[]) => mockIntentsList(...args),
     create: (...args: unknown[]) => mockIntentsCreate(...args),
     remove: (...args: unknown[]) => mockIntentsRemove(...args),
+    findOne: vi.fn().mockResolvedValue({ id: 'intent-1', name: '배송조회', description: undefined, examples: [], topicId: undefined, linkedNodes: [] }),
     bulkDelete: vi.fn(),
     importValidate: vi.fn(),
     importCommit: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('../../api/dialogue', () => ({
     list: (...args: unknown[]) => mockKeywordsList(...args),
     create: (...args: unknown[]) => mockKeywordsCreate(...args),
     remove: (...args: unknown[]) => mockKeywordsRemove(...args),
+    findOne: vi.fn().mockResolvedValue({ id: 'keyword-1', name: '택배사', description: undefined, synonyms: [], topicId: undefined, linkedNodes: [] }),
     bulkDelete: vi.fn(),
     importValidate: vi.fn(),
     importCommit: vi.fn(),
@@ -58,6 +60,27 @@ const mockContext: ChatbotDetailContext = {
 };
 vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
+}));
+
+// [신규 No.22 — 코드리뷰 2회차 보강] 토픽 필터 드롭다운이 선택지를 가지려면 실제 토픽이 1개는 있어야 한다.
+vi.mock('../../api/topics', () => ({
+  topicsApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'topic-1',
+          chatbotId: 'bot-1',
+          name: '배송',
+          sortOrder: 0,
+          enabled: true,
+          createdAt: new Date('2026-09-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      ],
+      common: { counts: {}, outgoingCrossRefs: 0 },
+      limit: 50,
+    }),
+  },
 }));
 
 const intentItem: IntentListItem = {
@@ -213,5 +236,58 @@ describe('IntentsKeywordsPage — 의도/키워드 CRUD', () => {
 
     expect(await screen.findByText('삭제되었습니다.')).toBeInTheDocument();
     await waitFor(() => expect(mockIntentsList).toHaveBeenCalledTimes(1));
+  });
+});
+
+/**
+ * [신규 No.22 — 코드리뷰 2회차 보강] 토픽 필터(topicIds)를 바꿔도 이미 URL에 있던 다른 쿼리
+ * (`?resource=`·`?edit=`)가 지워지지 않는지 확인한다(`useTopicFilterParam`이 함수형
+ * `setSearchParams`로 기존 파라미터를 보존하는지의 행동적 증거 — lib/useTopicFilterParam.ts 주석
+ * "[코드 리뷰 1회차 M-1]"의 회귀 방지).
+ */
+describe('IntentsKeywordsPage — 토픽 필터가 ?resource=·?edit=를 보존한다(M-1)', () => {
+  beforeEach(() => {
+    mockIntentsList.mockReset();
+    mockKeywordsList.mockReset();
+    mockIntentsList.mockResolvedValue({ items: [intentItem], total: 1, page: 1, pageSize: 20 });
+    mockKeywordsList.mockResolvedValue({ items: [keywordItem], total: 1, page: 1, pageSize: 20 });
+  });
+
+  function LocationEcho(): JSX.Element {
+    const location = useLocation();
+    return <div data-testid="location-search">{location.search}</div>;
+  }
+
+  function renderPageWithLocation(initialEntry: string): ReturnType<typeof render> {
+    return render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <ToastProvider>
+          <LocationEcho />
+          <Routes>
+            <Route path="/chatbots/:chatbotId/dialogue/intents" element={<IntentsKeywordsPage />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('?resource=keyword&edit=keyword-1 상태에서 토픽 필터를 바꿔도 resource·edit 쿼리가 그대로 남는다', async () => {
+    const user = userEvent.setup();
+    renderPageWithLocation('/chatbots/bot-1/dialogue/intents?resource=keyword&edit=keyword-1');
+
+    await screen.findByText('택배사');
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('location-search').textContent).toContain('resource=keyword');
+    expect(screen.getByTestId('location-search').textContent).toContain('edit=keyword-1');
+
+    await user.click(screen.getByRole('button', { name: /^토픽:/ }));
+    await user.click(await screen.findByRole('checkbox', { name: '배송' }));
+
+    await waitFor(() => expect(mockKeywordsList).toHaveBeenLastCalledWith('bot-1', expect.objectContaining({ topicIds: ['topic-1'] })));
+
+    const search = screen.getByTestId('location-search').textContent ?? '';
+    expect(search).toContain('resource=keyword'); // 리소스 탭이 지워지지 않는다
+    expect(search).toContain('edit=keyword-1'); // 편집 모달 상태가 지워지지 않는다
+    expect(search).toContain('topicIds=topic-1'); // 토픽 필터도 함께 반영된다
   });
 });

@@ -6,6 +6,7 @@ import { AnswerSettingsModule } from '../answer-settings/answer-settings.module'
 import { RagModule } from '../rag/rag.module';
 import { LegacyApiModule } from '../legacy-api/legacy-api.module';
 import { ApiConnectionCatalogModule } from '../api-connections/catalog/api-connection-catalog.module';
+import { TopicsModule } from '../topics/topics.module';
 import { SimulationController } from './simulation.controller';
 import { SimulationService } from './simulation.service';
 
@@ -15,7 +16,7 @@ import { SimulationService } from './simulation.service';
  * `ConversationLogService`는 주입하지 않는다(FR-0-21, AC-N2-25 — 시뮬레이션은 절대 로그를 남기지 않는다).
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, AnswerSettingsModule, RagModule, LegacyApiModule, ApiConnectionCatalogModule],
+  imports: [ChatbotsModule, DialogueCommonModule, EmbeddingModule, AnswerSettingsModule, RagModule, LegacyApiModule, ApiConnectionCatalogModule, TopicsModule],
   controllers: [SimulationController],
   providers: [SimulationService],
 })

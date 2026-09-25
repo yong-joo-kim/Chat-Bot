@@ -131,6 +131,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ['intentId', 'INTENT_IN_USE', '이 의도를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
       ['keywordId', 'KEYWORD_IN_USE', '이 키워드를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
       ['contextVariableId', 'CONTEXT_IN_USE', '이 컨텍스트를 사용하는 대화 노드가 있습니다. 먼저 조건을 정리해 주세요.'],
+      // [신규 No.22] 사전 확인과 삭제 사이 경합으로 자산이 들어온 경우의 최종 방어선(§5.4).
+      ['topicId', 'TOPIC_NOT_EMPTY', '토픽에 속한 자산이 있어 삭제할 수 없습니다.'],
     ];
     for (const [needle, code, message] of mapping) {
       if (field.includes(needle)) return { statusCode: HttpStatus.CONFLICT, code, message };

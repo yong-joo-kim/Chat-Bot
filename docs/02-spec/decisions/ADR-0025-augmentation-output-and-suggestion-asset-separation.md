@@ -171,3 +171,14 @@
 - 반영 내용은 여전히 **과거에 실제로 존재한 자산 상태**다 — 스냅샷 본문을 만드는 경로는 실제 DB 자산의 캡처뿐이고 내보내기·가져오기가 없다. 제안(`AugmentationSuggestion`)이나 외부 문장이 승인 없이 예문이 되는 경로가 아니다.
 - **L1~L4 봉인은 전부 불변**이다: 예약 모듈은 `IntentsModule`·`KeywordsModule`·`AugmentationModule`을 import하지 않고(L1), 자산 테이블 쓰기 호출이 0건이며(L2 — **`asset-write-sealing.spec.ts` S-1 허용 파일은 3개 그대로**), `applyLearningExample()`을 호출하지 않는다(L3 — S-2 불변). 개발명세서 §5의 "스케줄러·백그라운드 작업·Job 완료 콜백이 자산을 **직접** 쓰는 코드 0건"도 그대로 참이다 — 예약 실행기는 applier가 아니라 `restore()`를 호출한다.
 - 구조 보장은 약속이 아니라 **주입 불가**다: `VersionsModule`이 applier를 export하지 않는다. `restore(` 호출 파일이 정확히 2개임을 `deploy-schedule-sealing.spec.ts`가 단언한다.
+
+
+---
+
+## 갱신 (2026-09-25 — No.22: 자산 쓰기 봉인 L2/S-1 허용 파일 3 → 5 · 쓰기 패턴에 `createMany` 편입)
+
+토픽 시스템(No.22, **ADR-0037 §5·§6**)이 `Intent`·`Keyword` 테이블을 쓰는 파일 2개를 더한다. `asset-write-sealing.spec.ts` **S-1**의 허용 파일이 **3 → 5**가 되고, 쓰기 패턴에 **`createMany`를 편입**한다(지금까지 두 테이블의 `createMany` 호출이 0건이라 편입 자체로 걸리는 기존 파일은 없다 — 새 적재기가 봉인을 우회하지 못하게 한다).
+
+- **`topics/topic-assignment.service.ts`** — 쓰는 필드는 **`topicId`(+ 보존용 `updatedAt`)뿐**이다(`topic-sealing.spec.ts` T-7이 `data` 키를 제한). 예문·동의어를 쓰지 않으므로 "승인 없는 예문 주입" 경로가 아니다.
+- **`asset-transfer/asset-transfer.loader.ts`** — **새 챗봇에만, 원본 챗봇에 실제로 존재하는 자산의 복사본만** 생성한다(`create｜createMany`만 — T-5). 외부 문장·제안이 들어올 입력이 없다.
+- **L1·L3·L4는 불변**이다: 두 모듈은 `IntentsModule`·`KeywordsModule`·`AugmentationModule`을 import하지 않고(L1), `applyLearningExample()`을 호출하지 않는다(L3 — S-2 불변).

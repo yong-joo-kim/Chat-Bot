@@ -1,6 +1,24 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray, queryBoolean } from './common';
+import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray, queryBoolean, TOPIC_FILTER_COMMON } from './common';
 import { parseResponsePath } from './api-mapping';
+
+/**
+ * [신규 No.22] 목록 쿼리 `topicIds` 공통 파서 — 콤마 구분, 원소 = uuid | `'common'`, 최대 51개
+ * (토픽 상한 50 + 공통 1). 없는 토픽 id는 서비스가 매칭 0으로 처리한다(오류 아님, EX-TP-24).
+ */
+export function topicIdsFilter() {
+  return z.preprocess((val) => {
+    if (val === undefined || val === null || val === '') return undefined;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      return val
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    }
+    return val;
+  }, z.array(z.union([z.string().uuid(), z.literal(TOPIC_FILTER_COMMON)])).max(51).optional());
+}
 
 /**
  * 대화 설계(빌더) No.5~9 도메인 스키마.
@@ -41,6 +59,8 @@ export const IntentSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(300).optional(),
   examples: z.array(IntentExampleSchema).max(500).default([]),
+  /** [신규 No.22] 값 없음 = 공통(항상 활성). */
+  topicId: z.string().uuid().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -50,6 +70,8 @@ export const CreateIntentSchema = z.object({
   name: DialogueNameSchema,
   description: z.string().max(300).optional(),
   examples: z.array(IntentExampleSchema).max(500).optional(),
+  /** [신규 No.22] 없거나 null = 공통. */
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type CreateIntentDto = z.infer<typeof CreateIntentSchema>;
 
@@ -57,6 +79,8 @@ export const UpdateIntentSchema = z.object({
   name: DialogueNameSchema.optional(),
   description: z.string().max(300).nullable().optional(),
   examples: z.array(IntentExampleSchema).max(500).optional(),
+  /** [신규 No.22] null = 공통으로. 부분 수정 시맨틱(값이 없으면 불변). */
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type UpdateIntentDto = z.infer<typeof UpdateIntentSchema>;
 
@@ -66,6 +90,8 @@ export const IntentListItemSchema = z.object({
   description: z.string().optional(),
   exampleCount: z.number().int().nonnegative(),
   linkedNodeCount: z.number().int().nonnegative(),
+  /** [신규 No.22] 목록 행은 항상 키가 존재한다 — null = 공통. */
+  topicId: z.string().uuid().nullable(),
   updatedAt: z.coerce.date(),
 });
 export type IntentListItem = z.infer<typeof IntentListItemSchema>;
@@ -85,6 +111,9 @@ export const ExampleConflictSchema = z.object({
   example: z.string(),
   intentId: z.string().uuid(),
   intentName: z.string(),
+  /** [신규 No.22] 상대 의도가 공통이면 없음(§7.5). */
+  topicId: z.string().uuid().optional(),
+  topicName: z.string().optional(),
 });
 export type ExampleConflict = z.infer<typeof ExampleConflictSchema>;
 
@@ -110,6 +139,8 @@ export const IntentListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
+  /** [신규 No.22] 콤마 구분 uuid | 'common' 목록. */
+  topicIds: topicIdsFilter(),
 });
 export type IntentListQuery = z.infer<typeof IntentListQuerySchema>;
 
@@ -130,6 +161,8 @@ export const KeywordSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(300).optional(),
   synonyms: z.array(KeywordSynonymSchema).max(200).default([]),
+  /** [신규 No.22] 값 없음 = 공통(항상 활성). */
+  topicId: z.string().uuid().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -139,6 +172,7 @@ export const CreateKeywordSchema = z.object({
   name: DialogueNameSchema,
   description: z.string().max(300).optional(),
   synonyms: z.array(KeywordSynonymSchema).max(200).optional(),
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type CreateKeywordDto = z.infer<typeof CreateKeywordSchema>;
 
@@ -146,6 +180,7 @@ export const UpdateKeywordSchema = z.object({
   name: DialogueNameSchema.optional(),
   description: z.string().max(300).nullable().optional(),
   synonyms: z.array(KeywordSynonymSchema).max(200).optional(),
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type UpdateKeywordDto = z.infer<typeof UpdateKeywordSchema>;
 
@@ -155,6 +190,7 @@ export const KeywordListItemSchema = z.object({
   description: z.string().optional(),
   synonymCount: z.number().int().nonnegative(),
   linkedNodeCount: z.number().int().nonnegative(),
+  topicId: z.string().uuid().nullable(),
   updatedAt: z.coerce.date(),
 });
 export type KeywordListItem = z.infer<typeof KeywordListItemSchema>;
@@ -168,6 +204,7 @@ export const KeywordListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
+  topicIds: topicIdsFilter(),
 });
 export type KeywordListQuery = z.infer<typeof KeywordListQuerySchema>;
 
@@ -234,6 +271,8 @@ export const HomonymDictionarySchema = z
     policy: HomonymPolicy.default('ASK'),
     clarifyPrompt: z.string().max(200).optional(),
     defaultMeaningIndex: z.number().int().min(0).nullable().optional(),
+    /** [신규 No.22] 값 없음 = 공통(항상 활성). */
+    topicId: z.string().uuid().optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   })
@@ -248,6 +287,7 @@ export const CreateHomonymSchema = z
     policy: HomonymPolicy.default('ASK'),
     clarifyPrompt: z.string().max(200).optional(),
     defaultMeaningIndex: z.number().int().min(0).nullable().optional(),
+    topicId: z.string().uuid().nullable().optional(),
   })
   .superRefine((val, ctx) => checkHomonymMeanings(val.meanings, ctx, val));
 export type CreateHomonymDto = z.infer<typeof CreateHomonymSchema>;
@@ -260,6 +300,7 @@ export const UpdateHomonymSchema = z
     policy: HomonymPolicy.optional(),
     clarifyPrompt: z.string().max(200).nullable().optional(),
     defaultMeaningIndex: z.number().int().min(0).nullable().optional(),
+    topicId: z.string().uuid().nullable().optional(),
   })
   .superRefine((val, ctx) => {
     if (val.meanings) checkHomonymMeanings(val.meanings, ctx, val);
@@ -271,6 +312,7 @@ export const HomonymListItemSchema = z.object({
   word: z.string(),
   meaningCount: z.number().int().nonnegative(),
   policy: HomonymPolicy,
+  topicId: z.string().uuid().nullable(),
   updatedAt: z.coerce.date(),
 });
 export type HomonymListItem = z.infer<typeof HomonymListItemSchema>;
@@ -279,6 +321,7 @@ export const HomonymListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
+  topicIds: topicIdsFilter(),
 });
 export type HomonymListQuery = z.infer<typeof HomonymListQuerySchema>;
 
@@ -361,6 +404,8 @@ export const ContextVariableSchema = z
     completionMessage: z.string().max(500).optional(),
     cancelKeywords: z.array(z.string().trim().min(1).max(50)).max(10).default(['취소', '그만', '처음으로']),
     sessionTimeoutMinutes: z.number().int().min(1).max(180).default(30),
+    /** [신규 No.22] 값 없음 = 공통(항상 활성). */
+    topicId: z.string().uuid().optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   })
@@ -375,6 +420,7 @@ export const CreateContextSchema = z
     completionMessage: z.string().max(500).optional(),
     cancelKeywords: z.array(z.string().trim().min(1).max(50)).max(10).optional(),
     sessionTimeoutMinutes: z.number().int().min(1).max(180).optional(),
+    topicId: z.string().uuid().nullable().optional(),
   })
   .superRefine((val, ctx) => checkSlotNamesUnique(val.slots, ctx));
 export type CreateContextDto = z.infer<typeof CreateContextSchema>;
@@ -387,6 +433,7 @@ export const UpdateContextSchema = z
     completionMessage: z.string().max(500).nullable().optional(),
     cancelKeywords: z.array(z.string().trim().min(1).max(50)).max(10).optional(),
     sessionTimeoutMinutes: z.number().int().min(1).max(180).optional(),
+    topicId: z.string().uuid().nullable().optional(),
   })
   .superRefine((val, ctx) => {
     if (val.slots) checkSlotNamesUnique(val.slots, ctx);
@@ -398,6 +445,7 @@ export const ContextListItemSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   slotCount: z.number().int().nonnegative(),
+  topicId: z.string().uuid().nullable(),
   updatedAt: z.coerce.date(),
 });
 export type ContextListItem = z.infer<typeof ContextListItemSchema>;
@@ -406,6 +454,7 @@ export const ContextListQuerySchema = PaginationQuerySchema.extend({
   q: z.string().max(200).optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
+  topicIds: topicIdsFilter(),
 });
 export type ContextListQuery = z.infer<typeof ContextListQuerySchema>;
 
@@ -857,6 +906,8 @@ const DialogNodeBaseSchema = z.object({
   keywordIds: z.array(z.string().uuid()).default([]),
   contextVariableId: z.string().uuid().optional(),
   outputs: z.array(DialogOutputSchema).max(10).default([]),
+  /** [신규 No.22] 값 없음 = 공통(항상 활성). START/FALLBACK은 항상 없음(서비스 검사). */
+  topicId: z.string().uuid().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -883,6 +934,7 @@ export const CreateDialogNodeSchema = z
     keywordIds: z.array(z.string().uuid()).default([]),
     contextVariableId: z.string().uuid().optional(),
     outputs: z.array(DialogOutputSchema).max(10).default([]),
+    topicId: z.string().uuid().nullable().optional(),
   })
   .superRefine((val, ctx) => checkNodeConditionsAndOutputs(val, ctx));
 export type CreateDialogNodeDto = z.infer<typeof CreateDialogNodeSchema>;
@@ -898,6 +950,7 @@ export const UpdateDialogNodeSchema = z.object({
   keywordIds: z.array(z.string().uuid()).optional(),
   contextVariableId: z.string().uuid().nullable().optional(),
   outputs: z.array(DialogOutputSchema).max(10).optional(),
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type UpdateDialogNodeDto = z.infer<typeof UpdateDialogNodeSchema>;
 
@@ -912,6 +965,11 @@ export const DialogNodeListItemSchema = DialogNodeBaseSchema.extend({
   conditionSummary: ConditionSummarySchema,
   outputTypes: z.array(DialogOutputType),
   incomingCount: z.number().int().nonnegative(),
+  /** [신규 No.22] 목록 행은 항상 키가 존재한다 — null = 공통(부모 스키마의 optional 재정의). */
+  topicId: z.string().uuid().nullable(),
+  /** [신규 No.22 — FR-TP4-5] 이 노드에서 나가 다른 토픽(공통 제외)을 향하는 교차 참조 간선 수.
+   * `collectAssetRefs()`의 `CROSS_TOPIC_REFERENCE` 조건을 만족하는 간선 수 — 추가 쿼리 0(§5.3). */
+  crossTopicRefCount: z.number().int().nonnegative(),
 });
 export type DialogNodeListItem = z.infer<typeof DialogNodeListItemSchema>;
 
@@ -926,6 +984,7 @@ export const DialogNodeListQuerySchema = PaginationQuerySchema.extend({
   order: SortOrder.default('desc'),
   nodeType: csvEnumArray(DialogNodeType),
   enabled: queryBoolean().optional(),
+  topicIds: topicIdsFilter(),
 });
 export type DialogNodeListQuery = z.infer<typeof DialogNodeListQuerySchema>;
 
@@ -944,6 +1003,8 @@ export const FaqEntrySchema = z.object({
   answer: z.string().min(1).max(2000),
   altQuestions: z.array(z.string().min(1).max(300)).max(30).default([]),
   enabled: z.boolean().default(true),
+  /** [신규 No.22] 값 없음 = 공통(항상 활성). */
+  topicId: z.string().uuid().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -955,6 +1016,7 @@ export const CreateFaqSchema = z.object({
   answer: z.string().min(1).max(2000),
   altQuestions: z.array(z.string().trim().min(1).max(300)).max(30).optional(),
   enabled: z.boolean().default(true),
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type CreateFaqDto = z.infer<typeof CreateFaqSchema>;
 
@@ -964,6 +1026,7 @@ export const UpdateFaqSchema = z.object({
   answer: z.string().min(1).max(2000).optional(),
   altQuestions: z.array(z.string().trim().min(1).max(300)).max(30).optional(),
   enabled: z.boolean().optional(),
+  topicId: z.string().uuid().nullable().optional(),
 });
 export type UpdateFaqDto = z.infer<typeof UpdateFaqSchema>;
 
@@ -973,6 +1036,7 @@ export const FaqListQuerySchema = PaginationQuerySchema.extend({
   enabled: queryBoolean().optional(),
   sort: ListSortField.default('updatedAt'),
   order: SortOrder.default('desc'),
+  topicIds: topicIdsFilter(),
 });
 export type FaqListQuery = z.infer<typeof FaqListQuerySchema>;
 

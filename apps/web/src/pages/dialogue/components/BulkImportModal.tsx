@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ImportCommitResult, ImportErrorPolicy, ImportMergePolicy, ImportResourceType, ImportValidateResult } from '@chat-bot/shared-types';
+import type { ImportCommitResult, ImportErrorPolicy, ImportMergePolicy, ImportResourceType, ImportValidateResult, Topic } from '@chat-bot/shared-types';
 import { escapeCsvCell, IMPORT_LIMITS } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { FileUploadField } from '../../../components/FileUploadField';
@@ -7,6 +7,7 @@ import { ImportValidationReportTable } from '../../../components/ImportValidatio
 import { AutoSnapshotPreNotice } from '../../../components/AutoSnapshotPreNotice';
 import { AutoSnapshotNotice } from '../../../components/AutoSnapshotNotice';
 import { ScheduleConflictBanner } from '../../../components/ScheduleConflictBanner';
+import { TopicSelectField } from '../../../components/TopicSelectField';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { intentsApi, keywordsApi, faqsApi } from '../../../api/dialogue';
@@ -14,7 +15,10 @@ import { ApiError } from '../../../api/client';
 
 type ImportApi = {
   importValidate: (chatbotId: string, formData: FormData) => Promise<ImportValidateResult>;
-  importCommit: (chatbotId: string, dto: { importToken: string; mergePolicy: ImportMergePolicy; errorPolicy: ImportErrorPolicy }) => Promise<ImportCommitResult>;
+  importCommit: (
+    chatbotId: string,
+    dto: { importToken: string; mergePolicy: ImportMergePolicy; errorPolicy: ImportErrorPolicy; newItemTopicId?: string | null },
+  ) => Promise<ImportCommitResult>;
   templateUrl: (chatbotId: string, format: 'csv' | 'xlsx') => string;
 };
 
@@ -31,6 +35,8 @@ export interface BulkImportModalProps {
   apiOverride?: ImportApi;
   /** TC 업로드는 "기존 항목과 이름이 겹칠 때" 개념이 없다(§4.2.2) — true면 정책 라디오를 숨기고 'MERGE'로 고정 전송한다. */
   hideMergePolicy?: boolean;
+  /** [신규 No.22] `INTENT`/`KEYWORD`/`FAQ`일 때만 "신규 항목의 토픽" 선택을 렌더한다(§3.6). `TEST_CASE`는 대상이 아니다. */
+  topics?: Topic[];
 }
 
 const API_BY_TYPE = {
@@ -71,10 +77,13 @@ export function BulkImportModal({
   onCommitted,
   apiOverride,
   hideMergePolicy = false,
+  topics,
 }: BulkImportModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.bulkImport;
   const { showToast } = useToast();
   const api: ImportApi = apiOverride ?? API_BY_TYPE[resourceType as 'INTENT' | 'KEYWORD' | 'FAQ'];
+  // [신규 No.22] 노드·컨텍스트·동음이의어는 이 절 대상이 아니다(§3.6) — `topics` prop을 준 소비자만 렌더한다.
+  const showTopicField = topics !== undefined && resourceType !== 'TEST_CASE';
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -83,6 +92,7 @@ export function BulkImportModal({
   const [result, setResult] = useState<ImportValidateResult | null>(null);
   const [mergePolicy, setMergePolicy] = useState<ImportMergePolicy>('MERGE');
   const [errorPolicy, setErrorPolicy] = useState<ImportErrorPolicy>('SKIP_INVALID');
+  const [newItemTopicId, setNewItemTopicId] = useState<string | null>(null);
   const [tokenExpiredBanner, setTokenExpiredBanner] = useState(false);
   const [abortedBanner, setAbortedBanner] = useState<number | null>(null);
   const [committing, setCommitting] = useState(false);
@@ -98,6 +108,7 @@ export function BulkImportModal({
     setAbortedBanner(null);
     setMergePolicy('MERGE');
     setErrorPolicy('SKIP_INVALID');
+    setNewItemTopicId(null);
     onClose();
   }
 
@@ -128,7 +139,12 @@ export function BulkImportModal({
     setCommitting(true);
     setAbortedBanner(null);
     try {
-      const res = await api.importCommit(chatbotId, { importToken: result.importToken, mergePolicy: hideMergePolicy ? 'MERGE' : mergePolicy, errorPolicy });
+      const res = await api.importCommit(chatbotId, {
+        importToken: result.importToken,
+        mergePolicy: hideMergePolicy ? 'MERGE' : mergePolicy,
+        errorPolicy,
+        newItemTopicId: showTopicField ? newItemTopicId : undefined,
+      });
       setCommitResult(res);
       setStep(3);
       onCommitted();
@@ -267,6 +283,21 @@ export function BulkImportModal({
               {msg.errorPolicyAbort} — {msg.errorPolicyAbortDesc}
             </label>
           </fieldset>
+
+          {showTopicField && (
+            <>
+              <TopicSelectField
+                id="bulk-import-new-item-topic"
+                label={MESSAGES.topics.importNewItemTopicLabel}
+                topics={topics ?? []}
+                value={newItemTopicId}
+                onChange={setNewItemTopicId}
+              />
+              <p className="field-hint">
+                <span aria-hidden="true">ⓘ</span> {MESSAGES.topics.importExistingItemTopicHint}
+              </p>
+            </>
+          )}
 
           <div className="import-wizard-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setStep(1)} disabled={committing}>

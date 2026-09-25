@@ -14,10 +14,13 @@ export function CompareView({
   chatbotId,
   overlay,
   initialState,
+  includeInactiveTopics = false,
 }: {
   chatbotId: string;
   overlay: DialogueOverlay | undefined;
   initialState?: unknown;
+  /** [No.22] SimulatorPanel 상단 공용 토글 값(§6.5). */
+  includeInactiveTopics?: boolean;
 }): JSX.Element {
   const msg = MESSAGES.simulator.compare;
   const [rawText, setRawText] = useState('');
@@ -39,7 +42,7 @@ export function CompareView({
     setLoading(true);
     setError(undefined);
     try {
-      const res = await simulationApi.compare(chatbotId, { messages: lines, overlay, initialState });
+      const res = await simulationApi.compare(chatbotId, { messages: lines, overlay, initialState, includeInactiveTopics });
       setResult(res);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : MESSAGES.errors.generic);

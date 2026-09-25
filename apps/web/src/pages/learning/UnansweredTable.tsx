@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import type { UnansweredQuestionDetail, UnansweredQuestionListItem, UnansweredQuestionStatus } from '@chat-bot/shared-types';
+import type { IntentSuggestion, Topic, UnansweredQuestionDetail, UnansweredQuestionListItem, UnansweredQuestionStatus } from '@chat-bot/shared-types';
 import { UNANSWERED_STATUS_LABELS } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../constants/messages';
 import { formatDate, formatRelativeTime } from '../../lib/date';
@@ -8,6 +8,19 @@ import { ChartFrame } from '../stats/ChartFrame';
 import { BarChartSvg, type BarDatum } from '../stats/BarChartSvg';
 import { buildTrendSummary } from '../stats/chartSummary';
 import { SuggestionSourceBadge } from './ClassifierBadges';
+import { topicStatusLabel } from '../dialogue/components/topicBadges';
+
+/** [신규 No.22] 추천 의도 토픽 배지 — 값이 없으면(공통) 아무것도 렌더하지 않는다(§3.10). */
+function SuggestionTopicBadge({ suggestion, topicsById }: { suggestion: IntentSuggestion; topicsById: Map<string, Topic> }): JSX.Element | null {
+  if (!suggestion.topicId) return null;
+  const topic = topicsById.get(suggestion.topicId);
+  if (!topic) return null;
+  return (
+    <span className="dialogue-badge dialogue-badge--neutral">
+      {MESSAGES.topics.suggestedIntentTopicBadge(topic.name, topicStatusLabel(topic.enabled ? 'ACTIVE' : 'INACTIVE'))}
+    </span>
+  );
+}
 
 const STATUS_ICON: Record<UnansweredQuestionStatus, string> = { PENDING: '●', RESOLVED: '✓', IGNORED: '⊘' };
 const STATUS_COLOR: Record<UnansweredQuestionStatus, { bg: string; fg: string }> = {
@@ -49,6 +62,8 @@ export interface UnansweredTableProps {
   onIgnoreClick: (question: UnansweredQuestionListItem) => void;
   onReopenClick: (question: UnansweredQuestionListItem) => void;
   highlightId?: string;
+  /** [신규 No.22] 추천 의도 토픽 배지용(§3.10). */
+  topicsById: Map<string, Topic>;
 }
 
 /** L1 목록 표(FR-15-12, ui-spec §4.3~4.4). 행 펼침은 `aria-expanded` 버튼으로 Enter/Space 토글된다. */
@@ -65,6 +80,7 @@ export function UnansweredTable({
   onIgnoreClick,
   onReopenClick,
   highlightId,
+  topicsById,
 }: UnansweredTableProps): JSX.Element {
   return (
     <table className="dialogue-table learning-table">
@@ -129,7 +145,15 @@ export function UnansweredTable({
                 <td>
                   <UnansweredStatusBadge status={item.status} />
                 </td>
-                <td>{topSuggestion ? `${topSuggestion.intentName} ${topSuggestion.score.toFixed(2)}` : '—'}</td>
+                <td>
+                  {topSuggestion ? (
+                    <>
+                      {topSuggestion.intentName} {topSuggestion.score.toFixed(2)} <SuggestionTopicBadge suggestion={topSuggestion} topicsById={topicsById} />
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 {canWrite && (
                   <td className="learning-row-actions">
                     {item.status === 'PENDING' && (
@@ -159,6 +183,7 @@ export function UnansweredTable({
                       loading={detailLoadingId === item.id}
                       canWrite={canWrite}
                       onResolveClick={onResolveClick}
+                      topicsById={topicsById}
                     />
                   </td>
                 </tr>
@@ -177,12 +202,14 @@ function UnansweredDetailPanel({
   loading,
   canWrite,
   onResolveClick,
+  topicsById,
 }: {
   item: UnansweredQuestionListItem;
   detail: UnansweredQuestionDetail | null;
   loading: boolean;
   canWrite: boolean;
   onResolveClick: (question: UnansweredQuestionListItem, initialIntentName?: string) => void;
+  topicsById: Map<string, Topic>;
 }): JSX.Element {
   if (loading || !detail) {
     return <SkeletonRow />;
@@ -228,7 +255,8 @@ function UnansweredDetailPanel({
           <ul className="suggestion-list">
             {detail.suggestions.map((s) => (
               <li key={s.intentId}>
-                {s.intentName} {s.score.toFixed(2)} <SuggestionSourceBadge source={s.source} /> ({MESSAGES.learning.suggestionExample(s.matchedExample)})
+                {s.intentName} {s.score.toFixed(2)} <SuggestionSourceBadge source={s.source} /> <SuggestionTopicBadge suggestion={s} topicsById={topicsById} /> (
+                {MESSAGES.learning.suggestionExample(s.matchedExample)})
                 {canWrite && item.status === 'PENDING' && (
                   <button type="button" className="btn btn-secondary" onClick={() => onResolveClick(item, s.intentName)}>
                     {MESSAGES.learning.suggestionApply}

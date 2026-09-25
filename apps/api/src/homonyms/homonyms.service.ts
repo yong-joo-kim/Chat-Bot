@@ -20,6 +20,8 @@ import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { toHomonymEntity, toHomonymListItem } from './homonym.mapper';
 import { findInvalidIntentIds } from './lib/meaning-validation';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 
 const NOT_FOUND_MESSAGE = '요청하신 동음이의어 사전 항목을 찾을 수 없습니다.';
 
@@ -30,10 +32,12 @@ export class HomonymsService {
     private readonly scope: ChatbotScopeService,
     private readonly bundleService: DialogueBundleService,
     private readonly auditLogService: AuditLogService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
 
-  private toAuditSnapshot(row: { id: string; word: string; policy: string; meanings: string }) {
-    return { ...row, meaningCount: this.parseMeaningsJson(row.meanings).length };
+  private toAuditSnapshot(row: { id: string; word: string; policy: string; meanings: string; topicId?: string | null }) {
+    const { topicId, ...rest } = row;
+    return { ...rest, meaningCount: this.parseMeaningsJson(row.meanings).length, ...(topicId ? { topicId } : {}) };
   }
 
   private parseMeaningsJson(json: string): unknown[] {
@@ -48,9 +52,12 @@ export class HomonymsService {
   private async assertWordFree(chatbotId: string, wordNormalized: string, excludeId?: string): Promise<void> {
     const existing = await this.prisma.homonymDictionary.findFirst({
       where: { chatbotId, wordNormalized, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true },
+      select: { id: true, topic: { select: { name: true } } },
     });
-    if (existing) throw new ApiException('DUPLICATE_NAME', 409, '이미 같은 단어의 동음이의어 항목이 있습니다.');
+    if (existing) {
+      const suffix = existing.topic ? `(토픽: ${existing.topic.name})` : '';
+      throw new ApiException('DUPLICATE_NAME', 409, `이미 같은 단어의 동음이의어 항목이 있습니다.${suffix}`);
+    }
   }
 
   private async assertIntentRefsValid(chatbotId: string, dto: Pick<CreateHomonymDto, 'meanings'>): Promise<void> {
@@ -68,6 +75,7 @@ export class HomonymsService {
     const wordNormalized = normalizeText(dto.word);
     await this.assertWordFree(chatbotId, wordNormalized);
     await this.assertIntentRefsValid(chatbotId, dto);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const row = await this.prisma.homonymDictionary.create({
       data: {
@@ -79,6 +87,7 @@ export class HomonymsService {
         policy: dto.policy,
         clarifyPrompt: dto.clarifyPrompt,
         defaultMeaningIndex: dto.defaultMeaningIndex ?? undefined,
+        topicId: dto.topicId ?? undefined,
       },
     });
     this.bundleService.invalidate(chatbotId);
@@ -96,7 +105,11 @@ export class HomonymsService {
   async list(chatbotId: string, query: HomonymListQuery): Promise<Paginated<HomonymListItem>> {
     await this.scope.assertReadable(chatbotId);
     const where: Prisma.HomonymDictionaryWhereInput = { chatbotId };
-    if (query.q) where.OR = [{ word: { contains: query.q } }, { description: { contains: query.q } }];
+    const andConditions: Prisma.HomonymDictionaryWhereInput[] = [];
+    if (query.q) andConditions.push({ OR: [{ word: { contains: query.q } }, { description: { contains: query.q } }] });
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) andConditions.push(topicWhere as Prisma.HomonymDictionaryWhereInput);
+    if (andConditions.length > 0) where.AND = andConditions;
     const orderBy = { [query.sort === 'name' ? 'word' : query.sort]: query.order } as Prisma.HomonymDictionaryOrderByWithRelationInput;
 
     const [rows, total] = await Promise.all([
@@ -131,6 +144,17 @@ export class HomonymsService {
     if (dto.meanings !== undefined) {
       await this.assertIntentRefsValid(chatbotId, { meanings: dto.meanings });
     }
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    const onlyTopicIdChanged =
+      dto.topicId !== undefined &&
+      dto.word === undefined &&
+      dto.description === undefined &&
+      dto.meanings === undefined &&
+      dto.policy === undefined &&
+      dto.clarifyPrompt === undefined &&
+      dto.defaultMeaningIndex === undefined;
 
     const row = await this.prisma.homonymDictionary.update({
       where: { id },
@@ -142,6 +166,8 @@ export class HomonymsService {
         ...(dto.policy !== undefined ? { policy: dto.policy } : {}),
         ...(dto.clarifyPrompt !== undefined ? { clarifyPrompt: dto.clarifyPrompt } : {}),
         ...(dto.defaultMeaningIndex !== undefined ? { defaultMeaningIndex: dto.defaultMeaningIndex } : {}),
+        ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+        ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
       },
     });
     this.bundleService.invalidate(chatbotId);

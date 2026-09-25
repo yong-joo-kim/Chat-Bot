@@ -14,6 +14,8 @@ import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { ContextSlotEditor } from './components/ContextSlotEditor';
 import { ContextPreviewPanel } from './components/ContextPreviewPanel';
 import { SimulatorDrawer } from '../chatbot-detail/simulator/SimulatorDrawer';
+import { TopicSelectField } from '../../components/TopicSelectField';
+import { useTopics } from '../../lib/useTopics';
 
 interface SlotRow extends ContextSlot {
   key: string;
@@ -45,6 +47,8 @@ export function ContextFormPage(): JSX.Element {
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(30);
   const [slots, setSlots] = useState<SlotRow[]>([emptySlot()]);
   const [completionMessage, setCompletionMessage] = useState('');
+  const [topicId, setTopicId] = useState<string | null>(null);
+  const { topics } = useTopics(chatbot.id);
   const [loading, setLoading] = useState(!isNew);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,6 +69,7 @@ export function ContextFormPage(): JSX.Element {
       setSessionTimeoutMinutes(detail.sessionTimeoutMinutes);
       setSlots(detail.slots.map((s) => ({ ...s, key: nextKey() })));
       setCompletionMessage(detail.completionMessage ?? '');
+      setTopicId(detail.topicId ?? null);
       setDirty(false);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setNotFound(true);
@@ -109,6 +114,7 @@ export function ContextFormPage(): JSX.Element {
       completionMessage: completionMessage || undefined,
       cancelKeywords,
       sessionTimeoutMinutes,
+      topicId: isNew ? topicId ?? undefined : topicId,
     };
     try {
       if (isNew) {
@@ -127,6 +133,7 @@ export function ContextFormPage(): JSX.Element {
         const details = fieldErrorsFromApiError(e2);
         if (Object.keys(details).length > 0) setFieldErrors(details);
         else if (e2.code === 'DUPLICATE_NAME') setFieldErrors({ name: e2.message });
+        else if (e2.code === 'INVALID_REFERENCE') setFieldErrors({ topicId: MESSAGES.topics.topicFieldInvalidReference });
         else setFormBanner(e2.message || MESSAGES.errors.generic);
       } else {
         setFormBanner(MESSAGES.errors.generic);
@@ -153,6 +160,7 @@ export function ContextFormPage(): JSX.Element {
           completionMessage: completionMessage || undefined,
           cancelKeywords,
           sessionTimeoutMinutes,
+          topicId: topicId ?? undefined,
         },
       ],
     };
@@ -195,6 +203,17 @@ export function ContextFormPage(): JSX.Element {
               />
               <InlineFieldError id="context-name-error" message={fieldErrors.name} />
             </div>
+
+            <TopicSelectField
+              id="context-topic"
+              label={MESSAGES.topics.topicFieldLabel}
+              topics={topics}
+              value={topicId}
+              onChange={(v) => markDirty(setTopicId)(v)}
+              disabled={isArchived}
+              errorMessage={fieldErrors.topicId}
+            />
+
             <div className="form-field">
               <label htmlFor="context-description">{msg.descriptionLabel}</label>
               <textarea

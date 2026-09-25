@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, VersioningType } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { normalizeEmail } from '@chat-bot/shared-types';
+import { normalizeEmail, toKstDayBucket } from '@chat-bot/shared-types';
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
@@ -199,9 +199,22 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
     return { chatbotId, slug };
   }
 
+  /**
+   * [버그 수정 — 간헐 실패 #1] 세션 생성 직후(공개 메시지 POST 응답 후) 목록을 바로 조회하면
+   * live-sessions 적재가 아직 반영되지 않아 items가 비어 items[0]이 undefined인 채로 접근해
+   * 간헐적으로 실패했다(재현: 부하가 걸린 CI에서 수 회에 1회). items.length > 0이 될 때까지
+   * 짧게 폴링한다(최대 3초, 100ms 간격) — 그래도 없으면 원인을 알 수 있는 오류로 실패시킨다.
+   */
   async function getSessionRef(chatbotId: string): Promise<string> {
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
-    return listRes.body.items[0].sessionRef;
+    const deadline = Date.now() + 3000;
+    for (;;) {
+      const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
+      if (listRes.body.items.length > 0) return listRes.body.items[0].sessionRef;
+      if (Date.now() >= deadline) {
+        throw new Error(`getSessionRef: chatbotId=${chatbotId}의 live-sessions가 3초 안에 채워지지 않았습니다(items.length=0).`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   /** 개입(AGENT) → 첫 접촉(모던) → 원문이 남는 발화까지 만들어 CONNECTED 상태로 만든다. */
@@ -329,7 +342,7 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
       expect(bodyContains(liveList.body, R_E_PHONE)).toBe(false);
 
       await jsonRequest('POST', `${baseUrl}/chatbots/${chatbotId}/handoffs/${handoffId}/end`, {}, { cookie: agentCookie });
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 이력 기간은 KST 일 기준 — UTC로 자르면 KST 새벽에 빈 목록이 되어 누출 검사가 무의미해진다
       const histList = await jsonRequest('GET', `${baseUrl}/chatbots/${chatbotId}/handoffs?from=${today}&to=${today}`, undefined, { cookie: adminCookie });
       expect(bodyContains(histList.body, R_E_PHONE)).toBe(false);
       const histSummary = await jsonRequest('GET', `${baseUrl}/chatbots/${chatbotId}/handoffs/summary?from=${today}&to=${today}`, undefined, { cookie: adminCookie });
@@ -565,17 +578,26 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
       const { chatbotId, slug } = await setupHandoffChatbot({ cautionThreshold: 2, warningThreshold: 3 });
       const sessionId = randomUUID();
 
+      // 대화로그 적재가 응답과 비동기라 병렬 부하에서 직전 턴이 늦게 보일 수 있다 — 기대 단계까지 짧게 폴링(최대 3초).
+      const alertAfterLogs = async (expected: string): Promise<string | undefined> => {
+        let level: string | undefined;
+        for (let i = 0; i < 30; i += 1) {
+          const res = await jsonRequest<{ items: Array<{ alertLevel: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
+          level = res.body.items?.[0]?.alertLevel;
+          if (level === expected) return level;
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        return level;
+      };
+
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문 1' });
-      let list = await jsonRequest<{ items: Array<{ alertLevel: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
-      expect(list.body.items[0].alertLevel).toBe('NORMAL');
+      expect(await alertAfterLogs('NORMAL')).toBe('NORMAL');
 
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문 2' });
-      list = await jsonRequest('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
-      expect(list.body.items[0].alertLevel).toBe('CAUTION');
+      expect(await alertAfterLogs('CAUTION')).toBe('CAUTION');
 
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문 3' });
-      list = await jsonRequest('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
-      expect(list.body.items[0].alertLevel).toBe('WARNING');
+      expect(await alertAfterLogs('WARNING')).toBe('WARNING');
     });
 
     it('금지어 BLOCK 턴은 연속 미응답을 끊지도 늘리지도 않는다(중립) — 경고 유지', async () => {
@@ -590,12 +612,16 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: `${word} 포함` });
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문 3' });
 
-      const list = await jsonRequest<{ items: Array<{ alertLevel: string; consecutiveUnanswered: number; blockedCount: number }> }>(
-        'GET',
-        `${baseUrl}/chatbots/${chatbotId}/live-sessions`,
-        undefined,
-        { cookie: adminCookie },
-      );
+      // 대화로그 적재가 응답과 비동기(fire-and-forget)라 병렬 부하에서는 마지막 턴이 늦게 보일 수 있다 —
+      // 기대 상태가 될 때까지 짧게 폴링한다(최대 3초). 끝까지 안 되면 마지막 응답으로 아래 단언이 실패한다.
+      type Row = { alertLevel: string; consecutiveUnanswered: number; blockedCount: number };
+      let list = await jsonRequest<{ items: Row[] }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
+      for (let i = 0; i < 30; i += 1) {
+        const row = list.body.items?.[0];
+        if (row && row.blockedCount === 1 && row.consecutiveUnanswered === 3) break;
+        await new Promise((r) => setTimeout(r, 100));
+        list = await jsonRequest<{ items: Row[] }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie });
+      }
       // BLOCK 턴 1건은 세지도 끊지도 않는다 — 미응답 3건(1,2,3)이 연속으로 인정돼 WARNING까지 오른다.
       expect(list.body.items[0].consecutiveUnanswered).toBe(3);
       expect(list.body.items[0].blockedCount).toBe(1);
@@ -727,7 +753,7 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
     it('읽기 전용 cs:read 8경로 — VIEWER는 전부 403, EDITOR·AGENT·ADMIN은 403이 아니다', async () => {
       const { chatbotId, slug } = await setupHandoffChatbot();
       const { sessionRef, handoffId } = await connectHandoffWithRawMessage(chatbotId, slug);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toKstDayBucket(new Date()); // 이력 기간은 KST 일 기준 — UTC로 자르면 KST 새벽에 빈 목록이 되어 누출 검사가 무의미해진다
 
       const csReadTargets: Array<[string, string]> = [
         ['GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`],

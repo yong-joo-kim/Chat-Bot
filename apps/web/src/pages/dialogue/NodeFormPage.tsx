@@ -21,6 +21,9 @@ import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { DialogOutputEditor } from './components/DialogOutputEditor';
 import { SimulatorDrawer } from '../chatbot-detail/simulator/SimulatorDrawer';
+import { TopicSelectField } from '../../components/TopicSelectField';
+import { SystemNodeTopicLockedHint } from './components/topicBadges';
+import { useTopics } from '../../lib/useTopics';
 
 interface OutputRow {
   key: string;
@@ -52,7 +55,9 @@ export function NodeFormPage(): JSX.Element {
   const [intentIds, setIntentIds] = useState<string[]>([]);
   const [keywordIds, setKeywordIds] = useState<string[]>([]);
   const [contextVariableId, setContextVariableId] = useState<string | null>(null);
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<OutputRow[]>([]);
+  const { topics } = useTopics(chatbot.id);
 
   const [loading, setLoading] = useState(!isNew);
   const [notFound, setNotFound] = useState(false);
@@ -80,6 +85,7 @@ export function NodeFormPage(): JSX.Element {
       setIntentIds(node.intentIds);
       setKeywordIds(node.keywordIds);
       setContextVariableId(node.contextVariableId ?? null);
+      setTopicId(node.topicId ?? null);
       setOutputs(node.outputs.map((o) => ({ key: nextKey(), output: o })));
       setDirty(false);
     } catch (e) {
@@ -123,6 +129,7 @@ export function NodeFormPage(): JSX.Element {
       intentIds,
       keywordIds,
       contextVariableId: contextVariableId ?? undefined,
+      topicId: nodeType === 'NORMAL' ? topicId : null,
       outputs: outputs.map((o) => o.output),
     };
 
@@ -161,6 +168,10 @@ export function NodeFormPage(): JSX.Element {
           setFieldErrors({ name: e2.message });
         } else if (e2.code === 'START_NODE_EXISTS' || e2.code === 'FALLBACK_NODE_EXISTS') {
           setFormBanner(e2.message);
+        } else if (e2.code === 'TOPIC_SYSTEM_NODE_LOCKED') {
+          setFormBanner(MESSAGES.errors.TOPIC_SYSTEM_NODE_LOCKED);
+        } else if (e2.code === 'INVALID_REFERENCE' && Object.keys(details).length === 0) {
+          setFormBanner(MESSAGES.topics.topicFieldInvalidReference);
         } else if (e2.code === 'API_OUTPUT_LEGACY_FORMAT') {
           // [No.26] v1 카드로 스크롤·포커스를 옮기고 "연결로 전환" 버튼을 강조한다(ui-spec §3.3-5).
           setFormBanner(MESSAGES.dialogue.outputFields.saveBlockedLegacyFormat);
@@ -211,6 +222,7 @@ export function NodeFormPage(): JSX.Element {
           intentIds,
           keywordIds,
           contextVariableId: contextVariableId ?? undefined,
+          topicId: nodeType === 'NORMAL' ? (topicId ?? undefined) : undefined,
           outputs: outputs.map((o) => o.output),
         },
       ],
@@ -304,6 +316,19 @@ export function NodeFormPage(): JSX.Element {
                 />
                 <p className="field-hint">{msg.priorityHelp}</p>
               </div>
+            )}
+
+            {nodeType === 'NORMAL' ? (
+              <TopicSelectField
+                id="node-topic"
+                label={MESSAGES.topics.topicFieldLabel}
+                topics={topics}
+                value={topicId}
+                onChange={(v) => markDirty(setTopicId)(v)}
+                errorMessage={fieldErrors.topicId}
+              />
+            ) : (
+              <SystemNodeTopicLockedHint />
             )}
           </div>
 

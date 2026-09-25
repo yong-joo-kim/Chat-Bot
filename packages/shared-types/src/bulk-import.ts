@@ -65,6 +65,8 @@ export const ImportCommitRequestSchema = z.object({
   importToken: z.string(),
   mergePolicy: ImportMergePolicy.default('MERGE'),
   errorPolicy: ImportErrorPolicy.default('SKIP_INVALID'),
+  /** [신규 No.22] 신규 항목에만 적용된다 — 이름이 같아 병합되는 기존 항목은 토픽을 바꾸지 않는다(§8, AC-TP2-4). */
+  newItemTopicId: z.string().uuid().nullable().optional(),
 });
 export type ImportCommitRequestDto = z.infer<typeof ImportCommitRequestSchema>;
 

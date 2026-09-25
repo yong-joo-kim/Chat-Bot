@@ -36,6 +36,7 @@ export function toContextEntity(row: PrismaContext): ContextVariable {
     completionMessage: row.completionMessage ?? undefined,
     cancelKeywords: parseCancelKeywords(row.cancelKeywords, row.id),
     sessionTimeoutMinutes: row.sessionTimeoutMinutes,
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -48,6 +49,7 @@ export function toContextListItem(row: PrismaContext): ContextListItem {
     name: entity.name,
     description: entity.description,
     slotCount: entity.slots.length,
+    topicId: row.topicId ?? null,
     updatedAt: entity.updatedAt,
   };
 }

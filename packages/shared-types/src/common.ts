@@ -9,6 +9,12 @@ import { z } from 'zod';
 export const SortOrder = z.enum(['asc', 'desc']);
 export type SortOrder = z.infer<typeof SortOrder>;
 
+/**
+ * [신규 No.22] 목록 필터의 "공통"(topicId = null) 예약어. UUID와 충돌하지 않는다.
+ * `common.ts`에 둔다 — `dialogue.ts`(목록 쿼리 파서)와 `topic.ts`가 순환 의존 없이 공유한다.
+ */
+export const TOPIC_FILTER_COMMON = 'common' as const;
+
 /** 목록 API 공통 페이지네이션 쿼리(FR-0-5). page는 1부터, pageSize 기본 20 · 최대 100. */
 export const PaginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -146,6 +152,11 @@ export const ApiErrorCode = z.enum([
   'HANDOFF_DISABLED',
   'HANDOFF_NOT_ASSIGNEE',
   'HANDOFF_UNAVAILABLE',
+  // 토픽 시스템(No.22) 그룹 추가(topic-system-설계.md §16.3, §25 D-9) — 4종.
+  'TOPIC_NOT_EMPTY',
+  'TOPIC_SYSTEM_NODE_LOCKED',
+  'TOPIC_SPLIT_TOO_LARGE',
+  'TOPIC_SPLIT_BUSY',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

@@ -2,12 +2,13 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { MESSAGES } from '../../constants/messages';
 
-type SubNavKey = 'nodes' | 'intents' | 'homonyms' | 'contexts' | 'faqs' | 'surveys' | 'cannedResponses';
+type SubNavKey = 'nodes' | 'intents' | 'homonyms' | 'contexts' | 'faqs' | 'surveys' | 'cannedResponses' | 'topics';
 
 // [No.27] 서브내비 6번째 "설문" — 최상위 라우트는 늘리지 않는다(`AC-C-3` 6개 고정,
 // survey-management-ui-spec.md §0-3·§1). 권한과 무관하게 항상 노출되며 쓰기 액션만 게이팅된다.
 // [No.24] 7번째 "자주 쓰는 문장" — 같은 원칙(신규 최상위 라우트 0개, hybrid-cs-ui-spec.md §0.4).
-const SUBNAV_ITEMS: SubNavKey[] = ['nodes', 'intents', 'homonyms', 'contexts', 'faqs', 'surveys', 'cannedResponses'];
+// [No.22] 8번째 "토픽" — 같은 원칙(신규 최상위 라우트 0개, topic-system-ui-spec.md §0.2).
+const SUBNAV_ITEMS: SubNavKey[] = ['nodes', 'intents', 'homonyms', 'contexts', 'faqs', 'surveys', 'cannedResponses', 'topics'];
 
 /** D0 — 대화설계 공통 셸(좌측 서브내비 + 본문, ui-spec §3). */
 export function DialogueShell(): JSX.Element {

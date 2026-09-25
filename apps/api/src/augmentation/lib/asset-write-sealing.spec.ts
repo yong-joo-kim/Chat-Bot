@@ -69,29 +69,39 @@ describe('제안 ≠ 자산 구조적 봉인 정적 검사 — ADR-0025 §13, AC
   describe('S-1: Intent/Keyword 자산 쓰기 Prisma 호출은 소유 서비스 파일 밖에서 0건이다', () => {
     // `upsert`도 쓰기 호출이며, 트랜잭션 콜백 변수(관례상 `tx`) 경유 호출도 리터럴 `prisma.` 앞부분만
     // 보면 놓친다 — 두 우회 모두 잡도록 `prisma`/`tx` 두 접두사와 `upsert`를 포함한다.
-    const writeCallPattern = /(?:prisma|tx)\.(intent|keyword)\.(create|update|updateMany|upsert)\(/;
+    // [신규 No.22] `createMany`를 포함한다 — 분리 적재기(`asset-transfer.loader.ts`)의 생성 전용 쓰기도
+    // 이 검사 대상이다(topic-system-설계.md §25 패치 B-6).
+    const writeCallPattern = /(?:prisma|tx)\.(intent|keyword)\.(create|update|updateMany|upsert|createMany)\(/;
 
     // [신규 2026-09-23 No.25] 복원 applier(`versions/restore/version-restore.applier.ts`)가 3번째 허용
     // 파일로 추가된다(ADR-0025 갱신 각주, version-history-설계.md §16.2). 복원은 "새 편집"이 아니라
     // 관리자 요청 핸들러 1곳의 **과거 상태 재현**이며, 본문을 만드는 경로가 실제 DB 자산의 캡처뿐이라
     // "승인 없는 자산 주입" 경로가 아니다.
+    // [신규 No.22] `topics/topic-assignment.service.ts`(자산 6종 topicId 일괄 쓰기 유일 파일, §17 T-7)와
+    // `asset-transfer/asset-transfer.loader.ts`(분리 적재기, 생성 전용 · §17 T-5)가 4·5번째로 추가된다 —
+    // 둘 다 "승인 없는 자산 내용 변경"이 아니라 분류(topicId)/생성 전용 경로다.
     it.each(apiFileContents.filter(({ content }) => writeCallPattern.test(content)).map(({ f }) => f))(
-      '%s는 intents.service.ts · keywords.service.ts · versions/restore/version-restore.applier.ts 중 하나여야 한다',
+      '%s는 intents.service.ts · keywords.service.ts · versions/restore/version-restore.applier.ts · topics/topic-assignment.service.ts · asset-transfer/asset-transfer.loader.ts 중 하나여야 한다',
       (file) => {
         const normalized = file.replace(/\\/g, '/');
         expect(
           normalized.endsWith('intents/intents.service.ts') ||
             normalized.endsWith('keywords/keywords.service.ts') ||
-            normalized.endsWith('versions/restore/version-restore.applier.ts'),
+            normalized.endsWith('versions/restore/version-restore.applier.ts') ||
+            normalized.endsWith('topics/topic-assignment.service.ts') ||
+            normalized.endsWith('asset-transfer/asset-transfer.loader.ts'),
         ).toBe(true);
       },
     );
 
-    it('실제로 걸리는 파일이 정확히 3개(intents.service.ts, keywords.service.ts, version-restore.applier.ts)다(가드 — 검사 자체가 무력화되지 않았음을 확인)', () => {
+    it('실제로 걸리는 파일이 정확히 5개다(가드 — 검사 자체가 무력화되지 않았음을 확인)', () => {
       const offenders = apiFileContents.filter(({ content }) => writeCallPattern.test(content)).map(({ f }) => f.replace(/\\/g, '/'));
       expect(offenders.filter((f) => f.endsWith('intents/intents.service.ts'))).toHaveLength(1);
       expect(offenders.filter((f) => f.endsWith('keywords/keywords.service.ts'))).toHaveLength(1);
       expect(offenders.filter((f) => f.endsWith('versions/restore/version-restore.applier.ts'))).toHaveLength(1);
+      expect(offenders.filter((f) => f.endsWith('topics/topic-assignment.service.ts'))).toHaveLength(1);
+      expect(offenders.filter((f) => f.endsWith('asset-transfer/asset-transfer.loader.ts'))).toHaveLength(1);
+      expect(offenders).toHaveLength(5);
     });
 
     it('회귀: upsert 호출과 tx 트랜잭션 변수 경유 호출도 실제로 검출된다(정규식 우회 방지 확인)', () => {

@@ -92,6 +92,11 @@ export function warningText(warning: RestoreWarning): string {
       return msg.warnings.SURVEY_NOT_OPEN(warning.count);
     case 'SURVEY_LEGACY_FORMAT':
       return msg.warnings.SURVEY_LEGACY_FORMAT(warning.count);
+    // [No.22] 토픽 시스템 — 복원 미리보기 경고 2종(topic-system-ui-spec.md §3.9).
+    case 'TOPIC_MISSING':
+      return msg.warnings.TOPIC_MISSING(warning.count);
+    case 'TOPIC_EXPOSURE_CHANGE':
+      return msg.warnings.TOPIC_EXPOSURE_CHANGE(warning.exposed, warning.hidden);
     default:
       return '';
   }

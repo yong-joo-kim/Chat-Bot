@@ -17,6 +17,7 @@ function buildPrismaMock() {
     contextVariable: { findMany: emptyFindManyMock() },
     faqEntry: { findMany: emptyFindManyMock() },
     survey: { findMany: emptyFindManyMock() },
+    topic: { findMany: emptyFindManyMock() },
   };
 }
 
@@ -50,5 +51,22 @@ describe('K-1: DialogueBundleService.build() 결정적 정렬', () => {
     expect(tx.contextVariable.findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: EXPECTED_ORDER_BY }));
     expect(tx.faqEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: EXPECTED_ORDER_BY }));
     expect(tx.survey.findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: EXPECTED_ORDER_BY }));
+    // tx 경로는 필터를 쓸 수 없다 — 8번째(topic) 조회가 없다.
+    expect(tx.topic.findMany).not.toHaveBeenCalled();
+    expect(prisma.topic.findMany).not.toHaveBeenCalled();
+  });
+
+  it('excludeInactiveTopics=true + tx 클라이언트 조합은 프로그래밍 오류로 throw한다(§6.1, §17 T-2 런타임 가드)', async () => {
+    const prisma = buildPrismaMock();
+    const tx = buildPrismaMock();
+    const service = new DialogueBundleService(prisma as never);
+    await expect(service.build('chatbot-1', tx as never, { excludeInactiveTopics: true })).rejects.toThrow();
+  });
+
+  it('excludeInactiveTopics=true(비tx) — 8번째 topic.findMany가 나머지 7개와 함께 병렬 호출된다', async () => {
+    const prisma = buildPrismaMock();
+    const service = new DialogueBundleService(prisma as never);
+    await service.build('chatbot-1', undefined, { excludeInactiveTopics: true });
+    expect(prisma.topic.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { chatbotId: 'chatbot-1', enabled: false } }));
   });
 });

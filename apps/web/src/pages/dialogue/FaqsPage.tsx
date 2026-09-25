@@ -17,6 +17,11 @@ import { MESSAGES } from '../../constants/messages';
 import { FaqCategoryBadge } from './badges';
 import { FaqEditModal } from './components/FaqEditModal';
 import { BulkImportModal } from './components/BulkImportModal';
+import { TopicFilterDropdown } from './components/TopicFilterDropdown';
+import { BulkTopicAssignModal } from './components/BulkTopicAssignModal';
+import { TopicLoadErrorNotice, TopicNameChip } from './components/topicBadges';
+import { useTopics } from '../../lib/useTopics';
+import { useTopicFilterParam } from '../../lib/useTopicFilterParam';
 
 const CATEGORIES: FaqCategory[] = ['FAQ', 'SMALL_TALK', 'SELF_SERVICE', 'ERROR_RESPONSE'];
 
@@ -28,9 +33,11 @@ export function FaqsPage(): JSX.Element {
   const isArchived = chatbot.status === 'ARCHIVED';
   const msg = MESSAGES.dialogue.faqs;
 
+  const { topics, topicsById, error: topicsError, reload: reloadTopics } = useTopics(chatbot.id);
   const [q, setQ] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<FaqCategory[]>([]);
   const [enabledOnly, setEnabledOnly] = useState(false);
+  const [topicFilter, setTopicFilter] = useTopicFilterParam();
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<FaqEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -45,6 +52,7 @@ export function FaqsPage(): JSX.Element {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FaqEntry | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +62,7 @@ export function FaqsPage(): JSX.Element {
         q: q || undefined,
         category: categoryFilter.length > 0 ? categoryFilter : undefined,
         enabled: enabledOnly ? true : undefined,
+        topicIds: topicFilter.length > 0 ? topicFilter : undefined,
         page,
         pageSize: 20,
       });
@@ -65,7 +74,7 @@ export function FaqsPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [chatbot.id, q, categoryFilter, enabledOnly, page]);
+  }, [chatbot.id, q, categoryFilter, enabledOnly, topicFilter, page]);
 
   useEffect(() => {
     load();
@@ -164,7 +173,7 @@ export function FaqsPage(): JSX.Element {
         </fieldset>
         {!isArchived && (
           <div className="dialogue-toolbar-actions">
-            <a className="btn btn-secondary" href={faqsApi.exportUrl(chatbot.id)}>
+            <a className="btn btn-secondary" href={faqsApi.exportUrl(chatbot.id, topicFilter)} title={MESSAGES.topics.exportTopicFilterHint}>
               {msg.exportButton}
             </a>
             <button type="button" className="btn btn-secondary" onClick={() => setImportOpen(true)}>
@@ -191,6 +200,15 @@ export function FaqsPage(): JSX.Element {
             setPage(1);
           }}
         />
+        <TopicFilterDropdown
+          topics={topics}
+          selected={topicFilter}
+          onChange={(v) => {
+            setTopicFilter(v);
+            setPage(1);
+          }}
+        />
+        {topicsError && <TopicLoadErrorNotice onRetry={reloadTopics} />}
       </div>
 
       {!loading && !error && errorResponseCount === 0 && (
@@ -246,6 +264,7 @@ export function FaqsPage(): JSX.Element {
                 <th scope="col">{msg.columnAnswer}</th>
                 <th scope="col">{msg.columnAltQuestions}</th>
                 <th scope="col">{msg.columnEnabled}</th>
+                <th scope="col">{MESSAGES.topics.listColumnTopic}</th>
                 <th scope="col">{msg.columnUpdatedAt}</th>
                 <th scope="col">{msg.columnActions}</th>
               </tr>
@@ -281,6 +300,9 @@ export function FaqsPage(): JSX.Element {
                   <td>{item.answer.length > 60 ? `${item.answer.slice(0, 60)}…` : item.answer}</td>
                   <td>{msg.altQuestionsCount(item.altQuestions.length)}</td>
                   <td>{item.enabled ? msg.enabledYes : msg.enabledNo}</td>
+                  <td>
+                    <TopicNameChip topicId={item.topicId} topicsById={topicsById} />
+                  </td>
                   <td>{new Date(item.updatedAt).toLocaleDateString('ko-KR')}</td>
                   <td>
                     {!isArchived && (
@@ -305,6 +327,14 @@ export function FaqsPage(): JSX.Element {
                 type="button"
                 className="btn btn-secondary"
                 disabled={selectedIds.length === 0}
+                onClick={() => setBulkAssignOpen(true)}
+              >
+                {MESSAGES.topics.bulkAssignOpenButton}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={selectedIds.length === 0}
                 onClick={() => setBulkDeleteOpen(true)}
               >
                 {msg.bulkDelete}
@@ -318,6 +348,7 @@ export function FaqsPage(): JSX.Element {
         isOpen={editModalOpen}
         chatbotId={chatbot.id}
         faqId={editingId}
+        topics={topics}
         prefillQuestion={prefillQuestion}
         onClose={closeEditModal}
         onSaved={load}
@@ -325,7 +356,20 @@ export function FaqsPage(): JSX.Element {
         isArchived={isArchived}
         onJumpToFaq={handleJumpToFaq}
       />
-      <BulkImportModal resourceType="FAQ" chatbotId={chatbot.id} isOpen={importOpen} onClose={() => setImportOpen(false)} onCommitted={load} />
+      <BulkImportModal resourceType="FAQ" chatbotId={chatbot.id} isOpen={importOpen} onClose={() => setImportOpen(false)} onCommitted={load} topics={topics} />
+      <BulkTopicAssignModal
+        isOpen={bulkAssignOpen}
+        chatbotId={chatbot.id}
+        resourceKind="FAQ"
+        resourceKindLabel="FAQ"
+        selectedIds={selectedIds}
+        topics={topics}
+        onClose={() => setBulkAssignOpen(false)}
+        onAssigned={() => {
+          setSelectedIds([]);
+          void load();
+        }}
+      />
 
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}

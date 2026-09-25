@@ -19,6 +19,9 @@ import { ApiException } from '../common/api.exception';
  * [No.24] 하이브리드 CS 그룹이 사전검사에 `handoffSessions`·`cannedResponses` 2건을 추가하고
  * (11 → 13종), 동반 삭제 트랜잭션에 `chatbotHandoffSetting.deleteMany` 1건을 추가했다
  * (15 → 16테이블, ADR-0036 §8) — 상담 스레드·문장 자체는 삭제 대상이 아니다(§18 H-8).
+ * [No.22] 토픽 시스템 그룹이 사전검사에 `topics` 1건을 추가했다(13 → 14종) — 토픽은 대화 자산
+ * 성격이라 동반 삭제가 아니라 사전검사(409) 대상이다(topic-system-설계.md §9.7). 동반 삭제
+ * 트랜잭션은 변경 없다(토픽 FK가 Restrict라 비어 있지 않으면 애초에 이 지점에 도달하지 않는다).
  */
 
 const ARCHIVED_CHATBOT = {
@@ -75,12 +78,16 @@ function buildPrismaMock(tx: ReturnType<typeof buildTxMock>) {
     surveyResponse: { count: jest.fn().mockResolvedValue(0) },
     handoffSession: { count: jest.fn().mockResolvedValue(0) },
     cannedResponse: { count: jest.fn().mockResolvedValue(0) },
+    // [신규 No.22] 사전검사 13 → 14종.
+    topic: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb(tx)),
   };
 }
 
 function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogService: { record: jest.Mock }) {
-  return new ChatbotsService(prisma as never, auditLogService as never);
+  // [신규 No.22] ChatbotCopyTargetService는 copy()에서만 쓰인다 — 이 스펙의 permanentDelete 시험에는
+  // 관여하지 않으므로 더미로 주입한다.
+  return new ChatbotsService(prisma as never, auditLogService as never, {} as never);
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {

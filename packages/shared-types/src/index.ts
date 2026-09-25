@@ -7,6 +7,7 @@
 export * from './common';
 export * from './chatbot';
 export * from './dialogue';
+export * from './topic';
 export * from './survey';
 export * from './survey-logic';
 export * from './dialogue-engine';

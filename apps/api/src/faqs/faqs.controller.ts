@@ -111,8 +111,9 @@ export class FaqsController {
 
   @Get('export')
   @RequirePermission('dialogue:read')
-  async export(@Param('chatbotId') chatbotId: string, @Res() res: Response): Promise<void> {
-    const { content, filename, mimeType } = await this.faqsService.export(chatbotId);
+  async export(@Param('chatbotId') chatbotId: string, @Query('topicIds') topicIds: string | undefined, @Res() res: Response): Promise<void> {
+    const parsedTopicIds = topicIds ? topicIds.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
+    const { content, filename, mimeType } = await this.faqsService.export(chatbotId, parsedTopicIds);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', mimeType);
     res.send(content);

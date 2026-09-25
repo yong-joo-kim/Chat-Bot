@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import type { Chatbot, DialogNodeListItem, FlowTree, DesignValidationReport } from '@chat-bot/shared-types';
 import { ToastProvider } from '../../components/Toast';
 import { ApiError } from '../../api/client';
@@ -39,6 +39,32 @@ const mockContext: ChatbotDetailContext = {
 
 vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
+}));
+
+// [신규 No.22] `NodesListPage`가 토픽 일괄 지정 게이팅에 `useAuth().can`을 쓴다 — 기존 스펙은
+// `AuthProvider` 없이 렌더하므로 실패를 막기 위해 최소 목을 추가한다(canned-responses 선례와 동일).
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ can: () => true }),
+}));
+
+vi.mock('../../api/topics', () => ({
+  topicsApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'topic-1',
+          chatbotId: 'bot-1',
+          name: '배송',
+          sortOrder: 0,
+          enabled: true,
+          createdAt: new Date('2026-09-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      ],
+      common: { counts: {}, outgoingCrossRefs: 0 },
+      limit: 50,
+    }),
+  },
 }));
 
 function makeNodeItem(overrides: Partial<DialogNodeListItem> = {}): DialogNodeListItem {
@@ -248,5 +274,88 @@ describe('NodesListPage', () => {
 
     expect(await screen.findByText("'배송조회_응답 (사본)'이 생성되었습니다. 새 노드는 비활성 상태입니다.")).toBeInTheDocument();
     expect(screen.queryByText(/이전 형식 API 조건/)).not.toBeInTheDocument();
+  });
+});
+
+/** [신규 No.22] D1-ext — 토픽 필터·열(topic-system-ui-spec.md §3.3). */
+describe('NodesListPage — 토픽 필터', () => {
+  beforeEach(() => {
+    mockList.mockReset();
+    mockList.mockResolvedValue({ items: [makeNodeItem({ topicId: 'topic-1', crossTopicRefCount: 2 })], total: 1, page: 1, pageSize: 20 });
+    mockIntentsList.mockReset().mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it('토픽 필터에서 토픽을 선택하면 목록 조회에 topicIds가 실려 간다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    await user.click(screen.getByRole('button', { name: /^토픽:/ }));
+    await user.click(await screen.findByRole('checkbox', { name: '배송' }));
+
+    await waitFor(() => expect(mockList).toHaveBeenLastCalledWith('bot-1', expect.objectContaining({ topicIds: ['topic-1'] })));
+  });
+
+  it('노드 목록의 토픽 열에 토픽 이름과 "다른 토픽 참조 n" 배지가 표시된다', async () => {
+    renderPage();
+    await screen.findByText('배송조회_응답');
+
+    expect(screen.getByText('배송')).toBeInTheDocument();
+    expect(screen.getByText('다른 토픽 참조 2')).toBeInTheDocument();
+  });
+});
+
+/** [코드 리뷰 1회차 M-1] 토픽 필터를 URL 쿼리 `topicIds=`로 유지한다 — 새로고침·뒤로가기 보존. */
+describe('NodesListPage — 토픽 필터 URL 유지(M-1)', () => {
+  beforeEach(() => {
+    mockList.mockReset();
+    mockList.mockResolvedValue({ items: [makeNodeItem({ topicId: 'topic-1' })], total: 1, page: 1, pageSize: 20 });
+    mockIntentsList.mockReset().mockResolvedValue({ items: [], total: 0 });
+  });
+
+  function TestBackButton(): JSX.Element {
+    const navigate = useNavigate();
+    return (
+      <button type="button" onClick={() => navigate(-1)}>
+        테스트용 뒤로가기
+      </button>
+    );
+  }
+
+  it('URL에 이미 topicIds가 있으면(새로고침과 동일한 상황) 그 값으로 목록을 조회한다', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chatbots/bot-1/dialogue/nodes?topicIds=topic-1']}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/chatbots/:chatbotId/dialogue/nodes" element={<NodesListPage />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledWith('bot-1', expect.objectContaining({ topicIds: ['topic-1'] })));
+  });
+
+  it('필터를 적용한 뒤 브라우저 뒤로가기를 하면 이전 URL(필터 없음) 기준으로 다시 조회한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter
+        initialEntries={['/chatbots/bot-1/dialogue/nodes', '/chatbots/bot-1/dialogue/nodes?topicIds=topic-1']}
+        initialIndex={1}
+      >
+        <ToastProvider>
+          <TestBackButton />
+          <Routes>
+            <Route path="/chatbots/:chatbotId/dialogue/nodes" element={<NodesListPage />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledWith('bot-1', expect.objectContaining({ topicIds: ['topic-1'] })));
+
+    await user.click(screen.getByRole('button', { name: '테스트용 뒤로가기' }));
+
+    await waitFor(() => expect(mockList).toHaveBeenLastCalledWith('bot-1', expect.objectContaining({ topicIds: undefined })));
   });
 });

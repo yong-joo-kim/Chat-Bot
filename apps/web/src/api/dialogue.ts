@@ -82,7 +82,7 @@ export const intentsApi = {
     apiClient.post<ImportCommitResult>(`/chatbots/${chatbotId}/intents/import/commit`, dto),
   templateUrl: (chatbotId: string, format: 'csv' | 'xlsx') =>
     `${API_BASE_URL}/chatbots/${chatbotId}/intents/import/template?format=${format}`,
-  exportUrl: (chatbotId: string) => `${API_BASE_URL}/chatbots/${chatbotId}/intents/export`,
+  exportUrl: (chatbotId: string, topicIds?: string[]) => `${API_BASE_URL}/chatbots/${chatbotId}/intents/export${buildQuery({ topicIds })}`,
 };
 
 /* ------------------------------------------------------------------------------------------------
@@ -105,7 +105,7 @@ export const keywordsApi = {
     apiClient.post<ImportCommitResult>(`/chatbots/${chatbotId}/keywords/import/commit`, dto),
   templateUrl: (chatbotId: string, format: 'csv' | 'xlsx') =>
     `${API_BASE_URL}/chatbots/${chatbotId}/keywords/import/template?format=${format}`,
-  exportUrl: (chatbotId: string) => `${API_BASE_URL}/chatbots/${chatbotId}/keywords/export`,
+  exportUrl: (chatbotId: string, topicIds?: string[]) => `${API_BASE_URL}/chatbots/${chatbotId}/keywords/export${buildQuery({ topicIds })}`,
 };
 
 /* ------------------------------------------------------------------------------------------------
@@ -181,5 +181,5 @@ export const faqsApi = {
     apiClient.post<ImportCommitResult>(`/chatbots/${chatbotId}/faqs/import/commit`, dto),
   templateUrl: (chatbotId: string, format: 'csv' | 'xlsx') =>
     `${API_BASE_URL}/chatbots/${chatbotId}/faqs/import/template?format=${format}`,
-  exportUrl: (chatbotId: string) => `${API_BASE_URL}/chatbots/${chatbotId}/faqs/export`,
+  exportUrl: (chatbotId: string, topicIds?: string[]) => `${API_BASE_URL}/chatbots/${chatbotId}/faqs/export${buildQuery({ topicIds })}`,
 };

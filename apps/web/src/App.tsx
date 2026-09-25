@@ -47,6 +47,7 @@ import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
 import { CannedResponsesPage } from './pages/dialogue/CannedResponsesPage';
+import { TopicsPage } from './pages/dialogue/TopicsPage';
 import { HandoffChatbotPickerPage } from './pages/handoff-console/HandoffChatbotPickerPage';
 import { HandoffConsoleChatbotShell } from './pages/handoff-console/HandoffConsoleChatbotShell';
 import { LiveSessionListPage } from './pages/handoff-console/LiveSessionListPage';
@@ -136,6 +137,8 @@ export function App(): JSX.Element {
               <Route path="surveys/:surveyId/results" element={<SurveyResultsPage />} />
               {/* [No.24] CR1 — 자주 쓰는 문장 관리, DialogueShell 서브내비 7번째(hybrid-cs-ui-spec.md §3.6). */}
               <Route path="canned-responses" element={<CannedResponsesPage />} />
+              {/* [No.22] TP0 — 토픽 관리, DialogueShell 서브내비 8번째(topic-system-ui-spec.md §1). */}
+              <Route path="topics" element={<TopicsPage />} />
             </Route>
             <Route path="validation" element={<ValidationShell />}>
               <Route index element={<Navigate to="sets" replace />} />

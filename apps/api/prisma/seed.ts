@@ -342,6 +342,96 @@ async function seedLearningQueue(chatbotId: string, groupId: string, now: Date):
   );
 }
 
+/**
+ * [신규 No.22 토픽 시스템] 데모 토픽 2개(topic-system-설계.md §3.3) — "배송"(활성)에 의도 2건·FAQ
+ * 2건, "보험청구 — 준비 중"(비활성)에 의도 1건·노드 1건·FAQ 1건을 지정한다. 시작·폴백 노드와 기존
+ * 트랙 A 자산은 공통(topicId=null)으로 그대로 둔다. 이름에 "토픽데모_" 접두를 붙여 기존 자산과
+ * 겹치지 않게 하고, 재실행 시 deleteMany 후 재생성해 멱등을 유지한다.
+ */
+async function seedTopicsDemo(chatbotId: string): Promise<void> {
+  await prisma.faqEntry.deleteMany({ where: { chatbotId, question: { startsWith: '토픽데모_' } } });
+  await prisma.dialogNode.deleteMany({ where: { chatbotId, name: { startsWith: '토픽데모_' } } });
+  await prisma.intent.deleteMany({ where: { chatbotId, name: { startsWith: '토픽데모_' } } });
+  await prisma.topic.deleteMany({ where: { chatbotId, name: { in: ['배송', '보험청구 — 준비 중'] } } });
+
+  const shippingTopic = await prisma.topic.create({
+    data: { chatbotId, name: '배송', nameNormalized: normalizeText('배송'), sortOrder: 1, enabled: true },
+  });
+  const insuranceTopic = await prisma.topic.create({
+    data: { chatbotId, name: '보험청구 — 준비 중', nameNormalized: normalizeText('보험청구 — 준비 중'), sortOrder: 2, enabled: false },
+  });
+
+  await prisma.intent.create({
+    data: {
+      chatbotId,
+      name: '토픽데모_배송조회',
+      nameNormalized: normalizeText('토픽데모_배송조회'),
+      examples: JSON.stringify(['배송 상태 알려줘', '택배 어디까지 왔어요']),
+      topicId: shippingTopic.id,
+    },
+  });
+  await prisma.intent.create({
+    data: {
+      chatbotId,
+      name: '토픽데모_배송지변경',
+      nameNormalized: normalizeText('토픽데모_배송지변경'),
+      examples: JSON.stringify(['배송지를 바꾸고 싶어요', '주소 변경 가능한가요']),
+      topicId: shippingTopic.id,
+    },
+  });
+  await prisma.faqEntry.create({
+    data: {
+      chatbotId,
+      category: 'FAQ',
+      question: '토픽데모_배송은 며칠 걸리나요?',
+      questionNormalized: normalizeText('토픽데모_배송은 며칠 걸리나요?'),
+      answer: '영업일 기준 2~3일 소요됩니다.',
+      topicId: shippingTopic.id,
+    },
+  });
+  await prisma.faqEntry.create({
+    data: {
+      chatbotId,
+      category: 'FAQ',
+      question: '토픽데모_해외배송도 되나요?',
+      questionNormalized: normalizeText('토픽데모_해외배송도 되나요?'),
+      answer: '일부 국가에 한해 가능합니다.',
+      topicId: shippingTopic.id,
+    },
+  });
+
+  await prisma.intent.create({
+    data: {
+      chatbotId,
+      name: '토픽데모_보험금청구',
+      nameNormalized: normalizeText('토픽데모_보험금청구'),
+      examples: JSON.stringify(['보험금 청구하고 싶어요', '보험 청구 절차 알려주세요']),
+      topicId: insuranceTopic.id,
+    },
+  });
+  await prisma.dialogNode.create({
+    data: {
+      chatbotId,
+      name: '토픽데모_보험금청구절차',
+      nameNormalized: normalizeText('토픽데모_보험금청구절차'),
+      nodeType: 'NORMAL',
+      priority: 100,
+      outputs: JSON.stringify([{ type: 'TEXT', payload: { text: '보험금 청구 서류를 준비해 주세요(준비 중인 서비스입니다).' } }]),
+      topicId: insuranceTopic.id,
+    },
+  });
+  await prisma.faqEntry.create({
+    data: {
+      chatbotId,
+      category: 'FAQ',
+      question: '토픽데모_보험청구 서류는 무엇이 필요한가요?',
+      questionNormalized: normalizeText('토픽데모_보험청구 서류는 무엇이 필요한가요?'),
+      answer: '준비 중인 서비스입니다.',
+      topicId: insuranceTopic.id,
+    },
+  });
+}
+
 async function main(): Promise<void> {
   const now = new Date();
 
@@ -859,6 +949,10 @@ async function main(): Promise<void> {
     },
   });
   await prisma.dialogNodeKeyword.create({ data: { nodeId: orderLookupNode.id, keywordId: orderKeyword.id } });
+
+  // [신규 No.22 토픽 시스템] 데모 토픽 2개 — "배송"(활성) · "보험청구 — 준비 중"(비활성). 기존 트랙 A
+  // 자산(의도/FAQ/노드/대화로그 수)에 영향이 없도록 새 이름의 자산만 추가한다(topic-system-설계.md §3.3).
+  await seedTopicsDemo(supportBot.id);
 
   // eslint-disable-next-line no-console
   console.log(

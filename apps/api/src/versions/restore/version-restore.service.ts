@@ -18,6 +18,8 @@ import { checkSnapshotIntegrity } from '../lib/snapshot-integrity';
 import { computeContentHash } from '../lib/snapshot-canonical';
 import { diffSnapshots } from '../lib/version-diff';
 import { planRestore } from '../lib/restore-plan';
+import { normalizeSnapshotTopics } from '../lib/snapshot-topic-normalize';
+import { computeTopicExposureChange } from '../lib/topic-exposure';
 import { RestoreLockRegistry } from './restore-lock.registry';
 import { RestoreWarningsService } from './restore-warnings.service';
 import { VersionRestoreApplier } from './version-restore.applier';
@@ -101,10 +103,17 @@ export class VersionRestoreService {
     let warnings: RestorePreviewResponse['warnings'] = [];
 
     if (targetLoad) {
-      const hydrated = hydrateSnapshot(targetLoad.envelope, chatbotId);
+      // [신규 No.22 — §11.2] 대상 스냅샷을 현재 토픽 기준으로 정규화한다(없는 토픽 → 공통).
+      // 트랜잭션 밖 — 미리보기와 확정 사이에 토픽이 지워져도 확정은 트랜잭션 안에서 다시 정규화한다.
+      const currentTopicRows = await this.prisma.topic.findMany({ where: { chatbotId }, select: { id: true, enabled: true } });
+      const existingTopicIds = new Set(currentTopicRows.map((t) => t.id));
+      const normalized = normalizeSnapshotTopics(targetLoad.envelope, existingTopicIds);
+      const effectiveTargetEnvelope = normalized.envelope;
+
+      const hydrated = hydrateSnapshot(effectiveTargetEnvelope, chatbotId);
       const { violations, violationsTotal } = checkSnapshotIntegrity(hydrated, 'RESTORE');
       // §5.5 ⑤ / FR-H3-11 — DB 의존 검사라 순수 함수 밖에서 별도로 수행한다(L-1).
-      const crossChatbotViolations = await findCrossChatbotIdConflicts(this.prisma, chatbotId, targetLoad.envelope);
+      const crossChatbotViolations = await findCrossChatbotIdConflicts(this.prisma, chatbotId, effectiveTargetEnvelope);
       const allViolations = [...violations, ...crossChatbotViolations];
       if (allViolations.length > 0) {
         blockers.push({
@@ -113,16 +122,23 @@ export class VersionRestoreService {
           total: violationsTotal + crossChatbotViolations.length,
         });
       } else {
-        targetContentHash = targetLoad.upcastedFrom !== undefined ? computeContentHash(targetLoad.envelope) : versionRow.contentHash;
-        diffResult = diffSnapshots(currentData.envelope, targetLoad.envelope, currentData.integrityWarningCount, versionRow.integrityWarningCount);
+        // [신규 No.22] 정규화로 봉투가 바뀌었으면 기대 해시를 정규화본으로 다시 계산한다(§11.2) —
+        // 그래야 복원 트랜잭션의 사후 해시 검증(§8)과 충돌하지 않는다.
+        targetContentHash = normalized.changed
+          ? computeContentHash(effectiveTargetEnvelope)
+          : targetLoad.upcastedFrom !== undefined
+            ? computeContentHash(effectiveTargetEnvelope)
+            : versionRow.contentHash;
+        diffResult = diffSnapshots(currentData.envelope, effectiveTargetEnvelope, currentData.integrityWarningCount, versionRow.integrityWarningCount);
         warnings = await this.warningsService.computeWarnings(
           chatbotId,
           chatbot.status,
           currentData.envelope,
-          targetLoad.envelope,
+          effectiveTargetEnvelope,
           versionRow.integrityWarningCount,
           targetLoad.upcastedFrom,
           SNAPSHOT_SCHEMA_VERSION,
+          { topics: currentTopicRows, missingCount: normalized.missingCount },
         );
       }
     }
@@ -168,11 +184,17 @@ export class VersionRestoreService {
       if (!versionRow || versionRow.chatbotId !== chatbotId) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
 
       const targetLoad = await this.payloadReader.loadStrict(versionId);
-      const hydrated = hydrateSnapshot(targetLoad.envelope, chatbotId);
+
+      // [신규 No.22 — §11.2] 대상 스냅샷을 현재 토픽 기준으로 정규화한다(트랜잭션 밖 준비 단계 —
+      // 인증(확인 체크) 판정용. 실제 적용은 트랜잭션 안에서 **다시** 최신 토픽 집합으로 정규화한다).
+      const topicRowsPre = await this.prisma.topic.findMany({ where: { chatbotId }, select: { id: true, enabled: true } });
+      const normalizedPre = normalizeSnapshotTopics(targetLoad.envelope, new Set(topicRowsPre.map((t) => t.id)));
+
+      const hydrated = hydrateSnapshot(normalizedPre.envelope, chatbotId);
       const { violations } = checkSnapshotIntegrity(hydrated, 'RESTORE');
       // §5.5 ⑤ / FR-H3-11 — DB 의존 검사라 순수 함수 밖에서 별도로 수행한다(L-1). 준비 단계(트랜잭션
       // 밖)에서 수행하며, 호출 자체는 tx가 아니므로 순차/병렬 제약(M-1)과 무관하다.
-      const crossChatbotViolations = await findCrossChatbotIdConflicts(this.prisma, chatbotId, targetLoad.envelope);
+      const crossChatbotViolations = await findCrossChatbotIdConflicts(this.prisma, chatbotId, normalizedPre.envelope);
       const allViolations = [...violations, ...crossChatbotViolations];
       if (allViolations.length > 0) {
         throw new ApiException(
@@ -182,12 +204,28 @@ export class VersionRestoreService {
           allViolations.slice(0, 100).map((v) => ({ field: v.id, message: v.rule })),
         );
       }
-      const targetContentHash = targetLoad.upcastedFrom !== undefined ? computeContentHash(targetLoad.envelope) : versionRow.contentHash;
+      const targetContentHash = normalizedPre.changed
+        ? computeContentHash(normalizedPre.envelope)
+        : targetLoad.upcastedFrom !== undefined
+          ? computeContentHash(normalizedPre.envelope)
+          : versionRow.contentHash;
+
+      // [신규 No.22 — PM 확정 2026-09-25] 토픽 노출 변화(`TOPIC_EXPOSURE_CHANGE`)가 있는데
+      // `acknowledgeTopicExposure`가 true가 아니면 복원을 거부한다(`acknowledgeActive`와 같은 패턴).
+      const currentDataForGate = await this.versionCapture.captureSnapshotData(chatbotId);
+      const exposureForGate = computeTopicExposureChange(topicRowsPre, currentDataForGate.envelope, normalizedPre.envelope);
+      if ((exposureForGate.exposed > 0 || exposureForGate.hidden > 0) && dto.acknowledgeTopicExposure !== true) {
+        throw new ApiException('VALIDATION_FAILED', 400, '토픽 노출이 바뀝니다. 영향을 확인했는지 체크해 주세요.', [
+          { field: 'acknowledgeTopicExposure', message: '토픽 노출 변화 확인이 필요합니다.' },
+        ]);
+      }
 
       let backupVersionRow!: PrismaChatbotVersion;
       let summaryRows: ReturnType<typeof diffSnapshots>['summary']['rows'] = [];
       let reindexWasRunning = false;
       let classifierDeletedCount = 0;
+      // [신규 No.22] 트랜잭션 안에서 재정규화한 최종 기대 해시(§11.2) — 사후 검증·응답이 이 값을 쓴다.
+      let effectiveTargetHash = targetContentHash;
 
       try {
         await this.prisma.$transaction(
@@ -204,18 +242,45 @@ export class VersionRestoreService {
               throw new ApiException('RESTORE_BLOCKED_BY_ACTIVE_JOB', 409, '진행 중인 작업이 있어 복원할 수 없습니다.');
             }
 
+            // [신규 No.22 — §11.2] 트랜잭션 안에서 대상 스냅샷을 **다시** 최신 토픽 집합으로 정규화한다
+            // (권위 있는 적용본 — 준비 단계 이후 토픽이 바뀌었을 수 있다). tx는 단일 커넥션이므로 순차 조회.
+            // [신규 — M-3 코드리뷰 대응] enabled도 함께 읽는다 — 노출 게이트 재확인에 필요하다.
+            const topicRowsInTx = await tx.topic.findMany({ where: { chatbotId }, select: { id: true, enabled: true } });
+            const normalizedInTx = normalizeSnapshotTopics(targetLoad.envelope, new Set(topicRowsInTx.map((t) => t.id)));
+            const effectiveTargetEnvelope = normalizedInTx.envelope;
+            effectiveTargetHash = normalizedInTx.changed
+              ? computeContentHash(effectiveTargetEnvelope)
+              : targetLoad.upcastedFrom !== undefined
+                ? computeContentHash(effectiveTargetEnvelope)
+                : versionRow.contentHash;
+
             const currentCaptured = await this.versionCapture.readConsistent(chatbotId, tx);
             const currentData = this.versionCapture.computeFromCaptured(currentCaptured, new Date());
             if (currentData.contentHash !== dto.expectedCurrentHash) {
               throw new ApiException('RESTORE_PREVIEW_STALE', 409, '미리보기 이후 자산이 변경되었습니다. 차이를 다시 확인해 주세요.');
             }
-            if (currentData.contentHash === targetContentHash) {
+            if (currentData.contentHash === effectiveTargetHash) {
               throw new ApiException('RESTORE_NO_CHANGES', 409, '이미 해당 버전과 동일한 상태입니다.');
+            }
+
+            // [신규 — M-3 코드리뷰 대응 / §11.2 TOCTOU 재확인] 트랜잭션 안에서 노출 변화를 **다시**
+            // 계산해 게이트를 재확인한다. 확인 시점(트랜잭션 밖 `exposureForGate`)과 값이 다르면(다른
+            // 요청이 그 사이 토픽을 토글했거나 자산을 옮겼을 수 있다) 재시도를 유도하기 위해
+            // `RESTORE_PREVIEW_STALE`로 거부한다 — 값이 같아 재확인 자체는 필요 없더라도, 노출 변화가
+            // 있는데 확인 체크가 없으면 여전히 거부한다(단독 요청 경로에서도 동작해야 하는 1차 방어선).
+            const exposureInTx = computeTopicExposureChange(topicRowsInTx, currentData.envelope, effectiveTargetEnvelope);
+            if (exposureInTx.exposed !== exposureForGate.exposed || exposureInTx.hidden !== exposureForGate.hidden) {
+              throw new ApiException('RESTORE_PREVIEW_STALE', 409, '미리보기 이후 자산이 변경되었습니다. 차이를 다시 확인해 주세요.');
+            }
+            if ((exposureInTx.exposed > 0 || exposureInTx.hidden > 0) && dto.acknowledgeTopicExposure !== true) {
+              throw new ApiException('VALIDATION_FAILED', 400, '토픽 노출이 바뀝니다. 영향을 확인했는지 체크해 주세요.', [
+                { field: 'acknowledgeTopicExposure', message: '토픽 노출 변화 확인이 필요합니다.' },
+              ]);
             }
 
             // L-1 잔여 — 준비 단계(트랜잭션 밖)의 교차 챗봇 ID 검사와 쓰기 사이의 TOCTOU 창을 없앤다.
             // tx는 단일 커넥션이므로 순차 조회한다(§6.1, M-1과 동일한 이유).
-            const crossChatbotViolationsInTx = await findCrossChatbotIdConflicts(tx, chatbotId, targetLoad.envelope);
+            const crossChatbotViolationsInTx = await findCrossChatbotIdConflicts(tx, chatbotId, effectiveTargetEnvelope);
             if (crossChatbotViolationsInTx.length > 0) {
               throw new ApiException(
                 'VERSION_INTEGRITY_FAILED',
@@ -235,17 +300,17 @@ export class VersionRestoreService {
               triggerContext: invocation?.triggerContext,
             });
 
-            const plan = planRestore(currentData.envelope, targetLoad.envelope);
-            summaryRows = diffSnapshots(currentData.envelope, targetLoad.envelope, currentData.integrityWarningCount, versionRow.integrityWarningCount).summary.rows;
+            const plan = planRestore(currentData.envelope, effectiveTargetEnvelope);
+            summaryRows = diffSnapshots(currentData.envelope, effectiveTargetEnvelope, currentData.integrityWarningCount, versionRow.integrityWarningCount).summary.rows;
 
             const applyResult = await this.applier.apply(tx, chatbotId, plan);
             classifierDeletedCount = applyResult.classifierDeletedCount;
 
             const afterCaptured = await this.versionCapture.readConsistent(chatbotId, tx);
             const afterData = this.versionCapture.computeFromCaptured(afterCaptured, new Date());
-            if (afterData.contentHash !== targetContentHash) {
+            if (afterData.contentHash !== effectiveTargetHash) {
               this.logger.warn(
-                `복원 사후 검증 실패(전체 롤백): chatbotId=${chatbotId} expected=${targetContentHash.slice(0, 8)} actual=${afterData.contentHash.slice(0, 8)}`,
+                `복원 사후 검증 실패(전체 롤백): chatbotId=${chatbotId} expected=${effectiveTargetHash.slice(0, 8)} actual=${afterData.contentHash.slice(0, 8)}`,
               );
               throw new ApiException('INTERNAL_ERROR', 500, '복원 처리 중 내부 오류가 발생했습니다. 변경 사항이 저장되지 않았습니다.');
             }
@@ -310,7 +375,7 @@ export class VersionRestoreService {
         restoredFromVersionNo: versionRow.versionNo,
         backupVersionNo: backupVersionRow.versionNo,
         backupVersionId: backupVersionRow.id,
-        contentHash: targetContentHash,
+        contentHash: effectiveTargetHash,
         summary,
         reindexScheduled: true,
         reindexWasRunning,

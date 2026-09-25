@@ -138,3 +138,33 @@ describe('NodeFormPage — API_OUTPUT_LEGACY_FORMAT 저장 거부', () => {
     expect(screen.getByRole('button', { name: '연결로 전환' })).toBeInTheDocument();
   });
 });
+
+/** [신규 No.22] D1-ext — START/FALLBACK 노드는 `TopicSelectField` 대신 고정 안내를 보여준다(§9-7). */
+describe('NodeFormPage — 토픽 선택 필드 / 시작·폴백 잠금', () => {
+  it('유형이 일반(NORMAL)이면 토픽 선택 필드가 보인다', async () => {
+    renderPage();
+    expect(await screen.findByLabelText('토픽')).toBeInTheDocument();
+  });
+
+  it('유형을 시작(START)으로 바꾸면 토픽 선택 필드 대신 고정 안내 문구가 보인다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByLabelText('토픽');
+
+    await user.click(screen.getByRole('radio', { name: '시작' }));
+
+    expect(screen.queryByLabelText('토픽')).not.toBeInTheDocument();
+    expect(screen.getByText('시작·폴백 노드는 항상 공통입니다.')).toBeInTheDocument();
+  });
+
+  it('유형을 폴백(FALLBACK)으로 바꿔도 같은 고정 안내가 보인다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByLabelText('토픽');
+
+    await user.click(screen.getByRole('radio', { name: '폴백' }));
+
+    expect(screen.queryByLabelText('토픽')).not.toBeInTheDocument();
+    expect(screen.getByText('시작·폴백 노드는 항상 공통입니다.')).toBeInTheDocument();
+  });
+});

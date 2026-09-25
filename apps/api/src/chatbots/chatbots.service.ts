@@ -24,10 +24,9 @@ import { ApiException } from '../common/api.exception';
 import { toPaginated } from '../common/pagination';
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { toChatbotDto, toChatbotListItemDto } from './chatbot.mapper';
-import { deriveCopyName } from './lib/copy-name.util';
-import { deriveCopySlug, SlugDerivationExhaustedError } from './lib/slug.util';
 import { archivedAtPatch, evaluateStatusTransition } from './lib/status-transition';
 import { mergeSkin, parseSkin, serializeSkin } from './lib/skin.util';
+import { ChatbotCopyTargetService } from './chatbot-copy-target.service';
 
 /** 영구 삭제 사전 검사 대상(ADR-0002 §7.8) — 사용자에게 보여줄 한글 라벨. */
 const CHILD_COUNT_LABELS: Record<string, string> = {
@@ -46,6 +45,9 @@ const CHILD_COUNT_LABELS: Record<string, string> = {
   // 문장은 원천 기록·대화 자산 성격이라 동반 삭제 대상이 아니다(§18 H-8).
   handoffSessions: '상담',
   cannedResponses: '자주 쓰는 문장',
+  // [신규 No.22] 영구삭제 사전검사 13 → 14종(topic-system-설계.md §9.7·ADR-0002 갱신) — 토픽은
+  // 대화 자산 성격이라 동반 삭제가 아니라 사전검사(409) 대상이다.
+  topics: '토픽',
 };
 
 const NOT_FOUND_MESSAGE = '요청하신 대상을 찾을 수 없습니다.';
@@ -55,6 +57,7 @@ export class ChatbotsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
+    private readonly copyTarget: ChatbotCopyTargetService,
   ) {}
 
   /** StatsModule 등 타 모듈의 존재 검증에 사용된다(설계서 §6 chatbots.module.ts 주석). */
@@ -236,34 +239,16 @@ export class ChatbotsService {
   async copy(id: string, dto: CopyChatbotDto): Promise<Chatbot> {
     const original = await this.findRowOrThrow(id);
 
-    let targetGroupId = original.groupId;
-    if (dto.targetGroupId) {
-      // [No.29] 보관된 그룹은 복사 대상에서 제외한다(404) — ADR-0033 §5.
-      const group = await this.prisma.chatbotGroup.findFirst({ where: { id: dto.targetGroupId, archivedAt: null } });
-      if (!group) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
-      targetGroupId = dto.targetGroupId;
-    }
-
-    const name = dto.name ?? deriveCopyName(original.name);
-
-    let slug: string;
-    if (dto.slug) {
-      await this.assertSlugFree(dto.slug);
-      slug = dto.slug;
-    } else {
-      try {
-        slug = await deriveCopySlug(original.slug, (candidate) => this.slugExists(candidate));
-      } catch (e) {
-        if (e instanceof SlugDerivationExhaustedError) {
-          throw new ApiException('DUPLICATE_SLUG', 409, '이미 사용 중인 고유 URL입니다. 다른 값을 입력해 주세요.');
-        }
-        throw e;
-      }
-    }
+    // [신규 No.22 — §9.7] 이름·slug·그룹 결정은 `ChatbotCopyTargetService`로 추출했다(동작 불변 —
+    // 토픽 분리가 같은 서비스를 재사용한다). 이 메서드는 여전히 프로필만 복사한다.
+    const { name, slug, groupId } = await this.copyTarget.resolve(
+      { name: original.name, slug: original.slug, groupId: original.groupId },
+      { name: dto.name, slug: dto.slug, targetGroupId: dto.targetGroupId },
+    );
 
     const row = await this.prisma.chatbot.create({
       data: {
-        groupId: targetGroupId,
+        groupId,
         name,
         slug,
         avatarUrl: original.avatarUrl,
@@ -320,6 +305,7 @@ export class ChatbotsService {
       surveyResponses,
       handoffSessions,
       cannedResponses,
+      topics,
     ] = await Promise.all([
       this.prisma.intent.count({ where: { chatbotId: id } }),
       this.prisma.keyword.count({ where: { chatbotId: id } }),
@@ -337,6 +323,8 @@ export class ChatbotsService {
       // 아니라 사전검사 대상이다(삭제 코드 0건, §18 H-1/H-8).
       this.prisma.handoffSession.count({ where: { chatbotId: id } }),
       this.prisma.cannedResponse.count({ where: { chatbotId: id } }),
+      // [신규 No.22] 영구삭제 사전검사 13 → 14종.
+      this.prisma.topic.count({ where: { chatbotId: id } }),
     ]);
 
     const counts: Record<string, number> = {
@@ -353,6 +341,7 @@ export class ChatbotsService {
       surveyResponses,
       handoffSessions,
       cannedResponses,
+      topics,
     };
     const nonZero = Object.entries(counts).filter(([, count]) => count > 0);
     if (nonZero.length > 0) {

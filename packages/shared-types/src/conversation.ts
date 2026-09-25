@@ -14,6 +14,14 @@ import { ThresholdPreviewCandidateSchema } from './answering';
 import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from './legacy-api';
 import { queryBoolean } from './common';
 
+/** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
+export const SimulatedAnsweredTopicSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SimulatedAnsweredTopic = z.infer<typeof SimulatedAnsweredTopicSchema>;
+
 /**
  * 대화 1턴 처리(시뮬레이션/비교/공개 대화) 계약 — `quality-channel-설계.md` §4.2.
  * 의존 방향: `conversation.ts → {dialogue-engine.ts, dialogue.ts, chatbot.ts, common.ts}` 단방향.
@@ -88,6 +96,8 @@ export const SimulateRequestSchema = z
     mockResponse: SimulateMockResponseSchema.optional(),
     /** [No.27 신설] 켜면 DRAFT·마감·기간 밖 설문도 진행한다(§5.1). 저장은 0건(P-14). 기본 false. */
     surveyPreview: z.boolean().default(false),
+    /** [신규 No.22] 켜면 `getCachedUnfiltered()`로 비활성 토픽 자산도 후보에 포함한다(P-13). TC 실행에는 없다. */
+    includeInactiveTopics: z.boolean().default(false),
   })
   .superRefine((val, ctx) => {
     const hasMessage = val.message !== undefined && val.message.trim().length > 0;
@@ -151,6 +161,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   apiStep: ApiStepViewSchema.optional(),
   /** [No.27 신설] 이번 턴에 설문 세션이 관여했을 때만 존재한다(FR-SV9-3). 판정 값은 담지 않는다. */
   surveyStep: SurveyStepViewSchema.optional(),
+  /** [신규 No.22] 답한 자산의 topicId가 있을 때만 채워진다(공통 답변·토픽 없는 챗봇 = undefined, §6.5). */
+  answeredTopic: SimulatedAnsweredTopicSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 
@@ -163,6 +175,8 @@ export const CompareRequestSchema = z.object({
   overlay: DialogueOverlaySchema,
   // state 필드와 동일한 이유로 엄격 검증하지 않는다(FR-10-4 ①, DD-32).
   initialState: z.unknown().optional(),
+  /** [신규 No.22] §6.5 — 단건과 같은 의미. */
+  includeInactiveTopics: z.boolean().default(false),
 });
 export type CompareRequestDto = z.infer<typeof CompareRequestSchema>;
 
@@ -174,6 +188,8 @@ export const CompareTurnResultSchema = z.object({
   matchedFaqId: z.string().uuid().optional(),
   unsupportedOutputs: z.array(z.string()),
   trace: DialogueResolutionSchema.shape.trace,
+  /** [신규 No.22] 답한 자산의 topicId가 있을 때만 채워진다(§6.5). */
+  answeredTopic: SimulatedAnsweredTopicSchema.optional(),
 });
 export type CompareTurnResult = z.infer<typeof CompareTurnResultSchema>;
 

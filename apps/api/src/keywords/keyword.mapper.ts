@@ -21,6 +21,7 @@ export function toKeywordEntity(row: PrismaKeyword): Keyword {
     name: row.name,
     description: row.description ?? undefined,
     synonyms: parseSynonyms(row.synonyms, row.id),
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -34,6 +35,7 @@ export function toKeywordListItem(row: PrismaKeyword & { _count: { nodeLinks: nu
     description: entity.description,
     synonymCount: entity.synonyms.length,
     linkedNodeCount: row._count.nodeLinks,
+    topicId: row.topicId ?? null,
     updatedAt: entity.updatedAt,
   };
 }

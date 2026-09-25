@@ -22,6 +22,7 @@ export function toIntentEntity(row: PrismaIntent): Intent {
     name: row.name,
     description: row.description ?? undefined,
     examples: parseExamples(row.examples, row.id),
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -35,6 +36,7 @@ export function toIntentListItem(row: PrismaIntent & { _count: { nodeLinks: numb
     description: entity.description,
     exampleCount: entity.examples.length,
     linkedNodeCount: row._count.nodeLinks,
+    topicId: row.topicId ?? null,
     updatedAt: entity.updatedAt,
   };
 }

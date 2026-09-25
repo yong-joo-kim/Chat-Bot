@@ -15,16 +15,26 @@ import { MESSAGES } from '../../constants/messages';
 import { HomonymPolicyBadge } from './badges';
 import { HomonymEditModal } from './components/HomonymEditModal';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
+import { TopicFilterDropdown } from './components/TopicFilterDropdown';
+import { BulkTopicAssignModal } from './components/BulkTopicAssignModal';
+import { TopicLoadErrorNotice, TopicNameChip } from './components/topicBadges';
+import { useTopics } from '../../lib/useTopics';
+import { useTopicFilterParam } from '../../lib/useTopicFilterParam';
+import { useAuth } from '../../context/AuthContext';
 
 /** D3 — 동음이의어/다의어 사전 목록(ui-spec §4.5). */
 export function HomonymsPage(): JSX.Element {
   const { chatbot } = useChatbotDetailContext();
   const { showToast } = useToast();
+  const { can } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isArchived = chatbot.status === 'ARCHIVED';
   const msg = MESSAGES.dialogue.homonyms;
+  const { topics, topicsById, error: topicsError, reload: reloadTopics } = useTopics(chatbot.id);
+  const canAssignTopic = can('dialogue:write') && !isArchived;
 
   const [q, setQ] = useState('');
+  const [topicFilter, setTopicFilter] = useTopicFilterParam();
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<HomonymListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -33,12 +43,14 @@ export function HomonymsPage(): JSX.Element {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HomonymListItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const res = await homonymsApi.list(chatbot.id, { q: q || undefined, page, pageSize: 20 });
+      const res = await homonymsApi.list(chatbot.id, { q: q || undefined, topicIds: topicFilter.length > 0 ? topicFilter : undefined, page, pageSize: 20 });
       setItems(res.items);
       setTotal(res.total);
     } catch {
@@ -46,7 +58,7 @@ export function HomonymsPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [chatbot.id, q, page]);
+  }, [chatbot.id, q, topicFilter, page]);
 
   useEffect(() => {
     load();
@@ -102,6 +114,15 @@ export function HomonymsPage(): JSX.Element {
               setPage(1);
             }}
           />
+          <TopicFilterDropdown
+            topics={topics}
+            selected={topicFilter}
+            onChange={(v) => {
+              setTopicFilter(v);
+              setPage(1);
+            }}
+          />
+          {topicsError && <TopicLoadErrorNotice onRetry={reloadTopics} />}
         </div>
         {!isArchived && (
           <button
@@ -149,9 +170,20 @@ export function HomonymsPage(): JSX.Element {
           <table className="dialogue-table">
             <thead>
               <tr>
+                {canAssignTopic && (
+                  <th scope="col">
+                    <input
+                      type="checkbox"
+                      aria-label="전체 선택"
+                      checked={items.length > 0 && selectedIds.length === items.length}
+                      onChange={(e) => setSelectedIds(e.target.checked ? items.map((i) => i.id) : [])}
+                    />
+                  </th>
+                )}
                 <th scope="col">{msg.columnWord}</th>
                 <th scope="col">{msg.columnMeaningCount}</th>
                 <th scope="col">{msg.columnPolicy}</th>
+                <th scope="col">{MESSAGES.topics.listColumnTopic}</th>
                 <th scope="col">{msg.columnUpdatedAt}</th>
                 <th scope="col">{msg.columnActions}</th>
               </tr>
@@ -159,6 +191,18 @@ export function HomonymsPage(): JSX.Element {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
+                  {canAssignTopic && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`${item.word} 선택`}
+                        checked={selectedIds.includes(item.id)}
+                        onChange={(e) =>
+                          setSelectedIds((prev) => (e.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id)))
+                        }
+                      />
+                    </td>
+                  )}
                   <td>
                     <button
                       type="button"
@@ -174,6 +218,9 @@ export function HomonymsPage(): JSX.Element {
                   <td>{msg.meaningCount(item.meaningCount)}</td>
                   <td>
                     <HomonymPolicyBadge policy={item.policy} />
+                  </td>
+                  <td>
+                    <TopicNameChip topicId={item.topicId} topicsById={topicsById} />
                   </td>
                   <td>{new Date(item.updatedAt).toLocaleDateString('ko-KR')}</td>
                   <td>
@@ -191,6 +238,14 @@ export function HomonymsPage(): JSX.Element {
               ))}
             </tbody>
           </table>
+          {canAssignTopic && (
+            <div className="dialogue-bulk-actions">
+              <span>{MESSAGES.topics.bulkAssignButton(selectedIds.length)}</span>
+              <button type="button" className="btn btn-secondary" disabled={selectedIds.length === 0} onClick={() => setBulkAssignOpen(true)}>
+                {MESSAGES.topics.bulkAssignOpenButton}
+              </button>
+            </div>
+          )}
           <Pagination page={page} pageSize={20} total={total} onPageChange={setPage} />
         </div>
       )}
@@ -199,9 +254,23 @@ export function HomonymsPage(): JSX.Element {
         isOpen={editModalOpen}
         chatbotId={chatbot.id}
         homonymId={editingId}
+        topics={topics}
         onClose={closeEditModal}
         onSaved={load}
         readOnly={isArchived}
+      />
+      <BulkTopicAssignModal
+        isOpen={bulkAssignOpen}
+        chatbotId={chatbot.id}
+        resourceKind="HOMONYM"
+        resourceKindLabel={msg.columnWord}
+        selectedIds={selectedIds}
+        topics={topics}
+        onClose={() => setBulkAssignOpen(false)}
+        onAssigned={() => {
+          setSelectedIds([]);
+          void load();
+        }}
       />
 
       <ConfirmDialog

@@ -40,6 +40,8 @@ import { buildXlsxTemplate } from '../dialogue-common/import/lib/xlsx-writer';
 import { toFaqEntity } from './faq.mapper';
 import { dedupeAltQuestions, findDuplicateFaqOwner } from './lib/alt-question-set';
 import type { UploadedFile } from '../intents/intents.service';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 
 const NOT_FOUND_MESSAGE = '요청하신 FAQ를 찾을 수 없습니다.';
 const FAQ_CATEGORIES: FaqCategory[] = ['FAQ', 'SMALL_TALK', 'SELF_SERVICE', 'ERROR_RESPONSE'];
@@ -60,16 +62,18 @@ export class FaqsService {
     private readonly csvReader: CsvSheetReader,
     private readonly xlsxReader: XlsxSheetReader,
     private readonly versionCapture: VersionCaptureService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
 
-  private toAuditSnapshot(row: { id: string; question: string; category: string; enabled: boolean; altQuestions: string }) {
-    return { ...row, altQuestionCount: this.parseAltQuestionsJson(row.altQuestions).length };
+  private toAuditSnapshot(row: { id: string; question: string; category: string; enabled: boolean; altQuestions: string; topicId?: string | null }) {
+    const { topicId, ...rest } = row;
+    return { ...rest, altQuestionCount: this.parseAltQuestionsJson(row.altQuestions).length, ...(topicId ? { topicId } : {}) };
   }
 
   private async assertNotDuplicate(chatbotId: string, question: string, altQuestions: string[], excludeId?: string): Promise<void> {
     const others = await this.prisma.faqEntry.findMany({
       where: { chatbotId, ...(excludeId ? { id: { not: excludeId } } : {}) },
-      select: { id: true, question: true, altQuestions: true },
+      select: { id: true, question: true, altQuestions: true, topic: { select: { name: true } } },
     });
     const owner = findDuplicateFaqOwner(
       excludeId,
@@ -78,7 +82,9 @@ export class FaqsService {
       others.map((o) => ({ id: o.id, question: o.question, altQuestions: this.parseAltQuestionsJson(o.altQuestions) })),
     );
     if (owner) {
-      throw new ApiException('DUPLICATE_FAQ', 409, `이미 같은 질문이 등록되어 있습니다: "${owner.question}"`);
+      const ownerRow = others.find((o) => o.id === owner.id);
+      const suffix = ownerRow?.topic ? `(토픽: ${ownerRow.topic.name})` : '';
+      throw new ApiException('DUPLICATE_FAQ', 409, `이미 같은 질문이 등록되어 있습니다: "${owner.question}"${suffix}`);
     }
   }
 
@@ -96,6 +102,7 @@ export class FaqsService {
     const question = dto.question.trim();
     const { altQuestions } = dedupeAltQuestions(dto.altQuestions ?? [], question);
     await this.assertNotDuplicate(chatbotId, question, altQuestions);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const row = await this.prisma.faqEntry.create({
       data: {
@@ -106,6 +113,7 @@ export class FaqsService {
         answer: dto.answer,
         altQuestions: JSON.stringify(altQuestions),
         enabled: dto.enabled ?? true,
+        topicId: dto.topicId ?? undefined,
       },
     });
     this.bundleService.invalidate(chatbotId);
@@ -128,6 +136,8 @@ export class FaqsService {
 
     const where: Prisma.FaqEntryWhereInput = { ...baseWhere };
     if (query.category && query.category.length > 0) where.category = { in: query.category };
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) where.AND = [topicWhere as Prisma.FaqEntryWhereInput];
 
     const orderBy = { [query.sort === 'name' ? 'question' : query.sort]: query.order } as Prisma.FaqEntryOrderByWithRelationInput;
 
@@ -180,6 +190,16 @@ export class FaqsService {
     if (dto.question !== undefined || dto.altQuestions !== undefined) {
       await this.assertNotDuplicate(chatbotId, question, altQuestions, id);
     }
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    const onlyTopicIdChanged =
+      dto.topicId !== undefined &&
+      dto.category === undefined &&
+      dto.question === undefined &&
+      dto.answer === undefined &&
+      dto.altQuestions === undefined &&
+      dto.enabled === undefined;
 
     const row = await this.prisma.faqEntry.update({
       where: { id },
@@ -189,6 +209,8 @@ export class FaqsService {
         ...(dto.answer !== undefined ? { answer: dto.answer } : {}),
         ...(dto.altQuestions !== undefined || dto.question !== undefined ? { altQuestions: JSON.stringify(altQuestions) } : {}),
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
+        ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+        ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
       },
     });
     this.bundleService.invalidate(chatbotId);
@@ -327,6 +349,7 @@ export class FaqsService {
     if (!staged || staged.chatbotId !== chatbotId || staged.resourceType !== 'FAQ') {
       throw new ApiException('IMPORT_TOKEN_EXPIRED', 400, '검증 결과가 만료되었습니다(10분). 파일을 다시 검증해 주세요.');
     }
+    if (dto.newItemTopicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.newItemTopicId);
     const { plan, errors } = staged.plan as StagedFaqPayload;
 
     if (dto.errorPolicy === 'ABORT_ON_ERROR' && errors.length > 0) {
@@ -371,6 +394,7 @@ export class FaqsService {
               answer: item.answer,
               altQuestions: JSON.stringify(altQuestions),
               enabled: true,
+              topicId: dto.newItemTopicId ?? undefined,
             },
           });
           createdItems += 1;
@@ -402,9 +426,10 @@ export class FaqsService {
     return { content: buildCsv(FAQ_TEMPLATE_HEADERS, []), filename: 'faq-template.csv', mimeType: 'text/csv; charset=utf-8' };
   }
 
-  async export(chatbotId: string): Promise<{ content: string; filename: string; mimeType: string }> {
+  async export(chatbotId: string, topicIds?: string[]): Promise<{ content: string; filename: string; mimeType: string }> {
     await this.scope.assertReadable(chatbotId);
-    const rows = await this.prisma.faqEntry.findMany({ where: { chatbotId } });
+    const topicWhere = buildTopicIdsWhere(topicIds);
+    const rows = await this.prisma.faqEntry.findMany({ where: { chatbotId, ...(topicWhere ?? {}) } });
     const lines: string[][] = [];
     for (const row of rows) {
       const altQuestions = this.parseAltQuestionsJson(row.altQuestions);

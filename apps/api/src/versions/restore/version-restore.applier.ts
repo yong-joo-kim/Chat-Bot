@@ -69,6 +69,7 @@ export class VersionRestoreApplier {
           nameNormalized: normalizeText(item.name),
           description: item.description ?? null,
           examples: JSON.stringify(item.examples),
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -76,7 +77,13 @@ export class VersionRestoreApplier {
     for (const item of plan.intents.toUpdate) {
       await tx.intent.update({
         where: { id: item.id },
-        data: { name: item.name, nameNormalized: normalizeText(item.name), description: item.description ?? null, examples: JSON.stringify(item.examples) },
+        data: {
+          name: item.name,
+          nameNormalized: normalizeText(item.name),
+          description: item.description ?? null,
+          examples: JSON.stringify(item.examples),
+          topicId: item.topicId ?? null,
+        },
       });
     }
 
@@ -89,6 +96,7 @@ export class VersionRestoreApplier {
           nameNormalized: normalizeText(item.name),
           description: item.description ?? null,
           synonyms: JSON.stringify(item.synonyms),
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -96,7 +104,13 @@ export class VersionRestoreApplier {
     for (const item of plan.keywords.toUpdate) {
       await tx.keyword.update({
         where: { id: item.id },
-        data: { name: item.name, nameNormalized: normalizeText(item.name), description: item.description ?? null, synonyms: JSON.stringify(item.synonyms) },
+        data: {
+          name: item.name,
+          nameNormalized: normalizeText(item.name),
+          description: item.description ?? null,
+          synonyms: JSON.stringify(item.synonyms),
+          topicId: item.topicId ?? null,
+        },
       });
     }
 
@@ -112,6 +126,7 @@ export class VersionRestoreApplier {
           policy: item.policy,
           clarifyPrompt: item.clarifyPrompt ?? null,
           defaultMeaningIndex: item.defaultMeaningIndex ?? null,
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -127,6 +142,7 @@ export class VersionRestoreApplier {
           policy: item.policy,
           clarifyPrompt: item.clarifyPrompt ?? null,
           defaultMeaningIndex: item.defaultMeaningIndex ?? null,
+          topicId: item.topicId ?? null,
         },
       });
     }
@@ -143,6 +159,7 @@ export class VersionRestoreApplier {
           completionMessage: item.completionMessage ?? null,
           cancelKeywords: JSON.stringify(item.cancelKeywords),
           sessionTimeoutMinutes: item.sessionTimeoutMinutes,
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -158,6 +175,7 @@ export class VersionRestoreApplier {
           completionMessage: item.completionMessage ?? null,
           cancelKeywords: JSON.stringify(item.cancelKeywords),
           sessionTimeoutMinutes: item.sessionTimeoutMinutes,
+          topicId: item.topicId ?? null,
         },
       });
     }
@@ -173,6 +191,7 @@ export class VersionRestoreApplier {
           answer: item.answer,
           altQuestions: JSON.stringify(item.altQuestions),
           enabled: item.enabled,
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -187,6 +206,7 @@ export class VersionRestoreApplier {
           answer: item.answer,
           altQuestions: JSON.stringify(item.altQuestions),
           enabled: item.enabled,
+          topicId: item.topicId ?? null,
         },
       });
     }
@@ -206,6 +226,7 @@ export class VersionRestoreApplier {
           priority: item.priority,
           contextVariableId: item.contextVariableId ?? null,
           outputs: JSON.stringify(item.outputs),
+          topicId: item.topicId ?? null,
           createdAt: item.createdAt,
         },
       });
@@ -223,6 +244,7 @@ export class VersionRestoreApplier {
           priority: item.priority,
           contextVariableId: item.contextVariableId ?? null,
           outputs: JSON.stringify(item.outputs),
+          topicId: item.topicId ?? null,
         },
       });
     }

@@ -32,12 +32,14 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'showSources',
     'ragTimeoutMs',
   ],
-  Intent: ['name', 'description', 'exampleCount'],
-  Keyword: ['name', 'synonymCount'],
-  HomonymDictionary: ['word', 'policy', 'meaningCount'],
-  ContextVariable: ['name', 'slotCount', 'cancelKeywords', 'sessionTimeoutMinutes'],
-  DialogNode: ['name', 'nodeType', 'priority', 'enabled', 'outputCount', 'intentIds', 'keywordIds', 'contextVariableId'],
-  FaqEntry: ['question', 'category', 'enabled', 'altQuestionCount'],
+  // [신규 No.22] 자산 6종에 'topicId' 추가 — 서비스가 값이 있을 때만 스냅샷 입력에 넣는다(토픽 없는
+  // 챗봇의 감사 본문 불변, topic-system-설계.md §15).
+  Intent: ['name', 'description', 'exampleCount', 'topicId'],
+  Keyword: ['name', 'synonymCount', 'topicId'],
+  HomonymDictionary: ['word', 'policy', 'meaningCount', 'topicId'],
+  ContextVariable: ['name', 'slotCount', 'cancelKeywords', 'sessionTimeoutMinutes', 'topicId'],
+  DialogNode: ['name', 'nodeType', 'priority', 'enabled', 'outputCount', 'intentIds', 'keywordIds', 'contextVariableId', 'topicId'],
+  FaqEntry: ['question', 'category', 'enabled', 'altQuestionCount', 'topicId'],
   Channel: ['type', 'enabled'],
   User: ['email', 'name', 'role', 'status'],
   BannedWord: ['word', 'matchType', 'policy', 'enabled'],
@@ -75,6 +77,8 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   HandoffSession: ['status', 'endReason', 'assignedUserName', 'alertLevelAtStart', 'alias'],
   // 본문(body) 제외 — FAQ 답변 제외 선례와 동일.
   CannedResponse: ['title', 'category', 'shortcut', 'enabled', 'sortOrder', 'bodyLength'],
+  // 토픽 시스템(No.22) 그룹 추가(topic-system-설계.md §15).
+  Topic: ['name', 'description', 'sortOrder', 'enabled'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

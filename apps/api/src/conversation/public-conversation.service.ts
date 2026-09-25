@@ -21,6 +21,7 @@ import { ChannelAdapterFactory } from './adapters/channel-adapter.factory';
 import type { InboundTurn } from './adapters/channel-adapter';
 import { parseChannelConfig } from '../channels/lib/channel-config';
 import { buildBotResponseText, judgeAnswered } from './lib/conversation-log';
+import { resolveAnsweredTopicId } from './lib/answered-topic';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
 import type { InputKind } from '../learning/lib/collect-decision';
 import { ApiException } from '../common/api.exception';
@@ -270,6 +271,8 @@ export class PublicConversationService {
       inputKind,
       apiNotice,
       surveyTurn,
+      // [신규 No.22 — §6.6] 이미 가진(필터된 운영) 번들에서 찾는다 — 추가 조회 0 · 생성자 인자 추가 0.
+      topicId: resolveAnsweredTopicId(bundle, result, isAnswered),
     });
 
     return response;

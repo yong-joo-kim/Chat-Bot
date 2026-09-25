@@ -75,6 +75,9 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
   const [mockResponse, setMockResponse] = useState<SimulateMockResponse | undefined>(undefined);
   // [No.27] SIM1-ext — 설문 미리보기 토글. 기본 꺼짐(실제 상태·기간을 따름, ui-spec §3.6).
   const [surveyPreview, setSurveyPreview] = useState(false);
+  // [No.22] SIM-ext — "비활성 토픽 포함" 토글. 기본 꺼짐(운영과 동일, topic-system-ui-spec.md §3.8).
+  // 채팅·비교 모드 공용 상태다(비교 요청도 같은 플래그를 받는다, §6.5).
+  const [includeInactiveTopics, setIncludeInactiveTopics] = useState(false);
   const canCallLive = can('simulation:write');
   // ⚠ 오버레이(미저장 편집) 상태에서는 LIVE를 사전 차단한다 — 최종 판정은 항상 서버지만,
   // 클라이언트에서 미리 안내해 무의미한 실패 호출을 줄인다(ui-spec §3.7, disabled는 사전 안내일 뿐).
@@ -106,6 +109,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         apiMode,
         mockResponse: apiMode === 'MOCK' ? mockResponse : undefined,
         surveyPreview,
+        includeInactiveTopics,
       });
       const next: SimMessage[] = [];
       if (res.stateDiscarded.length > 0) {
@@ -124,6 +128,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         matchTrace: res.matchTrace,
         apiStep: res.apiStep,
         surveyStep: res.surveyStep,
+        answeredTopic: res.answeredTopic,
       });
       setMessages((prev) => [...prev, ...next]);
       setState(res.state);
@@ -229,11 +234,17 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay }: Simulat
         {viewMode === 'compare' && <span className="field-hint">{msg.ragToggle.compareNotice}</span>}
       </fieldset>
 
+      <label className="form-field--inline">
+        <input type="checkbox" checked={includeInactiveTopics} onChange={(e) => setIncludeInactiveTopics(e.target.checked)} />
+        {MESSAGES.topics.simulatorIncludeInactiveLabel}
+      </label>
+      <p className="field-hint">{MESSAGES.topics.simulatorTcNoToggleHint}</p>
+
       {viewMode === 'compare' ? (
         <>
           {/* [No.26] 비교 모드는 항상 목이며 A/B가 같은 목 원천을 쓴다는 사실만 1줄로 안내한다(ui-spec §3.7 흐름 3). */}
           <p className="field-hint">{msg.compareApiMockNotice}</p>
-          <CompareView chatbotId={chatbotId} overlay={overlay} initialState={state} />
+          <CompareView chatbotId={chatbotId} overlay={overlay} initialState={state} includeInactiveTopics={includeInactiveTopics} />
         </>
       ) : (
         <div className="simulator-layout">

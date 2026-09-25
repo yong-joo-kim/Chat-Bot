@@ -44,6 +44,8 @@ export const IntentSuggestionSchema = z.object({
    * 확률) | 'LEXICAL'(기존 문자 bigram 자카드). 선택 필드 — 하위호환(ADR-0027 §2).
    */
   source: z.enum(['CLASSIFIER', 'LEXICAL']).optional(),
+  /** [신규 No.22] 추천 의도의 토픽(값 없음 = 공통) — 콘솔이 토픽 목록으로 이름·활성 여부를 해석한다(FR-TP8-6). */
+  topicId: z.string().uuid().optional(),
 });
 export type IntentSuggestion = z.infer<typeof IntentSuggestionSchema>;
 

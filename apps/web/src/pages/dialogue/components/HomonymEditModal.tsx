@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HomonymDictionary, HomonymMeaning, HomonymPolicy, HomonymResolution, TraceStep } from '@chat-bot/shared-types';
+import type { HomonymDictionary, HomonymMeaning, HomonymPolicy, HomonymResolution, Topic, TraceStep } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ChipListEditor } from '../../../components/ChipListEditor';
 import { ReorderableList } from '../../../components/ReorderableList';
 import { ResourcePickerField } from '../../../components/ResourcePickerField';
+import { TopicSelectField } from '../../../components/TopicSelectField';
 import { useToast } from '../../../components/Toast';
 import { MESSAGES } from '../../../constants/messages';
 import { homonymsApi, intentsApi } from '../../../api/dialogue';
@@ -14,6 +15,8 @@ export interface HomonymEditModalProps {
   isOpen: boolean;
   chatbotId: string;
   homonymId: string | null;
+  /** [신규 No.22] `TopicSelectField`용 — 챗봇 전체 토픽. */
+  topics?: Topic[];
   onClose: () => void;
   onSaved: () => void;
   readOnly?: boolean;
@@ -34,13 +37,14 @@ function emptyMeaning(): MeaningRow {
 }
 
 /** D3a — 동음이의어 편집 모달 + 테스트 패널(ui-spec §4.5). */
-export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSaved, readOnly = false }: HomonymEditModalProps): JSX.Element {
+export function HomonymEditModal({ isOpen, chatbotId, homonymId, topics = [], onClose, onSaved, readOnly = false }: HomonymEditModalProps): JSX.Element {
   const msg = MESSAGES.dialogue.homonyms;
   const { showToast } = useToast();
   const [word, setWord] = useState('');
   const [description, setDescription] = useState('');
   const [meanings, setMeanings] = useState<MeaningRow[]>([emptyMeaning(), emptyMeaning()]);
   const [policy, setPolicy] = useState<HomonymPolicy>('ASK');
+  const [topicId, setTopicId] = useState<string | null>(null);
   const [clarifyPrompt, setClarifyPrompt] = useState('');
   const [defaultMeaningIndex, setDefaultMeaningIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -90,6 +94,7 @@ export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSave
           setPolicy(detail.policy);
           setClarifyPrompt(detail.clarifyPrompt ?? '');
           setDefaultMeaningIndex(detail.defaultMeaningIndex ?? null);
+          setTopicId(detail.topicId ?? null);
           setSaved(true);
           savedSnapshotRef.current = JSON.stringify({
             word: detail.word,
@@ -109,6 +114,7 @@ export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSave
       setPolicy('ASK');
       setClarifyPrompt('');
       setDefaultMeaningIndex(null);
+      setTopicId(null);
     }
   }, [isOpen, homonymId, chatbotId, showToast]);
 
@@ -168,11 +174,12 @@ export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSave
         policy,
         clarifyPrompt: policy === 'ASK' ? clarifyPrompt || undefined : undefined,
         defaultMeaningIndex: policy === 'DEFAULT_MEANING' ? defaultMeaningIndex : undefined,
+        topicId,
       };
       if (homonymId) {
         await homonymsApi.update(chatbotId, homonymId, payload);
       } else {
-        await homonymsApi.create(chatbotId, payload);
+        await homonymsApi.create(chatbotId, { ...payload, topicId: topicId ?? undefined });
       }
       showToast(msg.saveSuccess);
       setSaved(true);
@@ -181,7 +188,14 @@ export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSave
     } catch (e2) {
       if (e2 instanceof ApiError) {
         if (e2.code === 'INVALID_REFERENCE') {
-          setFormError(msg.intentNotFoundError);
+          // [코드 리뷰 1회차 H-1] `details[].field`로 토픽 참조 오류와 의미의 연결 의도 참조 오류를
+          // 구분한다 — `TopicLookupService.assertTopicInChatbot`은 `field: 'topicId'`(§5.2),
+          // 기존 연결 의도 검증은 `field: 'meanings.intentId'`(homonyms.service.ts)를 낸다.
+          if (e2.details?.some((d) => d.field === 'topicId')) {
+            setFieldErrors({ topicId: MESSAGES.topics.topicFieldInvalidReference });
+          } else {
+            setFormError(msg.intentNotFoundError);
+          }
         } else if (e2.details && e2.details.length > 0) {
           setFieldErrors(Object.fromEntries(e2.details.map((d) => [d.field, d.message])));
         } else {
@@ -239,6 +253,16 @@ export function HomonymEditModal({ isOpen, chatbotId, homonymId, onClose, onSave
               <label htmlFor="homonym-description">{msg.descriptionLabel}</label>
               <input id="homonym-description" type="text" value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} />
             </div>
+
+            <TopicSelectField
+              id="homonym-topic"
+              label={MESSAGES.topics.topicFieldLabel}
+              topics={topics}
+              value={topicId}
+              onChange={setTopicId}
+              disabled={readOnly}
+              errorMessage={fieldErrors.topicId}
+            />
 
             <div className="form-field">
               <span className="field-label-static">{msg.meaningsTitle(meanings.length, 10)}</span>

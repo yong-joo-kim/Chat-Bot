@@ -23,6 +23,7 @@ export function toFaqEntity(row: PrismaFaq): FaqEntry {
     answer: row.answer,
     altQuestions: parseAltQuestions(row.altQuestions, row.id),
     enabled: row.enabled,
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

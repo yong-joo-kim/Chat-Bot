@@ -27,6 +27,13 @@ import { EmbeddingModule } from '../embedding/embedding.module';
       useFactory: (config: ConfigService) => new InMemoryDialogueBundleCache(config.get<number>('DIALOGUE_BUNDLE_CACHE_TTL_MS') ?? 60000),
       inject: [ConfigService],
     },
+    // [신규 No.22] 비필터 번들 전용 소형 캐시(LRU 10) — 시뮬레이터 "비활성 토픽 포함" 1곳만 쓴다(§6.2).
+    {
+      provide: 'DialogueBundleUnfilteredCache',
+      useFactory: (config: ConfigService) =>
+        new InMemoryDialogueBundleCache(config.get<number>('DIALOGUE_BUNDLE_CACHE_TTL_MS') ?? 60000, 10),
+      inject: [ConfigService],
+    },
   ],
   exports: [ReferenceCheckService, DialogueBundleService, CsvSheetReader, XlsxSheetReader, 'ImportStagingStore'],
 })

@@ -24,6 +24,7 @@ export function toHomonymEntity(row: PrismaHomonym): HomonymDictionary {
     policy: (row.policy as HomonymPolicy) ?? 'ASK',
     clarifyPrompt: row.clarifyPrompt ?? undefined,
     defaultMeaningIndex: row.defaultMeaningIndex ?? undefined,
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -36,6 +37,7 @@ export function toHomonymListItem(row: PrismaHomonym): HomonymListItem {
     word: entity.word,
     meaningCount: entity.meanings.length,
     policy: entity.policy,
+    topicId: row.topicId ?? null,
     updatedAt: entity.updatedAt,
   };
 }

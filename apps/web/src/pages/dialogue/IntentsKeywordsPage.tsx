@@ -19,6 +19,11 @@ import { IntentEditModal } from './components/IntentEditModal';
 import { KeywordEditModal } from './components/KeywordEditModal';
 import { BulkImportModal } from './components/BulkImportModal';
 import { DeleteBlockedBanner, resolveBlockedRefKind } from './components/DeleteBlockedBanner';
+import { TopicFilterDropdown } from './components/TopicFilterDropdown';
+import { BulkTopicAssignModal } from './components/BulkTopicAssignModal';
+import { TopicLoadErrorNotice, TopicNameChip } from './components/topicBadges';
+import { useTopics } from '../../lib/useTopics';
+import { useTopicFilterParam } from '../../lib/useTopicFilterParam';
 
 type ResourceKind = 'intent' | 'keyword';
 
@@ -31,7 +36,9 @@ export function IntentsKeywordsPage(): JSX.Element {
   const msg = MESSAGES.dialogue.intents;
 
   const resource: ResourceKind = searchParams.get('resource') === 'keyword' ? 'keyword' : 'intent';
+  const { topics, topicsById, error: topicsError, reload: reloadTopics } = useTopics(chatbot.id);
   const [q, setQ] = useState('');
+  const [topicFilter, setTopicFilter] = useTopicFilterParam();
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<(IntentListItem | KeywordListItem)[]>([]);
   const [total, setTotal] = useState(0);
@@ -46,6 +53,7 @@ export function IntentsKeywordsPage(): JSX.Element {
   const [deleteBlocked, setDeleteBlocked] = useState<{ message: string; refs: { id: string; name: string }[] } | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteBlocked, setBulkDeleteBlocked] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
 
   const api = resource === 'intent' ? intentsApi : keywordsApi;
 
@@ -53,7 +61,7 @@ export function IntentsKeywordsPage(): JSX.Element {
     setLoading(true);
     setError(false);
     try {
-      const res = await api.list(chatbot.id, { q: q || undefined, page, pageSize: 20 });
+      const res = await api.list(chatbot.id, { q: q || undefined, topicIds: topicFilter.length > 0 ? topicFilter : undefined, page, pageSize: 20 });
       setItems(res.items);
       setTotal(res.total);
     } catch {
@@ -61,7 +69,7 @@ export function IntentsKeywordsPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [api, chatbot.id, q, page]);
+  }, [api, chatbot.id, q, topicFilter, page]);
 
   useEffect(() => {
     load();
@@ -175,10 +183,12 @@ export function IntentsKeywordsPage(): JSX.Element {
             {msg.searchLabel}
           </label>
           <input id="intent-search" type="text" placeholder={msg.searchLabel} value={q} onChange={(e) => setQ(e.target.value)} />
+          <TopicFilterDropdown topics={topics} selected={topicFilter} onChange={setTopicFilter} />
+          {topicsError && <TopicLoadErrorNotice onRetry={reloadTopics} />}
         </div>
         {!isArchived && (
           <div className="dialogue-toolbar-actions">
-            <a className="btn btn-secondary" href={api.exportUrl(chatbot.id)}>
+            <a className="btn btn-secondary" href={api.exportUrl(chatbot.id, topicFilter)} title={MESSAGES.topics.exportTopicFilterHint}>
               {msg.exportButton}
             </a>
             <button type="button" className="btn btn-secondary" onClick={() => setImportOpen(true)}>
@@ -237,6 +247,7 @@ export function IntentsKeywordsPage(): JSX.Element {
                 <th scope="col">{msg.columnDescription}</th>
                 <th scope="col">{resource === 'intent' ? msg.columnExamples : msg.columnSynonyms}</th>
                 <th scope="col">{msg.columnLinkedNodes}</th>
+                <th scope="col">{MESSAGES.topics.listColumnTopic}</th>
                 <th scope="col">{msg.columnUpdatedAt}</th>
                 <th scope="col">{msg.columnActions}</th>
               </tr>
@@ -274,6 +285,9 @@ export function IntentsKeywordsPage(): JSX.Element {
                     <td>
                       <LinkedNodeCountBadge count={item.linkedNodeCount} />
                     </td>
+                    <td>
+                      <TopicNameChip topicId={item.topicId} topicsById={topicsById} />
+                    </td>
                     <td>{new Date(item.updatedAt).toLocaleDateString('ko-KR')}</td>
                     <td>
                       {!isArchived && (
@@ -299,6 +313,14 @@ export function IntentsKeywordsPage(): JSX.Element {
                 type="button"
                 className="btn btn-secondary"
                 disabled={selectedIds.length === 0}
+                onClick={() => setBulkAssignOpen(true)}
+              >
+                {MESSAGES.topics.bulkAssignOpenButton}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={selectedIds.length === 0}
                 onClick={() => setBulkDeleteOpen(true)}
               >
                 {msg.bulkDelete}
@@ -312,6 +334,7 @@ export function IntentsKeywordsPage(): JSX.Element {
         isOpen={editModalOpen && resource === 'intent'}
         chatbotId={chatbot.id}
         intentId={editingId}
+        topics={topics}
         onClose={closeEditModal}
         onSaved={load}
         readOnly={isArchived}
@@ -320,6 +343,7 @@ export function IntentsKeywordsPage(): JSX.Element {
         isOpen={editModalOpen && resource === 'keyword'}
         chatbotId={chatbot.id}
         keywordId={editingId}
+        topics={topics}
         onClose={closeEditModal}
         onSaved={load}
         readOnly={isArchived}
@@ -330,6 +354,20 @@ export function IntentsKeywordsPage(): JSX.Element {
         isOpen={importOpen}
         onClose={() => setImportOpen(false)}
         onCommitted={load}
+        topics={topics}
+      />
+      <BulkTopicAssignModal
+        isOpen={bulkAssignOpen}
+        chatbotId={chatbot.id}
+        resourceKind={resource === 'intent' ? 'INTENT' : 'KEYWORD'}
+        resourceKindLabel={resource === 'intent' ? msg.tabIntent : msg.tabKeyword}
+        selectedIds={selectedIds}
+        topics={topics}
+        onClose={() => setBulkAssignOpen(false)}
+        onAssigned={() => {
+          setSelectedIds([]);
+          void load();
+        }}
       />
 
       <ConfirmDialog

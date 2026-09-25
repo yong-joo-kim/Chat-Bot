@@ -2,6 +2,7 @@ import type { ButtonActionView } from '@chat-bot/shared-types/output-view';
 import { OutputRenderer } from '../../../components/OutputRenderer';
 import { SeverityBadge } from '../../../components/SeverityBadge';
 import { MESSAGES } from '../../../constants/messages';
+import { topicStatusLabel } from '../../dialogue/components/topicBadges';
 import { TracePanel } from './TracePanel';
 import { ApiStepPanel } from './ApiStepPanel';
 import { SurveyStepPanel } from './SurveyStepPanel';
@@ -74,6 +75,9 @@ export function ChatBubble({
           severity="INFO"
           label={msg.unsupportedOutputsNotice(message.unsupportedOutputs.length, message.unsupportedOutputs.join('/'))}
         />
+      )}
+      {message.answeredTopic && (
+        <p className="field-hint">{MESSAGES.topics.simulatorAnsweredTopic(message.answeredTopic.name, topicStatusLabel(message.answeredTopic.enabled ? 'ACTIVE' : 'INACTIVE'))}</p>
       )}
       {message.trace && <TracePanel trace={message.trace} chatbotId={chatbotId} matchTrace={message.matchTrace} />}
       {message.apiStep && <ApiStepPanel apiStep={message.apiStep} />}

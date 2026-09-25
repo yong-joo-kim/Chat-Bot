@@ -35,6 +35,7 @@ export function toDialogNodeEntity(row: NodeRowWithLinks): DialogNode {
     keywordIds: row.keywordLinks.map((l) => l.keywordId),
     contextVariableId: row.contextVariableId ?? undefined,
     outputs: parseOutputs(row.outputs, row.id),
+    topicId: row.topicId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

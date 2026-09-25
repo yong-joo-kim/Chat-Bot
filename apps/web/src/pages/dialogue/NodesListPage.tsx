@@ -17,6 +17,12 @@ import { FlowPreviewPanel } from './components/FlowPreviewPanel';
 import { DesignValidationPanel } from './components/DesignValidationPanel';
 import { DeleteBlockedBanner } from './components/DeleteBlockedBanner';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
+import { TopicFilterDropdown } from './components/TopicFilterDropdown';
+import { BulkTopicAssignModal } from './components/BulkTopicAssignModal';
+import { CrossTopicRefBadge, TopicLoadErrorNotice, TopicNameChip } from './components/topicBadges';
+import { useTopics } from '../../lib/useTopics';
+import { useTopicFilterParam } from '../../lib/useTopicFilterParam';
+import { useAuth } from '../../context/AuthContext';
 
 const ALL_TYPES: DialogNodeType[] = ['NORMAL', 'START', 'FALLBACK'];
 
@@ -24,13 +30,17 @@ const ALL_TYPES: DialogNodeType[] = ['NORMAL', 'START', 'FALLBACK'];
 export function NodesListPage(): JSX.Element {
   const { chatbot } = useChatbotDetailContext();
   const { showToast } = useToast();
+  const { can } = useAuth();
   const navigate = useNavigate();
   const isArchived = chatbot.status === 'ARCHIVED';
   const msg = MESSAGES.dialogue.nodes;
+  const { topics, topicsById, error: topicsError, reload: reloadTopics } = useTopics(chatbot.id);
+  const canAssignTopic = can('dialogue:write') && !isArchived;
 
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<DialogNodeType[]>(ALL_TYPES);
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [topicFilter, setTopicFilter] = useTopicFilterParam();
   const [sort, setSort] = useState<'priority' | 'name' | 'updatedAt'>('priority');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<DialogNodeListItem[]>([]);
@@ -38,6 +48,8 @@ export function NodesListPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [hasAnyIntent, setHasAnyIntent] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<DialogNodeListItem | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<{ message: string; refs: { id: string; name: string }[] } | null>(null);
@@ -61,6 +73,7 @@ export function NodesListPage(): JSX.Element {
         // 서버가 `nodeType=NORMAL,START`처럼 콤마구분 다중값을 지원한다(csvEnumArray) — 그대로 위임한다.
         nodeType: typeFilter.length > 0 ? typeFilter : undefined,
         enabled: enabledFilter === 'all' ? undefined : enabledFilter === 'enabled',
+        topicIds: topicFilter.length > 0 ? topicFilter : undefined,
         sort,
         page,
         pageSize: 20,
@@ -72,7 +85,7 @@ export function NodesListPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [chatbot.id, q, typeFilter, enabledFilter, sort, page]);
+  }, [chatbot.id, q, typeFilter, enabledFilter, topicFilter, sort, page]);
 
   useEffect(() => {
     load();
@@ -211,6 +224,15 @@ export function NodesListPage(): JSX.Element {
             <option value="enabled">{msg.enabledOnly}</option>
             <option value="disabled">{msg.disabledOnly}</option>
           </select>
+          <TopicFilterDropdown
+            topics={topics}
+            selected={topicFilter}
+            onChange={(v) => {
+              setTopicFilter(v);
+              setPage(1);
+            }}
+          />
+          {topicsError && <TopicLoadErrorNotice onRetry={reloadTopics} />}
           <label htmlFor="node-sort" className="sr-only">
             {msg.sortLabel}
           </label>
@@ -219,6 +241,11 @@ export function NodesListPage(): JSX.Element {
             <option value="name">{msg.sortName}</option>
             <option value="updatedAt">{msg.sortUpdatedAt}</option>
           </select>
+          {sort === 'updatedAt' && (
+            <span className="field-hint" title={MESSAGES.topics.sortRecentTopicChangeHint}>
+              <span aria-hidden="true">ⓘ</span> {MESSAGES.topics.sortRecentTopicChangeHint}
+            </span>
+          )}
         </div>
         {!isArchived && (
           <div className="dialogue-toolbar-actions">
@@ -287,6 +314,16 @@ export function NodesListPage(): JSX.Element {
           <table className="dialogue-table">
             <thead>
               <tr>
+                {canAssignTopic && (
+                  <th scope="col">
+                    <input
+                      type="checkbox"
+                      aria-label="전체 선택"
+                      checked={items.length > 0 && selectedIds.length === items.length}
+                      onChange={(e) => setSelectedIds(e.target.checked ? items.map((i) => i.id) : [])}
+                    />
+                  </th>
+                )}
                 <th scope="col">{msg.columnName}</th>
                 <th scope="col">{msg.columnType}</th>
                 <th scope="col">{msg.columnEnabled}</th>
@@ -294,6 +331,7 @@ export function NodesListPage(): JSX.Element {
                 <th scope="col">{msg.columnCondition}</th>
                 <th scope="col">{msg.columnOutputs}</th>
                 <th scope="col">{msg.columnIncoming}</th>
+                <th scope="col">{MESSAGES.topics.listColumnTopic}</th>
                 <th scope="col">{msg.columnUpdatedAt}</th>
                 <th scope="col">{msg.columnActions}</th>
               </tr>
@@ -301,6 +339,19 @@ export function NodesListPage(): JSX.Element {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
+                  {canAssignTopic && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`${item.name} 선택`}
+                        checked={selectedIds.includes(item.id)}
+                        onChange={(e) =>
+                          setSelectedIds((prev) => (e.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id)))
+                        }
+                        disabled={item.nodeType !== 'NORMAL'}
+                      />
+                    </td>
+                  )}
                   <td>
                     <button type="button" className="link-button" onClick={() => navigate(`/chatbots/${chatbot.id}/dialogue/nodes/${item.id}`)}>
                       {item.name}
@@ -318,6 +369,17 @@ export function NodesListPage(): JSX.Element {
                     <OutputTypeIconList outputTypes={item.outputTypes} />
                   </td>
                   <td>{msg.incomingCount(item.incomingCount)}</td>
+                  <td>
+                    {item.nodeType === 'NORMAL' ? (
+                      <>
+                        <TopicNameChip topicId={item.topicId} topicsById={topicsById} /> <CrossTopicRefBadge count={item.crossTopicRefCount} />
+                      </>
+                    ) : (
+                      <span title={MESSAGES.topics.topicFieldSystemLockedHint}>
+                        <span aria-hidden="true">🔒</span> {MESSAGES.topics.commonRowLabel}
+                      </span>
+                    )}
+                  </td>
                   <td>{new Date(item.updatedAt).toLocaleDateString('ko-KR')}</td>
                   <td>
                     {!isArchived && (
@@ -335,9 +397,31 @@ export function NodesListPage(): JSX.Element {
               ))}
             </tbody>
           </table>
+          {canAssignTopic && (
+            <div className="dialogue-bulk-actions">
+              <span>{MESSAGES.topics.bulkAssignButton(selectedIds.length)}</span>
+              <button type="button" className="btn btn-secondary" disabled={selectedIds.length === 0} onClick={() => setBulkAssignOpen(true)}>
+                {MESSAGES.topics.bulkAssignOpenButton}
+              </button>
+            </div>
+          )}
           <Pagination page={page} pageSize={20} total={total} onPageChange={setPage} />
         </div>
       )}
+
+      <BulkTopicAssignModal
+        isOpen={bulkAssignOpen}
+        chatbotId={chatbot.id}
+        resourceKind="NODE"
+        resourceKindLabel={msg.title}
+        selectedIds={selectedIds}
+        topics={topics}
+        onClose={() => setBulkAssignOpen(false)}
+        onAssigned={() => {
+          setSelectedIds([]);
+          void load();
+        }}
+      />
 
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}

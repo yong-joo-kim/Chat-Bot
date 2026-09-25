@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { CompareResponse } from '@chat-bot/shared-types';
 import { OutputRenderer } from '../../../components/OutputRenderer';
 import { MESSAGES } from '../../../constants/messages';
+import { topicStatusLabel } from '../../dialogue/components/topicBadges';
 import { DiffBadge } from './DiffBadge';
 import { TracePanel } from './TracePanel';
 
@@ -27,11 +28,17 @@ export function CompareTurnRow({ turn, chatbotId }: { turn: CompareTurn; chatbot
           <p className="compare-turn-column-label">{msg.columnA}</p>
           {turn.a.matchedNodeName && <p className="chat-bubble-caption">{turn.a.matchedNodeName}</p>}
           {turn.a.outputs.length > 0 ? <OutputRenderer outputs={turn.a.outputs} onButtonClick={noop} /> : <p>{msg.noOutputs}</p>}
+          {turn.a.answeredTopic && (
+            <p className="field-hint">{MESSAGES.topics.simulatorAnsweredTopic(turn.a.answeredTopic.name, topicStatusLabel(turn.a.answeredTopic.enabled ? 'ACTIVE' : 'INACTIVE'))}</p>
+          )}
         </div>
         <div className="compare-turn-column">
           <p className="compare-turn-column-label">{msg.columnB}</p>
           {turn.b.matchedNodeName && <p className="chat-bubble-caption">{turn.b.matchedNodeName}</p>}
           {turn.b.outputs.length > 0 ? <OutputRenderer outputs={turn.b.outputs} onButtonClick={noop} /> : <p>{msg.noOutputs}</p>}
+          {turn.b.answeredTopic && (
+            <p className="field-hint">{MESSAGES.topics.simulatorAnsweredTopic(turn.b.answeredTopic.name, topicStatusLabel(turn.b.answeredTopic.enabled ? 'ACTIVE' : 'INACTIVE'))}</p>
+          )}
         </div>
       </div>
       {open && (

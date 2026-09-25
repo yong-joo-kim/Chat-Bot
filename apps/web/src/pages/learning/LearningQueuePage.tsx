@@ -21,6 +21,7 @@ import { SkeletonRow } from '../../components/Skeleton';
 import { Pagination } from '../../components/Pagination';
 import { ConfirmDialog } from '../../components/Modal';
 import { useStatsShellContext } from '../stats/StatsShell';
+import { useTopics } from '../../lib/useTopics';
 import { UnansweredFilterBar, type UnansweredSort } from './UnansweredFilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { UnansweredTable } from './UnansweredTable';
@@ -40,6 +41,7 @@ export function LearningQueuePage(): JSX.Element {
   const { can } = useAuth();
   const { showToast } = useToast();
   const canWrite = can('dialogue:write');
+  const { topicsById } = useTopics(chatbot.id);
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('highlightId') ?? undefined;
 
@@ -390,6 +392,7 @@ export function LearningQueuePage(): JSX.Element {
             onIgnoreClick={(item) => void handleIgnore(item)}
             onReopenClick={(item) => void handleReopen(item)}
             highlightId={highlightId}
+            topicsById={topicsById}
           />
           <p>{MESSAGES.learning.totalCount(total)}</p>
           <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />

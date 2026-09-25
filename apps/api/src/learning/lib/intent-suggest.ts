@@ -32,6 +32,8 @@ export interface SuggestCandidateIntent {
   id: string;
   name: string;
   examples: string[];
+  /** [신규 No.22] 값 없음 = 공통. */
+  topicId?: string;
 }
 
 /**
@@ -57,7 +59,13 @@ export function suggestIntents(
       }
     }
     if (bestScore >= opts.minScore) {
-      results.push({ intentId: intent.id, intentName: intent.name, score: round4(bestScore), matchedExample: bestCandidate });
+      results.push({
+        intentId: intent.id,
+        intentName: intent.name,
+        score: round4(bestScore),
+        matchedExample: bestCandidate,
+        ...(intent.topicId ? { topicId: intent.topicId } : {}),
+      });
     }
   }
 

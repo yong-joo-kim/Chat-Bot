@@ -27,10 +27,15 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
+import { collectAssetRefs } from '../dialogue-common/lib/asset-ref-graph';
 import { ApiConnectionCatalogService } from '../api-connections/catalog/api-connection-catalog.service';
 import { NodeRowWithLinks, parseOutputs, toDialogNodeEntity, toDialogNodeResponse } from './dialog-node.mapper';
 import { dedupeIds } from './lib/node-links';
 import { buildConditionSummary, extractOutputTypes } from './lib/node-condition-summary';
+import { collectNodeTargetRefs } from './lib/node-target-refs';
+import { TopicLookupService } from '../topics/topic-lookup.service';
+import { validateTopicBoundaries } from '../topics/lib/topic-boundary';
+import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
 
 const NOT_FOUND_MESSAGE = '요청하신 대화 노드를 찾을 수 없습니다.';
 
@@ -50,7 +55,15 @@ export class DialogNodesService {
     private readonly bundleService: DialogueBundleService,
     private readonly auditLogService: AuditLogService,
     private readonly apiConnectionCatalog: ApiConnectionCatalogService,
+    private readonly topicLookup: TopicLookupService,
   ) {}
+
+  /** [신규 No.22] START/FALLBACK 노드는 항상 공통이다 — 생성·수정·유형 변경 전부(§5.2). */
+  private assertNotSystemNodeWithTopic(nodeType: DialogNodeType, topicId: string | null | undefined): void {
+    if ((nodeType === 'START' || nodeType === 'FALLBACK') && topicId) {
+      throw new ApiException('TOPIC_SYSTEM_NODE_LOCKED', 400, '시작·폴백 노드는 항상 공통입니다. 토픽을 지정할 수 없습니다.');
+    }
+  }
 
   /** [No.26] 쓰기 = v2만 — v1 `API_CONDITION`이 있으면 400으로 거부한다(FR-L1-4, §4.2). */
   private assertNoLegacyApiOutputs(outputs: DialogOutput[]): void {
@@ -125,38 +138,15 @@ export class DialogNodesService {
     // [No.26 M2-2] 누락 참조를 "어느 아웃풋의 어느 필드"인지 알 수 있도록 위치(zod 경로)를 보존한다.
     // DB 조회는 여전히 id 집합으로 1회만 하되, 상세 보고는 위치별로 하나씩 만든다(같은 id가 여러
     // 위치에서 참조되면 위치 수만큼 detail이 생긴다).
-    const nodeTargetRefs: Array<{ id: string; field: string }> = [];
+    // [신규 No.22 — K-2] 노드→노드 참조 수집은 `node-target-refs.ts`로 추출했다(동작 불변).
+    const nodeTargetRefs = collectNodeTargetRefs(input.outputs);
     const contextFormIds = new Set<string>();
     const surveyRefs: Array<{ id: string; field: string }> = [];
     input.outputs.forEach((o, i) => {
-      if (o.type === 'DIALOG_MOVE') nodeTargetRefs.push({ id: o.payload.targetNodeId, field: `outputs.${i}.payload.targetNodeId` });
       if (o.type === 'CONTEXT_FORM') contextFormIds.add(o.payload.contextVariableId);
-      if (o.type === 'BUTTON') {
-        o.payload.buttons.forEach((b, k) => {
-          if (b.action === 'NODE') nodeTargetRefs.push({ id: b.value, field: `outputs.${i}.payload.buttons.${k}.value` });
-        });
-      }
-      if (o.type === 'CARD' && o.payload.buttons) {
-        o.payload.buttons.forEach((b, k) => {
-          if (b.action === 'NODE') nodeTargetRefs.push({ id: b.value, field: `outputs.${i}.payload.buttons.${k}.value` });
-        });
-      }
-      // [No.26] API 조건분기(v1·v2 모두)의 분기 대상 노드도 참조 검증 대상이다(J-17, FR-L3-1/2).
-      if (o.type === 'API_CONDITION') {
-        o.payload.conditions.forEach((c, j) => {
-          nodeTargetRefs.push({ id: c.nextNodeId, field: `outputs.${i}.payload.conditions.${j}.nextNodeId` });
-        });
-        if (isApiConditionV2(o.payload)) {
-          if (o.payload.defaultNodeId) nodeTargetRefs.push({ id: o.payload.defaultNodeId, field: `outputs.${i}.payload.defaultNodeId` });
-          if (o.payload.failureNodeId) nodeTargetRefs.push({ id: o.payload.failureNodeId, field: `outputs.${i}.payload.failureNodeId` });
-        }
-      }
-      // [No.27] v2 SURVEY의 surveyId(같은 챗봇 Survey 참조)·onCompleteNodeId(노드 참조, J-20).
+      // [No.27] v2 SURVEY의 surveyId(같은 챗봇 Survey 참조, J-20).
       if (o.type === 'SURVEY' && isSurveyV2(o.payload)) {
         surveyRefs.push({ id: o.payload.surveyId, field: `outputs.${i}.payload.surveyId` });
-        if (o.payload.onCompleteNodeId) {
-          nodeTargetRefs.push({ id: o.payload.onCompleteNodeId, field: `outputs.${i}.payload.onCompleteNodeId` });
-        }
       }
     });
     const nodeTargetIds = new Set(nodeTargetRefs.map((r) => r.id));
@@ -191,6 +181,8 @@ export class DialogNodesService {
     await this.assertNameFree(chatbotId, nameNormalized);
     await this.assertNodeTypeSingleton(chatbotId, dto.nodeType);
     await this.validateReferences(chatbotId, dto);
+    this.assertNotSystemNodeWithTopic(dto.nodeType, dto.topicId);
+    if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
     const intentIds = dedupeIds(dto.intentIds);
     const keywordIds = dedupeIds(dto.keywordIds);
@@ -208,6 +200,7 @@ export class DialogNodesService {
           priority: dto.priority,
           contextVariableId: dto.contextVariableId,
           outputs: JSON.stringify(dto.outputs),
+          topicId: dto.topicId ?? undefined,
         },
       });
       if (intentIds.length > 0) await tx.dialogNodeIntent.createMany({ data: intentIds.map((intentId) => ({ nodeId: created.id, intentId })) });
@@ -230,11 +223,18 @@ export class DialogNodesService {
   async list(chatbotId: string, query: DialogNodeListQuery): Promise<Paginated<DialogNodeListItem>> {
     await this.scope.assertReadable(chatbotId);
     const where: Prisma.DialogNodeWhereInput = { chatbotId };
-    if (query.q) where.OR = [{ name: { contains: query.q } }, { description: { contains: query.q } }];
+    const andConditions: Prisma.DialogNodeWhereInput[] = [];
+    if (query.q) andConditions.push({ OR: [{ name: { contains: query.q } }, { description: { contains: query.q } }] });
     if (query.nodeType && query.nodeType.length > 0) where.nodeType = { in: query.nodeType };
     if (query.enabled !== undefined) where.enabled = query.enabled;
+    const topicWhere = buildTopicIdsWhere(query.topicIds);
+    if (topicWhere) andConditions.push(topicWhere as Prisma.DialogNodeWhereInput);
+    if (andConditions.length > 0) where.AND = andConditions;
     const orderBy = { [query.sort]: query.order } as Prisma.DialogNodeOrderByWithRelationInput;
 
+    // [신규 No.22 — FR-TP4-5] "다른 토픽 참조 n" 배지 — 기존 전체 노드/의도/키워드/컨텍스트 조회에
+    // topicId select만 추가한다. **쿼리 수 불변**(6개 그대로) — 노드는 동음이의어·FAQ를 직접 참조하지
+    // 않으므로(§7.1) 그 두 종류는 이 계산에 필요 없다.
     const [rows, total, allNodes, intents, keywords, contexts] = await Promise.all([
       this.prisma.dialogNode.findMany({
         where,
@@ -244,10 +244,10 @@ export class DialogNodesService {
         take: query.pageSize,
       }),
       this.prisma.dialogNode.count({ where }),
-      this.prisma.dialogNode.findMany({ where: { chatbotId }, select: { id: true, outputs: true } }),
-      this.prisma.intent.findMany({ where: { chatbotId }, select: { id: true, name: true } }),
-      this.prisma.keyword.findMany({ where: { chatbotId }, select: { id: true, name: true } }),
-      this.prisma.contextVariable.findMany({ where: { chatbotId }, select: { id: true, name: true } }),
+      this.prisma.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } }),
+      this.prisma.intent.findMany({ where: { chatbotId }, select: { id: true, name: true, topicId: true } }),
+      this.prisma.keyword.findMany({ where: { chatbotId }, select: { id: true, name: true, topicId: true } }),
+      this.prisma.contextVariable.findMany({ where: { chatbotId }, select: { id: true, name: true, topicId: true } }),
     ]);
 
     const incomingCounts = computeIncomingCounts(
@@ -257,6 +257,45 @@ export class DialogNodesService {
     const keywordNames = new Map(keywords.map((k) => [k.id, k.name]));
     const contextNames = new Map(contexts.map((c) => [c.id, c.name]));
 
+    // 노드가 나가는 방향으로 가리킬 수 있는 대상(의도·키워드·컨텍스트·다른 노드)만 담은 최소 번들 —
+    // 동음이의어·FAQ·설문은 노드의 나가는 참조 대상이 아니므로 빈 배열이다(collectAssetRefs 입력 형태만 충족).
+    const badgeBundle = {
+      intents: intents.map((i) => ({ id: i.id, chatbotId, name: i.name, examples: [], topicId: i.topicId ?? undefined, createdAt: new Date(0), updatedAt: new Date(0) })),
+      keywords: keywords.map((k) => ({ id: k.id, chatbotId, name: k.name, synonyms: [], topicId: k.topicId ?? undefined, createdAt: new Date(0), updatedAt: new Date(0) })),
+      homonyms: [],
+      dialogNodes: allNodes.map((n) => toDialogNodeResponse(n)),
+      contexts: contexts.map((c) => ({
+        id: c.id,
+        chatbotId,
+        name: c.name,
+        slots: [],
+        cancelKeywords: [],
+        sessionTimeoutMinutes: 30,
+        topicId: c.topicId ?? undefined,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      })),
+      faqs: [],
+    };
+    const topicKeyById = new Map<string, string | null>();
+    for (const n of allNodes) topicKeyById.set(n.id, n.topicId);
+    for (const i of intents) topicKeyById.set(i.id, i.topicId);
+    for (const k of keywords) topicKeyById.set(k.id, k.topicId);
+    for (const c of contexts) topicKeyById.set(c.id, c.topicId);
+
+    const hasAnyTopic = [...topicKeyById.values()].some((v) => v !== null);
+    const crossTopicRefCounts = new Map<string, number>();
+    if (hasAnyTopic) {
+      for (const ref of collectAssetRefs(badgeBundle)) {
+        if (ref.fromKind !== 'NODE') continue;
+        const fromTopic = topicKeyById.get(ref.fromId) ?? null;
+        const toTopic = topicKeyById.get(ref.toId) ?? null;
+        if (fromTopic === toTopic) continue;
+        if (toTopic === null) continue; // 공통으로의 참조는 배지에서 제외(§5.3)
+        crossTopicRefCounts.set(ref.fromId, (crossTopicRefCounts.get(ref.fromId) ?? 0) + 1);
+      }
+    }
+
     const items = rows.map((row) => {
       const entity = toDialogNodeResponse(row);
       return {
@@ -264,6 +303,8 @@ export class DialogNodesService {
         conditionSummary: buildConditionSummary(entity, intentNames, keywordNames, contextNames),
         outputTypes: extractOutputTypes(entity.outputs),
         incomingCount: incomingCounts.get(entity.id) ?? 0,
+        topicId: row.topicId ?? null,
+        crossTopicRefCount: crossTopicRefCounts.get(row.id) ?? 0,
       };
     });
 
@@ -320,6 +361,24 @@ export class DialogNodesService {
 
     await this.validateReferences(chatbotId, { intentIds, keywordIds, contextVariableId, outputs });
 
+    const finalTopicId = dto.topicId !== undefined ? dto.topicId : (current.topicId ?? undefined);
+    this.assertNotSystemNodeWithTopic(nodeType, finalTopicId);
+    if (dto.topicId !== undefined && dto.topicId !== null) {
+      await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
+    }
+    const onlyTopicIdChanged =
+      dto.topicId !== undefined &&
+      dto.name === undefined &&
+      dto.description === undefined &&
+      dto.nodeType === undefined &&
+      dto.matchMode === undefined &&
+      dto.enabled === undefined &&
+      dto.priority === undefined &&
+      dto.intentIds === undefined &&
+      dto.keywordIds === undefined &&
+      dto.contextVariableId === undefined &&
+      dto.outputs === undefined;
+
     const row = await this.prisma.$transaction(async (tx) => {
       await tx.dialogNode.update({
         where: { id },
@@ -333,6 +392,8 @@ export class DialogNodesService {
           priority: dto.priority ?? current.priority,
           contextVariableId: contextVariableId ?? null,
           ...(dto.outputs !== undefined ? { outputs: JSON.stringify(outputs) } : {}),
+          ...(dto.topicId !== undefined ? { topicId: dto.topicId } : {}),
+          ...(onlyTopicIdChanged ? { updatedAt: current.updatedAt } : {}),
         },
       });
       if (dto.intentIds !== undefined) {
@@ -395,6 +456,8 @@ export class DialogNodesService {
           priority: original.priority,
           contextVariableId: original.contextVariableId,
           outputs: JSON.stringify(filteredOutputs),
+          // [신규 No.22] 복사본이 원본 topicId를 승계한다(§16.2). 원본이 START/FALLBACK이면 항상 null이다.
+          topicId: original.topicId,
         },
       });
       if (intentIds.length > 0) await tx.dialogNodeIntent.createMany({ data: intentIds.map((intentId) => ({ nodeId: created.id, intentId })) });
@@ -448,7 +511,23 @@ export class DialogNodesService {
     }
     const apiConnections = await this.apiConnectionCatalog.designInfo([...connectionIds]);
 
-    return validateDialogueDesign(bundle, new Date(), { apiConnections });
+    const engineReport = validateDialogueDesign(bundle, new Date(), { apiConnections });
+
+    // [신규 No.22 — §7.3] 토픽 규칙 4종을 엔진 결과 뒤에 합친다(엔진 코드 변경 0). 토픽이 없는
+    // 챗봇은 +1 조회만 하고 결과는 바이트 동일이다(AC-TP4-4).
+    const topics = await this.topicLookup.listForChatbot(chatbotId);
+    if (topics.length === 0) return engineReport;
+
+    const handoffSetting = await this.prisma.chatbotHandoffSetting.findUnique({ where: { chatbotId }, select: { endButtonNodeId: true } });
+    const { issues: topicIssues, ruleTotals } = validateTopicBoundaries(bundle, topics, { handoffEndButtonNodeId: handoffSetting?.endButtonNodeId ?? null });
+
+    const issues = [...engineReport.issues, ...topicIssues];
+    const summary = {
+      error: issues.filter((i) => i.severity === 'ERROR').length,
+      warning: issues.filter((i) => i.severity === 'WARNING').length,
+      info: issues.filter((i) => i.severity === 'INFO').length,
+    };
+    return { issues, summary, checkedAt: engineReport.checkedAt, ...(ruleTotals ? { ruleTotals } : {}) };
   }
 
   async flow(chatbotId: string): Promise<FlowTree> {

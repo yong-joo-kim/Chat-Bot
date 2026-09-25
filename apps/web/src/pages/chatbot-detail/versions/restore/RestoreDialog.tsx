@@ -43,6 +43,8 @@ export function RestoreDialog({
   const [loadError, setLoadError] = useState(false);
   const [preview, setPreview] = useState<RestorePreviewResponse | null>(null);
   const [acknowledgeActive, setAcknowledgeActive] = useState(false);
+  // [No.22] `TOPIC_EXPOSURE_CHANGE` 경고 전용 확인 체크박스(§3.9) — `ACTIVE_CHATBOT`과 같은 게이팅 패턴.
+  const [acknowledgeTopicExposure, setAcknowledgeTopicExposure] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [staleBanner, setStaleBanner] = useState(false);
   const [backupFailedBanner, setBackupFailedBanner] = useState(false);
@@ -77,6 +79,7 @@ export function RestoreDialog({
   useEffect(() => {
     if (!isOpen) return;
     setAcknowledgeActive(false);
+    setAcknowledgeTopicExposure(false);
     setStaleBanner(false);
     setBackupFailedBanner(false);
     void fetchPreview();
@@ -95,6 +98,7 @@ export function RestoreDialog({
       const res = await versionsApi.restore(chatbotId, targetVersionId, {
         expectedCurrentHash: preview.currentContentHash,
         acknowledgeActive: needsAck ? acknowledgeActive : undefined,
+        acknowledgeTopicExposure: needsAckTopicExposure ? acknowledgeTopicExposure : undefined,
       });
       if (!isMountedRef.current) return;
       onRestored(res);
@@ -104,6 +108,10 @@ export function RestoreDialog({
         e instanceof ApiError &&
         (e.code === 'RESTORE_PREVIEW_STALE' || e.code === 'RESTORE_BLOCKED_BY_ACTIVE_JOB' || e.code === 'RESTORE_BUSY')
       ) {
+        // [No.22 — 코드 리뷰 1회차 L-7] 백엔드가 트랜잭션 안 재검증을 추가하면서, 토픽 노출 값이
+        // 바뀐 경우에도 이 경합 경로(RESTORE_PREVIEW_STALE 등)로 온다 — 최신 미리보기를 다시
+        // 받아 `TOPIC_EXPOSURE_CHANGE` 체크박스를 다시 보여주고, 확인 체크는 초기화해 재확인을 강제한다.
+        setAcknowledgeTopicExposure(false);
         setStaleBanner(true);
         await fetchPreview();
       } else if (e instanceof ApiError && e.code === 'RESTORE_IN_PROGRESS') {
@@ -112,6 +120,17 @@ export function RestoreDialog({
       } else if (e instanceof ApiError && e.code === 'VERSION_SNAPSHOT_TOO_LARGE') {
         setBackupFailedBanner(true);
       } else if (e instanceof ApiError && e.code === 'VERSION_INTEGRITY_FAILED') {
+        setAcknowledgeTopicExposure(false);
+        setStaleBanner(true);
+        await fetchPreview();
+      } else if (
+        e instanceof ApiError &&
+        e.code === 'VALIDATION_FAILED' &&
+        e.details?.some((d) => d.field === 'acknowledgeTopicExposure')
+      ) {
+        // 확정 요청 사이에 노출 값이 바뀌어 서버가 `acknowledgeTopicExposure`를 요구하는 경우
+        // (§3.9) — 최신 미리보기를 다시 받아 체크박스를 다시 보여준다.
+        setAcknowledgeTopicExposure(false);
         setStaleBanner(true);
         await fetchPreview();
       } else {
@@ -123,6 +142,10 @@ export function RestoreDialog({
   }
 
   const needsAck = preview?.warnings.some((w) => w.code === 'ACTIVE_CHATBOT') ?? false;
+  // [No.22] §3.9 — `exposed`·`hidden`이 둘 다 0이면 서버가 이 경고 자체를 내려주지 않으므로,
+  // 배열에 존재한다는 것만으로 게이팅이 필요하다고 판단한다(PM 강화: 확인 체크 필수).
+  const topicExposureWarning = preview?.warnings.find((w) => w.code === 'TOPIC_EXPOSURE_CHANGE');
+  const needsAckTopicExposure = Boolean(topicExposureWarning);
   const acceptedWarning = preview?.warnings.find((w) => w.code === 'ACCEPTED_SUGGESTIONS_NOT_RESUGGESTED');
   const otherWarnings = preview?.warnings.filter((w) => w.code !== 'ACCEPTED_SUGGESTIONS_NOT_RESUGGESTED') ?? [];
 
@@ -195,9 +218,15 @@ export function RestoreDialog({
               )}
 
               {needsAck && (
-                <label className="restore-ack-checkbox">
+                <label className="restore-ack-checkbox" id="restore-ack-active-label">
                   <input type="checkbox" checked={acknowledgeActive} onChange={(e) => setAcknowledgeActive(e.target.checked)} />
                   {msg.activeChatbotCheckboxLabel}
+                </label>
+              )}
+              {needsAckTopicExposure && topicExposureWarning?.code === 'TOPIC_EXPOSURE_CHANGE' && (
+                <label className="restore-ack-checkbox" id="restore-ack-topic-exposure-label">
+                  <input type="checkbox" checked={acknowledgeTopicExposure} onChange={(e) => setAcknowledgeTopicExposure(e.target.checked)} />
+                  {msg.topicExposureCheckboxLabel(topicExposureWarning.exposed)}
                 </label>
               )}
             </>
@@ -212,8 +241,14 @@ export function RestoreDialog({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => void handleConfirm()}
-                disabled={confirming || (needsAck && !acknowledgeActive)}
-                aria-disabled={confirming || (needsAck && !acknowledgeActive)}
+                disabled={confirming || (needsAck && !acknowledgeActive) || (needsAckTopicExposure && !acknowledgeTopicExposure)}
+                aria-disabled={confirming || (needsAck && !acknowledgeActive) || (needsAckTopicExposure && !acknowledgeTopicExposure)}
+                // [코드 리뷰 1회차 L-6] 게이팅 사유(미체크 확인 항목)를 스크린리더가 함께 읽도록 연결한다.
+                aria-describedby={
+                  [needsAck && !acknowledgeActive ? 'restore-ack-active-label' : null, needsAckTopicExposure && !acknowledgeTopicExposure ? 'restore-ack-topic-exposure-label' : null]
+                    .filter((id): id is string => Boolean(id))
+                    .join(' ') || undefined
+                }
               >
                 {confirming ? msg.confirming : msg.confirmButton(targetVersionNo)}
               </button>

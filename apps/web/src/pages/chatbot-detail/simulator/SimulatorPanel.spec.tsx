@@ -288,3 +288,48 @@ describe('SimulatorPanel — 설문 미리보기(FR-SV9-3)', () => {
     expect(screen.getByText('저장되지 않음')).toBeInTheDocument();
   });
 });
+
+/** [신규 No.22] SIM-ext — "비활성 토픽 포함" 토글(topic-system-ui-spec.md §3.8). */
+describe('SimulatorPanel — 비활성 토픽 포함 토글', () => {
+  beforeEach(() => {
+    mockSimulate.mockReset();
+    mockDialogNodesList.mockReset().mockResolvedValue({ items: [], total: 0 });
+    mockDialogNodesFindOne.mockReset();
+  });
+
+  it('기본값은 꺼짐이며, 꺼진 채로 보내면 includeInactiveTopics:false가 전달된다', async () => {
+    mockSimulate.mockResolvedValue(makeResponse({ outputs: [textOutput('안내')] }));
+    renderPanel();
+    const toggle = screen.getByRole('checkbox', { name: '비활성 토픽 포함' });
+    expect(toggle).not.toBeChecked();
+
+    await sendMessage('안녕');
+    expect(mockSimulate.mock.calls[0][1]).toMatchObject({ includeInactiveTopics: false });
+  });
+
+  it('토글을 켜고 보내면 includeInactiveTopics:true가 전달된다', async () => {
+    const user = userEvent.setup();
+    mockSimulate.mockResolvedValue(makeResponse({ outputs: [textOutput('안내')] }));
+    renderPanel();
+
+    await user.click(screen.getByRole('checkbox', { name: '비활성 토픽 포함' }));
+    await sendMessage('안녕');
+
+    expect(mockSimulate.mock.calls[0][1]).toMatchObject({ includeInactiveTopics: true });
+  });
+
+  it('응답에 answeredTopic이 있으면 봇 말풍선에 "토픽: {이름}({상태})"가 표시된다', async () => {
+    mockSimulate.mockResolvedValue(
+      makeResponse({ outputs: [textOutput('보험 접수는 이렇게 진행합니다')], answeredTopic: { id: 'topic-2', name: '보험청구', enabled: false } }),
+    );
+    renderPanel();
+    await sendMessage('보험 접수');
+
+    expect(await screen.findByText('토픽: 보험청구(비활성)')).toBeInTheDocument();
+  });
+
+  it('TC 실행에는 이 옵션이 없다는 안내 문구가 토글 근처에 있다', () => {
+    renderPanel();
+    expect(screen.getByText(/TC 실행에는 이 옵션이 없습니다/)).toBeInTheDocument();
+  });
+});

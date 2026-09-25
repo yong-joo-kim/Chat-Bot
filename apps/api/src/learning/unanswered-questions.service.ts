@@ -66,8 +66,8 @@ export class UnansweredQuestionsService {
 
   /** 의도 후보 집합을 요청당 1회 로드해 전 행이 공유한다(NFR-P4, N+1 금지). */
   private async loadSuggestionCandidates(chatbotId: string): Promise<SuggestCandidateIntent[]> {
-    const intents = await this.prisma.intent.findMany({ where: { chatbotId }, select: { id: true, name: true, examples: true } });
-    return intents.map((row) => ({ id: row.id, name: row.name, examples: this.parseExamplesJson(row.examples) }));
+    const intents = await this.prisma.intent.findMany({ where: { chatbotId }, select: { id: true, name: true, examples: true, topicId: true } });
+    return intents.map((row) => ({ id: row.id, name: row.name, examples: this.parseExamplesJson(row.examples), topicId: row.topicId ?? undefined }));
   }
 
   private computeLexicalSuggestions(normalizedQuestion: string, candidates: SuggestCandidateIntent[]): IntentSuggestion[] {
@@ -105,12 +105,21 @@ export class UnansweredQuestionsService {
       classifierMap = null; // 분류기 호출 실패도 폴백으로 수렴한다(오류를 전파하지 않는다).
     }
 
+    const topicIdByIntentId = new Map(candidates.map((c) => [c.id, c.topicId]));
     for (const row of pending) {
       if (classifierMap) {
         const predictions = classifierMap.get(row.id) ?? [];
         result.set(
           row.id,
-          predictions.map((p) => ({ intentId: p.intentId, intentName: p.intentName, score: p.score, matchedExample: p.intentName, source: 'CLASSIFIER' as const })),
+          predictions.map((p) => ({
+            intentId: p.intentId,
+            intentName: p.intentName,
+            score: p.score,
+            matchedExample: p.intentName,
+            source: 'CLASSIFIER' as const,
+            // [신규 No.22]
+            ...(topicIdByIntentId.get(p.intentId) ? { topicId: topicIdByIntentId.get(p.intentId) } : {}),
+          })),
         );
       } else {
         result.set(row.id, this.computeLexicalSuggestions(row.questionNormalized, candidates));
