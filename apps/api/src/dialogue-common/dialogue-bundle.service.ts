@@ -83,23 +83,36 @@ export class DialogueBundleService {
     let faqs: Awaited<ReturnType<typeof this.prisma.faqEntry.findMany>>;
     let surveys: Awaited<ReturnType<typeof this.prisma.survey.findMany>>;
 
+    // [K-1] 결정적 정렬. orderBy가 없으면 SQLite가 플래너가 고른 인덱스 순서로 행을
+    // 돌려주어 편집·버전 복원에 따라 엔진의 동점 매칭 승자가 흔들린다. `createdAt asc, id asc`는
+    // 복원(타임스탬프 보존)에서도 같은 승자를 낸다.
+    const orderByCreatedAtId = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
+
     if (isTransactionClient) {
-      intents = await db.intent.findMany({ where: { chatbotId } });
-      keywords = await db.keyword.findMany({ where: { chatbotId } });
-      homonyms = await db.homonymDictionary.findMany({ where: { chatbotId } });
-      dialogNodes = await db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } });
-      contexts = await db.contextVariable.findMany({ where: { chatbotId } });
-      faqs = await db.faqEntry.findMany({ where: { chatbotId } });
-      surveys = await db.survey.findMany({ where: { chatbotId } });
+      intents = await db.intent.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
+      keywords = await db.keyword.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
+      homonyms = await db.homonymDictionary.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
+      dialogNodes = await db.dialogNode.findMany({
+        where: { chatbotId },
+        include: { intentLinks: true, keywordLinks: true },
+        orderBy: orderByCreatedAtId,
+      });
+      contexts = await db.contextVariable.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
+      faqs = await db.faqEntry.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
+      surveys = await db.survey.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId });
     } else {
       [intents, keywords, homonyms, dialogNodes, contexts, faqs, surveys] = await Promise.all([
-        db.intent.findMany({ where: { chatbotId } }),
-        db.keyword.findMany({ where: { chatbotId } }),
-        db.homonymDictionary.findMany({ where: { chatbotId } }),
-        db.dialogNode.findMany({ where: { chatbotId }, include: { intentLinks: true, keywordLinks: true } }),
-        db.contextVariable.findMany({ where: { chatbotId } }),
-        db.faqEntry.findMany({ where: { chatbotId } }),
-        db.survey.findMany({ where: { chatbotId } }),
+        db.intent.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
+        db.keyword.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
+        db.homonymDictionary.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
+        db.dialogNode.findMany({
+          where: { chatbotId },
+          include: { intentLinks: true, keywordLinks: true },
+          orderBy: orderByCreatedAtId,
+        }),
+        db.contextVariable.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
+        db.faqEntry.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
+        db.survey.findMany({ where: { chatbotId }, orderBy: orderByCreatedAtId }),
       ]);
     }
 
