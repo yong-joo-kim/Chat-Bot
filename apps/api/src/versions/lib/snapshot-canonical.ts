@@ -75,6 +75,9 @@ export function toCanonicalComparable(envelope: SnapshotEnvelope): unknown {
     },
     answerSetting: envelope.answerSetting ?? null,
     profile: envelope.profile,
+    // [신규 No.40] 해시 밖 보조 필드(C-1) — `toHashComparable`은 이 키를 보지 않는다(아래 참고).
+    // `sortKeysDeep`이 `undefined` 키를 생략하므로 과거 봉투(tiebreak 없음)의 저장 바이트는 불변이다.
+    tiebreak: envelope.tiebreak ?? undefined,
   };
 }
 
@@ -111,6 +114,17 @@ export function canonicalizeSnapshot(envelope: SnapshotEnvelope): string {
 
 export function computeContentHash(envelope: SnapshotEnvelope): string {
   return createHash('sha256').update(canonicalizeSnapshot(envelope), 'utf8').digest('hex');
+}
+
+/**
+ * [신규 No.40] `sha256(stableStringify(tiebreak.nodeUpdatedAt))` — `tiebreak`가 없으면 `null`(과거
+ * 스냅샷). 환경 캡처의 "재사용" 조건(§5.3)이 `contentHash`만으로는 불충분해(발견 제약 ③) 이 값도
+ * 같아야 한다. 목록·재사용 판정이 본문을 읽지 않게 하는 비정규화라 `ChatbotVersion.tiebreakHash`
+ * 메타 컬럼에 저장한다.
+ */
+export function computeTiebreakHash(envelope: SnapshotEnvelope): string | null {
+  if (!envelope.tiebreak) return null;
+  return createHash('sha256').update(stableStringify(envelope.tiebreak.nodeUpdatedAt), 'utf8').digest('hex');
 }
 
 /** 임의 값을 정규(키 정렬) JSON 문자열로 — 차이 계산(§7.2)·복원 계획(§8.4)이 공유하는 동일성 판정 기준. */

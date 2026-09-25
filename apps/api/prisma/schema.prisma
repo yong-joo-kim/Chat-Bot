@@ -989,6 +989,11 @@ model ChatbotVersion {
 
   payload         ChatbotVersionPayload?
 
+  /// [신규 No.40 — 커밋 ①] 봉투 보조 필드 tiebreak.nodeUpdatedAt의 sha256(정규 JSON). contentHash와
+  /// 별개다(해시 밖). null = 보조 필드 없는 과거 스냅샷. 환경 캡처의 "재사용" 조건 = contentHash ∧
+  /// tiebreakHash 동일(§5.3).
+  tiebreakHash    String?
+
   @@unique([chatbotId, versionNo])
   @@index([chatbotId, createdAt])
   @@index([chatbotId, trigger, createdAt])

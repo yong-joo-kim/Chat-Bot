@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isApiConditionV2, isSurveyV2, normalizeText } from '@chat-bot/shared-types';
+import { normalizeText } from '@chat-bot/shared-types';
 import type { RestoreWarning } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BannedWordFilterService } from '../../banned-words/banned-word-filter.service';
@@ -8,6 +8,7 @@ import { ReindexQueueService } from '../../embedding/index/reindex-queue.service
 import type { SnapshotEnvelope } from '../lib/snapshot-envelope';
 import { stableStringify } from '../lib/snapshot-canonical';
 import { computeTopicExposureChange } from '../lib/topic-exposure';
+import { collectExternalRefs } from '../lib/external-refs';
 
 /**
  * 복원 경고(§8.1) — **읽기 전용**(제안·TC·금지어·RAG 설정). 대화 자산을 쓰지 않는다.
@@ -146,22 +147,15 @@ export class RestoreWarningsService {
 
     if (upcastedFrom !== undefined) warnings.push({ code: 'SCHEMA_UPCASTED', fromVersion: upcastedFrom, toVersion: currentSchemaVersion });
 
-    // [No.26] API 연결 참조 경고(§15) — 대상 스냅샷의 v2 connectionId 집합으로 1회 조회.
-    const targetConnectionIds = new Set<string>();
-    let legacyFormatCount = 0;
-    for (const node of target.assets.dialogNodes) {
-      for (const output of node.outputs) {
-        if (output.type !== 'API_CONDITION') continue;
-        if (isApiConditionV2(output.payload)) targetConnectionIds.add(output.payload.connectionId);
-        else legacyFormatCount += 1;
-      }
-    }
-    if (targetConnectionIds.size > 0) {
-      const rows = await this.prisma.apiConnection.findMany({ where: { id: { in: [...targetConnectionIds] } }, select: { id: true, enabled: true } });
+    // [No.26/No.27, 신규 No.40 — §6.1 발견 제약 ⑤] 외부 참조(API 연결·설문) 수집은 이제
+    // `collectExternalRefs()` 공용 함수를 쓴다(동작 불변 — 복원 경고와 전환 미리보기 경고가 같은 로직 공유).
+    const targetRefs = collectExternalRefs(target);
+    if (targetRefs.apiConnectionIds.size > 0) {
+      const rows = await this.prisma.apiConnection.findMany({ where: { id: { in: [...targetRefs.apiConnectionIds] } }, select: { id: true, enabled: true } });
       const foundMap = new Map(rows.map((r) => [r.id, r.enabled]));
       let missing = 0;
       let disabled = 0;
-      for (const id of targetConnectionIds) {
+      for (const id of targetRefs.apiConnectionIds) {
         const enabled = foundMap.get(id);
         if (enabled === undefined) missing += 1;
         else if (!enabled) disabled += 1;
@@ -169,24 +163,14 @@ export class RestoreWarningsService {
       if (missing > 0) warnings.push({ code: 'API_CONNECTION_MISSING', count: missing });
       if (disabled > 0) warnings.push({ code: 'API_CONNECTION_DISABLED', count: disabled });
     }
-    if (legacyFormatCount > 0) warnings.push({ code: 'API_LEGACY_FORMAT', count: legacyFormatCount });
+    if (targetRefs.apiLegacyFormatCount > 0) warnings.push({ code: 'API_LEGACY_FORMAT', count: targetRefs.apiLegacyFormatCount });
 
-    // [No.27] 설문 참조 경고 3종(§16) — 대상 스냅샷의 v2 surveyId 집합으로 1회 조회.
-    const targetSurveyIds = new Set<string>();
-    let legacySurveyFormatCount = 0;
-    for (const node of target.assets.dialogNodes) {
-      for (const output of node.outputs) {
-        if (output.type !== 'SURVEY') continue;
-        if (isSurveyV2(output.payload)) targetSurveyIds.add(output.payload.surveyId);
-        else legacySurveyFormatCount += 1;
-      }
-    }
-    if (targetSurveyIds.size > 0) {
-      const rows = await this.prisma.survey.findMany({ where: { id: { in: [...targetSurveyIds] } }, select: { id: true, status: true } });
+    if (targetRefs.surveyIds.size > 0) {
+      const rows = await this.prisma.survey.findMany({ where: { id: { in: [...targetRefs.surveyIds] } }, select: { id: true, status: true } });
       const foundMap = new Map(rows.map((r) => [r.id, r.status]));
       let missing = 0;
       let notOpen = 0;
-      for (const id of targetSurveyIds) {
+      for (const id of targetRefs.surveyIds) {
         const status = foundMap.get(id);
         if (status === undefined) missing += 1;
         else if (status !== 'OPEN') notOpen += 1;
@@ -194,7 +178,7 @@ export class RestoreWarningsService {
       if (missing > 0) warnings.push({ code: 'SURVEY_MISSING', count: missing });
       if (notOpen > 0) warnings.push({ code: 'SURVEY_NOT_OPEN', count: notOpen });
     }
-    if (legacySurveyFormatCount > 0) warnings.push({ code: 'SURVEY_LEGACY_FORMAT', count: legacySurveyFormatCount });
+    if (targetRefs.surveyLegacyFormatCount > 0) warnings.push({ code: 'SURVEY_LEGACY_FORMAT', count: targetRefs.surveyLegacyFormatCount });
 
     return warnings;
   }

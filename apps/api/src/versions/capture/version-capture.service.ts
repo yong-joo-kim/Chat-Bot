@@ -17,7 +17,7 @@ import { DialogueBundleService } from '../../dialogue-common/dialogue-bundle.ser
 import { parseSkin } from '../../chatbots/lib/skin.util';
 import { buildSnapshotEnvelope, computeVersionCounts } from '../lib/snapshot-envelope';
 import type { CapturedAssets, SnapshotEnvelope } from '../lib/snapshot-envelope';
-import { computeContentHash, serializeEnvelopeForStorage } from '../lib/snapshot-canonical';
+import { computeContentHash, computeTiebreakHash, serializeEnvelopeForStorage } from '../lib/snapshot-canonical';
 import { hydrateSnapshot } from '../lib/snapshot-hydrate';
 import { checkSnapshotIntegrity } from '../lib/snapshot-integrity';
 import { toVersionDetailDto } from '../version.mapper';
@@ -26,6 +26,8 @@ import { VersionRetentionService } from './version-retention.service';
 export interface CaptureSnapshotData {
   envelope: SnapshotEnvelope;
   contentHash: string;
+  /** [신규 No.40] §6.1 — null = 보조 필드 없음(있을 수 없다, buildSnapshotEnvelope가 항상 채운다). */
+  tiebreakHash: string | null;
   counts: VersionCounts;
   sizeBytes: number;
   integrityWarnings: VersionIntegrityWarning[];
@@ -125,6 +127,7 @@ export class VersionCaptureService {
     const envelope = buildSnapshotEnvelope(captured, capturedAt);
     const counts = computeVersionCounts(envelope);
     const contentHash = computeContentHash(envelope);
+    const tiebreakHash = computeTiebreakHash(envelope);
     const serialized = serializeEnvelopeForStorage(envelope);
     const sizeBytes = Buffer.byteLength(serialized, 'utf8');
     const hydrated = hydrateSnapshot(envelope, captured.chatbotId);
@@ -132,6 +135,7 @@ export class VersionCaptureService {
     return {
       envelope,
       contentHash,
+      tiebreakHash,
       counts,
       sizeBytes,
       integrityWarnings: warnings,
@@ -179,6 +183,7 @@ export class VersionCaptureService {
         triggerContext: meta.triggerContext ? JSON.stringify(meta.triggerContext) : null,
         schemaVersion: data.envelope.schemaVersion,
         contentHash: data.contentHash,
+        tiebreakHash: data.tiebreakHash,
         counts: JSON.stringify(data.counts),
         sizeBytes: data.sizeBytes,
         integrityWarnings: JSON.stringify(data.integrityWarnings),

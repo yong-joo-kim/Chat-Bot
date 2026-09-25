@@ -34,6 +34,11 @@ export interface SnapshotAssets {
   faqs: SlimFaq[];
 }
 
+/** [신규 No.40 — 커밋 ①] 해시 밖 보조 필드(C-1) — 노드 id → 캡처 당시 updatedAt(ISO). */
+export interface SnapshotTiebreak {
+  nodeUpdatedAt: Record<string, string>;
+}
+
 /** 저장 봉투(§5.1) — `payload` 컬럼에 그대로 직렬화된다. */
 export interface SnapshotEnvelope {
   schemaVersion: number;
@@ -42,6 +47,8 @@ export interface SnapshotEnvelope {
   assets: SnapshotAssets;
   answerSetting: SlimAnswerSetting | null;
   profile: ChatbotSnapshotProfile;
+  /** [신규 No.40] 선택 필드 — 해시 범위 밖(`snapshot-canonical.ts`는 이 키를 보지 않는다). */
+  tiebreak?: SnapshotTiebreak;
 }
 
 export interface CapturedAssets {
@@ -58,6 +65,13 @@ function stripIdentity<T extends { chatbotId: string; updatedAt: unknown }>(row:
 
 export function buildSnapshotEnvelope(captured: CapturedAssets, capturedAt: Date): SnapshotEnvelope {
   const { bundle, answerSetting, profile, chatbotId } = captured;
+  // [신규 No.40 — 커밋 ①] C-1: 라이브 값(stripIdentity 전)의 노드 updatedAt을 해시 밖 보조 필드에
+  // 담는다. 엔진이 updatedAt을 읽는 곳은 rankNodes(node-matcher.ts) 1곳뿐이라 노드만 담는다.
+  const nodeUpdatedAt: Record<string, string> = {};
+  for (const node of bundle.dialogNodes) {
+    nodeUpdatedAt[node.id] = new Date(node.updatedAt as unknown as string | Date).toISOString();
+  }
+
   return {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     capturedAt: capturedAt.toISOString(),
@@ -77,6 +91,7 @@ export function buildSnapshotEnvelope(captured: CapturedAssets, capturedAt: Date
         })()
       : null,
     profile,
+    tiebreak: { nodeUpdatedAt },
   };
 }
 

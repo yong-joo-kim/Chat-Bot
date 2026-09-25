@@ -7,7 +7,7 @@ import { BannedWordsModule } from '../banned-words/banned-words.module';
 import { VersionCaptureModule } from './capture/version-capture.module';
 import { VersionsController } from './versions.controller';
 import { VersionService } from './version.service';
-import { VersionPayloadReader } from './read/version-payload.reader';
+import { VersionReadModule } from './read/version-read.module';
 import { VersionDiffService } from './diff/version-diff.service';
 import { VersionRestoreService } from './restore/version-restore.service';
 import { VersionRestoreApplier } from './restore/version-restore.applier';
@@ -21,9 +21,9 @@ import { RestoreLockRegistry } from './restore/restore-lock.registry';
  * import하지 않는다**(§2.2 봉인 — §16 V-5).
  */
 @Module({
-  imports: [ChatbotsModule, DialogueCommonModule, AnswerSettingsModule, EmbeddingModule, BannedWordsModule, VersionCaptureModule],
+  imports: [ChatbotsModule, DialogueCommonModule, AnswerSettingsModule, EmbeddingModule, BannedWordsModule, VersionCaptureModule, VersionReadModule],
   controllers: [VersionsController],
-  providers: [VersionService, VersionPayloadReader, VersionDiffService, VersionRestoreService, VersionRestoreApplier, RestoreWarningsService, RestoreLockRegistry],
+  providers: [VersionService, VersionDiffService, VersionRestoreService, VersionRestoreApplier, RestoreWarningsService, RestoreLockRegistry],
   // [신규 2026-09-23 No.28] 운영 예약 배포 모듈이 재사용한다(§2.2). applier는 export하지 않는다
   // (구조적 봉인 — §9.4 #1, §16 D-15).
   exports: [VersionRestoreService, VersionDiffService],

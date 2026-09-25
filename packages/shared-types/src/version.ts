@@ -121,6 +121,10 @@ export const ChatbotSnapshotEnvelopeSchema = z.object({
   }),
   answerSetting: z.unknown().nullable(),
   profile: z.unknown(),
+  /** [신규 No.40 — 커밋 ①] 해시 밖 보조 필드(C-1) — 노드 id → 캡처 당시 updatedAt(ISO). 선택 필드다
+   * (없으면 과거 스냅샷 — `LEGACY_TIEBREAK`). ★ `z.object`는 strip 모드라 반드시 선언해야 파싱 시
+   * 소실되지 않는다(발견 제약 ②). */
+  tiebreak: z.object({ nodeUpdatedAt: z.record(z.string(), z.string()) }).optional(),
 });
 export type ChatbotSnapshotEnvelope = z.infer<typeof ChatbotSnapshotEnvelopeSchema>;
 
