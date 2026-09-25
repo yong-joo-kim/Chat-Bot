@@ -622,8 +622,11 @@ model UnansweredQuestion {
   resolvedById       String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  /// [신규 No.44] NEGATIVE_FEEDBACK 항목의 최근 👎 턴(ConversationLog.id). FK 없음(로그 규약).
+  /// 상세 화면이 당시 봇 답변(마스킹본)·매칭 대상을 이 로그 행에서 읽는다 — 텍스트 중복 저장 0.
+  lastFeedbackLogId  String?
 
-  @@unique([chatbotId, questionNormalized])
+  @@unique([chatbotId, source, questionNormalized])   // [변경 No.44] (chatbotId, questionNormalized) → 소스 분리
   @@index([chatbotId, status, occurredCount])
   @@index([chatbotId, lastOccurredAt])
   @@map("unanswered_questions")

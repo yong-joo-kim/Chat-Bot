@@ -53,8 +53,10 @@ export class UnansweredCollectorService {
       if (!decision.collect) return;
 
       const now = new Date();
+      // [No.44 — 커밋 ①] 유일 키를 (chatbotId, source, questionNormalized)로 교체한다.
+      // 도입 전 행은 전부 source='UNANSWERED'이므로 결과는 동일하다(동작 불변).
       const existing = await this.prisma.unansweredQuestion.findUnique({
-        where: { chatbotId_questionNormalized: { chatbotId: input.chatbotId, questionNormalized: decision.normalized } },
+        where: { chatbotId_source_questionNormalized: { chatbotId: input.chatbotId, source: 'UNANSWERED', questionNormalized: decision.normalized } },
       });
 
       if (existing) {
@@ -90,7 +92,8 @@ export class UnansweredCollectorService {
 
   private async createIfUnderLimit(input: CollectUnansweredQuestionParams, normalized: string, now: Date): Promise<void> {
     const maxPending = this.config.get<number>('UNANSWERED_MAX_PENDING') ?? 5000;
-    const pendingCount = await this.prisma.unansweredQuestion.count({ where: { chatbotId: input.chatbotId, status: 'PENDING' } });
+    // [No.44 — 커밋 ①] 상한 계수를 source='UNANSWERED'로 한정한다(소스별 상한, 값은 도입 전과 동일).
+    const pendingCount = await this.prisma.unansweredQuestion.count({ where: { chatbotId: input.chatbotId, status: 'PENDING', source: 'UNANSWERED' } });
     if (pendingCount >= maxPending) {
       // FR-15-8 — 상한 도달 시 신규 추가만 중단한다(기존 항목 카운트 증가는 계속된다).
       this.logger.warn(`UnansweredQuestion PENDING 상한 도달 — 신규 추가를 건너뜁니다: chatbotId=${input.chatbotId}`);
@@ -107,13 +110,16 @@ export class UnansweredCollectorService {
           occurredCount: 1,
           lastOccurredAt: now,
           channelType: input.channelType,
+          source: 'UNANSWERED',
         },
       });
     } catch (e) {
       // 동시 요청이 같은 정규화 키로 첫 create에 몰리면 유니크 위반(P2002) — 1회만 update로 합류한다.
       if (this.isUniqueConstraintViolation(e)) {
         await this.prisma.unansweredQuestion.update({
-          where: { chatbotId_questionNormalized: { chatbotId: input.chatbotId, questionNormalized: normalized } },
+          where: {
+            chatbotId_source_questionNormalized: { chatbotId: input.chatbotId, source: 'UNANSWERED', questionNormalized: normalized },
+          },
           data: { occurredCount: { increment: 1 }, lastOccurredAt: now },
         });
         return;

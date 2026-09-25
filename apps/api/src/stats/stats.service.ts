@@ -310,7 +310,9 @@ export class StatsService {
     let unansweredIdByQuestion = new Map<string, string>();
     if (normalizedToQuestion.size > 0) {
       const matches = await this.prisma.unansweredQuestion.findMany({
-        where: { chatbotId: query.chatbotId, questionNormalized: { in: Array.from(normalizedToQuestion.keys()) } },
+        // [No.44 — 커밋 ①] source 조건 1개 — 소스 분리 후 같은 정규화 질문의 NEGATIVE_FEEDBACK 행에
+        // 딥링크가 잘못 걸리지 않도록 한다(§10.6). 도입 전 행은 전부 UNANSWERED라 응답 바이트 불변.
+        where: { chatbotId: query.chatbotId, source: 'UNANSWERED', questionNormalized: { in: Array.from(normalizedToQuestion.keys()) } },
         select: { id: true, questionNormalized: true },
       });
       unansweredIdByQuestion = new Map(
