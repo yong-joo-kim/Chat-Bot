@@ -200,3 +200,22 @@ feat: 토픽 시스템(No.22) 기능그룹 구현
 - 시험 안정화: hybrid-cs-hardening 폴링·KST today, legacy-api 타이밍 단언
 - 테스트 api 1935(3회 연속 통과) / web 520 / widget 95 / engine 182 통과, 코드리뷰 2회차 PASS
 - 배포 시 할 일: 마이그레이션(20260925110000_topic_system) 적용(자산 6테이블 재정의 — API 중지 상태에서), K-1로 같은 예문 의도의 답변이 바뀔 수 있으니 배포 전후 TC 비교 권장
+
+## 2026-09-25 — 8d9e2fd (선행 분리 커밋 4e4abd5)
+
+feat: 피드백 기반 개선 루프(No.44) 기능그룹 구현
+
+- 위젯 봇 답변마다 👍/👎, 공개 평가 API `PUT /public/chatbots/:slug/messages/:messageId/feedback`(`@Public()` 8번째): 토큰 없이 (슬러그의 챗봇, 요청 `sessionId`, `messageId`)와 로그 행이 전부 일치하고 `feedbackOffered`일 때만 저장, 어긋나면 전부 같은 404. 평가 전용 레이트리밋 버킷(`fb-ip` 120/분 · `fb-key:msg` 10/분)으로 대화 전송 한도와 분리
+- 평가 원장 `MessageFeedback`: 메시지(`ConversationLog` 1행)당 1행 · 변경 24시간·5회 · 취소 없음 · 텍스트·`sessionId` 컬럼 0(최소 수집) · 쓰기는 `feedback/message-feedback.service.ts` 1파일뿐. 첫 👎 확정 시 원장의 선점 상태 기계(`queueOutcome` CAS)로 정확히 한 번만 학습현황 큐에 `NEGATIVE_FEEDBACK` 소스로 편입
+- 학습현황 콘솔: 소스 탭(답변 못함/부정 평가), 당시 봇 답변(마스킹본)·매칭 대상 표시, "현재 매칭" 배지, "직접 수정 완료"(의도 없이 `RESOLVED`) 전이
+- No.14 통계 "답변 만족도" 섹션(`GET /stats/feedback`): 평가 수·긍정률·참여율(분모 `feedbackOffered` 턴)·추이·👎 집중 답변
+- 위젯: `feedback-v1` 기능 선언 + 봇 말풍선 평가 막대(vanilla · 런타임 의존성 0 · gzip 100KB 게이트 준수)
+- WEB 채널 설정 `feedbackEnabled` 스위치(기본 꺼짐) — `access.resolve()`가 이미 읽는 행이라 추가 조회 0, 꺼진 챗봇 응답은 키 생략으로 바이트 동일
+- 엔진(`dialogue-engine`) 변경 0건 — 응답 조립 직전 순수 판정만 추가
+- 선행 분리 커밋 4e4abd5(큐 소스 분리 준비): `UnansweredQuestion` 유일 키를 `(chatbotId, source, questionNormalized)`로 교체, 기존 수집기(`collect()`)의 조회·생성·상한 계수에 `source='UNANSWERED'` 명시, `stats.service.ts#getQuestions` 큐 딥링크 조회에 `source` 조건 추가 — 도입 시점 모든 행이 `UNANSWERED`라 동작 불변, 기존 시험 무수정 전부 통과
+- 신규 ADR-0038(답변 평가 = 메시지 능력 결합 검증·텍스트 없는 평가 원장·큐 소스 분리·평가 전용 레이트리밋·선점 상태 기계). 기존 ADR(0002/0011/0012/0015/0019/0023/0033) 각주 갱신
+- PM 결정 요점: 기능 기본 꺼짐(`feedbackEnabled`) · 👎 1회 즉시 편입 · 부정 평가 대기 상한 2,000 · 자유 텍스트 사유 없음 · 신규 권한·역할·감사 0 · GPU 카탈로그 2 유지(이 그룹이 만드는 연산은 전부 조회·순수 판정·`groupBy`)
+- 테스트 api 2652 / web 561 / widget 133(gzip 12.49KB) / engine 182(변경 0) 통과, 코드리뷰 통과
+- 배포 시 할 일: `prisma migrate deploy`(마이그레이션 `20260925115000_queue_source_split` → `20260925120000_feedback_loop` 순서 적용) → 필요 시 챗봇별 WEB 채널 설정에서 답변 평가 받기 스위치를 켠다
+- 롤백 제약: `NEGATIVE_FEEDBACK` 행이 하나라도 생기면 이전 유일 키 `(chatbotId, questionNormalized)`로 되돌릴 수 없다(같은 정규화 질문의 두 소스 행이 옛 키를 위반). 롤백 전 해당 행을 정리해야 하며, 배포 절차는 "API 롤백까지만, 스키마는 유지"를 기본으로 한다
+- 알려진 한계: FB-S1 긍정률 선(추이 그래프) 미구현(요약 문장과 표로 대체) · `TabNav`의 학습현황 요약(summary) 호출이 챗봇 상세 진입마다 1회 발생 · 미커버 시험 FB1-3/FB5-6(쿼리 수)·FB8-2(감사 수)·EX-15/20/22 · `learning-augmentation` 통합 시험을 전체 스위트와 병렬 실행할 때 간헐 실패(이 그룹 범위 밖, 기존 결함)
