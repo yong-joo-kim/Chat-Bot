@@ -22,6 +22,14 @@ export interface ChannelMessage {
 }
 
 /**
+ * [신규 No.46] 렌더 문맥 — 위젯 기능 선언 등. 없으면 구버전 클라이언트로 취급한다(안전측 —
+ * ADR-0043 §6).
+ */
+export interface ChannelRenderContext {
+  features?: readonly string[];
+}
+
+/**
  * 채널 어댑터 계약(FR-11-17). 대화 처리 코어는 채널을 모르며, 채널별 차이는 어댑터에서만
  * 흡수한다(개발명세서 §1). 이번 Phase의 구현체는 `WebChannelAdapter` 1종뿐이다(FR-11-18).
  */
@@ -29,5 +37,5 @@ export interface ChannelAdapter {
   readonly type: ChannelType;
   readonly supportedOutputTypes: ReadonlySet<DialogOutputType>;
   normalizeInbound(raw: { sessionId: string; message?: string; buttonAction?: ButtonAction; state?: unknown; identityToken?: string }): InboundTurn;
-  renderOutbound(outputs: DialogOutput[]): ChannelMessage[];
+  renderOutbound(outputs: DialogOutput[], ctx?: ChannelRenderContext): ChannelMessage[];
 }

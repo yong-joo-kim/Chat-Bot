@@ -321,7 +321,8 @@ export class PublicConversationService {
       });
     }
 
-    const rendered = adapter.renderOutbound(result.outputs);
+    // [신규 No.46] 위젯 기능 선언(`features`)을 넘기기만 한다 — 프로필 선택은 어댑터 안(RM-11).
+    const rendered = adapter.renderOutbound(result.outputs, { features: dto.features });
     // ⑤.5 출구 금지어 필터(FR-12-40) — 정책 무관, 항상 마스킹만 한다(차단하지 않는다). 외부 API
     // 값이 섞인 최종 출력 전체가 이 필터를 통과한다(FR-L4-14 · AC-L3-10). G-8 전치 아웃풋도 같은
     // 필터를 통과한다(이미 마스킹된 텍스트라 멱등이지만, "최종 출력 전체가 필터를 통과한다"는
