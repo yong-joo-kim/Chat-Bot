@@ -48,6 +48,12 @@ interface ReferenceValidationInput {
   outputs: DialogOutput[];
 }
 
+/**
+ * 노드 쓰기 트랜잭션 옵션 — Prisma 기본 5000ms는 부하 시 부족해 500(Transaction already closed)이 재현됐다
+ * (No.46 자동시험). versions 모듈 선례(VersionCaptureService.txTimeoutMs() 30000)와 같은 값으로 create·update·copy·remove에 공통 적용.
+ */
+const NODE_WRITE_TX_OPTIONS = { timeout: 30_000, maxWait: 15_000 } as const;
+
 @Injectable()
 export class DialogNodesService {
   constructor(
@@ -229,7 +235,7 @@ export class DialogNodesService {
       if (intentIds.length > 0) await tx.dialogNodeIntent.createMany({ data: intentIds.map((intentId) => ({ nodeId: created.id, intentId })) });
       if (keywordIds.length > 0) await tx.dialogNodeKeyword.createMany({ data: keywordIds.map((keywordId) => ({ nodeId: created.id, keywordId })) });
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
-    });
+    }, NODE_WRITE_TX_OPTIONS); // [bug-triage 2026-09-27 -- No.46 자동시험 회차 확인] 전체 스위트 병렬 실행(CPU 경합)에서 Prisma 기본 5000ms 트랜잭션 타임아웃을 실측 6831ms(1차)·17214ms(2차, 15000ms로도 부족)로 초과해 500(Transaction already closed)이 재현됨 -- versions 모듈의 기존 선례(VersionCaptureService.txTimeoutMs() 30000)와 동일값으로 정렬.
     this.bundleService.invalidate(chatbotId);
     await this.auditLogService.record({
       action: 'CREATE',
@@ -429,7 +435,7 @@ export class DialogNodesService {
         if (keywordIds.length > 0) await tx.dialogNodeKeyword.createMany({ data: keywordIds.map((keywordId) => ({ nodeId: id, keywordId })) });
       }
       return tx.dialogNode.findUniqueOrThrow({ where: { id }, include: { intentLinks: true, keywordLinks: true } });
-    });
+    }, NODE_WRITE_TX_OPTIONS);
     this.bundleService.invalidate(chatbotId);
     await this.auditLogService.record({
       action: 'UPDATE',
@@ -487,7 +493,7 @@ export class DialogNodesService {
       if (intentIds.length > 0) await tx.dialogNodeIntent.createMany({ data: intentIds.map((intentId) => ({ nodeId: created.id, intentId })) });
       if (keywordIds.length > 0) await tx.dialogNodeKeyword.createMany({ data: keywordIds.map((keywordId) => ({ nodeId: created.id, keywordId })) });
       return tx.dialogNode.findUniqueOrThrow({ where: { id: created.id }, include: { intentLinks: true, keywordLinks: true } });
-    });
+    }, NODE_WRITE_TX_OPTIONS);
     this.bundleService.invalidate(chatbotId);
     await this.auditLogService.record({
       action: 'COPY',
@@ -509,7 +515,7 @@ export class DialogNodesService {
       await tx.dialogNodeIntent.deleteMany({ where: { nodeId: id } });
       await tx.dialogNodeKeyword.deleteMany({ where: { nodeId: id } });
       await tx.dialogNode.delete({ where: { id } });
-    });
+    }, NODE_WRITE_TX_OPTIONS);
     this.bundleService.invalidate(chatbotId);
     await this.auditLogService.record({
       action: 'DELETE',
