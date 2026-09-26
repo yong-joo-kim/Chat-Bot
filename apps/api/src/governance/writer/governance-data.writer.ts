@@ -180,6 +180,34 @@ export class GovernanceDataWriter {
     return count;
   }
 
+  /** [신규 No.42] `InboxEntry.text` 재암호화(백필 겸용). */
+  async reencryptInboxEntryText(rows: readonly { id: string; oldValue: string }[]): Promise<number> {
+    let count = 0;
+    for (const row of rows) {
+      const plaintext = openField('INBOX_ENTRY_TEXT', row.id, row.oldValue);
+      if (plaintext === null || plaintext === DECRYPT_FAILED_TEXT) continue;
+      const newValue = sealField('INBOX_ENTRY_TEXT', row.id, plaintext);
+      if (newValue === row.oldValue) continue;
+      const result = await this.prisma.inboxEntry.updateMany({ where: { id: row.id, text: row.oldValue }, data: { text: newValue } });
+      count += result.count;
+    }
+    return count;
+  }
+
+  /** [신규 No.42] `Customer.displayName` 재암호화(백필 겸용). */
+  async reencryptCustomerDisplayName(rows: readonly { id: string; oldValue: string }[]): Promise<number> {
+    let count = 0;
+    for (const row of rows) {
+      const plaintext = openField('CUSTOMER_DISPLAY_NAME', row.id, row.oldValue);
+      if (plaintext === null || plaintext === DECRYPT_FAILED_TEXT) continue;
+      const newValue = sealField('CUSTOMER_DISPLAY_NAME', row.id, plaintext);
+      if (newValue === row.oldValue) continue;
+      const result = await this.prisma.customer.updateMany({ where: { id: row.id, displayName: row.oldValue }, data: { displayName: newValue } });
+      count += result.count;
+    }
+    return count;
+  }
+
   async createRetentionRun(data: {
     runId: string;
     kind: RetentionRunKind;

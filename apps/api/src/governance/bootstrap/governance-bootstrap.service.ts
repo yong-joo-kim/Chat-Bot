@@ -64,6 +64,31 @@ const ENCRYPTED_COLUMNS: Array<{ field: string; label: string; query: (prisma: P
     },
     count: (prisma, keyId) => prisma.workflowRun.count({ where: { payload: { startsWith: `enc:v1:${keyId}:` } } }),
   },
+  {
+    // [신규 No.42] 인박스 항목 본문 — 영구 데이터라 옛 키 필요 행 검사 대상(ADR-0042 §6).
+    field: 'INBOX_ENTRY_TEXT',
+    label: '인박스 메모·기록',
+    query: async (prisma, known) => {
+      const row = await prisma.inboxEntry.findFirst({
+        where: { text: { startsWith: 'enc:v1:' }, AND: known.map((k) => ({ NOT: { text: { startsWith: `enc:v1:${k}:` } } })) },
+        select: { id: true, text: true },
+      });
+      return row ? { id: row.id, value: row.text } : null;
+    },
+    count: (prisma, keyId) => prisma.inboxEntry.count({ where: { text: { startsWith: `enc:v1:${keyId}:` } } }),
+  },
+  {
+    field: 'CUSTOMER_DISPLAY_NAME',
+    label: '고객 표시 이름',
+    query: async (prisma, known) => {
+      const row = await prisma.customer.findFirst({
+        where: { displayName: { startsWith: 'enc:v1:' }, AND: known.map((k) => ({ NOT: { displayName: { startsWith: `enc:v1:${k}:` } } })) },
+        select: { id: true, displayName: true },
+      });
+      return row && row.displayName !== null ? { id: row.id, value: row.displayName } : null;
+    },
+    count: (prisma, keyId) => prisma.customer.count({ where: { displayName: { startsWith: `enc:v1:${keyId}:` } } }),
+  },
 ];
 
 /**

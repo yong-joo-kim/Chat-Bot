@@ -274,12 +274,13 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
   });
 
   describe('G-5: sealField(/openField( 호출 파일 집합', () => {
-    it('sealField( 호출 파일 = {handoff-thread.service.ts, survey-response.service.ts, governance-data.writer.ts, workflow-run-enqueue.writer.ts}(No.41 +1)', () => {
+    it('sealField( 호출 파일 = {handoff-thread.service.ts, survey-response.service.ts, governance-data.writer.ts, workflow-run-enqueue.writer.ts, inbox.store.ts}(No.42 +1)', () => {
       const allowed = [
         'apps/api/src/handoff/handoff-thread.service.ts',
         'apps/api/src/survey-responses/survey-response.service.ts',
         'apps/api/src/governance/writer/governance-data.writer.ts',
         'apps/api/src/workflow/triggers/workflow-run-enqueue.writer.ts',
+        'apps/api/src/inbox/core/inbox.store.ts',
       ];
       const offenders = apiFileContents.filter(({ f, content }) => nonCommentOccurrences(content, /\bsealField\(/) > 0 && !allowed.includes(f) && !f.endsWith('common/crypto/field-crypto.ts')).map(({ f }) => f);
       expect(offenders).toEqual([]);

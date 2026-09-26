@@ -18,9 +18,11 @@ export const EgressDecision = z.enum(['ALLOWED', 'BLOCKED', 'NOT_CONFIGURED', 'N
 export type EgressDecision = z.infer<typeof EgressDecision>;
 
 // [신규 No.41] 발송함 본문(재시도용 일시 보관) — 4번째 암호화 대상(ADR-0041 §7). 백필·재암호화 잡 제외 대상.
-export const EncryptedFieldId = z.enum(['HANDOFF_RAW_TEXT', 'HANDOFF_TEXT', 'SURVEY_TEXT_VALUE', 'WORKFLOW_PAYLOAD']);
+// [신규 No.42] 인박스 항목 본문·고객 표시 이름 — 5·6번째 암호화 대상(ADR-0042 §6). 백필·재암호화 잡 편입.
+export const EncryptedFieldId = z.enum(['HANDOFF_RAW_TEXT', 'HANDOFF_TEXT', 'SURVEY_TEXT_VALUE', 'WORKFLOW_PAYLOAD', 'INBOX_ENTRY_TEXT', 'CUSTOMER_DISPLAY_NAME']);
 export type EncryptedFieldId = z.infer<typeof EncryptedFieldId>;
 
+// [신규 No.42] `INBOX_TEXT`·`CUSTOMER_IDENTITY` — 전역만(ADR-0042 §6, `CONVERSATION_RETENTION_KINDS` 불변).
 export const RetentionTargetKind = z.enum([
   'CONVERSATION_TEXT',
   'UNANSWERED_CLOSED',

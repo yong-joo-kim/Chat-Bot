@@ -15,6 +15,9 @@ export const ENCRYPTED_FIELDS: readonly EncryptedFieldDef[] = [
   { field: 'SURVEY_TEXT_VALUE', table: 'survey_answers', column: 'textValue' },
   // [신규 No.41] 발송함 본문(재시도용 일시 보관) — 백필·재암호화 잡 대상 아님(일시 데이터, ADR-0041 §7).
   { field: 'WORKFLOW_PAYLOAD', table: 'workflow_runs', column: 'payload' },
+  // [신규 No.42] 인박스 항목 본문·고객 표시 이름 — 영구 데이터라 백필·재암호화 잡에 편입(ADR-0042 §6).
+  { field: 'INBOX_ENTRY_TEXT', table: 'inbox_entries', column: 'text' },
+  { field: 'CUSTOMER_DISPLAY_NAME', table: 'customers', column: 'displayName' },
 ];
 
 export function encryptedFieldDef(field: EncryptedFieldId): EncryptedFieldDef {

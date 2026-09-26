@@ -30,7 +30,8 @@ interface JobStateShape {
   statsComputedAt?: string;
 }
 
-const ALL_FIELDS = ['HANDOFF_TEXT', 'HANDOFF_RAW_TEXT', 'SURVEY_TEXT_VALUE'] as const;
+// [신규 No.42] +2(영구 데이터 — 백필·재암호화 잡 편입, ADR-0042 §6).
+const ALL_FIELDS = ['HANDOFF_TEXT', 'HANDOFF_RAW_TEXT', 'SURVEY_TEXT_VALUE', 'INBOX_ENTRY_TEXT', 'CUSTOMER_DISPLAY_NAME'] as const;
 
 function safeJsonParse<T>(json: string, fallback: T): T {
   try {
@@ -203,18 +204,34 @@ export class FieldCryptoJob implements OnApplicationBootstrap, OnModuleDestroy {
       });
       return rows.map((r) => ({ id: r.id, value: r.rawText }));
     }
-    const rows = await this.prisma.surveyAnswer.findMany({
-      where: { ...idFilter, textValue: { not: null } },
+    if (field === 'SURVEY_TEXT_VALUE') {
+      const rows = await this.prisma.surveyAnswer.findMany({
+        where: { ...idFilter, textValue: { not: null } },
+        orderBy: { id: 'asc' },
+        take,
+        select: { id: true, textValue: true },
+      });
+      return rows.map((r) => ({ id: r.id, value: r.textValue }));
+    }
+    // [신규 No.42]
+    if (field === 'INBOX_ENTRY_TEXT') {
+      const rows = await this.prisma.inboxEntry.findMany({ where: idFilter, orderBy: { id: 'asc' }, take, select: { id: true, text: true } });
+      return rows.map((r) => ({ id: r.id, value: r.text }));
+    }
+    const rows = await this.prisma.customer.findMany({
+      where: { ...idFilter, displayName: { not: null } },
       orderBy: { id: 'asc' },
       take,
-      select: { id: true, textValue: true },
+      select: { id: true, displayName: true },
     });
-    return rows.map((r) => ({ id: r.id, value: r.textValue }));
+    return rows.map((r) => ({ id: r.id, value: r.displayName }));
   }
 
   private async reencrypt(field: EncryptedFieldId, rows: Array<{ id: string; value: string | null }>): Promise<number> {
     const payload = rows.filter((r): r is { id: string; value: string } => r.value !== null).map((r) => ({ id: r.id, oldValue: r.value }));
     if (field === 'SURVEY_TEXT_VALUE') return this.writer.reencryptSurveyTextValue(payload);
+    if (field === 'INBOX_ENTRY_TEXT') return this.writer.reencryptInboxEntryText(payload);
+    if (field === 'CUSTOMER_DISPLAY_NAME') return this.writer.reencryptCustomerDisplayName(payload);
     const column = field === 'HANDOFF_TEXT' ? 'text' : 'rawText';
     return this.writer.reencryptHandoffColumn(column, field, payload);
   }
@@ -253,18 +270,45 @@ export class FieldCryptoJob implements OnApplicationBootstrap, OnModuleDestroy {
       }
       return { field, plaintextRows, byKey, unknownKeyRows: Math.max(0, encryptedTotal - knownTotal) };
     }
-    // SURVEY_TEXT_VALUE — 소거 센티넬(빈 문자열)은 평문 잔존이 아니므로 제외한다.
-    const plaintextRows = await this.prisma.surveyAnswer.count({
-      where: { textValue: { not: null }, AND: [{ NOT: { textValue: '' } }, { NOT: { textValue: { startsWith: 'enc:v1:' } } }] },
+    if (field === 'SURVEY_TEXT_VALUE') {
+      // 소거 센티넬(빈 문자열)은 평문 잔존이 아니므로 제외한다.
+      const plaintextRows = await this.prisma.surveyAnswer.count({
+        where: { textValue: { not: null }, AND: [{ NOT: { textValue: '' } }, { NOT: { textValue: { startsWith: 'enc:v1:' } } }] },
+      });
+      const encryptedTotal = await this.prisma.surveyAnswer.count({ where: { textValue: { startsWith: 'enc:v1:' } } });
+      const byKey: Record<string, number> = {};
+      let knownTotal = 0;
+      for (const keyId of knownKeyIds) {
+        const c = await this.prisma.surveyAnswer.count({ where: { textValue: { startsWith: `enc:v1:${keyId}:` } } });
+        byKey[keyId] = c;
+        knownTotal += c;
+      }
+      return { field: 'SURVEY_TEXT_VALUE', plaintextRows, byKey, unknownKeyRows: Math.max(0, encryptedTotal - knownTotal) };
+    }
+    if (field === 'INBOX_ENTRY_TEXT') {
+      const plaintextRows = await this.prisma.inboxEntry.count({ where: { text: { not: '' }, NOT: { text: { startsWith: 'enc:v1:' } } } });
+      const encryptedTotal = await this.prisma.inboxEntry.count({ where: { text: { startsWith: 'enc:v1:' } } });
+      const byKey: Record<string, number> = {};
+      let knownTotal = 0;
+      for (const keyId of knownKeyIds) {
+        const c = await this.prisma.inboxEntry.count({ where: { text: { startsWith: `enc:v1:${keyId}:` } } });
+        byKey[keyId] = c;
+        knownTotal += c;
+      }
+      return { field: 'INBOX_ENTRY_TEXT', plaintextRows, byKey, unknownKeyRows: Math.max(0, encryptedTotal - knownTotal) };
+    }
+    // CUSTOMER_DISPLAY_NAME
+    const plaintextRows = await this.prisma.customer.count({
+      where: { displayName: { not: null }, AND: [{ NOT: { displayName: '' } }, { NOT: { displayName: { startsWith: 'enc:v1:' } } }] },
     });
-    const encryptedTotal = await this.prisma.surveyAnswer.count({ where: { textValue: { startsWith: 'enc:v1:' } } });
+    const encryptedTotal = await this.prisma.customer.count({ where: { displayName: { startsWith: 'enc:v1:' } } });
     const byKey: Record<string, number> = {};
     let knownTotal = 0;
     for (const keyId of knownKeyIds) {
-      const c = await this.prisma.surveyAnswer.count({ where: { textValue: { startsWith: `enc:v1:${keyId}:` } } });
+      const c = await this.prisma.customer.count({ where: { displayName: { startsWith: `enc:v1:${keyId}:` } } });
       byKey[keyId] = c;
       knownTotal += c;
     }
-    return { field: 'SURVEY_TEXT_VALUE', plaintextRows, byKey, unknownKeyRows: Math.max(0, encryptedTotal - knownTotal) };
+    return { field: 'CUSTOMER_DISPLAY_NAME', plaintextRows, byKey, unknownKeyRows: Math.max(0, encryptedTotal - knownTotal) };
   }
 }
