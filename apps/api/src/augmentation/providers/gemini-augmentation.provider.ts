@@ -1,10 +1,13 @@
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { maskPii } from '@chat-bot/pii-mask';
+import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
+import { AUGMENT_GEMINI_DEFAULT_BASE_URL } from '../../common/egress/egress-registry';
 import { AUGMENTATION_SYSTEM_INSTRUCTION, buildAugmentationUserContent } from '../lib/gemini-prompt';
 import { AugmentationGenerateInput, AugmentationProvider } from './augmentation-provider.port';
 
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+/** 기동 검사(§6.4)와 같은 상수를 쓴다(`common/egress/egress-registry.ts`) — export(§6.1 표). */
+const DEFAULT_BASE_URL = AUGMENT_GEMINI_DEFAULT_BASE_URL;
 const DEFAULT_MODEL = 'gemini-2.0-flash';
 
 export interface GeminiAugmentationConfig {
@@ -115,12 +118,18 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
     try {
+      assertEgressAllowed('AUGMENT_GEMINI', baseUrl);
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: controller.signal,
+        redirect: egressRedirectMode(),
       });
+      // [신규 No.45] M-1 — 가드는 baseUrl로 판정하므로(URL에 `?key=`가 있어 URL 전체로 판정하지 않는다),
+      // 응답이 비허용 호스트로의 리다이렉트(3xx)면 여기서 별도로 막는다. `generate()`의 catch가
+      // recordFailure() + [] (G1 폴백)로 흡수한다.
+      assertNoRedirectResponse('AUGMENT_GEMINI', baseUrl, res.status);
     } finally {
       clearTimeout(timer);
     }

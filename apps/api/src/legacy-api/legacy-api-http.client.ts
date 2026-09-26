@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isIP } from 'node:net';
 import type { ApiConnectionAuthType } from '@chat-bot/shared-types';
+import { checkEgress } from '../common/egress/egress-guard';
 import type { ValidatedLegacyRequest } from './lib/build-request';
 import { classifyAddress, isAddressAllowlisted, isHostnameAllowlisted, parseAllowlist } from './lib/ip-policy';
 import { LEGACY_DNS_RESOLVER, LEGACY_TRANSPORT } from './transport/legacy-transport.port';
@@ -14,7 +15,9 @@ export type LegacyHttpErrorOutcome =
   | 'BLOCKED_ADDRESS'
   | 'REDIRECT_NOT_ALLOWED'
   | 'RESPONSE_TOO_LARGE'
-  | 'SECRET_MISSING';
+  | 'SECRET_MISSING'
+  // [신규 No.45] 출구 허용 목록 밖 호스트 — DNS 조회 전에 차단(데이터 거버넌스 모드).
+  | 'EGRESS_BLOCKED';
 
 export type LegacyHttpResult =
   | { kind: 'RESPONSE'; status: number; contentType?: string; bytes: number; body: Buffer }
@@ -41,6 +44,11 @@ export class LegacyApiHttpClient {
   ) {}
 
   async send(req: ValidatedLegacyRequest, auth: LegacyAuthSpec, limits: { timeoutMs: number; maxBytes: number }): Promise<LegacyHttpResult> {
+    // [신규 No.45] DNS 조회 전 — 출구 허용 목록 밖이면 송신 0(전송 자체를 시도하지 않는다, AC-DG2-3).
+    if (checkEgress('LEGACY_API', req.url) === 'BLOCKED') {
+      return { kind: 'ERROR', outcome: 'EGRESS_BLOCKED' };
+    }
+
     const allowlist = parseAllowlist(this.config.get<string>('LEGACY_API_PRIVATE_ALLOWLIST') ?? '');
 
     let addresses: string[];

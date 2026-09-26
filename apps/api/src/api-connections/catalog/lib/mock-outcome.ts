@@ -31,6 +31,8 @@ const FAILURE_ONLY_OUTCOMES = new Set<ApiCallOutcome>([
   'SECRET_MISSING',
   'BINDING_MISSING',
   'FEATURE_DISABLED',
+  // [신규 No.45] 시뮬레이터가 출구 차단 결과도 재현할 수 있어야 한다(ADR-0040 §6.5).
+  'EGRESS_BLOCKED',
 ]);
 
 function hashSample(sample: ApiSampleResponse): string {

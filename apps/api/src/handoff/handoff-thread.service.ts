@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { maskPii } from '@chat-bot/pii-mask';
 import type { HandoffEndReason } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { sealField } from '../common/crypto/field-crypto';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
 import { generateHandoffToken, hashHandoffToken } from './lib/handoff-token';
 import { resolveEndSystemMessage } from './lib/handoff-notices';
@@ -108,14 +110,16 @@ export class HandoffThreadService {
           },
           select: { id: true },
         });
+        const connectMessageId = randomUUID();
         await tx.handoffMessage.create({
           data: {
+            id: connectMessageId,
             handoffSessionId: session.id,
             chatbotId: input.chatbotId,
             seq: 1,
             sender: 'SYSTEM',
             systemKind: 'CONNECTED',
-            text: input.connectNotice,
+            text: sealField('HANDOFF_TEXT', connectMessageId, input.connectNotice),
             createdAt: input.now,
           },
         });
@@ -173,14 +177,16 @@ export class HandoffThreadService {
 
       return await this.prisma.$transaction(async (tx) => {
         const seq = await this.nextSeq(tx, input.handoffSessionId);
+        const messageId = randomUUID();
         await tx.handoffMessage.create({
           data: {
+            id: messageId,
             handoffSessionId: input.handoffSessionId,
             chatbotId: input.chatbotId,
             seq,
             sender: 'USER',
-            text: masked,
-            rawText,
+            text: sealField('HANDOFF_TEXT', messageId, masked),
+            rawText: rawText === null ? null : sealField('HANDOFF_RAW_TEXT', messageId, rawText),
             rawExpiresAt,
             conversationLogId: input.conversationLogId,
             createdAt: input.now,
@@ -223,15 +229,17 @@ export class HandoffThreadService {
           throw new ApiException('HANDOFF_NOT_ASSIGNEE', 403, '이 상담의 담당자만 메시지를 보낼 수 있습니다.');
         }
         const seq = await this.nextSeq(tx, input.handoffSessionId);
+        const messageId = randomUUID();
         await tx.handoffMessage.create({
           data: {
+            id: messageId,
             handoffSessionId: input.handoffSessionId,
             chatbotId: session.chatbotId,
             seq,
             sender: 'AGENT',
             senderUserId: input.userId,
             senderUserName: input.userName,
-            text: masked,
+            text: sealField('HANDOFF_TEXT', messageId, masked),
             createdAt: input.now,
           },
         });
@@ -272,14 +280,16 @@ export class HandoffThreadService {
           const { systemKind, text } = resolveEndSystemMessage(input.reason, input.settings);
           const action = await this.resolveEndButtonAction(tx, input.chatbotId, input.settings);
           const seq = await this.nextSeq(tx, input.handoffSessionId);
+          const messageId = randomUUID();
           await tx.handoffMessage.create({
             data: {
+              id: messageId,
               handoffSessionId: input.handoffSessionId,
               chatbotId: input.chatbotId,
               seq,
               sender: 'SYSTEM',
               systemKind,
-              text,
+              text: sealField('HANDOFF_TEXT', messageId, text),
               action: action ? JSON.stringify(action) : null,
               createdAt: input.now,
             },
@@ -313,8 +323,10 @@ export class HandoffThreadService {
           data: { assignedUserId: admin.id, assignedUserName: admin.name },
         });
         const seq = await this.nextSeq(tx, handoffSessionId);
+        const messageId = randomUUID();
         await tx.handoffMessage.create({
           data: {
+            id: messageId,
             handoffSessionId,
             chatbotId: session.chatbotId,
             seq,
@@ -322,7 +334,7 @@ export class HandoffThreadService {
             systemKind: 'TAKEOVER',
             senderUserId: admin.id,
             senderUserName: admin.name,
-            text: `강제 인수: ${reason}`,
+            text: sealField('HANDOFF_TEXT', messageId, `강제 인수: ${reason}`),
             createdAt: now,
           },
         });

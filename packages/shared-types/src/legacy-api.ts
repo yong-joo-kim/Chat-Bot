@@ -33,6 +33,9 @@ export const ApiCallOutcome = z.enum([
   'SECRET_MISSING',
   'BINDING_MISSING',
   'FEATURE_DISABLED',
+  // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §6.5, ADR-0040) — 18 → 19종.
+  // 출구 허용 목록 밖 호스트로의 호출을 DNS 조회 전에 차단한 결과.
+  'EGRESS_BLOCKED',
 ]);
 export type ApiCallOutcome = z.infer<typeof ApiCallOutcome>;
 

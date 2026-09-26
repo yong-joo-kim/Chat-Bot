@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { normalizeText } from '@chat-bot/shared-types';
 import type { ChatbotAnswerSetting, DialogueBundle, HintAnswerItem, HintCannedItem, HintResponse } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
+import { openField } from '../common/crypto/field-crypto';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { SemanticMatchService } from '../embedding/semantic-match.service';
@@ -78,7 +79,7 @@ export class HandoffHintsService {
 
     const candidates = [
       lastLog ? { key: lastLog.id, text: lastLog.userMessage, at: lastLog.createdAt } : null,
-      lastHandoffMsg ? { key: lastHandoffMsg.id, text: lastHandoffMsg.text, at: lastHandoffMsg.createdAt } : null,
+      lastHandoffMsg ? { key: lastHandoffMsg.id, text: openField('HANDOFF_TEXT', lastHandoffMsg.id, lastHandoffMsg.text) ?? '', at: lastHandoffMsg.createdAt } : null,
     ].filter((c): c is { key: string; text: string; at: Date } => c !== null);
 
     if (candidates.length === 0) return null;

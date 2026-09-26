@@ -8,7 +8,8 @@ import type { ApiCallOutcome } from '@chat-bot/shared-types';
 export type CircuitClass = 'INFRA_FAILURE' | 'ALIVE' | 'NEUTRAL';
 
 const INFRA_FAILURE_OUTCOMES = new Set<ApiCallOutcome>(['TIMEOUT', 'NETWORK_ERROR', 'INVALID_RESPONSE', 'RESPONSE_TOO_LARGE']);
-const NEUTRAL_OUTCOMES = new Set<ApiCallOutcome>(['BLOCKED_ADDRESS', 'BLOCKED_URL', 'REDIRECT_NOT_ALLOWED']);
+// [신규 No.45] EGRESS_BLOCKED은 출구 허용 목록 설정에 따른 의도된 차단이라 인프라 실패로 세지 않는다.
+const NEUTRAL_OUTCOMES = new Set<ApiCallOutcome>(['BLOCKED_ADDRESS', 'BLOCKED_URL', 'REDIRECT_NOT_ALLOWED', 'EGRESS_BLOCKED']);
 
 export function classifyOutcome(outcome: ApiCallOutcome, httpStatus?: number): CircuitClass {
   if (outcome === 'HTTP_ERROR') {

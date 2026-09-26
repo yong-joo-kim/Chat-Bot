@@ -60,3 +60,8 @@ process.env.HANDOFF_SWEEPER_ENABLED = 'false';
 // ConfigModule 스냅샷이 import 시점에 고정돼 효과가 없었다(2026-09-25 실측 — 10개 spec에서 30초 폴링이
 // 계속 돌고 있었음). 엔진 동작 검증은 `DeploySchedulesEngine.tick()` 직접 호출로 한다.
 process.env.DEPLOY_SCHEDULE_ENABLED = 'false';
+
+// 데이터 거버넌스(No.45) 파기·재암호화 잡도 같은 이유로 기본값을 끈다(기존 루프 규약). 잡 동작
+// 검증은 `RetentionJob.tick()`/`FieldCryptoJob.tick()` 직접 호출로 한다.
+process.env.DATA_RETENTION_JOB_ENABLED = 'false';
+process.env.DATA_REENCRYPT_JOB_ENABLED = 'false';

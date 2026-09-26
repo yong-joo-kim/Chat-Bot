@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { WIDGET_FEATURE_HANDOFF_V1 } from '@chat-bot/shared-types';
 import type { ConversationState, DialogOutput, PublicHandoffState, PublicMessageResponse } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
+import { openField } from '../common/crypto/field-crypto';
 import type { InboundTurn } from '../conversation/adapters/channel-adapter';
 import { HandoffThreadService } from './handoff-thread.service';
 import { HandoffSettingsCacheService } from './handoff-settings-cache.service';
@@ -261,13 +262,13 @@ export class HandoffGateService {
     const pending = await this.prisma.handoffMessage.findMany({
       where: { handoffSessionId, seq: { gt: afterSeq } },
       orderBy: { seq: 'asc' },
-      select: { seq: true, sender: true, systemKind: true, text: true },
+      select: { id: true, seq: true, sender: true, systemKind: true, text: true },
     });
     const deliverable = pending.filter((m) => m.sender === 'AGENT' || (m.sender === 'SYSTEM' && m.systemKind !== 'TAKEOVER'));
     if (deliverable.length > 0) {
       await this.thread.advanceLegacyCursor(handoffSessionId, deliverable[deliverable.length - 1].seq);
     }
-    return deliverable.map((m) => ({ type: 'TEXT', payload: { text: m.text } }));
+    return deliverable.map((m) => ({ type: 'TEXT', payload: { text: openField('HANDOFF_TEXT', m.id, m.text) ?? '' } }));
   }
 
   private unverifiedResult(input: HandoffGateEvaluateInput): HandoffGateResult {

@@ -30,3 +30,4 @@ export * from './handoff';
 export * from './feedback';
 export * from './bundle-target';
 export * from './environment';
+export * from './governance';

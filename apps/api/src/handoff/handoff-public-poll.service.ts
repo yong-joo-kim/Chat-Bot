@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { HandoffPollMessage, HandoffPollQuery, HandoffPollResponse } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { openField } from '../common/crypto/field-crypto';
 import { HandoffThreadService } from './handoff-thread.service';
 import { HandoffSettingsCacheService } from './handoff-settings-cache.service';
 import { verifyHandoffToken } from './lib/handoff-token';
@@ -104,7 +105,7 @@ export class HandoffPublicPollService {
       where: { handoffSessionId: latest.id, seq: { gt: query.after } },
       orderBy: { seq: 'asc' },
       take: 100,
-      select: { seq: true, sender: true, systemKind: true, text: true, createdAt: true, action: true },
+      select: { id: true, seq: true, sender: true, systemKind: true, text: true, createdAt: true, action: true },
     });
 
     const messages: HandoffPollMessage[] = rows
@@ -112,7 +113,7 @@ export class HandoffPublicPollService {
       .map((m) => ({
         seq: m.seq,
         sender: m.sender as HandoffPollMessage['sender'],
-        text: m.text,
+        text: openField('HANDOFF_TEXT', m.id, m.text) ?? '',
         sentAt: m.createdAt,
         action: m.action ? (JSON.parse(m.action) as HandoffPollMessage['action']) : undefined,
       }));

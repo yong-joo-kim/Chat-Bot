@@ -31,6 +31,30 @@ export interface PiiMaskResult {
   counts: PiiMaskCounts;
 }
 
+/**
+ * [신규 No.45 — 데이터 거버넌스] 마스킹 강도. `PARTIAL`(기본 = 현행)은 전화·이메일을 부분 마스킹,
+ * `FULL`은 전화·이메일도 전량 치환한다(주민번호·카드·계좌는 두 모드 모두 전량). ADR-0013 감수 비용
+ * ①이 예고한 옵션이다 — 함수 1벌을 유지한다(`docs/02-spec/data-governance-설계.md` §12).
+ */
+export type PiiMaskMode = 'PARTIAL' | 'FULL';
+
+export interface PiiMaskOptions {
+  /** 생략하면 `configurePiiMaskMode()`로 설치된 값(기본 `PARTIAL`)을 쓴다. */
+  mode?: PiiMaskMode;
+}
+
+/** 거버넌스 부트스트랩 1곳만 호출한다(설치 없음 = PARTIAL). 재설치는 시험 전용. */
+let installedMode: PiiMaskMode = 'PARTIAL';
+
+export function configurePiiMaskMode(mode: PiiMaskMode): void {
+  installedMode = mode;
+}
+
+/** 시험 전용 — 설치값을 기본으로 되돌린다(함수명에 `ForTest`, 운영 코드 호출 0). */
+export function resetPiiMaskModeForTest(): void {
+  installedMode = 'PARTIAL';
+}
+
 // ① 주민등록번호 — YYMMDD-[1-8]XXXXXX(구분자 선택). 성별코드 1~4(~1999년생 이하 legacy) / 5~8(2000년~/외국인).
 const RRN_REGEX = /\d{6}-?[1-8]\d{6}/g;
 
@@ -63,7 +87,12 @@ function maskEmail(value: string): string {
   return `${local[0]}***@${domain}`;
 }
 
-export function maskPii(text: string): PiiMaskResult {
+/**
+ * PII 마스킹(FR-11-23, NFR-S4, ADR-0013). `options.mode`를 생략하면 설치값(기본 `PARTIAL`)을 쓴다.
+ * `PARTIAL` 결과는 이 옵션 도입 전과 **바이트 동일**이다(No.45 FR-0-161).
+ */
+export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
+  const mode = options?.mode ?? installedMode;
   const counts: PiiMaskCounts = { rrn: 0, card: 0, account: 0, phone: 0, email: 0 };
   if (!text) return { maskedText: text, counts };
 
@@ -78,7 +107,7 @@ export function maskPii(text: string): PiiMaskResult {
   });
   masked = masked.replace(PHONE_REGEX, (m) => {
     counts.phone += 1;
-    return maskPhone(m);
+    return mode === 'FULL' ? '[전화번호]' : maskPhone(m);
   });
   masked = masked.replace(ACCOUNT_REGEX, () => {
     counts.account += 1;
@@ -86,7 +115,7 @@ export function maskPii(text: string): PiiMaskResult {
   });
   masked = masked.replace(EMAIL_REGEX, (m) => {
     counts.email += 1;
-    return maskEmail(m);
+    return mode === 'FULL' ? '[이메일]' : maskEmail(m);
   });
 
   return { maskedText: masked, counts };

@@ -11,6 +11,7 @@ import { SURVEY_LIMITS } from '@chat-bot/shared-types';
 import type { ChannelType } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApiException } from '../../common/api.exception';
+import { openField } from '../../common/crypto/field-crypto';
 import { ChatbotScopeService } from '../../chatbots/chatbot-scope.service';
 import { toPaginated } from '../../common/pagination';
 import { runWithAggregationTimeout } from '../stats-request.helpers';
@@ -81,7 +82,11 @@ export class SurveyResultsService {
     }
 
     const items: SurveyResponseListItem[] = rows.map((row) => {
-      const rowAnswers = answersByResponse.get(row.id) ?? [];
+      // [신규 No.45] 자유 텍스트만 개봉(다른 유형은 textValue=null이라 영향 없음).
+      const rowAnswers = (answersByResponse.get(row.id) ?? []).map((a) => ({
+        ...a,
+        textValue: a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
+      }));
       const answerItems = survey.questions
         .map((q) => {
           const qRows = rowAnswers.filter((a) => a.questionKey === q.key);
@@ -137,7 +142,11 @@ export class SurveyResultsService {
         this.prisma.surveyAnswer.count({ where }),
       ]),
     );
-    const items: SurveyTextAnswerItem[] = rows.map((r) => ({ responseNo: toResponseNo(r.responseId), answeredAt: r.answeredAt, text: r.textValue ?? '' }));
+    const items: SurveyTextAnswerItem[] = rows.map((r) => ({
+      responseNo: toResponseNo(r.responseId),
+      answeredAt: r.answeredAt,
+      text: openField('SURVEY_TEXT_VALUE', r.id, r.textValue) ?? '',
+    }));
     return toPaginated(items, total, query.page, query.pageSize);
   }
 
@@ -213,7 +222,14 @@ export class SurveyResultsService {
       const answers = await this.prisma.surveyAnswer.findMany({ where: { responseId: { in: batch } } });
       for (const a of answers) {
         const list = answersByResponse.get(a.responseId) ?? [];
-        list.push(a);
+        list.push({
+          questionKey: a.questionKey,
+          kind: a.kind,
+          choiceKey: a.choiceKey,
+          numericValue: a.numericValue,
+          textValue: a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
+          isHead: a.isHead,
+        });
         answersByResponse.set(a.responseId, list);
       }
     }

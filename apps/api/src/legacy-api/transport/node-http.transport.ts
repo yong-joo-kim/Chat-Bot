@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { isIP } from 'node:net';
+import { checkEgress } from '../../common/egress/egress-guard';
 import type { LegacyTransport, LegacyTransportRequest, LegacyTransportResult } from './legacy-transport.port';
 
 interface LookupCallback {
@@ -20,6 +21,11 @@ interface LookupCallback {
 export class NodeHttpTransport implements LegacyTransport {
   request(req: LegacyTransportRequest): Promise<LegacyTransportResult> {
     return new Promise((resolve) => {
+      // [신규 No.45] 방어 이중화 — 클라이언트 우회 경로를 막는다(§6.5).
+      if (checkEgress('LEGACY_API', req.url) === 'BLOCKED') {
+        resolve({ kind: 'ERROR', outcome: 'NETWORK_ERROR', errorCode: 'EGRESS_BLOCKED' });
+        return;
+      }
       let url: URL;
       try {
         url = new URL(req.url);

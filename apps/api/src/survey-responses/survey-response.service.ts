@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { maskPii } from '@chat-bot/pii-mask';
 import { toKstDayBucket } from '@chat-bot/shared-types';
 import type { DialogueBundle, Survey, SurveyEvent } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
+import { sealField } from '../common/crypto/field-crypto';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
 import { buildAnsweredRows, buildSkippedRow } from './lib/answer-rows';
 import { guardAbandonedEvent, guardCompletedEvent, guardQuestionEvent } from './lib/write-guard';
@@ -126,7 +128,13 @@ export class SurveyResponseService {
 
       try {
         await this.prisma.$transaction(async (tx) => {
-          await tx.surveyAnswer.createMany({ data: rows.map((r) => ({ ...r, responseId: row.id })) });
+          // [신규 No.45] 행 id를 앱이 먼저 발급하고(AAD에 필요), 자유 텍스트만 저장 직전 봉인한다.
+          await tx.surveyAnswer.createMany({
+            data: rows.map((r) => {
+              const id = randomUUID();
+              return { ...r, id, responseId: row.id, textValue: r.textValue === null ? null : sealField('SURVEY_TEXT_VALUE', id, r.textValue) };
+            }),
+          });
           const updated = await tx.surveyResponse.updateMany({
             where: { id: row.id, lastQuestionIndex: { lt: event.questionIndex }, status: { in: ['EXPOSED', 'IN_PROGRESS'] } },
             data: { status: 'IN_PROGRESS', started: true, lastQuestionIndex: event.questionIndex, lastInteractedAt: ctx.now },

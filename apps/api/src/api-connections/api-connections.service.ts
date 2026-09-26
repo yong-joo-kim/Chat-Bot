@@ -12,6 +12,7 @@ import {
 } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { checkEgress } from '../common/egress/egress-guard';
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { ReferenceCheckService } from '../dialogue-common/reference-check.service';
 import { LegacyApiService } from '../legacy-api/legacy-api.service';
@@ -121,6 +122,18 @@ export class ApiConnectionsService {
     }
   }
 
+  /** [신규 No.45] 거버넌스 모드 ON에서 `baseUrl` 호스트가 출구 허용 목록 밖이면 저장을 막는다(§6.5). */
+  private assertEgressAllowedForSave(baseUrl: string): void {
+    if (checkEgress('LEGACY_API', baseUrl) === 'BLOCKED') {
+      throw new ApiException(
+        'EGRESS_HOST_NOT_ALLOWED',
+        400,
+        '외부 전송 허용 목록에 없는 호스트입니다(서버 설정 필요).',
+        [{ field: 'baseUrl', message: '허용 목록(DATA_EGRESS_ALLOWED_HOSTS)에 이 호스트를 추가해야 합니다.' }],
+      );
+    }
+  }
+
   async create(dto: CreateApiConnectionDto): Promise<ApiConnection> {
     const name = dto.name.trim();
     const nameNormalized = normalizeText(name);
@@ -128,6 +141,7 @@ export class ApiConnectionsService {
     if (existing) throw new ApiException('DUPLICATE_NAME', 409, '이미 같은 이름의 연결이 있습니다.');
 
     this.assertConfirmRawPersonalData(name, dto.allowRawPersonalData, dto.confirmRawPersonalData);
+    this.assertEgressAllowedForSave(dto.baseUrl);
 
     const defaultTimeout = this.config.get<number>('LEGACY_API_DEFAULT_TIMEOUT_MS') ?? 3000;
     const rateLimitPerMin = dto.rateLimitPerMin ?? resolveDefaultRateLimit(dto.personalDataLookup);
@@ -177,6 +191,9 @@ export class ApiConnectionsService {
     const nextAllowRaw = dto.allowRawPersonalData ?? current.allowRawPersonalData;
     if (dto.allowRawPersonalData === true && !current.allowRawPersonalData) {
       this.assertConfirmRawPersonalData(name, true, dto.confirmRawPersonalData);
+    }
+    if (dto.baseUrl !== undefined) {
+      this.assertEgressAllowedForSave(dto.baseUrl);
     }
 
     const row = await this.prisma.apiConnection.update({

@@ -315,6 +315,8 @@ export class LegacyApiService {
         return '요청 경로가 허용되지 않는 형식입니다.';
       case 'SECRET_MISSING':
         return '시크릿이 설정되지 않았습니다. 서버 환경변수를 확인하세요.';
+      case 'EGRESS_BLOCKED':
+        return '이 주소는 서버의 외부 전송 허용 목록에 없습니다. 서버 설정(DATA_EGRESS_ALLOWED_HOSTS)에 추가해야 합니다.';
       default:
         return '확인 중 문제가 발생했습니다.';
     }

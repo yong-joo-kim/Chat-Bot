@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../common/egress/egress-guard';
 import { RAG_PATHS } from './lib/rag-paths';
 import type { RagPathKey } from './lib/rag-paths';
 
@@ -69,13 +70,19 @@ export class RagHttpClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${baseUrl}${RAG_PATHS[key]}`, {
+      const url = `${baseUrl}${RAG_PATHS[key]}`;
+      assertEgressAllowed('RAG', url);
+      const res = await fetch(url, {
         method,
         // §0-2: 헤더를 빠뜨리면 본문이 무시되고 쿼리스트링을 읽는다 — 항상 명시한다(불변식 3).
         headers: { 'Content-Type': 'application/json' },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,
+        redirect: egressRedirectMode(),
       });
+      // [신규 No.45] M-1 — 허용 호스트가 비허용 호스트로 리다이렉트하는 우회를 차단한다.
+      // 기존 RAG 실패 경로(networkError:true)로 흡수한다(§6.3의 "네트워크 계열 예외" 규약과 동일).
+      assertNoRedirectResponse('RAG', url, res.status);
       const text = await res.text();
       let json: unknown;
       try {

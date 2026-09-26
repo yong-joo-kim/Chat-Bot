@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
 import {
   EmbeddingKind,
   EmbeddingProvider,
@@ -101,12 +102,16 @@ export class HttpEmbeddingProvider implements EmbeddingProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${this.baseUrl}${path}`, {
+      const url = `${this.baseUrl}${path}`;
+      assertEgressAllowed('EMBEDDING', url);
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal,
+        redirect: egressRedirectMode(),
       });
+      assertNoRedirectResponse('EMBEDDING', url, res.status);
       if (!res.ok) {
         throw new EmbeddingProviderUnavailableError(`ml-worker HTTP ${res.status}`);
       }
@@ -138,7 +143,10 @@ export class HttpEmbeddingProvider implements EmbeddingProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${baseUrl}/health`, { signal: controller.signal });
+      const url = `${baseUrl}/health`;
+      assertEgressAllowed('EMBEDDING', url);
+      const res = await fetch(url, { signal: controller.signal, redirect: egressRedirectMode() });
+      assertNoRedirectResponse('EMBEDDING', url, res.status);
       if (!res.ok) {
         throw new EmbeddingProviderUnavailableError(`ml-worker 헬스체크 HTTP ${res.status}`);
       }

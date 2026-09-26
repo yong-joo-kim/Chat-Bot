@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
+import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
 import { AugmentationGenerateInput, AugmentationProvider } from './augmentation-provider.port';
 
 const AugmentResponseSchema = z.object({
@@ -37,12 +38,16 @@ export class LocalAugmentationProvider implements AugmentationProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(`${this.config.baseUrl}/augment`, {
+      const url = `${this.config.baseUrl}/augment`;
+      assertEgressAllowed('AUGMENT_LOCAL', url);
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seeds: input.seeds, targetCount: input.targetCount, locale: input.locale }),
         signal: controller.signal,
+        redirect: egressRedirectMode(),
       });
+      assertNoRedirectResponse('AUGMENT_LOCAL', url, res.status);
       if (!res.ok) throw new Error(`ml-worker /augment HTTP ${res.status}`);
       const json = await res.json();
       const parsed = AugmentResponseSchema.safeParse(json);
@@ -58,7 +63,10 @@ export class LocalAugmentationProvider implements AugmentationProvider {
 
   async healthy(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.config.baseUrl}/augment/health`, { signal: AbortSignal.timeout(3000) });
+      const url = `${this.config.baseUrl}/augment/health`;
+      assertEgressAllowed('AUGMENT_LOCAL', url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000), redirect: egressRedirectMode() });
+      assertNoRedirectResponse('AUGMENT_LOCAL', url, res.status);
       if (!res.ok) return false;
       const json = await res.json();
       const parsed = AugmentHealthResponseSchema.safeParse(json);

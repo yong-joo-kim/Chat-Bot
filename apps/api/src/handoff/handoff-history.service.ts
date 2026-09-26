@@ -3,6 +3,7 @@ import type { HandoffHistoryDetailResponse, HandoffHistoryItem, HandoffHistoryQu
 import { HANDOFF_LIMITS } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
+import { openField } from '../common/crypto/field-crypto';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { buildHandoffSummary } from './lib/handoff-summary';
 import { computeSessionRef, assignAliases } from './lib/session-ref';
@@ -113,7 +114,7 @@ export class HandoffHistoryService {
           at: m.createdAt,
           sender: m.sender as 'USER' | 'AGENT' | 'SYSTEM',
           systemKind: m.systemKind as 'CONNECTED' | 'ENDED' | 'FAILED' | undefined,
-          text: m.text,
+          text: openField('HANDOFF_TEXT', m.id, m.text) ?? '',
           senderName: m.senderUserName ?? undefined,
         })),
     ].sort((a, b) => a.at.getTime() - b.at.getTime());

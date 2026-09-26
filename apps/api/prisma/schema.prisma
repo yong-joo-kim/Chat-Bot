@@ -94,6 +94,8 @@ model Chatbot {
   environment             ChatbotEnvironment?
   environmentSwitchLogs   EnvironmentSwitchLog[]
   embeddingTextVectors    EmbeddingTextVector[]
+  /// [신규 No.45] 보존기간 재정의(없으면 전역 따름). 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제 동반 삭제.
+  retentionPolicy         RetentionPolicy?
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -426,6 +428,13 @@ model AuditLog {
   ip          String?
   userAgent   String?
   createdAt   DateTime @default(now())
+  /// [신규 No.45] 체인 순번 — 커밋된 행에만 부여(헤드 CAS와 같은 트랜잭션). null = 체인 도입 전 행 ·
+  /// 체인 폴백 행 · 구버전 인스턴스 행.
+  seq      Int?    @unique
+  /// [신규 No.45] 직전 체인 행의 rowHash(seq=1이면 제네시스 해시 "g1:genesis").
+  prevHash String?
+  /// [신규 No.45] "s1:<sha256 hex>" | "h1:<keyId>:<hmac-sha256 hex>" — 접두가 방식이다.
+  rowHash  String?
 
   @@index([createdAt])
   @@index([actorId, createdAt])
@@ -518,6 +527,9 @@ model ConversationLog {
   /// [신규 No.40] 이 턴을 처리할 때의 운영 포인터(모드 켜짐) — 엔진·BLOCK·상담 턴 공통. null = 라이브
   /// 서빙(모드 꺼짐). FK 없음 · 인덱스 없음(1차 = 적재만) · 쓰기 주체 record() 1곳 · 적재 후 불변 · 백필 없음.
   servedVersionId String?
+  /// [신규 No.45] 보존기간 파기로 userMessage·botResponse를 ""로 소거한 시각. 쓰기 = governance-data.writer.ts 1파일.
+  /// 행·수치·버킷·sessionId·groupId·매칭 id는 변경하지 않는다(ADR-0040 §4). null = 소거 전.
+  textPurgedAt DateTime?
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
@@ -525,6 +537,8 @@ model ConversationLog {
   @@index([dayBucket])
   /// [신규 No.24] 세션 1개 전문 조회(FR-CS3-6, 대화 보기) — 기존 인덱스로는 챗봇 전체를 훑는다.
   @@index([chatbotId, sessionId, createdAt])
+  /// [신규 No.45] 파기 대상 탐색(소거된 행을 다시 훑지 않게).
+  @@index([chatbotId, textPurgedAt, createdAt])
   @@map("conversation_logs")
 }
 
@@ -648,6 +662,9 @@ model UnansweredQuestion {
   /// [신규 No.44] NEGATIVE_FEEDBACK 항목의 최근 👎 턴(ConversationLog.id). FK 없음(로그 규약).
   /// 상세 화면이 당시 봇 답변(마스킹본)·매칭 대상을 이 로그 행에서 읽는다 — 텍스트 중복 저장 0.
   lastFeedbackLogId  String?
+  /// [신규 No.45] 종결(RESOLVED·IGNORED) 항목의 questionText·variants·questionNormalized 소거 시각.
+  /// questionNormalized 소거값은 "#PURGED#<id>"(대문자 — normalizeText 결과와 충돌 불가 · 유일 키 보존).
+  textPurgedAt       DateTime?
 
   @@unique([chatbotId, source, questionNormalized])   // [변경 No.44] (chatbotId, questionNormalized) → 소스 분리
   @@index([chatbotId, status, occurredCount])
@@ -1390,10 +1407,13 @@ model SurveyAnswer {
   channelType   String
   isDuplicate   Boolean        @default(false)
   answeredAt    DateTime
+  /// [신규 No.45] 자유 텍스트 소거 시각(textValue → ""). 선택·척도 행은 대상 아님.
+  textPurgedAt  DateTime?
 
   /// 멱등 — 같은 시도·문항·선택지 두 번 적재 불가
   @@unique([responseId, questionKey, choiceKey])
   @@index([surveyId, questionKey, dayBucket])
+  @@index([surveyId, textPurgedAt, answeredAt])
   @@map("survey_answers")
 }
 
@@ -1513,9 +1533,12 @@ model HandoffMessage {
   /// SYSTEM ENDED 전용 JSON { kind:'NODE', nodeId, label } — 종료 시점 설정 스냅샷
   action            String?
   createdAt         DateTime       @default(now())
+  /// [신규 No.45] 종료된 상담 메시지의 text 소거 시각(text → ""). rawText 소거(ADR-0036)와 별개.
+  textPurgedAt      DateTime?
 
   @@unique([handoffSessionId, seq])
   @@index([rawExpiresAt])                      // 정리 루프: 만료 원문(값이 있는 행만 소수)
+  @@index([chatbotId, textPurgedAt, createdAt])
   @@map("handoff_messages")
 }
 
@@ -1545,3 +1568,91 @@ model CannedResponse {
 // (chatbotId, sessionId) WHERE status IN ('CONNECTING','CONNECTED') — 세션당 활성 상담 최대 1건(P-8).
 // test_runs_chatbotId_active_key·deploy_schedules 선례와 같이 마이그레이션 SQL에 raw로만 존재한다.
 // `prisma migrate dev` diff가 이 인덱스(와 기존 3개)를 삭제하는 구문을 끼워 넣지 않는지 반드시 확인할 것.
+
+/// [신규 No.45] 보존기간 정책 — 전역 1행(scopeKey="GLOBAL", chatbotId=null) + 챗봇 재정의 N행(scopeKey=chatbotId).
+/// 쓰기 = retention-policy.service.ts 1파일. 행 없음 = 전부 무기한(전역) / 전역 따름(챗봇).
+model RetentionPolicy {
+  scopeKey       String   @id
+  chatbotId      String?  @unique
+  chatbot        Chatbot? @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// JSON { [RetentionTargetKind]: number | null } — 전역: 키 없음 = 무기한 · 챗봇: 키 없음 = 전역 따름, null = 무기한(대화 원천 4종만)
+  days           String   @default("{}")
+  /// JSON { [kind]: { days: number | null | "GLOBAL", effectiveAt: ISO } } — 단축 유예 대기분(적용 시각 도래 후 유효 계산에 반영)
+  pending        String   @default("{}")
+  updatedById    String?
+  updatedByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("retention_policies")
+}
+
+/// [신규 No.45] 파기·백필·재암호화·체인 검증 실행 이력. 본문·행 id 목록·sessionId 컬럼 없음.
+/// 쓰기 = governance-data.writer.ts 1파일. 보존 = AUDIT_LOGS 정책과 같은 기한으로 행 삭제.
+model RetentionRun {
+  id            String    @id @default(uuid())
+  /// 같은 tick 실행의 묶음 id(요약 1행 + 대상별 행)
+  runId         String
+  /// PURGE | BACKFILL | REENCRYPT | CHAIN_VERIFY
+  kind          String
+  /// RetentionTargetKind | EncryptedFieldId | null(요약 행)
+  target        String?
+  /// null = 전역·요약
+  chatbotId     String?
+  days          Int?
+  cutoff        DateTime?
+  affectedCount Int       @default(0)
+  /// SUCCEEDED | PARTIAL | FAILED
+  status        String
+  /// WINDOW_ENDED | MAX_ROWS | LEASE_LOST | HASH_MISMATCH | SEQ_GAP | TAIL_MISSING | KEY_UNAVAILABLE | ANCHOR_MISSING | DB_ERROR ...
+  resultCode    String?
+  headSeq       Int?
+  headHash      String?
+  anchorSeq     Int?
+  instanceId    String
+  startedAt     DateTime
+  finishedAt    DateTime?
+
+  @@index([kind, startedAt])
+  @@index([chatbotId, startedAt])
+  @@map("retention_runs")
+}
+
+/// [신규 No.45] 감사 체인 머리(싱글턴 id="HEAD"). 쓰기 = audit-log.service.ts 1파일(record()의 CAS · 최초 생성).
+model AuditChainHead {
+  id        String   @id
+  headSeq   Int
+  headHash  String
+  updatedAt DateTime @updatedAt
+
+  @@map("audit_chain_heads")
+}
+
+/// [신규 No.45] 체인 앵커 — "GENESIS"(도입 시 1회) · "RETENTION"(보존 파기로 앞부분 삭제 시 마지막 삭제 행 — 최신 1행 갱신).
+/// 쓰기 = audit-log.service.ts(GENESIS) · governance-data.writer.ts(RETENTION).
+model AuditChainAnchor {
+  id                   String    @id
+  seq                  Int
+  hash                 String
+  /// 제네시스 전용 — 체인 도입 전 행 수·최대 createdAt
+  preChainRows         Int?
+  preChainMaxCreatedAt DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("audit_chain_anchors")
+}
+
+/// [신규 No.45] 거버넌스 잡 상태(jobName = "RETENTION" | "FIELD_CRYPTO"). 임대(claimToken·claimedAt CAS) +
+/// 진행 상태 JSON(재암호화 커서·암호화 통계·v1 토큰 점검 결과 — 본문 0). 쓰기 = job-lease.ts · 잡 2파일.
+model GovernanceJobState {
+  jobName          String    @id
+  claimToken       String?
+  claimedAt        DateTime?
+  /// KST YYYY-MM-DD — 그날 파기를 끝까지 완료했는가(PARTIAL이면 갱신하지 않는다)
+  lastCompletedDay String?
+  state            String    @default("{}")
+  updatedAt        DateTime  @updatedAt
+
+  @@map("governance_job_states")
+}

@@ -4,6 +4,7 @@ import type { TranscriptEntry, TranscriptQuery, TranscriptResponse } from '@chat
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { AuditLogService } from '../audit-logs/audit-log.service';
+import { DECRYPT_FAILED_TEXT, openField } from '../common/crypto/field-crypto';
 import type { SessionUser } from '../common/auth/session-context';
 import { SessionRefResolverService } from './session-ref-resolver.service';
 import { HandoffSettingsCacheService } from './handoff-settings-cache.service';
@@ -80,7 +81,11 @@ export class HandoffTranscriptService {
       .filter((m) => m.systemKind !== 'TAKEOVER')
       .map((m) => {
         const owner = handoffById.get(m.handoffSessionId);
+        // [신규 No.45 §7.8] 표시 판정을 통과한 행만 복호화한다 — 표시되지 않을 원문은 메모리에서도
+        // 평문이 되지 않는다. 개봉 실패는 `rawText` 키를 생략한다(원문을 [복호화 실패]로 보여주지 않는다).
         const showRaw = rawVisible && m.sender === 'USER' && owner?.status === 'CONNECTED' && m.rawText !== null && m.rawExpiresAt !== null && m.rawExpiresAt > new Date();
+        const openedRawText = showRaw ? openField('HANDOFF_RAW_TEXT', m.id, m.rawText) : null;
+        const rawTextOk = showRaw && openedRawText !== null && openedRawText !== DECRYPT_FAILED_TEXT;
         return {
           kind: 'HANDOFF' as const,
           messageId: m.id,
@@ -89,8 +94,8 @@ export class HandoffTranscriptService {
           at: m.createdAt,
           sender: m.sender as 'USER' | 'AGENT' | 'SYSTEM',
           systemKind: m.systemKind as 'CONNECTED' | 'ENDED' | 'FAILED' | undefined,
-          text: m.text,
-          rawText: showRaw ? (m.rawText as string) : undefined,
+          text: openField('HANDOFF_TEXT', m.id, m.text) ?? '',
+          rawText: rawTextOk ? (openedRawText as string) : undefined,
           senderName: m.senderUserName ?? undefined,
         };
       });
