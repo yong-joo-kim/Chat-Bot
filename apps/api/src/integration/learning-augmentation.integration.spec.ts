@@ -267,7 +267,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
     }
   }
 
-  async function pollClassifierStatus(chatbotId: string, maxWaitMs = 15_000): Promise<{ state: string }> {
+  async function pollClassifierStatus(chatbotId: string, maxWaitMs = 30_000): Promise<{ state: string }> {
     const start = Date.now();
     for (;;) {
       const res = await admin<{ state: string }>('GET', `/chatbots/${chatbotId}/intent-classifier/status`);
@@ -320,7 +320,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
       expect(afterBody.state).toEqual(beforeBody.state);
       expect(afterBody.stateReset).toBe(beforeBody.stateReset);
       expect(afterBody.messageId).not.toBe(beforeBody.messageId);
-    }, 30_000);
+    }, 90_000); // [test-automation 2026-09-27 -- No.46 회귀 조사, 2차] 45_000ms로 올린 뒤에도 전체 스위트 병렬 실행에서 다시 초과(Exceeded timeout of 45000 ms)를 재현했다 -- 이 테스트는 분류기 학습 폴링(최대 15_000ms)을 포함해 순차 HTTP 호출이 많아 부하가 크면 누적 대기가 상당히 길어질 수 있다. 90_000으로 재상향(pollClassifierStatus 자체 상한도 함께 올림).
   });
 
   describe('② VIEWER 403 게이팅(AC-L3-4, 백엔드 축)', () => {
@@ -353,7 +353,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
       expect(listRes.status).toBe(200);
       const statusRes = await viewer('GET', `/chatbots/${chatbotId}/intent-classifier/status`);
       expect(statusRes.status).toBe(200);
-    });
+    }, 30_000); // [test-automation 2026-09-27 -- No.46 회귀 조사] 기존에는 jest 기본 20_000ms만 적용돼 전체 스위트 병렬 실행에서 타임아웃을 재현했다(HTTP 호출 6회 순차 대기) -- 30_000으로 상향.
   });
 
   describe('③ 미응답 요소분해 통합 반영(No.15 무회귀 포함, AC-L2-5/8)', () => {

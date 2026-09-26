@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Prisma } from '@prisma/client';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
 import { toKstDayBucket } from '@chat-bot/shared-types';
 
@@ -33,6 +34,29 @@ let authCookie = '';
 let editorCookie = '';
 let viewerCookie = '';
 
+/**
+ * [test-automation 2026-09-27 -- No.46 회귀 조사] AC-SV3-1이 전체 스위트 병렬 실행에서 흔들리는
+ * 것(surveyTurns.length가 3 미만)을 관측했다 -- `conversation-log.service.ts`의 `record()`는
+ * 요청 핸들러 안에서 `void`로 호출되는 완전한 fire-and-forget이라(드레인 훅 없음, 다른 그룹의
+ * 선례와 같은 원인 -- `omnichannel-inbox-query-count.integration.spec.ts` 주석 참고) HTTP 응답이
+ * 돌아온 직후 곧바로 `conversationLog`를 읽으면, 부하가 큰 환경에서는 마지막 턴의 로그 적재가
+ * 아직 커밋되지 않았을 수 있다. 짧게 폴링해 기대 개수에 도달할 때까지 기다린다(진짜 결함이면
+ * 여전히 시간 안에 값이 모자라 실패로 드러난다 -- 불변식은 그대로 개수 비교로 검증한다).
+ */
+async function waitForConversationLogCount(
+  prisma: PrismaService,
+  where: Prisma.ConversationLogWhereInput,
+  minCount: number,
+  timeoutMs = 5000,
+): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    const count = await prisma.conversationLog.count({ where });
+    if (count >= minCount) return;
+    if (Date.now() - start > timeoutMs) return; // 시간 초과 -- 이후 단언이 실제 값으로 실패한다.
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
 function jsonRequest<T = unknown>(method: string, url: string, body?: unknown, cookieOverride?: string): Promise<ApiResponse<T>> {
   return new Promise((resolve, reject) => {
     const payload = body !== undefined ? JSON.stringify(body) : undefined;
@@ -309,6 +333,7 @@ describe('설문관리(No.27) 통합 테스트', () => {
       expect(textAnswer?.textValue).toBe('아주 좋았어요');
 
       const chatbotIdOfSession = chatbotId;
+      await waitForConversationLogCount(prisma, { chatbotId: chatbotIdOfSession, sessionId }, 3);
       const logs = await prisma.conversationLog.findMany({ where: { chatbotId: chatbotIdOfSession, sessionId }, orderBy: { createdAt: 'asc' } });
       const surveyTurns = logs.filter((l) => l.surveyTurn);
       expect(surveyTurns.length).toBeGreaterThanOrEqual(3); // 응답 3턴(완료 포함)은 설문이 소비했다.

@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
+import { textHashOf } from '../embedding/lib/text-hash';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
@@ -204,13 +205,55 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     return jsonRequest(method, `${baseUrl}${path}`, body, { Cookie: editorCookie });
   }
 
+  /**
+   * [test-automation 2026-09-27 -- No.46 회귀 조사] 원래는 "30ms 고정 유예 후 isRunning()이 false가
+   * 될 때까지 폴링"이었다 -- 전체 스위트 병렬 실행(CPU 경합)에서 schedule() 호출 자체가 30ms 안에
+   * 아직 실행되지 않은 경우("시작 전")와 "이미 끝났음"을 구분하지 못해, patch2가 유발한 재색인이
+   * 이 함수의 조기 반환 뒤 뒤늦게 실행되어 restore 측정 구간(reset() 이후)으로 새어 들어가는 것을
+   * 재현·확인했다(AC-H3-7이 기대값 5 대신 10 = 2×5로 실패 -- patch2 몫 5 + restore 몫 5가 한 구간에
+   * 합쳐짐). omnichannel-inbox-query-count.integration.spec.ts의 M-A 하드닝(연속 정적 샘플 요구)과
+   * 같은 원칙을 적용한다 -- 고정 유예 없이 t=0부터 폴링하되, isRunning()===false를 연속 5회(100ms)
+   * 관측해야 idle로 판정해 schedule() 호출 지연을 흡수한다(진짜 무한 대기는 여전히 timeoutMs 뒤
+   * 실패로 드러난다 -- 불변식 자체는 여전히 정확한 값과의 등호로 검증한다).
+   */
   async function waitForReindexIdle(chatbotId: string, timeoutMs = 15_000): Promise<void> {
-    // schedule()은 동기로 running Set에 등록되지만, HTTP 응답이 먼저 돌아올 수 있어 짧은 유예를 둔다.
-    await new Promise((r) => setTimeout(r, 30));
     const start = Date.now();
-    while (reindexQueue.isRunning(chatbotId)) {
-      if (Date.now() - start > timeoutMs) throw new Error('재색인 대기 타임아웃');
+    let stableStreak = 0;
+    for (;;) {
       await new Promise((r) => setTimeout(r, 20));
+      if (!reindexQueue.isRunning(chatbotId)) {
+        stableStreak += 1;
+        if (stableStreak >= 5) return;
+      } else {
+        stableStreak = 0;
+      }
+      if (Date.now() - start > timeoutMs) throw new Error('재색인 대기 타임아웃');
+    }
+  }
+
+  /**
+   * [test-automation 2026-09-27 -- No.46 회귀 조사, 2차 조치] `waitForReindexIdle`(isRunning() 연속
+   * idle 샘플 방식)만으로는 부족했다 -- 전체 스위트 병렬 실행(특히 워커 수를 줄여 개별 파일의
+   * 절대 실행 시간이 늘어난 조건)에서 schedule() 호출 자체가 관측 윈도(연속 5회 idle, 100ms)보다
+   * 훨씬 크게 지연될 수 있어, 이전 단계가 유발한 재색인이 다음 reset() 이후 측정 구간으로 새어
+   * 들어가 5의 배수(10 · 15)로 관측됐다. 인메모리 플래그를 도청하는 대신 이 시험이 실제로 확인
+   *하고 싶은 것 -- "이 의도의 예문이 DB에 반영한 텍스트로 재색인을 마쳤다" -- 을 직접 DB에서
+   * 확인한다(제품 코드의 실제 재색인 완료 신호 -- `embeddingVector.textHash`가 최신 텍스트와
+   * 일치 + `status: READY`). 타이밍 가정이 전혀 없어 부하와 무관하게 결정적이다.
+   */
+  async function waitForIntentExamplesIndexed(chatbotId: string, intentId: string, examples: string[], timeoutMs = 20_000): Promise<void> {
+    const expected = examples.map((e) => textHashOf(e));
+    const start = Date.now();
+    for (;;) {
+      const rows = await prisma.embeddingVector.findMany({
+        where: { chatbotId, ownerType: 'INTENT_EXAMPLE', ownerId: intentId, modelId: MODEL_ID },
+        select: { slotIndex: true, textHash: true, status: true },
+      });
+      const bySlot = new Map(rows.map((r) => [r.slotIndex, r]));
+      const ready = rows.length === expected.length && expected.every((h, i) => bySlot.get(i)?.status === 'READY' && bySlot.get(i)?.textHash === h);
+      if (ready) return;
+      if (Date.now() - start > timeoutMs) return; // 시간 초과 -- 이후 단언이 실제 값으로 실패해 드러난다.
+      await new Promise((r) => setTimeout(r, 30));
     }
   }
 
@@ -230,14 +273,14 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     const intentId = createRes.body.intent.id;
 
     // 초기 색인(이름 1 + 예문 30 = 31건)이 끝날 때까지 대기 — 측정 대상이 아니므로 카운터를 리셋한다.
-    await waitForReindexIdle(chatbotId);
+    await waitForIntentExamplesIndexed(chatbotId, intentId, baseline);
     embeddingServer.reset();
 
     // 예문 중 앞 5건만 텍스트를 바꾼다(같은 슬롯 수 유지 — ID 보존 시나리오의 "예문 배열 전체 교체"와 동일 모양).
     const edited = baseline.map((text, i) => (i < CHANGED_COUNT ? `${text}-수정본` : text));
     const patchRes = await editor('PATCH', `/chatbots/${chatbotId}/intents/${intentId}`, { examples: edited });
     expect(patchRes.status).toBe(200);
-    await waitForReindexIdle(chatbotId);
+    await waitForIntentExamplesIndexed(chatbotId, intentId, edited);
     // 편집 직후 재색인은 바뀐 5건만 임베딩해야 한다(IndexerService의 textHash 재사용 규칙 자체의 사전 확인).
     expect(embeddingServer.totalTextsSinceReset()).toBe(CHANGED_COUNT);
 
@@ -254,7 +297,7 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     });
     expect(secondCreate.status).toBe(201);
     const intentId2 = secondCreate.body.intent.id;
-    await waitForReindexIdle(chatbotId);
+    await waitForIntentExamplesIndexed(chatbotId, intentId2, baseline.map((t) => `2차-${t}`));
 
     const saved = await editor<{ version: { id: string } }>('POST', `/chatbots/${chatbotId}/versions`, { label: '기준(원본 예문)' });
     expect(saved.status).toBe(201);
@@ -264,7 +307,7 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     const editedAgain = baseline.map((t, i) => (i < CHANGED_COUNT ? `2차-${t}-재수정` : `2차-${t}`));
     const patch2 = await editor('PATCH', `/chatbots/${chatbotId}/intents/${intentId2}`, { examples: editedAgain });
     expect(patch2.status).toBe(200);
-    await waitForReindexIdle(chatbotId);
+    await waitForIntentExamplesIndexed(chatbotId, intentId2, editedAgain);
 
     const currentHash = (await editor<{ contentHash: string }>('GET', `/chatbots/${chatbotId}/versions/current`)).body.contentHash;
     expect(currentHash).not.toBe(baseHash);
@@ -285,7 +328,8 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     expect(restore.body.contentHash).toBe(baseHash);
     expect(restore.body.reindexScheduled).toBe(true);
 
-    await waitForReindexIdle(chatbotId);
+    await waitForIntentExamplesIndexed(chatbotId, intentId2, baseline.map((t) => `2차-${t}`));
+    await waitForReindexIdle(chatbotId); // 위 DB 확인 뒤에도 남을 수 있는 완전히 무관한 백그라운드 재실행(있다면)을 위한 보조 대기 -- 기존 방식을 안전망으로 유지.
 
     // 핵심 단언(AC-H3-7/NFR-HP6) — intentId2의 5개 예문만 원래 텍스트로 되돌아갔으므로 재색인
     // 임베딩 호출 대상 문장 수는 정확히 5건이다. intentId(변경하지 않고 둔 첫 번째 의도)의 31개

@@ -80,6 +80,25 @@ function jsonRequest<T = unknown>(
 }
 
 /**
+ * [test-automation 2026-09-27 -- No.46 회귀 조사] AC-I3-3/AC-I3-4가 전체 스위트 병렬 실행에서
+ * "read ECONNRESET"으로 흔들리는 것을 관측했다 -- 이 테스트는 execSync(ts-node 백필 스크립트,
+ * 별도 자식 프로세스 기동 -- 무겁고 느리다)로 이 프로세스의 이벤트 루프를 여러 초 동안 완전히
+ * 막은 직후 곧바로 jsonRequest(GET)를 보낸다. CPU 경합이 큰 전체 스위트 실행에서는 이 시점의
+ * 소켓 상태가 불안정할 수 있어(정확한 근본 원인은 미확정 -- 보고 참고) 멱등 GET에 한해 1회
+ * 재시도로 흡수한다(단언은 재시도 뒤에도 그대로 정확한 값과의 등호로 검증한다).
+ */
+async function jsonRequestRetrying<T = unknown>(method: string, url: string, body?: unknown, cookie: string | null = authCookie): Promise<ApiResponse<T>> {
+  try {
+    return await jsonRequest<T>(method, url, body, cookie);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '';
+    if (!/ECONNRESET|ECONNREFUSED|socket hang up/i.test(message)) throw e;
+    await new Promise((r) => setTimeout(r, 200));
+    return jsonRequest<T>(method, url, body, cookie);
+  }
+}
+
+/**
  * No.29 통합 통계 통합 테스트(`integrated-stats-설계.md` §14, ADR-0033). AC-I1(보존)·AC-I2(정의 일치)·
  * AC-I3(귀속)·AC-I4(그룹 보관)·EX-I-2(스코프 검증)·No.29 의도별 매칭 핵심 항목을 HTTP 계약 레벨에서 검증한다.
  * 2026-09-24 회차 — 코드리뷰 통과 후 남은 공백(AC-I2-2/3/5/7·AC-I3-2~4·AC-I4 나머지 6경로·AC-I5-1~6·
@@ -1032,7 +1051,7 @@ describe('통합 통계(No.29) 통합 테스트', () => {
       });
 
       const after = IntegratedOverviewSchema.parse(
-        (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+        (await jsonRequestRetrying('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
       );
       expect(after.backfillPending).toBe(false);
       expect(after.totals.turnCount).toBe(2);
@@ -1044,7 +1063,7 @@ describe('통합 통계(No.29) 통합 테스트', () => {
         stdio: 'pipe',
       });
       const afterTwice = IntegratedOverviewSchema.parse(
-        (await jsonRequest('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
+        (await jsonRequestRetrying('GET', `${baseUrl}/stats/integrated/overview?scope=GROUP&groupId=${groupId}`)).body,
       );
       expect(afterTwice.totals.turnCount).toBe(2);
       expect(afterTwice.backfillPending).toBe(false);
