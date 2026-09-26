@@ -262,3 +262,45 @@ feat: 데이터 거버넌스(No.45) 기능그룹 구현
 - 테스트 apps/api jest 212 suites/3226 tests(9건은 본 그룹과 무관한 기존 feedback/message-feedback.service.spec.ts 실패 — clean HEAD에서도 재현), apps/web vitest 147 files/758 tests, apps/widget vitest 18 files/133 tests, packages/dialogue-engine jest 15 suites/182 tests(변경 0건) 전부 통과.
 - 커밋 분리: ① 00b11cf(기반 — 출구 가드·필드 봉투·거버넌스 런타임, 관측 응답 불변·기존 시험 무수정 통과) → ② 6fad633(감사로그 해시 체인·열람/내보내기 감사, 의도된 기대값 변경 X-1(AuditAction 14→16)뿐) → ③ 4301714(거버넌스 본체 — 부트스트랩·정책·잡·데이터 지도·콘솔·문서, 의도된 기대값 변경 X-2~X-8).
 - 알려진 한계: PUT 보존 정책 응답의 `appliedNow`/`pendingKinds` 필드 미구현 · `env-key.provider.ts` 전용 단위 시험 부재(통합 시험으로만 커버) · 부하(k6) 시나리오 미자동화 · 기존 간헐 실패 시험 2종(version-history-reindex, topic-system 통합 시험 — 전체 스위트 병렬 실행 시 드물게 실패, 본 그룹 범위 밖) · 2차 범위(대화로그·미응답 큐 본문 암호화(블라인드 인덱스)·KMS/HSM/Vault·정보주체 파기 요청·SIEM 연동·감사 전용 역할·2인 승인·멀티테넌시).
+
+## 2026-09-26 — 169be3f (선행 분리 커밋 8b874d3·78c70cf·1c0e3e5)
+
+feat: 업무 자동화 워크플로우(No.41) 기능그룹 구현
+
+- 대화그래프에 "업무 요청 보내기" 아웃풋(`WORKFLOW`)을 신설한다 — 폼 슬롯·상수 바인딩(No.26 `ApiBindingSchema` 그대로 재사용), 사용자에게 보이지 않는 비종결 아웃풋. 엔진은 대화를 멈추지 않고 결과 선택 필드 `workflowEvents?`에 "보낼 것"만 싣는다(`surveyEvents` 선례 방식, 재조립 경로 `resumeAfterApiCall` 등에서도 필드 소실 없음). 챗봇별 이벤트 구독 5종(상담 시작·종료·설문 완료·부정 평가·연속 미응답 N회)은 원천 서비스(대화로그·상담·설문·평가)가 커밋 후 순수 포트(`WORKFLOW_EVENT_SINK`)로 fire-and-forget 발행한다.
+- 범용 아웃바운드 웹훅 1종: HMAC-SHA256 서명(`t=,v1=`, `X-Chatbot-Delivery`), 멱등키(`dedupeKey`), 지수 백오프 재시도, "비밀 주소" 옵션(`urlSecretRef`). 발송 결과는 DB 발송함(`WorkflowRun` = 발송함 겸 실행 이력) + `PollingLoop` + 행 선점(CAS)으로 최소 1회 보장(멀티 인스턴스 1회 발송). 일시 정지 중 신규·대기 요청은 보류(HELD)되고 재개 시 발송, 24시간 초과는 만료(EXPIRED). 실패 본문은 7일 보관 후 소거하며 그 안에서만 재발송 가능하다.
+- No.45 출구 게이트에 6번째 클래스 `WORKFLOW_WEBHOOK`을 편입한다. No.26의 전송·DNS·IP 정책(SSRF 방어) 부품을 이동 없이 두 번째 DI 토큰으로 등록해 그대로 재사용하고(SSRF 코드 1벌 유지), 사설 대역 허용은 레거시와 별도인 `WORKFLOW_PRIVATE_ALLOWLIST`로 관리한다. 공유 전송은 `node:http(s).request` 기반이라 리다이렉트를 원래 따라가지 않는다(3xx = 영구 실패, 모드 무관).
+- 재시도용 발송함 본문(`WorkflowRun.payload`)은 `EncryptedFieldId` 4번째 대상 `WORKFLOW_PAYLOAD`로 암호화하고(성공 즉시·실패 7일 뒤 소거), 보존/파기(No.45 `governance-data.writer.ts`·`retention-policy.service.ts`)에 종단 편입한다.
+- 신규 권한 0종(대상 = `security:write`, 구독·재발송 = `chatbot:write`, 노드 = `dialogue:write` — 전부 기존 권한 재사용), `@Public()` 엔드포인트 8개 그대로 유지(신규 관리자 API는 전부 비공개).
+- 테스트: apps/api jest 235 suites/3522 tests, packages/dialogue-engine jest 17 suites/200 tests(변경 0건), apps/web vitest 164 files/829 tests, apps/widget vitest 18 files/133 tests 전부 통과.
+
+### PM 결정 요점(P-1~P-12, 전부 추천안 채택)
+
+P-1 트리거 = 대화그래프 "업무 요청 보내기" 노드 + 이벤트 구독(닫힌 목록 5종) · P-2 엔진에 새 출력 종류(`surveyEvents` 방식), 기존 엔진 시험 무수정 통과, 재조립 경로 필드 소실 금지 · P-3 범용 아웃바운드 웹훅 1종·HMAC 서명·재시도·멱등키·"비밀 주소" 옵션 · P-4 비동기 발송만(대화는 결과를 기다리지 않음), 결과는 콘솔 이력, `@Public()` 8 유지 · P-5 이벤트 5종(상담 시작·종료·설문 완료·부정 평가·연속 미응답 N회) · P-6 페이로드 = 메타데이터+`sessionRef`+마스킹된 폼 값(대상별 원문 허용은 확인 문구+감사), 대화 본문 0, 재시도 본문은 성공 즉시·실패 7일 뒤 소거 · P-7 비밀 = `WORKFLOW_SECRET__<REF>` 환경변수(DB 값 0) · P-8 신규 권한 0 · P-9 일시 정지 중 보류→재개 시 발송, 24시간 초과 만료 · P-10 노드는 스냅샷 자동 포함, 대상·구독은 저장 즉시 운영 반영(환경 밖) · P-11 2차 범위 = 콜백·대화 표시·프리셋·메일·운영 이벤트·대화 종료·발췌 첨부 · P-12 GPU 1(카탈로그 2 → 하향, JSON 조립·HMAC·HTTP 송신·DB 발송함 읽기/쓰기뿐, 모델·학습·추론·임베딩 0), 구축형·구독형 전부 적합.
+
+### 수용 편차(요구사항 대비 해석)
+
+- **R-5**: FR-WF3-5 "API 고정 문구 턴 제외"는 No.24 `evaluateSessionAlert()`의 기존 판정(API 고정 문구 턴을 미응답으로 셈, ADR-0036 결정)과 모순되어 같은 함수를 재사용해 **산입**했다 — 상담 콘솔 모니터링 화면과 웹훅 발행 숫자를 일치시키기 위함이다.
+- **R-6**: FR-WF5-3 "대상당 동시 SENDING ≤2(인스턴스 무관)"는 DB 계수 기반으로 구현했으나 tick 간 경합으로 정확한 상한이 아니라 **근사**다(K-3).
+- **R-8**: FR-WF1-8 "대상 삭제 409는 스냅샷 참조까지 포함"은 스냅샷 본문 테이블 참조 파일 봉인(V-7)을 깨뜨려 No.26 선례대로 **초안 노드 + 구독만** 검사하고, 운영/스테이징 버전 참조는 경고만 띄우고 실행 시 건너뛴다.
+- **K-8**: FR-WF7-6 "챗봇 목록·대시보드 확인 필요 배지"는 챗봇 목록 API 바이트 불변(FR-0-172급) 원칙을 지키기 위해 1차에서 구현하지 않았다 — 업무 자동화 메뉴 배지·챗봇 탭 배지로 대체한다.
+
+### 마이그레이션
+
+`20260926180000_workflow_automation` 1개 — 전부 `CREATE`(신규 3테이블 `workflow_targets`·`workflow_subscriptions`·`workflow_runs`, `Chatbot` 역참조는 컬럼 0). 기존 테이블 재정의·`ALTER TABLE`·백필 0건. 원시 부분 유니크 인덱스 4종(No.19/28/24 그룹)에 영향 없음.
+
+### 배포 절차
+
+① `prisma migrate deploy`(테이블 신설뿐 — API 중지 불필요) → ② API 배포 → ③ 콘솔 배포(순서 무관) → ④ (선택) 발송 기능을 쓰려면 `WORKFLOW_ENABLED=true`(기본값)·발송 루프를 돌릴 인스턴스에 `WORKFLOW_DISPATCH_ENABLED=true`(기본값, 시험 환경만 `false`) 확인 → ⑤ 발송 대상 등록 시 비밀은 `WORKFLOW_SECRET__<REF>` 환경변수로만 넣는다(DB에는 참조 이름만 저장) → ⑥ 거버넌스 모드(No.45 `DATA_GOVERNANCE_MODE=ON`)를 켠 설치는 대상의 `baseUrl` 호스트를 기존 `DATA_EGRESS_ALLOWED_HOSTS`(No.45 출구 허용목록)에 미리 등록해야 저장·발송이 막히지 않는다 — `WORKFLOW_WEBHOOK` 전용 별도 허용목록은 없다(사설 대역만 `WORKFLOW_PRIVATE_ALLOWLIST`로 별도 관리). 전부 선택이며 대상을 하나도 등록하지 않으면 기존 설치와 관측 동작이 완전히 동일하다(FR-0-172).
+
+### 대화 엔진 변경 공지
+
+이 그룹이 엔진(`dialogue-engine`) 변경을 세 번째 "의도된 예외"(No.26 API_CONDITION → No.27 SURVEY → No.41 WORKFLOW)로 공식화하면서, 엔진 미커밋 diff를 `git status`로 검사하던 봉인(E-5, `environment-sealing.spec.ts`)이 커밋 전·부분 스테이징 구간에서 항상 실패하는 구조적 결함이 되어 **골든 스냅샷 방식(X-5)으로 재설계**했다. 새 검사는 git과 무관하게 `packages/dialogue-engine/src` 최상위 파일 목록과 빌드 산출물의 실제 내보내기 심볼 집합을 승인된 스냅샷(파일 21개·심볼 64개)과 비교한다. **앞으로 엔진 파일 구성이나 공개 심볼을 바꿀 때는 이 골든 스냅샷을 함께 갱신해야 한다** — 잊으면 무관한 변경에서도 이 시험이 실패한다.
+
+### 알려진 한계
+
+- AC/EX 약 15개가 자동시험으로 아직 커버되지 않았다(성능(k6) 시나리오, 일부 화면 계약 세부 문구 등).
+- 서비스 단위 시험이 없는 곳: `workflow-secret.resolver.ts`(비밀 리졸버), `workflow-test-send.service.ts`(테스트 발송), `workflow-runs-query.service.ts`(이력 조회), `workflow-http.sender.ts`(HTTP 발송기), `workflow-catalog.service.ts`(카탈로그) — 전부 통합 시험으로만 커버한다.
+- **I-4**: 구독 이벤트 웹훅 봉투의 `chatbot.name`은 캐시 TTL 30초 규약을 그대로 따른다 — 챗봇 이름 변경 직후 최대 30초 동안 구 이름이 실릴 수 있다(전용 무효화 지점을 추가하지 않기로 함, system-architect 재검토 대상).
+- **I-5**: `WorkflowTargetsService.resume()`·`WorkflowSubscriptionsService.resume()`은 `CLOCK` 토큰을 주입받지 않고 실제 벽시계(`new Date()`)를 쓴다(정리 루프만 주입 시계 사용) — 시험은 `Date.now()` 기준 상대 시각 픽스처로 이를 반영했다.
+- 범위 밖 간헐 실패 2건(본 그룹 이전부터 있던 기존 결함, 전체 스위트 병렬 실행 시에만 드물게 재현): legacy-api 통합 시험의 로그 레이스, `version-history-reindex` 통합 시험(AC-H3-7). **후자는 우선순위 상향을 권고한다.**
