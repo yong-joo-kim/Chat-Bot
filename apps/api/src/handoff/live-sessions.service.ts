@@ -6,6 +6,7 @@ import { HandoffSettingsCacheService } from './handoff-settings-cache.service';
 import { evaluateSessionAlert } from './lib/session-alert';
 import type { SessionAlertLogRow } from './lib/session-alert';
 import { computeSessionRef, assignAliases } from './lib/session-ref';
+import { channelSupportsHandoff } from '@chat-bot/shared-types';
 
 interface SessionAgg {
   sessionId: string;
@@ -112,7 +113,8 @@ export class LiveSessionsService {
               idleSeconds: Math.max(0, Math.floor((now.getTime() - agg.lastAt.getTime()) / 1000)),
             }
           : undefined,
-        handoffSupported: agg.channelType === 'WEB',
+        // [신규 No.42] 속성 표로 정리(C-4 — 동작 불변). 표를 읽는 것은 분기가 아니다(§5.4).
+        handoffSupported: channelSupportsHandoff(agg.channelType),
       };
     });
 

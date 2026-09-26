@@ -8,6 +8,8 @@ import type { InputKind } from '../learning/lib/collect-decision';
 import { maskPii } from '@chat-bot/pii-mask';
 import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
 import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
+import { INBOX_SIGNAL_SINK } from '../common/inbox/inbox-signal.port';
+import type { InboxSignalSink } from '../common/inbox/inbox-signal.port';
 
 export interface RecordConversationLogParams {
   /** 공개 대화 API의 `messageId`를 그대로 쓴다(§8.3) — 향후 피드백(No.44)이 이 값을 앵커로 쓸 수 있다. */
@@ -63,6 +65,8 @@ export class ConversationLogService {
     private readonly bannedWordFilter: BannedWordFilterService,
     private readonly collector: UnansweredCollectorService,
     @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
+    // [신규 No.42 — 5번째 인자, 선택] `TURN_RECORDED` 신호(§8.1). No.41 emit 다음 줄.
+    @Optional() @Inject(INBOX_SIGNAL_SINK) private readonly inboxSignals?: InboxSignalSink,
   ) {}
 
   async record(params: RecordConversationLogParams): Promise<void> {
@@ -136,6 +140,18 @@ export class ConversationLogService {
         surveyTurn: params.surveyTurn ?? false,
         handoffTurn: params.handoffTurn ?? false,
         apiNotice: params.apiNotice ?? false,
+        occurredAt: now,
+      });
+      // [신규 No.42] emit 다음 줄(§8.1·§15.3) — await 0.
+      this.inboxSignals?.signal({
+        signal: 'TURN_RECORDED',
+        chatbotId: params.chatbotId,
+        sessionId: params.sessionId,
+        channelType: params.channelType,
+        isAnswered: params.isAnswered,
+        blockedByFilter: params.blockedByFilter ?? false,
+        surveyTurn: params.surveyTurn ?? false,
+        handoffTurn: params.handoffTurn ?? false,
         occurredAt: now,
       });
     } catch (e) {

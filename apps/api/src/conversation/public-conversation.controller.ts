@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, Po
 import {
   HANDOFF_SESSION_HEADER,
   HANDOFF_TOKEN_HEADER,
+  IDENTITY_TOKEN_HEADER,
   HandoffPollQuery,
   HandoffPollQuerySchema,
   HandoffPollResponse,
@@ -55,8 +56,10 @@ export class PublicConversationController {
     @Param('slug') slug: string,
     @Body(new ZodValidationPipe(PublicMessageRequestSchema)) dto: PublicMessageRequestDto,
     @Headers(HANDOFF_TOKEN_HEADER) handoffToken?: string,
+    // [신규 No.42] 선택 헤더 — 값이 없으면 opts에 키 자체가 없다(바이트 동일, §5.2).
+    @Headers(IDENTITY_TOKEN_HEADER) identityToken?: string,
   ): Promise<PublicMessageResponse> {
-    return this.publicConversationService.sendMessage(slug, dto, { handoffToken });
+    return this.publicConversationService.sendMessage(slug, dto, { handoffToken, ...(identityToken ? { identityToken } : {}) });
   }
 
   /**

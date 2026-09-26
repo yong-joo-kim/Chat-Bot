@@ -12,6 +12,8 @@ import { resolveEndSystemMessage } from './lib/handoff-notices';
 import { enableSecureDelete } from './handoff-secure-delete.query';
 import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
 import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
+import { INBOX_SIGNAL_SINK } from '../common/inbox/inbox-signal.port';
+import type { InboxSignalSink } from '../common/inbox/inbox-signal.port';
 
 function isUniqueConstraintViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
@@ -88,6 +90,8 @@ export class HandoffThreadService {
     private readonly prisma: PrismaService,
     private readonly bannedWordFilter: BannedWordFilterService,
     @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
+    // [신규 No.42 — 4번째 인자, 선택] `HANDOFF_OPENED` 신호(§8.1). No.41 emit 다음 줄.
+    @Optional() @Inject(INBOX_SIGNAL_SINK) private readonly inboxSignals?: InboxSignalSink,
   ) {}
 
   /** 개입 생성(관리자 ④) — 부분 유니크 위반 시 현재 담당자 이름을 담아 409로 변환한다(P-8). */
@@ -138,6 +142,18 @@ export class HandoffThreadService {
         channelType: input.channelType,
         alertLevelAtStart: input.alertLevelAtStart,
         consecutiveUnansweredAtStart: input.consecutiveUnansweredAtStart,
+        occurredAt: input.now,
+      });
+      // [신규 No.42] emit 다음 줄(§8.1·§15.3) — await 0 · 트랜잭션 성공 뒤에만.
+      this.inboxSignals?.signal({
+        signal: 'HANDOFF_OPENED',
+        chatbotId: input.chatbotId,
+        sessionId: input.sessionId,
+        sessionRef: input.sessionRef,
+        channelType: input.channelType,
+        handoffId: result.id,
+        agentUserId: input.assignedUserId,
+        agentUserName: input.assignedUserName,
         occurredAt: input.now,
       });
       return result;

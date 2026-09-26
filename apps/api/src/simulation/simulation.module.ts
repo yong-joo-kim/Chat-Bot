@@ -36,5 +36,7 @@ import { SimulationService } from './simulation.service';
   ],
   controllers: [SimulationController],
   providers: [SimulationService],
+  // [신규 No.42] 통합 인박스 시뮬레이션이 기존 시뮬레이터 엔진 경로를 재사용한다(제약 ④ — 서비스 코드 불변).
+  exports: [SimulationService],
 })
 export class SimulationModule {}

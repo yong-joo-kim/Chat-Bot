@@ -41,6 +41,7 @@ import { bundleSourceOf } from '../environment/serving/lib/bundle-source';
 import { VersionBundleService, ServingVersionUnavailableError } from '../environment/serving/version-bundle.service';
 import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
 import { WorkflowTriggerService } from '../workflow/triggers/workflow-trigger.service';
+import { InboxIdentityService } from '../inbox/identity/inbox-identity.service';
 
 /** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
  * 않는다 — packages/dialogue-engine 변경 0). */
@@ -87,6 +88,9 @@ export class PublicConversationService {
     // [신규 No.41 — 17번째 인자(끝), 선택] `WORKFLOW` 노드 방출 적재(§6.1). 선택 인자라 기존 16인자
     // 생성자 호출(단위 시험)은 무수정 통과한다.
     private readonly workflowTriggers?: WorkflowTriggerService,
+    // [신규 No.42 — 18번째 인자(끝), 선택] 고객 식별 요청(§2.3 ①.5). 선택 인자라 기존 17인자
+    // 생성자 호출(단위 시험)은 무수정 통과한다.
+    private readonly inboxIdentity?: InboxIdentityService,
   ) {}
 
   /**
@@ -144,10 +148,16 @@ export class PublicConversationService {
     };
   }
 
-  async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string }): Promise<PublicMessageResponse> {
+  async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> {
     const { chatbot, channel } = await this.access.resolve(slug);
     const adapter = this.adapterFactory.getAdapter('WEB');
-    const inbound = adapter.normalizeInbound(dto);
+    const inbound = adapter.normalizeInbound({ ...dto, identityToken: opts?.identityToken });
+
+    // ①.5 [신규 No.42] 고객 식별 요청(ADR-0042 §2.3) — 동기 반환 · 예외 없음 · 응답·엔진 입력 무관.
+    // 헤더가 없으면 `inbound.identity` 키 자체가 없어 이 분기에 들어오지 않는다(AC-OC1-1).
+    if (inbound.identity) {
+      this.inboxIdentity?.observe({ chatbotId: chatbot.id, sessionId: dto.sessionId, channelType: 'WEB', identity: inbound.identity, now: new Date() });
+    }
 
     // ②.5 입구 금지어 필터(FR-12-38/39) — BLOCK이면 엔진을 호출하지 않는다.
     // `NODE` 버튼은 사용자 입력이 아니라 봇이 제공한 선택지라 대상이 아니다(§10.2, 항상 PASS).

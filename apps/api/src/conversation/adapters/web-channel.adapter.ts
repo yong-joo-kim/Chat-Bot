@@ -17,8 +17,16 @@ export class WebChannelAdapter implements ChannelAdapter {
     'PHONE_CALL',
   ]);
 
-  normalizeInbound(raw: { sessionId: string; message?: string; buttonAction?: ButtonAction; state?: unknown }): InboundTurn {
-    return { sessionId: raw.sessionId, message: raw.message, buttonAction: raw.buttonAction, state: raw.state };
+  normalizeInbound(raw: { sessionId: string; message?: string; buttonAction?: ButtonAction; state?: unknown; identityToken?: string }): InboundTurn {
+    // [신규 No.42] identityToken이 있을 때만 키 자체를 만든다 — 없으면 기존 InboundTurn과 키 집합이
+    // 같다(바이트 동일, FR-OC1-2).
+    return {
+      sessionId: raw.sessionId,
+      message: raw.message,
+      buttonAction: raw.buttonAction,
+      state: raw.state,
+      ...(typeof raw.identityToken === 'string' && raw.identityToken.length > 0 ? { identity: { scheme: 'HOST_SIGNED_TOKEN' as const, token: raw.identityToken } } : {}),
+    };
   }
 
   renderOutbound(outputs: DialogOutput[]): ChannelMessage[] {

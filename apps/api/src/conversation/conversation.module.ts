@@ -11,6 +11,8 @@ import { HandoffModule } from '../handoff/handoff.module';
 import { FeedbackModule } from '../feedback/feedback.module';
 import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 import { WorkflowTriggersModule } from '../workflow/triggers/workflow-triggers.module';
+import { InboxIdentityModule } from '../inbox/identity/inbox-identity.module';
+import { InboxCoreModule } from '../inbox/core/inbox-core.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -45,6 +47,8 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     FeedbackModule,
     EnvironmentServingModule,
     WorkflowTriggersModule,
+    InboxIdentityModule,
+    InboxCoreModule,
   ],
   controllers: [PublicConversationController],
   providers: [
