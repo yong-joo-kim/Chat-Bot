@@ -365,6 +365,10 @@ export const WIDGET_FEATURE_HANDOFF_V1 = 'handoff-v1';
 export const HANDOFF_SESSION_HEADER = 'x-cb-session-id';
 export const HANDOFF_TOKEN_HEADER = 'x-cb-handoff-token';
 
+/** [신규 No.42] 고객 식별 토큰 헤더(ADR-0042 §2) — 기존 `POST …/messages`의 선택 헤더.
+ * 새 공개 경로 0(`@Public()` 8 유지). 값은 JWS Compact(HS256) — `docs/02-spec/omnichannel-inbox-설계.md` §6.1. */
+export const IDENTITY_TOKEN_HEADER = 'x-cb-identity';
+
 /* ------------------------------------------------------------------------------------------------
  * 피드백 기반 개선 루프(No.44) — 공개 평가 API 계약. `PUT /public/chatbots/:slug/messages/:messageId/feedback`
  * (`@Public()` 8번째, ADR-0038 §2). `feedback-loop-설계.md` §4.2·§7.

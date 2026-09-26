@@ -32,3 +32,4 @@ export * from './bundle-target';
 export * from './environment';
 export * from './governance';
 export * from './workflow';
+export * from './inbox';

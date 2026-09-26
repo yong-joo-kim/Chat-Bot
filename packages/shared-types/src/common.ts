@@ -175,6 +175,11 @@ export const ApiErrorCode = z.enum([
   // 업무 자동화 워크플로우(No.41) 그룹 추가(workflow-automation-설계.md §12.4, ADR-0041) — 2종.
   'WORKFLOW_TARGET_IN_USE',
   'WORKFLOW_RUN_NOT_RETRYABLE',
+  // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §14.4, ADR-0042) — 4종.
+  'INBOX_THREAD_CONFLICT',
+  'CUSTOMER_LINK_LOCKED',
+  'CUSTOMER_MERGE_FORBIDDEN',
+  'CUSTOMER_MERGE_NOT_REVERTIBLE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 
@@ -287,4 +292,23 @@ export function parseBooleanString(val: unknown): unknown {
 /** 목록 쿼리용 boolean. 기본값이 필요하면 `.default(false)`를 붙인다. */
 export function queryBoolean() {
   return z.preprocess(parseBooleanString, z.boolean().optional());
+}
+
+/**
+ * [신규 No.42] `?chatbotIds=<uuid>,<uuid>` 형태의 콤마 구분 UUID 목록 쿼리(`csvEnumArray`의 uuid판).
+ * 값이 없으면 undefined(필터 미적용) — 형식이 uuid가 아닌 항목이 하나라도 있으면 파싱 실패로
+ * 검증 오류가 된다(개별 항목이 아니라 배열 전체를 `z.array(z.string().uuid())`로 검증한다).
+ */
+export function csvUuidArray() {
+  return z.preprocess((val) => {
+    if (val === undefined || val === null || val === '') return undefined;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      return val
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    }
+    return val;
+  }, z.array(z.string().uuid()).optional());
 }

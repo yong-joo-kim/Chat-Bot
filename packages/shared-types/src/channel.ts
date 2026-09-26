@@ -97,6 +97,27 @@ export const ChannelListItemSchema = z.object({
 });
 export type ChannelListItem = z.infer<typeof ChannelListItemSchema>;
 
+/**
+ * [신규 No.42] 채널 능력 속성 표(ADR-0042 §1 · C-4) — `live-sessions.service.ts`의
+ * `=== 'WEB'` 분기를 대체한다(동작 불변). 표를 읽는 것은 분기가 아니다(§5.4) — 팩토리·
+ * `channel-config.ts`·어댑터 파일 밖에서 `=== 'WEB'` 리터럴 비교를 쓰지 않는다.
+ */
+export const CHANNEL_CAPABILITIES: Record<ChannelType, { handoff: boolean }> = {
+  WEB: { handoff: true },
+  MOBILE: { handoff: false },
+  KAKAOTALK: { handoff: false },
+  LINE: { handoff: false },
+  FACEBOOK: { handoff: false },
+  NAVER_TALKTALK: { handoff: false },
+  APP: { handoff: false },
+  KIOSK: { handoff: false },
+};
+
+/** 모르는 문자열은 false(안전측). */
+export function channelSupportsHandoff(type: string): boolean {
+  return (CHANNEL_CAPABILITIES as Record<string, { handoff: boolean } | undefined>)[type]?.handoff ?? false;
+}
+
 /** `PATCH /channels/:type` 요청 — upsert. config는 전체 교체(부분 병합 금지). */
 export const UpdateChannelSchema = z.object({
   enabled: z.boolean().optional(),

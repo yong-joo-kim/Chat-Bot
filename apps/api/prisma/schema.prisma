@@ -98,6 +98,10 @@ model Chatbot {
   retentionPolicy         RetentionPolicy?
   /// [신규 No.41] 이벤트 구독(환경 밖 — 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제 동반 삭제). 컬럼 추가 0.
   workflowSubscriptions   WorkflowSubscription[]
+  /// [신규 No.42] 통합 인박스 참여 설정(환경 밖 — 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제 동반 삭제). 컬럼 추가 0.
+  inboxSetting            ChatbotInboxSetting?
+  /// [신규 No.42] 역참조만 — DB 컬럼 변화 0. FK Restrict → 영구삭제 사전검사 16번째(ADR-0042 §16).
+  customerLinks           CustomerLink[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -1790,4 +1794,216 @@ model WorkflowRun {
   @@index([chatbotId, createdAt])
   @@index([createdAt])
   @@map("workflow_runs")
+}
+
+/// [신규 2026-09-26 No.42] 챗봇별 통합 인박스 참여 설정(1:1 · 행 없음 = 꺼짐). 환경 밖 — 저장 즉시
+/// 운영 반영(참여 캐시 30초 + 즉시 무효화). ★ 서명 비밀 값 컬럼이 없다 — identitySecretRef(이름)만.
+/// 값은 OMNI_IDENTITY_SECRET__<REF> 환경변수(리졸버 1파일).
+model ChatbotInboxSetting {
+  chatbotId         String   @id
+  chatbot           Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  enabled           Boolean  @default(false)
+  /// ^[A-Z0-9]+(_[A-Z0-9]+)*$ · ≤40 · 같은 참조 = 같은 식별 공간(고객 공유) · 쓰기 = security:write 경로만
+  identitySecretRef String?
+  /// 경고 단계 도달 시 스레드 열기(No.24 판정 1벌 · 세션당 1회)
+  openOnWarning     Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("chatbot_inbox_settings")
+}
+
+/// [신규 No.42] 고객(최종 사용자). ★ 원 회원 번호(sub)·토큰·전체 sessionId 컬럼이 없다(O-5).
+model Customer {
+  id               String    @id @default(uuid())
+  /// 16 hex 난수 — 별칭(앞 6자 · 목록 내 충돌 시 연장)의 원천. 고객 id·세션과 무관
+  ref              String    @unique
+  /// IDENTIFIED | ANONYMOUS | TEST — 생성 후 불변
+  kind             String
+  /// ACTIVE | MERGED
+  status           String    @default("ACTIVE")
+  /// IDENTIFIED만 — 식별 공간 참조(REF 이름)
+  identitySpaceRef String?
+  /// IDENTIFIED만 — HMAC-SHA256 hex 64. nullable 유일(NULL 다중 허용). 보존 소거 시 null
+  customerKeyHash  String?   @unique
+  /// 고객 키 비밀 지문(HMAC(secret,"cb-omni-fp:v1") 앞 8 hex) — 비밀 교체 탐지(EX-OC-20)
+  keyFingerprint   String?
+  /// 금지어 → PII 마스킹 → (모드 ON) 암호화. 소거 시 null
+  displayName      String?
+  /// MERGED일 때 대상 고객 — FK 없음
+  mergedIntoId     String?
+  firstSeenAt      DateTime
+  lastActivityAt   DateTime
+  identityPurgedAt DateTime?
+  /// TEST·수동 익명 고객의 생성자 — FK 없음(사실 기록)
+  createdById      String?
+  createdByName    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  links  CustomerLink[]
+  thread InboxThread?
+
+  @@index([kind, lastActivityAt])
+  @@index([lastActivityAt])
+  @@index([identitySpaceRef])
+  @@map("customers")
+}
+
+/// [신규 No.42] 대화(챗봇 × 세션) ↔ 고객 연결 — 복사 없음. 세션당 현재 연결 1행.
+model CustomerLink {
+  id                 String    @id @default(uuid())
+  customerId         String
+  customer           Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chatbotId          String
+  chatbot            Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 위젯 난수 — ★ 내부 전용(관리자 DTO·감사·로그 금지 — H-17 규약 확장)
+  sessionId          String
+  /// computeSessionRef(chatbotId, sessionId)
+  sessionRef         String
+  /// 대화가 들어온 배포 채널(1차 = WEB)
+  channelType        String
+  /// IDENTITY | MANUAL | SYSTEM
+  source             String
+  /// MANUAL 재지정 전 연결(분리 시 복귀 대상)
+  previousCustomerId String?
+  previousSource     String?
+  /// 이 세션에서 서명 식별이 확인된 시각(승격 병합 후 SYSTEM/MANUAL 행에도 남는다)
+  identityVerifiedAt DateTime?
+  /// ADMIN 분리 — 이후 이 세션의 식별 토큰을 무시(재생 대응)
+  identityBlockedAt  DateTime?
+  /// 경고 단계 열림 1회 표식(CAS)
+  warningOpenedAt    DateTime?
+  linkedById         String?
+  linkedByName       String?
+  linkedAt           DateTime
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([chatbotId, sessionId])
+  @@index([chatbotId, sessionRef])
+  @@index([customerId, linkedAt])
+  @@map("customer_links")
+}
+
+/// [신규 No.42] 고객 스레드(고객 1:1). "볼 일이 생긴" 순간 생성.
+model InboxThread {
+  id                String    @id @default(uuid())
+  customerId        String    @unique
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// OPEN | PENDING | CLOSED
+  status            String
+  snoozeUntil       DateTime?
+  /// HANDOFF | WARNING | RECORD | NOTE | MANUAL | SIMULATION — 최초 열림 사유
+  openReason        String
+  /// FK 없음(사실 기록) · 이름 스냅샷
+  assigneeUserId    String?
+  assigneeUserName  String?
+  lastActivityAt    DateTime
+  /// CONVERSATION | HANDOFF | NOTE | RECORD | SIMULATION | SYSTEM
+  lastActivityKind  String
+  lastChannelFamily String?
+  lastChannelType   String?
+  lastChatbotId     String?
+  /// 마지막 NOTE·RECORD·SIM 항목 — 목록 미리보기 원천(미리보기 텍스트 복제 컬럼 없음)
+  lastEntryId       String?
+  /// 병합으로 숨김(원 고객 스레드) — CustomerMerge.id
+  hiddenByMergeId   String?
+  /// 낙관적 동시성(모든 사람 쓰기가 +1)
+  version           Int       @default(0)
+  openedAt          DateTime
+  closedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  entries InboxEntry[]
+  tags    InboxThreadTag[]
+
+  @@index([status, lastActivityAt])
+  @@index([assigneeUserId, status, lastActivityAt])
+  @@index([status, snoozeUntil])
+  @@index([lastActivityAt])
+  @@map("inbox_threads")
+}
+
+/// [신규 No.42] 스레드 항목 — 메모·수동 기록·시뮬레이션·시스템. id = 앱 선발급(AAD).
+model InboxEntry {
+  id               String    @id
+  threadId         String
+  thread           InboxThread @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// NOTE | RECORD | SIM_USER | SIM_BOT | SYSTEM
+  kind             String
+  recordChannel    String?
+  direction        String?
+  outcome          String?
+  simulatedChannel String?
+  /// SIM_*만 — FK 없음
+  chatbotId        String?
+  /// PII 마스킹 → (모드 ON) 암호화. SYSTEM은 "" · 소거 시 ""
+  text             String    @default("")
+  /// SYSTEM 이벤트 JSON — 열거값·id·별칭·직원 이름만(고객 본문·이름 0)
+  meta             String    @default("{}")
+  occurredAt       DateTime
+  authorUserId     String?
+  authorName       String?
+  editedAt         DateTime?
+  textPurgedAt     DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([threadId, occurredAt])
+  @@index([textPurgedAt, createdAt])
+  @@map("inbox_entries")
+}
+
+/// [신규 No.42] 전역 태그(ADMIN 관리 · ≤100).
+model InboxTag {
+  id             String   @id @default(uuid())
+  name           String
+  nameNormalized String   @unique
+  /// 팔레트 키(UIUX 대비 검증된 8색 중 1) — 자유 HEX 아님
+  color          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  threads        InboxThreadTag[]
+
+  @@map("inbox_tags")
+}
+
+model InboxThreadTag {
+  threadId  String
+  thread    InboxThread @relation(fields: [threadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tagId     String
+  tag       InboxTag    @relation(fields: [tagId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  addedAt   DateTime    @default(now())
+  addedById String?
+
+  @@id([threadId, tagId])
+  @@index([tagId])
+  @@map("inbox_thread_tags")
+}
+
+/// [신규 No.42] 병합 기록 — 되돌리기의 근거. FK 없음(사실 기록). 본문 0.
+model CustomerMerge {
+  id                      String    @id @default(uuid())
+  /// MANUAL | IDENTITY_PROMOTION
+  kind                    String
+  sourceCustomerId        String
+  targetCustomerId        String
+  sourceThreadId          String?
+  targetThreadId          String?
+  /// 대상에 스레드가 없어 원 스레드를 통째로 옮겼는가
+  movedThread             Boolean   @default(false)
+  movedLinkIds            String    @default("[]")
+  movedEntryIds           String    @default("[]")
+  addedTagIds             String    @default("[]")
+  sourceThreadPriorStatus String?
+  mergedById              String?
+  mergedByName            String?
+  mergedAt                DateTime
+  revertedAt              DateTime?
+  revertedById            String?
+  revertedByName          String?
+
+  @@index([sourceCustomerId])
+  @@index([targetCustomerId, mergedAt])
+  @@map("customer_merges")
 }
