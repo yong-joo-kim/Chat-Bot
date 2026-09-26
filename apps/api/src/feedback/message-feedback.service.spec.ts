@@ -13,7 +13,9 @@ describe('MessageFeedbackService', () => {
     chatbotId: 'chatbot-1',
     sessionId: 'session-1',
     feedbackOffered: true,
-    createdAt: new Date('2026-09-25T00:00:00.000Z'),
+    // 변경 가능 기한(24시간) 안에 있어야 하므로 고정 날짜가 아닌 "방금"으로 둔다 — 고정 날짜는
+    // 하루가 지나면 모든 CREATE/CHANGE 분기가 CLOSED로 바뀌어 시험이 시한폭탄이 된다.
+    createdAt: new Date(Date.now() - 60_000),
     dayBucket: '2026-09-25',
     groupId: 'group-1',
     channelType: 'WEB',
