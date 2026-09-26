@@ -2,6 +2,7 @@ import type { AuditLog as PrismaAuditLog } from '@prisma/client';
 import { AuditAction, AuditTargetType } from '@chat-bot/shared-types';
 import type { AuditLogDetail, AuditLogListItem } from '@chat-bot/shared-types';
 import { computeChangedFields } from './lib/audit-diff';
+import { parseRowHashMethod } from './chain/audit-chain';
 
 function parseAction(raw: string): AuditAction {
   const result = AuditAction.safeParse(raw);
@@ -44,6 +45,13 @@ export function toAuditLogDetail(row: PrismaAuditLog): AuditLogDetail {
   const after = parseSnapshotJson(row.afterValue);
   const truncated = Boolean((before as { __truncated?: boolean } | null)?.__truncated) || Boolean((after as { __truncated?: boolean } | null)?.__truncated);
 
+  // [신규 No.45] 체인 도입 후 행만(`seq`·`prevHash`·`rowHash` 전부 값이 있을 때) — 값이 없으면 키 생략.
+  const chainMethod = row.rowHash ? parseRowHashMethod(row.rowHash) : null;
+  const chain =
+    row.seq !== null && row.prevHash !== null && row.rowHash !== null && chainMethod
+      ? { seq: row.seq, prevHash: row.prevHash, rowHash: row.rowHash, method: chainMethod.method }
+      : undefined;
+
   return {
     ...toAuditLogListItem(row),
     before,
@@ -52,5 +60,6 @@ export function toAuditLogDetail(row: PrismaAuditLog): AuditLogDetail {
     truncated,
     ip: row.ip,
     userAgent: row.userAgent,
+    chain,
   };
 }

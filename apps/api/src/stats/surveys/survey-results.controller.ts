@@ -17,6 +17,7 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodQueryPipe } from '../../common/zod-query.pipe';
 import { RequirePermission } from '../../common/auth/require-permission.decorator';
+import { AuditView } from '../../audit-logs/access/audit-view.decorator';
 import { SurveyStatsService } from './survey-stats.service';
 import { SurveyResultsService } from './survey-results.service';
 import { buildContentDisposition } from './lib/survey-csv';
@@ -51,6 +52,7 @@ export class SurveyResultsController {
 
   @Get('responses')
   @RequirePermission('chatbot:read')
+  @AuditView({ targetType: 'Survey', idParam: 'surveyId', chatbotParam: 'chatbotId' })
   responses(
     @Param('chatbotId') chatbotId: string,
     @Param('surveyId') surveyId: string,
@@ -80,6 +82,7 @@ export class SurveyResultsController {
 
   @Get('text-answers')
   @RequirePermission('chatbot:read')
+  @AuditView({ targetType: 'Survey', idParam: 'surveyId', chatbotParam: 'chatbotId' })
   textAnswers(
     @Param('chatbotId') chatbotId: string,
     @Param('surveyId') surveyId: string,

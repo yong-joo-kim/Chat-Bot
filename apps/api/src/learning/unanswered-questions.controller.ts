@@ -24,6 +24,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { SessionUser } from '../common/auth/session-context';
+import { AuditView } from '../audit-logs/access/audit-view.decorator';
 import { UnansweredQuestionsService } from './unanswered-questions.service';
 import { DecompositionService } from './decomposition.service';
 import { DecomposedResolveService } from './decomposed-resolve.service';
@@ -58,6 +59,7 @@ export class UnansweredQuestionsController {
 
   @Get(':id')
   @RequirePermission('dialogue:read')
+  @AuditView({ targetType: 'UnansweredQuestion', idParam: 'id', chatbotParam: 'chatbotId' })
   detail(@Param('chatbotId') chatbotId: string, @Param('id') id: string): Promise<UnansweredQuestionDetail> {
     return this.service.detail(chatbotId, id);
   }

@@ -25,6 +25,7 @@ import { TestRunStatusSink } from './run/test-run-status.sink';
 import { TestRunCancelRegistry } from './run/test-run-cancel.registry';
 import { toTestRunDto, toTestRunResultDto } from './test-run.mapper';
 import { buildTestRunResultCsv } from './lib/test-case-csv';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 
 const NOT_FOUND_MESSAGE = '요청하신 실행을 찾을 수 없습니다.';
 
@@ -48,6 +49,8 @@ export class TestRunService implements OnModuleInit {
     private readonly config: ConfigService,
     // [신규 No.40 — §12.2, 생성자 끝] 대상 해석(읽기 전용).
     private readonly environmentRead: EnvironmentReadService,
+    // [신규 No.45 — §11.2, 생성자 끝] `export()` 끝에 `recordExport()`.
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /** 기동 시 고아 실행 정리(ADR-0029 §4, `TrainingJobService`의 고아 Job 정리와 같은 규약·시점). */
@@ -273,6 +276,14 @@ export class TestRunService implements OnModuleInit {
         outputsPreviewA: dto.outputsPreviewA,
       };
     });
+    await this.auditLog.recordExport({
+      targetType: 'TestRun',
+      targetId: runId,
+      chatbotId,
+      summary: `내보내기 · 검증 실행 · ${exportRows.length}행`,
+      after: { rows: exportRows.length },
+    });
+
     return { content: buildTestRunResultCsv(exportRows), filename: 'test-run-results.csv', mimeType: 'text/csv; charset=utf-8' };
   }
 }

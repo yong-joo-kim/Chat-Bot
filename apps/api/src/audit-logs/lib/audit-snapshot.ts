@@ -82,6 +82,24 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §18) — 사유 메모 본문·
   // 자산 본문·발화는 화이트리스트에 없다(FR-0-155).
   ChatbotEnvironment: ['enabled', 'stagingVersionNo', 'prodVersionNo', 'gateMode', 'gateTestSetId', 'gateMinPassRate', 'gateValidHours'],
+  // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §11.1) — VIEW/EXPORT·파기 요약은
+  // 이 화이트리스트를 거치지 않는다(요약 액션 — AuditLogService.isBulkSummary). `RAW_VIEW`도 여전히
+  // 요약뿐(§9.4). 텍스트 필드는 0건(G-18).
+  ConversationLog: [],
+  UnansweredQuestion: [],
+  AuditLog: [],
+  TestRun: [],
+  RetentionPolicy: [
+    'conversationTextDays',
+    'unansweredClosedDays',
+    'surveyFreeTextDays',
+    'handoffTextDays',
+    'callLogsDays',
+    'auditLogsDays',
+    'pendingKinds',
+    'pendingEffectiveAt',
+  ],
+  RetentionRun: ['kind', 'status', 'affectedByKind', 'headSeq', 'anchorSeq'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

@@ -11,6 +11,7 @@ import {
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
+import { AuditView } from '../audit-logs/access/audit-view.decorator';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { SessionUser } from '../common/auth/session-context';
 import { LiveSessionsService } from './live-sessions.service';
@@ -30,6 +31,7 @@ export class LiveSessionsController {
 
   @Get()
   @RequirePermission('cs:read')
+  @AuditView({ targetType: 'ConversationLog', chatbotParam: 'chatbotId' })
   list(
     @Param('chatbotId') chatbotId: string,
     @Query(new ZodValidationPipe(LiveSessionListQuerySchema)) query: LiveSessionListQuery,
@@ -40,6 +42,7 @@ export class LiveSessionsController {
 
   @Get(':sessionRef/transcript')
   @RequirePermission('cs:read')
+  @AuditView({ targetType: 'ConversationLog', idParam: 'sessionRef', chatbotParam: 'chatbotId' })
   getTranscript(
     @Param('chatbotId') chatbotId: string,
     @Param('sessionRef') sessionRef: string,

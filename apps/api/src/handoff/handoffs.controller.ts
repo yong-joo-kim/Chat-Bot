@@ -23,6 +23,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { RequirePermission } from '../common/auth/require-permission.decorator';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { SessionUser } from '../common/auth/session-context';
+import { AuditView } from '../audit-logs/access/audit-view.decorator';
 import { HandoffActionsService } from './handoff-actions.service';
 import { HandoffHistoryService } from './handoff-history.service';
 import { CannedResponsesService } from '../canned-responses/canned-responses.service';
@@ -66,6 +67,7 @@ export class HandoffsController {
 
   @Get(':handoffId')
   @RequirePermission('cs:read')
+  @AuditView({ targetType: 'HandoffSession', idParam: 'handoffId', chatbotParam: 'chatbotId' })
   detail(@Param('chatbotId') chatbotId: string, @Param('handoffId') handoffId: string): Promise<HandoffHistoryDetailResponse> {
     return this.history.detail(chatbotId, handoffId);
   }

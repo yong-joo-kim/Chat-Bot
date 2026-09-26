@@ -20,6 +20,7 @@ import { parseSurveyRow } from './lib/survey-row';
 import { displayAnswer, displayStatusOf, findQuestion, toResponseNo } from './lib/survey-display';
 import { buildExportFilename, buildExportFilenameAscii, buildResponsesCsv, buildSummaryCsv } from './lib/survey-csv';
 import { assembleSurveyQuestionStats } from './lib/survey-question-assembler';
+import { AuditLogService } from '../../audit-logs/audit-log.service';
 
 const NOT_FOUND_MESSAGE = '요청하신 설문을 찾을 수 없습니다.';
 
@@ -38,6 +39,8 @@ export class SurveyResultsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ChatbotScopeService,
+    // [신규 No.45 — §11.2, 생성자 끝] `export()` 끝에 `recordExport()`.
+    private readonly auditLog: AuditLogService,
   ) {}
 
   private async findSurveyOrThrow(chatbotId: string, surveyId: string) {
@@ -191,6 +194,14 @@ export class SurveyResultsService {
         to: query.to,
         generatedAt: now,
       });
+      await this.auditLog.recordExport({
+        targetType: 'Survey',
+        targetId: surveyId,
+        chatbotId,
+        targetName: survey.name,
+        summary: `내보내기 · 설문 '${survey.name}' · ${query.from}~${query.to} · SUMMARY`,
+        after: { kind: 'SUMMARY', from: query.from, to: query.to, rows: stats.questions.length, includeDuplicates: query.includeDuplicates, channel: query.channel ?? null },
+      });
       return {
         content: buildSummaryCsv(stats),
         filename: buildExportFilename(surveyId, survey.name, 'SUMMARY', query.from, query.to),
@@ -247,6 +258,15 @@ export class SurveyResultsService {
       })),
       answersByResponse,
     );
+
+    await this.auditLog.recordExport({
+      targetType: 'Survey',
+      targetId: surveyId,
+      chatbotId,
+      targetName: survey.name,
+      summary: `내보내기 · 설문 '${survey.name}' · ${query.from}~${query.to} · RESPONSES`,
+      after: { kind: 'RESPONSES', from: query.from, to: query.to, rows: totalCount, truncated, includeDuplicates: query.includeDuplicates, channel: query.channel ?? null },
+    });
 
     return {
       content,

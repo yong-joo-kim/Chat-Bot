@@ -25,6 +25,10 @@ export const AuditAction = z.enum([
   // 하이브리드 CS(No.24) 그룹 추가(hybrid-cs-설계.md §16, ADR-0036 §6) — 이 프로젝트 최초의
   // 열람(읽기) 감사. (상담, 열람자)당 1건만 기록한다(§9.4).
   'RAW_VIEW',
+  // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §11, ADR-0040) — 14 → 16종.
+  // VIEW는 거버넌스 모드에서만(닫힌 목록 8핸들러) · EXPORT는 모드 무관 항상.
+  'VIEW',
+  'EXPORT',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -43,6 +47,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   PERMISSION_DENIED: '권한거부',
   RESTORE: '복원',
   RAW_VIEW: '원문 열람',
+  VIEW: '열람',
+  EXPORT: '내보내기',
 };
 
 /** 파괴적 동작(시각적 구분 대상, FR-13-21). 복원은 백업이 있어 가역이지만 대화 자산 전체를
@@ -83,6 +89,14 @@ export const AuditTargetType = z.enum([
   // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §18) — 켜기/끄기·승격·
   // 운영 전환/롤백·게이트 설정 감사 대상(targetId = chatbotId). 액션은 기존 STATUS_CHANGE·UPDATE 재사용.
   'ChatbotEnvironment',
+  // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §11.1, ADR-0040) — VIEW/EXPORT·파기 대상.
+  // 21 → 27종.
+  'ConversationLog',
+  'UnansweredQuestion',
+  'AuditLog',
+  'TestRun',
+  'RetentionPolicy',
+  'RetentionRun',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -108,6 +122,12 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   CannedResponse: '자주 쓰는 문장',
   Topic: '토픽',
   ChatbotEnvironment: '환경',
+  ConversationLog: '대화',
+  UnansweredQuestion: '학습 항목',
+  AuditLog: '이력',
+  TestRun: '검증 실행',
+  RetentionPolicy: '보존 정책',
+  RetentionRun: '보존기간 파기',
 };
 
 /**
@@ -143,8 +163,46 @@ export const AuditLogDetailSchema = AuditLogListItemSchema.extend({
   truncated: z.boolean(),
   ip: z.string().nullable(),
   userAgent: z.string().nullable(),
+  /** [신규 No.45] 값이 있을 때만(체인 도입 후 행). */
+  chain: z
+    .object({
+      seq: z.number().int(),
+      prevHash: z.string(),
+      rowHash: z.string(),
+      method: z.enum(['SHA256', 'HMAC']),
+    })
+    .optional(),
 });
 export type AuditLogDetail = z.infer<typeof AuditLogDetailSchema>;
+
+/* ── 감사 해시 체인 검증(No.45, §10.6) ── */
+export const AuditChainVerifyRequestSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+});
+export type AuditChainVerifyRequestDto = z.infer<typeof AuditChainVerifyRequestSchema>;
+
+export const AuditChainVerifyStatus = z.enum(['OK', 'EMPTY', 'HASH_MISMATCH', 'SEQ_GAP', 'TAIL_MISSING', 'ANCHOR_MISSING', 'KEY_UNAVAILABLE']);
+export type AuditChainVerifyStatus = z.infer<typeof AuditChainVerifyStatus>;
+
+export const AuditChainVerifyResponseSchema = z.object({
+  status: AuditChainVerifyStatus,
+  firstBadSeq: z.number().int().optional(),
+  gap: z.object({ fromSeq: z.number().int(), toSeq: z.number().int() }).optional(),
+  range: z.object({ fromSeq: z.number().int(), toSeq: z.number().int() }).nullable(),
+  checkedRows: z.number().int(),
+  preChainRows: z.number().int(),
+  outOfChainRows: z.number().int(),
+  head: z.object({ seq: z.number().int(), hash: z.string() }).nullable(),
+  methods: z.object({ sha256: z.number().int(), hmac: z.number().int() }),
+  verifiedAt: z.coerce.date(),
+});
+export type AuditChainVerifyResponse = z.infer<typeof AuditChainVerifyResponseSchema>;
+
+export const AUDIT_CHAIN_LIMITS = {
+  verifyMaxRows: 200_000,
+  verifyBatch: 5_000,
+} as const;
 
 export const AuditLogListQuerySchema = PaginationQuerySchema.extend({
   from: z.coerce.date().optional(),

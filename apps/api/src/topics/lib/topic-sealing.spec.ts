@@ -372,8 +372,8 @@ describe('토픽 시스템(No.22) 정적 검사 — topic-system-설계.md §17'
     it('topic: 접두 권한 문자열이 없다', () => {
       expect(Permission.options.some((p) => p.startsWith('topic:'))).toBe(false);
     });
-    it('AuditAction.options.length === 14', () => {
-      expect(AuditAction.options.length).toBe(14);
+    it('AuditAction.options.length === 16(No.45 VIEW·EXPORT 추가)', () => {
+      expect(AuditAction.options.length).toBe(16);
     });
   });
 
