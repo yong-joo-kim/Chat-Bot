@@ -52,4 +52,22 @@ export const MESSAGES = {
     unavailable: '지금은 의견을 받을 수 없어요',
     locked: '더 이상 바꿀 수 없어요',
   },
+  /**
+   * [신규 No.46] 캐러셀·바로연결(channel-rich-messages-ui-spec.md §7.4) — 위젯이 사용자에게
+   * 보여주는 **전체** 신규 문구(카드 필드 값 자체는 관리자가 입력한 텍스트라 대상 아님).
+   */
+  carousel: {
+    prevCard: '이전 카드',
+    nextCard: '다음 카드',
+    position: (k: number, n: number) => `${k} / ${n}`,
+    cardLabel: (k: number, n: number, title: string) => `${n}개 중 ${k}번째: ${title}`,
+    containerLabelWithText: (text: string) => text,
+    containerLabelDefault: (n: number) => `카드 ${n}개`,
+    statusAnnounce: (k: number, n: number, title: string) => `${n}개 중 ${k}번째 카드: ${title}`,
+    roleDescriptionGroup: '캐러셀',
+    roleDescriptionCard: '카드',
+  },
+  quickReplies: {
+    groupLabel: '바로 선택',
+  },
 } as const;

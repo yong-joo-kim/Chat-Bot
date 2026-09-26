@@ -197,6 +197,11 @@ export function VersionDiffPage(): JSX.Element {
                       <button type="button" className="link-button" onClick={() => setSelectedItemId({ kind: item.kind, id: item.id })}>
                         {item.name || item.id}
                       </button>
+                      {/* [신규 No.46, 계약 연결 RM-8] 캐러셀 등 아웃풋 요약("캐러셀(카드 N장)") — 키가
+                          없으면(다른 항목 종류·구버전 서버) 아무것도 추가하지 않는다(기존과 동일). */}
+                      {item.outputSummary && item.outputSummary.length > 0 && (
+                        <span className="field-hint"> · {item.outputSummary.join(', ')}</span>
+                      )}
                     </td>
                     <td>
                       <ChangeKindBadge change={item.change} />

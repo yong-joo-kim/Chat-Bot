@@ -8,6 +8,7 @@ import { ChatBubble } from '../../pages/chatbot-detail/simulator/ChatBubble';
 import { MessageComposer } from '../../pages/chatbot-detail/simulator/MessageComposer';
 import type { SimMessage } from '../../pages/chatbot-detail/simulator/types';
 import { SimulationBadge } from './badges';
+import { DegradePreviewNotice } from './DegradePreviewNotice';
 
 let seq = 0;
 function nextId(): string {
@@ -41,7 +42,7 @@ export function SimulationChatPanel({
     setSending(true);
     try {
       const res = await inboxApi.simulate(customerId, { chatbotId, simulatedChannel: channel, message: text });
-      setMessages((prev) => [...prev, { id: nextId(), role: 'bot', outputs: res.outputs }]);
+      setMessages((prev) => [...prev, { id: nextId(), role: 'bot', outputs: res.outputs, degradePreview: res.degradePreview }]);
       onEntryAdded?.();
     } catch (e) {
       setMessages((prev) => [...prev, { id: nextId(), role: 'error', text: e instanceof ApiError ? e.message : MESSAGES.errors.generic }]);
@@ -81,6 +82,7 @@ export function SimulationChatPanel({
           <div key={m.id} className="chat-bubble-wrapper">
             {m.role !== 'error' && <SimulationBadge />}
             <ChatBubble message={m} chatbotId={chatbotId} onButtonClick={handleButtonClick} onRetry={() => undefined} />
+            {m.role === 'bot' && m.degradePreview && <DegradePreviewNotice preview={m.degradePreview} />}
           </div>
         ))}
         {sending && (

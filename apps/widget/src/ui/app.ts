@@ -329,6 +329,15 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   }
 
   /**
+   * [신규 No.46] RM-9 — 캐러셀 이전/다음 버튼 이동 시 위치를 1회 안내한다(§12.1). `addBotOutputs`·
+   * `addBotAnswer`(보류 RAG 최종 답변 포함, 코드 리뷰 R1 Medium) 양쪽 호출에 공유한다.
+   */
+  function announceCarouselPosition(text: string): void {
+    panel.setStatusText(text);
+    clearStatusTextIfUnchanged(text);
+  }
+
+  /**
    * [No.44] 공개 평가 API 호출 — 오류를 `core/feedback.ts`의 `FeedbackAttemptResult`로 분류해
    * `ui/feedback-bar.ts`(DOM 무의존 재시도 판정)에 넘긴다. `sessionStorage`/`localStorage`에
    * 평가를 저장하지 않는다(F-16) — 상태는 DOM(막대)에만 있다.
@@ -505,12 +514,12 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         statusText = MESSAGES.pending.readyAnnounce;
         panel.setStatusText(statusText);
         const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction, feedback);
+        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction, feedback, announceCarouselPosition);
       } else if (decision.reason === 'FAILED' && payload) {
         statusText = MESSAGES.pending.timeoutFallback;
         panel.setStatusText(statusText);
         const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), undefined, handleButtonAction, feedback);
+        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), undefined, handleButtonAction, feedback, announceCarouselPosition);
       } else {
         // EXPIRED(404/TTL 만료) 또는 TIMEOUT(90초 초과, 로컬 판단) — 서버 응답이 없으므로
         // 클라이언트가 정리 문구로 마감한다(S-15, 오류로 표시하지 않는다).
@@ -533,6 +542,11 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
 
   async function handleSend(input: { message?: string; buttonAction?: ButtonAction }): Promise<void> {
     if (state.status === 'SENDING' || disabledPermanently) return;
+    // [신규 No.46] RM-10 — 다음 입력을 보내는 순간 남아 있는 바로연결 칩을 전부 숨긴다(§3.10).
+    // 숨긴 칩에 포커스가 있었으면 입력창으로 옮긴다(포커스 유실 방지, NFR-RMA4).
+    if (panel.messages.hideQuickReplies()) {
+      panel.composer.focus();
+    }
     if (state.status === 'AWAITING_ANSWER') {
       // 도중 새 질문 전송 — 이전 폴링을 폐기하고 인디케이터를 즉시 제거한다(EX-N2-11).
       pollGeneration += 1;
@@ -595,7 +609,14 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         // [No.44] 서버가 `feedback.rateable === true`를 준 말풍선에만 평가 막대를 붙인다 — 위젯은
         // 스스로 평가 가능성을 추정하지 않는다(FR-FB9-3).
         const feedback = res.feedback?.rateable === true ? makeFeedbackBinding(res.messageId) : undefined;
-        await panel.messages.addBotOutputs(views, handleButtonAction, (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''), undefined, feedback);
+        await panel.messages.addBotOutputs(
+          views,
+          handleButtonAction,
+          (typing) => panel.setStatusText(typing ? MESSAGES.sending : ''),
+          undefined,
+          feedback,
+          announceCarouselPosition,
+        );
       }
       dispatch({ type: 'SEND_SUCCEEDED', botMessages: [] });
       panel.setStatusText('');

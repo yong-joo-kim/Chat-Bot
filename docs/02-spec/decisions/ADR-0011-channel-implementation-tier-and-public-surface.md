@@ -179,3 +179,16 @@ interface ChannelAdapter {
 3. **스텁 금지(57행)와의 관계**: 시뮬레이션 채널은 **어댑터가 아닌 콘솔 기능**이다 — 팩토리 분기·어댑터 파일 0 · 기존 시뮬레이터 호출 · 모든 화면에 "시뮬레이션" 라벨. 수동 기록 채널(`PHONE｜EMAIL｜VISIT｜OTHER`)은 배포 채널이 아니므로 `ChannelType`에 넣지 않는다("등급은 값이 아니라 속성" — 대안표의 판단과 같은 방향).
 4. **§3 "분기 2파일" 보론 — 속성 표**: 채널별 능력은 `CHANNEL_IMPLEMENTATION`처럼 **shared-types 속성 표** `CHANNEL_CAPABILITIES`(+ `channelSupportsHandoff()`)에 둔다. 표를 읽는 것은 분기가 아니며, `live-sessions.service.ts`의 `=== 'WEB'` 리터럴 비교(기존 부채)를 표 조회로 옮겼다(동작 불변). 리터럴 비교는 팩토리·`channel-config.ts`·어댑터 밖에서 0건(정적 검사).
 5. **후속 Phase 인계 보강**: 외부 채널을 붙이는 ADR은 공개 파이프라인의 `'WEB'` 하드코딩(`getAdapter('WEB')` · 로그·설문·업무 자동화 적재 6곳 · 공개 접근 채널 조회 · 상담 게이트 `channelOpen`)을 한 번에 채널 매개변수로 바꾼다 — 1차는 두 번째 어댑터가 없어 바꾸지 않았다.
+
+
+---
+
+## 갱신 (2026-09-27 — No.46: 능력표 아웃풋 프로필 · WEB 어댑터 표 파생 · `renderOutbound` 렌더 문맥 · 강등 3단)
+
+채널별 리치 메시지(No.46, **ADR-0043 §4~§6**). §1(구현 등급)·§2(자격증명 미저장)·§3(어댑터 1종·스텁 금지·분기 2파일)·§4~§6은 **불변**이다.
+
+1. **속성 표 확장**: `CHANNEL_CAPABILITIES[type]`에 아웃풋 능력 프로필 `outputs`(출처 `MEASURED`·`ASSUMED`·`DEFAULT` · 지원 타입 · 캐러셀 카드 수 · 카드/캐러셀 카드 버튼 수 · 바로연결 · 버튼 동작 · 이미지 · 글자 수 상한)를 더한다. WEB = 실측(모든 상한 = 스키마 최대치) · 카카오톡 = 가정치(규격 미확인 보수값) · 나머지 6채널 = 텍스트만. 표는 코드 상수이며 관리자 설정이 아니다.
+2. **목록 이중화 해소**: `WebChannelAdapter.supportedOutputTypes`는 자기 리터럴 목록을 버리고 표에서 파생한다(정적 검사 RM-5). 채널 능력의 원천은 shared-types 표 1곳이다 — 콘솔 미리보기와 서버 강등이 같은 표를 읽는다.
+3. **§3 계약 확장**: `renderOutbound(outputs, ctx?: ChannelRenderContext)` — `ctx.features`(위젯 기능 선언). WEB 어댑터는 `'rich-v1'`이 있으면 WEB 프로필, 없으면 표 밖 가상 프로필 `LEGACY_WEB_WIDGET_OUTPUT_PROFILE`(캐러셀 미지원)로 강등한다. 인자가 없으면 구버전으로 취급한다(안전측). 공개 서비스는 `features`를 넘기기만 한다(분기 0).
+4. **58행 `degradeOutputs` 확장**: "타입 → 텍스트 한 줄" 1단이던 규칙을 shared-types 순수 함수 `degradeForProfile()`(zod 무의존)의 **3단 사다리**(원형 → 대체 컴포넌트 → 텍스트)로 확장한다. 기존 5종 텍스트 문구·"경로는 항상 실행"·"WEB 변환 0건" 규약은 그대로이며(WEB 프로필 상한 ≥ 스키마 최대치 — 기존 아웃풋은 입력 참조 그대로 반환), 기존 시그니처(`degradeOutputs(outputs, supported)`)는 래퍼로 유지한다. 외부 채널이 붙으면 그 어댑터가 같은 함수를 자기 프로필로 부른다.
+5. 공개 경로 8곳·요청/응답 스키마 정의는 불변이다 — 바뀌는 것은 요청 `features`의 값 하나(`rich-v1`)와 응답 `outputs` 원소의 스키마 확장분(`CAROUSEL`·`BUTTON.display`)뿐이다.

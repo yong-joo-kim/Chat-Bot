@@ -67,7 +67,7 @@ export function ChatBubble({
       {message.overlayApplied && <OverlayBadge />}
       {matchedCaption && <p className="chat-bubble-caption">{matchedCaption}</p>}
       {message.outputs && message.outputs.length > 0 ? (
-        <OutputRenderer outputs={message.outputs} onButtonClick={onButtonClick} />
+        <OutputRenderer outputs={message.outputs} onButtonClick={onButtonClick} hideQuickReply={message.quickReplyUsed} />
       ) : (
         <p className="chat-bubble-text">{message.text}</p>
       )}

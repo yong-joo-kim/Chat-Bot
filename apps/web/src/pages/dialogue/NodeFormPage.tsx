@@ -1,25 +1,36 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  CHANNEL_CAPABILITIES,
+  CHANNEL_TYPE_LABELS,
   CreateDialogNodeSchema,
+  LEGACY_WEB_WIDGET_OUTPUT_PROFILE,
+  degradeForProfile,
   findLegacyApiOutputIndexes,
   findLegacySurveyOutputIndexes,
+  findQuickReplyPlacementIssues,
   type DialogMatchMode,
   type DialogNodeType,
   type DialogOutput,
   type DialogueOverlay,
+  type RichUrlHostRule,
 } from '@chat-bot/shared-types';
+import { toOutputViews } from '@chat-bot/shared-types/output-view';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { dialogNodesApi } from '../../api/dialogue';
+import { channelsApi } from '../../api/channels';
+import { richMessagesApi } from '../../api/richMessages';
 import { ApiError } from '../../api/client';
 import { useToast } from '../../components/Toast';
 import { InlineFieldError } from '../../components/InlineFieldError';
 import { ReorderableList } from '../../components/ReorderableList';
 import { ResourcePickerField } from '../../components/ResourcePickerField';
 import { ErrorState } from '../../components/ErrorState';
+import { SeverityBadge } from '../../components/SeverityBadge';
 import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { DialogOutputEditor } from './components/DialogOutputEditor';
+import { ChannelPreviewSection } from './components/ChannelPreviewSection';
 import { SimulatorDrawer } from '../chatbot-detail/simulator/SimulatorDrawer';
 import { TopicSelectField } from '../../components/TopicSelectField';
 import { SystemNodeTopicLockedHint } from './components/topicBadges';
@@ -69,6 +80,25 @@ export function NodeFormPage(): JSX.Element {
   // [No.26] `API_OUTPUT_LEGACY_FORMAT` 저장 거부 시 v1 카드로 스크롤·포커스+강조(ui-spec §3.3-5).
   // `token`은 같은 인덱스에서 재시도해도 효과가 다시 발동하도록 매번 갱신한다.
   const [legacyHighlight, setLegacyHighlight] = useState<{ index: number; token: number } | null>(null);
+  // [신규 No.46] RM-1 하단 — 챗봇 허용 도메인 목록(있으면 목록 밖 호스트를 경고, §3.1 하단).
+  const [allowedHosts, setAllowedHosts] = useState<RichUrlHostRule[] | undefined>(undefined);
+  // [신규 No.46] RM-4 — 저장 성공 직후 1회만 보이는 채널 강등 경고 배너(비차단, §3.4).
+  const [saveWarning, setSaveWarning] = useState<{ severity: 'WARNING' | 'INFO'; text: string } | null>(null);
+
+  useEffect(() => {
+    richMessagesApi
+      .getUrlPolicy(chatbot.id)
+      .then((res) => setAllowedHosts(res.hosts))
+      .catch(() => setAllowedHosts(undefined));
+  }, [chatbot.id]);
+
+  // [신규 No.46] RM-2 — 바로연결 배치 규칙을 outputs가 바뀔 때마다 클라이언트에서 실시간 재계산한다(§4.2).
+  const quickReplyIssues = useMemo(() => findQuickReplyPlacementIssues(outputs.map((o) => o.output)), [outputs]);
+  const quickReplyBanner = useMemo(() => {
+    if (quickReplyIssues.length === 0) return undefined;
+    const msg = MESSAGES.dialogue.outputFields;
+    return quickReplyIssues.some((i) => i.reason === 'MULTIPLE') ? msg.quickReplyPlacementMultipleError : msg.quickReplyPlacementNotLastError;
+  }, [quickReplyIssues]);
 
   const load = useCallback(async () => {
     if (isNew || !nodeId) return;
@@ -109,8 +139,35 @@ export function NodeFormPage(): JSX.Element {
   function markDirty<T>(setter: (v: T) => void) {
     return (v: T) => {
       setDirty(true);
+      // [신규 No.46] RM-4 — 다시 편집을 시작하면 저장 경고 배너가 사라진다(§3.4, 모달 아님).
+      setSaveWarning(null);
       setter(v);
     };
+  }
+
+  /** [신규 No.46] RM-4 — 저장 성공 직후 활성/설정만 된 채널의 강등 변화를 1회 안내한다(§3.4, 순수 계산). */
+  async function computeSaveWarning(savedOutputs: DialogOutput[]): Promise<{ severity: 'WARNING' | 'INFO'; text: string } | null> {
+    const displayOutputs = toOutputViews(savedOutputs);
+    if (displayOutputs.length === 0) return null;
+    const legacyChanges = degradeForProfile(displayOutputs, LEGACY_WEB_WIDGET_OUTPUT_PROFILE).changes;
+    if (legacyChanges.length > 0) {
+      // [코드 리뷰 R1 Low, 오케스트레이터 결정] 설계서 §11.4 우선 — 구버전 위젯 강등은 INFO다
+      // (문서 간 §3.4 표기와 모순이 있었고, 설계서를 채택했다).
+      return { severity: 'INFO', text: MESSAGES.richMessages.saveWarningActiveChannel(MESSAGES.richMessages.tabLegacyWidget) };
+    }
+    try {
+      const { items } = await channelsApi.list(chatbot.id);
+      for (const ch of items) {
+        if (ch.type === 'WEB' || !ch.configured) continue;
+        const changes = degradeForProfile(displayOutputs, CHANNEL_CAPABILITIES[ch.type].outputs).changes;
+        if (changes.length > 0) {
+          return { severity: 'INFO', text: MESSAGES.richMessages.saveInfoConfigOnlyChannel(CHANNEL_TYPE_LABELS[ch.type]) };
+        }
+      }
+    } catch {
+      // 채널 목록 조회 실패는 저장 자체를 막지 않는다 — 경고 배너만 생략한다.
+    }
+    return null;
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -118,6 +175,7 @@ export function NodeFormPage(): JSX.Element {
     if (isArchived) return;
     setFormBanner(undefined);
     setFieldErrors({});
+    setSaveWarning(null);
 
     const payload = {
       name,
@@ -159,6 +217,7 @@ export function NodeFormPage(): JSX.Element {
         await dialogNodesApi.update(chatbot.id, nodeId, parsed.data);
         showToast(msg.saveSuccess);
         setDirty(false);
+        setSaveWarning(await computeSaveWarning(parsed.data.outputs));
         void load();
       }
     } catch (e2) {
@@ -249,6 +308,16 @@ export function NodeFormPage(): JSX.Element {
       {formBanner && (
         <div className="form-banner form-banner--error" role="alert">
           {formBanner}
+        </div>
+      )}
+
+      {/* [신규 No.46] RM-4 — 저장 성공 직후 1회만 보이는 채널 강등 경고(비차단, D-7 닫을 때까지 유지). */}
+      {saveWarning && (
+        <div aria-live="polite">
+          <SeverityBadge severity={saveWarning.severity} label={saveWarning.text} />{' '}
+          <button type="button" className="link-button" onClick={() => setSaveWarning(null)}>
+            {MESSAGES.common.close}
+          </button>
         </div>
       )}
 
@@ -396,17 +465,20 @@ export function NodeFormPage(): JSX.Element {
               getKey={(o) => o.key}
               onChange={(next) => {
                 setDirty(true);
+                setSaveWarning(null);
                 setOutputs(next);
               }}
               maxItems={10}
               onAdd={() => {
                 setDirty(true);
+                setSaveWarning(null);
                 setOutputs((prev) => [...prev, { key: nextKey(), output: { type: 'TEXT', payload: { text: '' } } }]);
               }}
               addLabel={msg.addOutput}
               addLimitLabel={msg.addOutputMax}
               onRemove={(key) => {
                 setDirty(true);
+                setSaveWarning(null);
                 setOutputs((prev) => prev.filter((o) => o.key !== key));
               }}
               itemLabel={(o, i) => `${i + 1}번째 아웃풋(${MESSAGES.dialogue.outputTypes[o.output.type]})`}
@@ -415,6 +487,7 @@ export function NodeFormPage(): JSX.Element {
                   value={row.output}
                   onChange={(next) => {
                     setDirty(true);
+                    setSaveWarning(null);
                     setOutputs((prev) => prev.map((o) => (o.key === row.key ? { ...o, output: next } : o)));
                   }}
                   chatbotId={chatbot.id}
@@ -424,9 +497,21 @@ export function NodeFormPage(): JSX.Element {
                   idPrefix={`output-${index}`}
                   errorFieldPrefix={`outputs.${index}.payload`}
                   fieldErrors={fieldErrors}
+                  allowedHosts={allowedHosts}
                 />
               )}
             />
+            {/* [신규 No.46] RM-2 — 바로연결 배치 오류(§3.2, 서버 400 폴백은 fieldErrorsFromApiError가 처리). */}
+            {quickReplyBanner && (
+              <div className="form-banner form-banner--error" role="alert">
+                {quickReplyBanner}
+              </div>
+            )}
+          </div>
+
+          {/* [신규 No.46] RM-3 — 채널별 미리보기(상시 노출, D-5 확정). */}
+          <div className="node-form-section">
+            <ChannelPreviewSection outputs={outputs.map((o) => o.output)} />
           </div>
         </fieldset>
 

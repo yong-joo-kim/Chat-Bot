@@ -190,3 +190,48 @@ describe('VersionDiffPage — 복원 후속 처리', () => {
     expect(screen.queryByRole('button', { name: 'v14로 복원' })).not.toBeInTheDocument();
   });
 });
+
+/** [신규 No.46, 계약 연결 RM-8] `outputSummary`(예: "캐러셀(카드 N장)") — 항목 라벨 옆에 표시. */
+describe('VersionDiffPage — outputSummary 표시(RM-8)', () => {
+  beforeEach(() => {
+    mockList.mockReset();
+    mockDiff.mockReset();
+    mockList.mockResolvedValue({ items: [makeVersionItem()], total: 1, page: 1, pageSize: 100 });
+  });
+
+  it('outputSummary가 있으면 항목 이름 옆에 표시된다', async () => {
+    mockDiff.mockResolvedValue(
+      makeDiffResponse({
+        summary: { rows: [{ kind: 'NODE', added: 0, removed: 0, modified: 1 }], totalChanged: 1, identical: false },
+        items: {
+          items: [{ id: 'node-1', kind: 'NODE', change: 'MODIFIED', name: '캐러셀노드', outputSummary: ['캐러셀(카드 3장)'] }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        },
+      }),
+    );
+    renderPage();
+
+    await screen.findByRole('button', { name: '캐러셀노드' });
+    expect(screen.getByText('· 캐러셀(카드 3장)')).toBeInTheDocument();
+  });
+
+  it('outputSummary가 없으면 기존과 동일하게(추가 텍스트 없이) 보인다', async () => {
+    mockDiff.mockResolvedValue(
+      makeDiffResponse({
+        summary: { rows: [{ kind: 'NODE', added: 0, removed: 0, modified: 1 }], totalChanged: 1, identical: false },
+        items: {
+          items: [{ id: 'node-1', kind: 'NODE', change: 'MODIFIED', name: '일반노드' }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        },
+      }),
+    );
+    renderPage();
+
+    const nameButton = await screen.findByRole('button', { name: '일반노드' });
+    expect(nameButton.parentElement?.textContent).toBe('일반노드');
+  });
+});

@@ -929,7 +929,7 @@ CustomerCard = {
 1. 고객 `TEST` 확인 · 챗봇 참여 확인(아니면 `400 VALIDATION_FAILED`).
 2. `SimulationService.simulate(chatbotId, { message|buttonAction, state, target, useRag: false, apiMode: 'MOCK', surveyPreview: false, includeInactiveTopics: false }, actor)` — **기존 시뮬레이터 엔진 경로 1벌**(`SimulationModule` export 1줄 — 제약 ④). 서빙 버전 없음 등 시뮬레이터 오류는 그대로 전달하고 항목 0건(EX-OC-16).
 3. 사용자 입력·봇 출력 텍스트(`buildBotResponseText(outputs)` — `conversation/lib` 순수 함수 파일 import)를 `maskForInbox()`로 마스킹해 `SIM_USER`·`SIM_BOT` 항목 2건으로 저장(가상 채널·챗봇 id) — 스레드 최근 채널 = `SIMULATED/<type>`.
-4. 응답: `outputs`(격하 미리보기 없음 — 채널별 지원 목록 미정의 · `degradePreview: 'NOT_DEFINED'` · No.46 착수 시 `degradeOutputs(outputs, 지원 목록)`로 교체 — R-18) · `state`(다음 봉투) · 저장된 항목 2건.
+4. ~~응답: `outputs`(격하 미리보기 없음 — 채널별 지원 목록 미정의 · `degradePreview: 'NOT_DEFINED'` · No.46 착수 시 `degradeOutputs(outputs, 지원 목록)`로 교체 — R-18) · `state`(다음 봉투) · 저장된 항목 2건.~~ **[2026-09-27 No.46 이행]** 응답: `outputs`(원형) · `degradePreview`(가상 채널 프로필로 강등한 미리보기 객체 `{ channelType, source, outputs, changes }` — `inbox/manage/lib/degrade-preview.ts` · `channel-rich-messages-설계.md` §11.6) · `state`(다음 봉투) · 저장된 항목 2건(원형 요약 — 불변).
 
 - **봉투는 서버에 저장하지 않는다**(R-17): 콘솔이 메모리에 들고 다음 요청의 `state`로 보낸다(ADR-0009 결정 1 · 슬롯 원문을 DB에 남기지 않는다). 새로고침하면 새 대화로 시작한다.
 - 시험 고객 삭제(`DELETE`): 항목·태그 연결·스레드·고객 행 삭제(store — 시험 데이터 · 보존 대상 아님) + 감사 `DELETE Customer`(AC-OC5-4). 실제 고객과 병합·연결 불가(§7).
@@ -1276,7 +1276,7 @@ CustomerCard = {
 | R-15 | FR-OC4-4 재열림 | 고객 사건(①②) = 종료·보류 → 열림 · 상담원 사건(③④) = 종료 → 열림만 |
 | R-16 | FR-OC5-7 기존 API 선택 필드 | 기존 No.24 응답 불변 · 신규 `GET /inbox/session-link` |
 | R-17 | FR-OC7-2 시뮬레이션 봉투 서버 보관 | 콘솔 메모리(서버 저장 0 — 슬롯 원문 저장 회피) |
-| R-18 | FR-OC7-3 격하 미리보기 | 지원 목록 미정의 → 격하 0 + `degradePreview: 'NOT_DEFINED'`(No.46이 채운다) |
+| R-18 | FR-OC7-3 격하 미리보기 | 지원 목록 미정의 → 격하 0 + `degradePreview: 'NOT_DEFINED'`(No.46이 채운다) **[2026-09-27 이행 — No.46: 능력표 + 3단 강등 순수 함수로 `degradePreview` 객체를 채운다 · 스키마 = 합집합(ADR-0043 · ADR-0042 갱신 각주)]** |
 | R-19 | FR-OC8-4 영구삭제 | 연결 = 사전검사 16종째 · 설정 = 동반 삭제(22 → 23) |
 | R-20 | FR-OC9-2 암호화 +2~3 | +2(`INBOX_ENTRY_TEXT`·`CUSTOMER_DISPLAY_NAME`) · 백필·재암호화 잡 **편입**(EX-OC-17) |
 | R-21 | FR-OC9-4 보존 종류 | 신설 2(`INBOX_TEXT`·`CUSTOMER_IDENTITY`) · 전역만 · 저장 스키마 선택 키 |
@@ -1295,7 +1295,7 @@ CustomerCard = {
 
 ## 26. 범위 밖 · 2차 교체 지점 (재검토 트리거는 요구사항 §9 · ADR-0042)
 
-카카오톡·네이버 톡톡·라인·페이스북 실연동(교체 지점 §5.3 6개 + 어댑터 1 + 자격증명 ADR + 웹훅 `@Public()` +1씩) · 범용 API 채널 · 음성 전화 자동 연동(No.32) · 이메일 수신 적재·회신(No.41 내장 메일) · 봇 슬롯 이월(No.34) · AI 요약·답변 제안(옵션 AI) · 위젯 지난 대화 복원(ADR-0009 트리거 ③) · 연락처 병합 제안 · 자동 배정·SLA·대기열(No.24 후속) · 스레드 이벤트 업무 자동화(No.41 확장) · 고객 단위 정보주체 파기(No.45 2차 — 착수 조건 충족) · 고유 방문자 통계 · 멀티테넌시 가시성 · 고객 키 재해시 · CRM 연동(No.39) · 인박스 통계(No.29 확장) · 채널별 리치 출력(No.46) · 토큰 재생 탐지.
+카카오톡·네이버 톡톡·라인·페이스북 실연동(교체 지점 §5.3 6개 + 어댑터 1 + 자격증명 ADR + 웹훅 `@Public()` +1씩) · 범용 API 채널 · 음성 전화 자동 연동(No.32) · 이메일 수신 적재·회신(No.41 내장 메일) · 봇 슬롯 이월(No.34) · AI 요약·답변 제안(옵션 AI) · 위젯 지난 대화 복원(ADR-0009 트리거 ③) · 연락처 병합 제안 · 자동 배정·SLA·대기열(No.24 후속) · 스레드 이벤트 업무 자동화(No.41 확장) · 고객 단위 정보주체 파기(No.45 2차 — 착수 조건 충족) · 고유 방문자 통계 · 멀티테넌시 가시성 · 고객 키 재해시 · CRM 연동(No.39) · 인박스 통계(No.29 확장) · ~~채널별 리치 출력(No.46)~~ **(2026-09-27 No.46 설계 완료 — ADR-0043)** · 토큰 재생 탐지.
 
 ## 27. 구현 편차 기록(I-n)
 

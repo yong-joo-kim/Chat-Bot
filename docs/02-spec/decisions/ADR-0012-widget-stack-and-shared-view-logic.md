@@ -126,3 +126,14 @@ packages/shared-types/src/contrast.ts      # (신규) apps/web/src/lib/contrast.
 2. 로직은 `core/feedback.ts`(응답 결과 → 재시도·표시 결정 순수 함수 — 첫 `404`도 1초 뒤 1회 재시도)와 `ui/feedback-bar.ts`(DOM)로 나눈다. 평가 상태는 DOM에만 두며 `sessionStorage`·`localStorage`를 쓰지 않는다.
 3. 메시지 목록(`role="log"`, `aria-relevant="additions"`)에 새 노드를 추가하지 않고 속성(`aria-pressed`) 변경과 상태 영역(`#cb-status`) 1회 안내로 알린다.
 4. **감수 비용 ③(Preact 재검토) 트리거는 발동하지 않는다** — 런타임 의존성 0 · gzip 100KB 게이트 유지 · 증가분(예상 2KB 이하)은 빌드 로그로 보고한다.
+
+
+---
+
+## 갱신 (2026-09-27 — No.46: 캐러셀·바로연결 렌더 · vanilla 유지 · 감수 비용 ③ 트리거 점검 = 미발동)
+
+채널별 리치 메시지(No.46, **ADR-0043 §9**). 스택·격리·서브패스 공유 결정은 **불변**이다.
+
+1. 감수 비용 ③이 남겨 둔 트리거 "리치 상담 메시지(No.46)"를 **점검했고 발동하지 않는다** — 캐러셀은 CSS 스크롤 스냅 + 이전/다음 `<button>` 2개, 바로연결은 버튼 묶음 + `hidden` 속성으로 충분하다. 순수 판단은 `core/carousel.ts`(위치·가장 가까운 카드)·`core/quick-reply.ts`(마지막 바로연결 선택), DOM은 `ui/renderers/carousel.ts`·`quick-reply.ts`로 나눈다.
+2. 위젯이 요청 `features`에 `'rich-v1'`을 더 싣는다(3/5). 강등 함수(`rich-degrade`)는 위젯이 import하지 않는다 — 서버가 강등한다. 위젯은 zod 무의존 `rich-url`(https·`@` 판정)만 `output-view` 서브패스로 공유해 렌더 시 재검증한다.
+3. 런타임 의존성 0 · gzip 100KB 게이트 유지 · **이 그룹 증가분 ≤6KB**(빌드 로그 보고). 남은 Preact 재검토 트리거 = **파일 첨부(No.33)**.

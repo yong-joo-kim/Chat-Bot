@@ -164,6 +164,41 @@ describe('NodeFormPage — API_OUTPUT_LEGACY_FORMAT 저장 거부', () => {
   });
 });
 
+/**
+ * [코드 리뷰 R1 Low, 오케스트레이터 결정] RM-4 저장 경고 — 구버전 위젯 강등은 설계서 §11.4에 따라
+ * INFO다(§3.4 표기와 모순이 있었고 설계서를 채택했다).
+ */
+describe('NodeFormPage — RM-4 저장 경고(비차단)', () => {
+  it('캐러셀이 있는 노드를 저장하면 구버전 위젯 강등 경고가 INFO로 보인다(WARNING 아님)', async () => {
+    mockFindOne.mockResolvedValue({
+      id: 'node-legacy',
+      chatbotId: 'bot-1',
+      name: '캐러셀노드',
+      nodeType: 'FALLBACK',
+      matchMode: 'ANY',
+      enabled: true,
+      priority: 100,
+      intentIds: [],
+      keywordIds: [],
+      outputs: [{ type: 'CAROUSEL', payload: { version: 1, cards: [{ title: 'A' }, { title: 'B' }] } }],
+      createdAt: new Date('2026-09-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    mockUpdate.mockResolvedValue({});
+
+    const user = userEvent.setup();
+    renderEditPage();
+    const nameInput = await screen.findByDisplayValue('캐러셀노드');
+    await user.type(nameInput, 'x');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    const text = await screen.findByText('구버전 웹 위젯에서는 응답 모습이 달라집니다.');
+    const badge = text.closest('.severity-badge');
+    expect(badge?.textContent).toContain('ⓘ');
+    expect(badge?.textContent).not.toContain('⚠');
+  });
+});
+
 /** [신규 No.22] D1-ext — START/FALLBACK 노드는 `TopicSelectField` 대신 고정 안내를 보여준다(§9-7). */
 describe('NodeFormPage — 토픽 선택 필드 / 시작·폴백 잠금', () => {
   it('유형이 일반(NORMAL)이면 토픽 선택 필드가 보인다', async () => {

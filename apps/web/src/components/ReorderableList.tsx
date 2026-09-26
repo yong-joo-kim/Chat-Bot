@@ -22,6 +22,12 @@ export interface ReorderableListProps<T> {
    * `onRemove`를 계속 넘기면서 이 값만 `true`로 주면 된다.
    */
   removeDisabled?: boolean;
+  /**
+   * [신규 No.46] `removeDisabled`가 참일 때 `aria-label`에 이유를 병기한다(예: "2장 미만으로
+   * 줄일 수 없습니다" — 캐러셀 카드 하한, channel-rich-messages-ui-spec.md §3.1). 생략하면 기존
+   * 동작과 바이트 동일(다른 소비자는 무수정).
+   */
+  removeDisabledReason?: string;
   /** `removeDisabled`와 같은 원칙 — 추가 버튼도 숨기지 않고 `disabled`로 보여 준다(No.27 리뷰 2회차). */
   addDisabled?: boolean;
 }
@@ -45,6 +51,7 @@ export function ReorderableList<T>({
   removeLabel = '삭제',
   reorderDisabled = false,
   removeDisabled = false,
+  removeDisabledReason,
   addDisabled = false,
 }: ReorderableListProps<T>): JSX.Element {
   const buttonRefs = useRef<Map<string, { up?: HTMLButtonElement; down?: HTMLButtonElement }>>(new Map());
@@ -114,7 +121,7 @@ export function ReorderableList<T>({
                 <button
                   type="button"
                   className="reorderable-btn reorderable-btn--danger"
-                  aria-label={`${label} ${removeLabel}`}
+                  aria-label={removeDisabled && removeDisabledReason ? `${label} ${removeLabel} — ${removeDisabledReason}` : `${label} ${removeLabel}`}
                   disabled={items.length <= minItems || removeDisabled}
                   onClick={() => onRemove(key)}
                 >

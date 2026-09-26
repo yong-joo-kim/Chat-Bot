@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ButtonItem, DialogOutput, DialogOutputType } from '@chat-bot/shared-types';
-import { isApiConditionV2, isSurveyV2, isUnsupportedOutput } from '@chat-bot/shared-types';
+import type { ButtonItem, DialogOutput, DialogOutputType, RichUrlHostRule } from '@chat-bot/shared-types';
+import { inspectRichUrl, isApiConditionV2, isSurveyV2, isUnsupportedOutput, RICH_URL_ERROR_MESSAGES } from '@chat-bot/shared-types';
 import { InlineFieldError } from '../../../components/InlineFieldError';
 import { ReorderableList } from '../../../components/ReorderableList';
 import { ResourcePickerField } from '../../../components/ResourcePickerField';
 import { MESSAGES } from '../../../constants/messages';
 import { UnsupportedOutputBadge } from '../badges';
 import { ButtonItemEditor } from './ButtonItemEditor';
+import { CarouselOutputEditor } from './CarouselOutputEditor';
 import { ApiConditionEditorV2 } from './api-condition/ApiConditionEditorV2';
 import { LegacyApiConditionReadonlyCard } from './api-condition/LegacyApiConditionReadonlyCard';
 import { ConvertLegacyApiConditionDialog } from './api-condition/ConvertLegacyApiConditionDialog';
@@ -29,6 +30,8 @@ export interface DialogOutputEditorProps {
   /** 서버 `details[].field` 경로 접두어(예: `outputs.3.payload`) — DOM id와 형식이 다를 수 있다. */
   errorFieldPrefix: string;
   fieldErrors: Record<string, string>;
+  /** [신규 No.46] 캐러셀 카드 이미지·LINK 버튼 주소의 목록 밖 경고용(§3.1 하단) — 없으면 검사를 건너뛴다. */
+  allowedHosts?: RichUrlHostRule[];
 }
 
 const OUTPUT_TYPES: DialogOutputType[] = [
@@ -46,6 +49,8 @@ const OUTPUT_TYPES: DialogOutputType[] = [
   'API_CONDITION',
   // [신규 No.41] 13번째 아웃풋 타입 — "업무 요청 보내기"(비종결·사용자에게 보이지 않음).
   'WORKFLOW',
+  // [신규 No.46] 14번째 아웃풋 타입 — "캐러셀(카드 여러 장 넘겨 보기)".
+  'CAROUSEL',
 ];
 
 function defaultPayloadFor(type: DialogOutputType): DialogOutput {
@@ -92,8 +97,15 @@ function defaultPayloadFor(type: DialogOutputType): DialogOutput {
     case 'WORKFLOW':
       // [신규 No.41] `WORKFLOW`는 이번에 처음 생기는 타입이라 레거시 호환 분기가 필요 없다(v1 한 형태뿐).
       return { type, payload: { version: 1, targetId: '', actionKey: '', fields: [] } };
-    default:
-      return { type: 'TEXT', payload: { text: '' } };
+    case 'CAROUSEL':
+      // [신규 No.46] 카드 2장(하한)으로 시작한다 — "카드가 부족합니다" 오류를 처음부터 겪지 않게(§3.1).
+      return { type, payload: { version: 1, cards: [{ title: '' }, { title: '' }] } };
+    default: {
+      // [신규 No.46] 14종 전부 명시 — 새 타입을 `OUTPUT_TYPES`에 추가하고 이 분기를 빠뜨리면
+      // 컴파일 오류로 걸린다(설계서 §15 #15).
+      const unreachable: never = type;
+      return unreachable;
+    }
   }
 }
 
@@ -114,6 +126,7 @@ export function DialogOutputEditor({
   idPrefix,
   errorFieldPrefix,
   fieldErrors,
+  allowedHosts,
 }: DialogOutputEditorProps): JSX.Element {
   const msg = MESSAGES.dialogue.outputFields;
   const prevTypeRef = useRef(value.type);
@@ -271,6 +284,31 @@ export function DialogOutputEditor({
               onChange={(e) => setPayload({ type: 'BUTTON', payload: { ...value.payload, text: e.target.value || undefined } })}
             />
           </div>
+          {/* [신규 No.46] "표시 방식" 라디오 — 일반 버튼/바로연결(RM-2, D-3). */}
+          <fieldset className="form-field" style={{ border: 'none', padding: 0 }}>
+            <legend className="field-label-static">{msg.quickReplyDisplayLabel}</legend>
+            <label className="form-field--inline">
+              <input
+                type="radio"
+                name={`${idPrefix}-display`}
+                checked={value.payload.display !== 'QUICK_REPLY'}
+                onChange={() => {
+                  const { display: _display, ...rest } = value.payload;
+                  setPayload({ type: 'BUTTON', payload: rest });
+                }}
+              />
+              {msg.quickReplyDisplayNormal}
+            </label>
+            <label className="form-field--inline">
+              <input
+                type="radio"
+                name={`${idPrefix}-display`}
+                checked={value.payload.display === 'QUICK_REPLY'}
+                onChange={() => setPayload({ type: 'BUTTON', payload: { ...value.payload, display: 'QUICK_REPLY' } })}
+              />
+              {msg.quickReplyDisplayQuickReply}
+            </label>
+          </fieldset>
           <ButtonListEditor
             buttons={value.payload.buttons}
             onChange={(buttons) => setPayload({ type: 'BUTTON', payload: { ...value.payload, buttons } })}
@@ -278,8 +316,9 @@ export function DialogOutputEditor({
             idPrefix={`${idPrefix}-btn`}
             maxItems={5}
             minItems={1}
+            quickReply={value.payload.display === 'QUICK_REPLY'}
           />
-          <InlineFieldError id={`${idPrefix}-buttons-error`} message={err('buttons')} />
+          <InlineFieldError id={`${idPrefix}-buttons-error`} message={err('buttons') ?? err('display')} />
         </div>
       )}
 
@@ -502,30 +541,53 @@ export function DialogOutputEditor({
           firstFieldRef={firstFieldRef}
         />
       )}
+
+      {value.type === 'CAROUSEL' && (
+        <CarouselOutputEditor
+          value={value.payload}
+          onChange={(payload) => setPayload({ type: 'CAROUSEL', payload })}
+          chatbotId={chatbotId}
+          idPrefix={idPrefix}
+          errorFieldPrefix={errorFieldPrefix}
+          fieldErrors={fieldErrors}
+          allowedHosts={allowedHosts}
+          firstFieldRef={firstFieldRef}
+        />
+      )}
     </div>
   );
 }
 
-/** 버튼 목록(카드/버튼 아웃풋 공용) — `ReorderableList` 재사용, 드래그 없이 위/아래 버튼만 제공. */
-function ButtonListEditor({
-  buttons,
-  onChange,
-  chatbotId,
-  idPrefix,
-  maxItems,
-  minItems = 0,
-}: {
+/** [신규 No.46] `inspectRichUrl` 오류를 서버 오류 문구와 1:1로 일치시켜 표시한다(§3.1). */
+function richUrlValueError(url: string): string | undefined {
+  if (!url) return undefined;
+  const r = inspectRichUrl(url);
+  return r.ok ? undefined : RICH_URL_ERROR_MESSAGES[r.error];
+}
+
+export interface ButtonListEditorProps {
   buttons: ButtonItem[];
   onChange: (buttons: ButtonItem[]) => void;
   chatbotId: string;
   idPrefix: string;
   maxItems: number;
   minItems?: number;
-}): JSX.Element {
+  /** [신규 No.46] 바로연결(RM-2) — LINK 동작을 비활성 + 이유 병기, 라벨 20자 초과 경고. */
+  quickReply?: boolean;
+  /** [신규 No.46] 캐러셀 카드 버튼(RM-1) — LINK 값을 `inspectRichUrl`로 즉시 검사(https 전용). */
+  richUrlCheck?: boolean;
+}
+
+/**
+ * 버튼 목록(카드/버튼/캐러셀 카드 아웃풋 공용) — `ReorderableList` 재사용, 드래그 없이 위/아래
+ * 버튼만 제공한다(§3.1 "카드 버튼 목록" — `maxItems`를 인자로 받아 그대로 재사용, export로 일반화).
+ */
+export function ButtonListEditor({ buttons, onChange, chatbotId, idPrefix, maxItems, minItems = 0, quickReply = false, richUrlCheck = false }: ButtonListEditorProps): JSX.Element {
+  const msg = MESSAGES.dialogue.outputFields;
   const rows = buttons.map((b, i) => ({ ...b, key: `${idPrefix}-${i}` }));
   return (
     <div className="form-field">
-      <span className="field-label-static">{MESSAGES.dialogue.outputFields.buttons}</span>
+      <span className="field-label-static">{msg.buttons}</span>
       <ReorderableList
         items={rows}
         getKey={(r) => r.key}
@@ -533,21 +595,36 @@ function ButtonListEditor({
         minItems={minItems}
         maxItems={maxItems}
         onAdd={() => onChange([...buttons, newButtonItem()])}
-        addLabel={MESSAGES.dialogue.outputFields.addButton}
+        addLabel={msg.addButton}
         onRemove={(key) => onChange(rows.filter((r) => r.key !== key).map(({ key: _key, ...rest }) => rest))}
         itemLabel={(r, i) => `${i + 1}번째 버튼(${r.label || '레이블 없음'})`}
-        renderItem={(r, index) => (
-          <ButtonItemEditor
-            value={r}
-            onChange={(next) => {
-              const nextRows = [...rows];
-              nextRows[index] = { ...next, key: r.key };
-              onChange(nextRows.map(({ key: _key, ...rest }) => rest));
-            }}
-            chatbotId={chatbotId}
-            idPrefix={`${idPrefix}-item-${index}`}
-          />
-        )}
+        renderItem={(r, index) => {
+          const disabledAction = quickReply ? { action: 'LINK' as const, reason: msg.quickReplyLinkDisabledReason } : undefined;
+          const labelWarning = quickReply && r.label.length > 20 ? msg.quickReplyLabelLongWarning(r.label.length) : undefined;
+          const storedLinkError = quickReply && r.action === 'LINK' ? msg.quickReplyLinkStoredError : undefined;
+          const urlError = richUrlCheck && r.action === 'LINK' ? richUrlValueError(r.value) : undefined;
+          return (
+            <div>
+              <ButtonItemEditor
+                value={r}
+                onChange={(next) => {
+                  const nextRows = [...rows];
+                  nextRows[index] = { ...next, key: r.key };
+                  onChange(nextRows.map(({ key: _key, ...rest }) => rest));
+                }}
+                chatbotId={chatbotId}
+                idPrefix={`${idPrefix}-item-${index}`}
+                disabledAction={disabledAction}
+                valueError={storedLinkError ?? urlError}
+              />
+              {labelWarning && (
+                <p className="field-hint field-hint--warning">
+                  <span aria-hidden="true">⚠</span> {labelWarning}
+                </p>
+              )}
+            </div>
+          );
+        }}
       />
     </div>
   );

@@ -74,7 +74,7 @@ describe('위젯 답변 평가(No.44) — 일반 턴', () => {
 
     const call = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/messages'));
     const body = JSON.parse(String(call?.[1]?.body)) as { features?: string[] };
-    expect(body.features).toEqual(['handoff-v1', 'feedback-v1']);
+    expect(body.features).toEqual(['handoff-v1', 'feedback-v1', 'rich-v1']);
   });
 
   it('feedback.rateable이 없는 응답에는 평가 막대가 없다', async () => {

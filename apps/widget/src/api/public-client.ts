@@ -9,6 +9,7 @@ import type {
 } from '@chat-bot/shared-types';
 import { HANDOFF_SESSION_HEADER, HANDOFF_TOKEN_HEADER, WIDGET_FEATURE_HANDOFF_V1 } from '../constants/handoff';
 import { WIDGET_FEATURE_FEEDBACK_V1 } from '../constants/feedback';
+import { WIDGET_FEATURE_RICH_V1 } from '../constants/rich';
 import { IDENTITY_TOKEN_HEADER } from '../constants/identity';
 import type { FeedbackRating } from '../core/feedback';
 
@@ -73,15 +74,16 @@ export function createPublicClient(apiBase: string, slug: string) {
   return {
     getConfig: (): Promise<PublicChatbotConfig> => request<PublicChatbotConfig>('/config'),
     /**
-     * [No.24·No.44·No.42] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1']`)을 항상
-     * 싣는다(ADR-0036 §5.6 — 이게 없으면 서버가 구버전으로 취급해 편승 격하한다). 상담 토큰이
-     * 있으면 헤더로 함께 보낸다. [신규 No.42] 식별 토큰이 있을 때만 `x-cb-identity` 헤더를
-     * 추가한다(없으면 요청 바이트 불변, `omnichannel-inbox-설계.md` §6.8).
+     * [No.24·No.44·No.42·No.46] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1',
+     * 'rich-v1']`)을 항상 싣는다(ADR-0036 §5.6 — 이게 없으면 서버가 구버전으로 취급해 편승
+     * 격하한다). `rich-v1`이 없으면 서버가 캐러셀을 `CARD` 여러 개로, 바로연결을 일반 `BUTTON`으로
+     * 강등해 보낸다(ADR-0043 §6). 상담 토큰이 있으면 헤더로 함께 보낸다. [신규 No.42] 식별 토큰이
+     * 있을 때만 `x-cb-identity` 헤더를 추가한다(없으면 요청 바이트 불변, `omnichannel-inbox-설계.md` §6.8).
      */
     sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> =>
       request<PublicMessageResponse>('/messages', {
         method: 'POST',
-        body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_FEEDBACK_V1] }),
+        body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_FEEDBACK_V1, WIDGET_FEATURE_RICH_V1] }),
         headers: {
           ...(opts?.handoffToken ? { [HANDOFF_TOKEN_HEADER]: opts.handoffToken } : undefined),
           ...(opts?.identityToken ? { [IDENTITY_TOKEN_HEADER]: opts.identityToken } : undefined),

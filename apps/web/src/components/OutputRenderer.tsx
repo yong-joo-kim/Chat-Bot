@@ -1,18 +1,43 @@
-import { isSafeHttpUrl, resolveButtonAction, toOutputViews, type ButtonActionView } from '@chat-bot/shared-types/output-view';
-import type { ButtonItem, DialogOutput } from '@chat-bot/shared-types';
+import { useRef, useState } from 'react';
+import { isSafeHttpUrl, isSafeRichUrl, resolveButtonAction, toOutputViews, type ButtonActionView, type OutputView } from '@chat-bot/shared-types/output-view';
+import type { ButtonItem, CarouselOutputPayloadV1, DialogOutput } from '@chat-bot/shared-types';
+import { MESSAGES } from '../constants/messages';
+
+/**
+ * [신규 No.46] 한 턴의 표시 아웃풋 중 `display==='QUICK_REPLY'`인 `BUTTON`의 **마지막 1개**만
+ * 칩으로 분리한다(FR-RM2-3·EX-RM-11) — 위젯 `core/quick-reply.ts`의 `splitQuickReply`와 같은 규칙.
+ */
+function findLastQuickReplyIndex(views: OutputView[]): number {
+  let last = -1;
+  views.forEach((v, i) => {
+    if (v.type === 'BUTTON' && v.payload.display === 'QUICK_REPLY') last = i;
+  });
+  return last;
+}
 
 /**
  * 아웃풋 → 화면 렌더러(FR-10-6, NFR-M1, DD-24). `toOutputViews()`가 정한 순서·타입만 그리며,
  * 위젯(`apps/widget`)과 "무엇을 어떤 순서로 보여줄지" 변환 로직을 공유한다(마크업만 앱별).
+ * [신규 No.46] `CAROUSEL` case와 바로연결 칩 분기 — 시뮬레이터(`ChatBubble`)와 채널별 미리보기
+ * (`ChannelPreviewSection`)가 이 컴포넌트 하나를 공유한다(설계서 §0, 중복 구현 금지).
  */
 export function OutputRenderer({
   outputs,
   onButtonClick,
+  hideQuickReply = false,
 }: {
   outputs: DialogOutput[];
   onButtonClick: (action: ButtonActionView) => void;
+  /**
+   * [신규 No.46] RM-6 — 응답 테스트 시뮬레이터가 "사용 후 숨김"(D-4, 위젯과 동일한 사용자 경험)을
+   * 표현할 때 쓴다. 참이면 바로연결 칩 묶음을 렌더하지 않는다(그 아웃풋 자체가 사라진 것처럼 —
+   * 위젯의 `hidden` 토글과 같은 관측 결과). 그 밖의 소비자(채널별 미리보기 등)는 항상 `false`.
+   */
+  hideQuickReply?: boolean;
 }): JSX.Element {
   const views = toOutputViews(outputs);
+  const quickReplyIndex = hideQuickReply ? -1 : findLastQuickReplyIndex(views);
+  const hiddenQuickReplyIndex = hideQuickReply ? findLastQuickReplyIndex(views) : -1;
   return (
     <div className="output-renderer">
       {views.map((view, i) => {
@@ -48,6 +73,10 @@ export function OutputRenderer({
               </p>
             );
           case 'BUTTON':
+            // [신규 No.46] 마지막 바로연결은 말풍선 안이 아니라 아래쪽 칩 묶음으로 렌더한다(EX-RM-11) —
+            // 여기서는 건너뛰고 전체 목록 렌더 뒤 1회만 그린다. `hideQuickReply`면 칩 자체를
+            // 만들지 않는다(사용 후 숨김 — 위젯 `hidden` 토글과 같은 관측 결과).
+            if (i === quickReplyIndex || i === hiddenQuickReplyIndex) return null;
             return (
               <div key={i} className="output-button-block">
                 {view.payload.text && <p className="output-text">{view.payload.text}</p>}
@@ -76,10 +105,92 @@ export function OutputRenderer({
             // 위젯은 이 지점에서 타이핑 인디케이터를 지연 표시한다(FR-W-7). 콘솔은 전체 응답을 한 번에
             // 렌더하므로 시각 요소를 만들지 않는다(§5.4 — "DOM 요소를 만들지 않는다"와 동일 원칙).
             return null;
-          default:
-            return null;
+          case 'CAROUSEL':
+            return <CarouselView key={i} payload={view.payload} onButtonClick={onButtonClick} />;
+          default: {
+            // [신규 No.46] 8종 전부 명시 — 새 표시 타입을 빠뜨리면 컴파일 오류로 걸린다(설계서 §15 #14).
+            const unreachable: never = view;
+            return unreachable;
+          }
         }
       })}
+      {quickReplyIndex >= 0 && views[quickReplyIndex].type === 'BUTTON' && (
+        <div className="output-quick-replies" role="group" aria-label={MESSAGES.richMessages.quickReplyGroupLabel}>
+          {(views[quickReplyIndex] as Extract<OutputView, { type: 'BUTTON' }>).payload.buttons
+            .filter((b) => b.action !== 'LINK')
+            .map((btn, i) => (
+              <button key={i} type="button" className="btn btn-secondary output-quick-reply" onClick={() => onButtonClick(resolveButtonAction(btn))}>
+                {btn.label}
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** [신규 No.46] RM-3·RM-6 공용 캐러셀 렌더 — 위젯(`ui/renderers/carousel.ts`)과 같은 구조(§3.9). */
+function CarouselView({
+  payload,
+  onButtonClick,
+}: {
+  payload: CarouselOutputPayloadV1;
+  onButtonClick: (action: ButtonActionView) => void;
+}): JSX.Element {
+  const [index, setIndex] = useState(0);
+  const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const cards = payload.cards;
+  const clamped = Math.min(index, cards.length - 1);
+
+  function goTo(next: number): void {
+    if (next < 0 || next >= cards.length) return;
+    setIndex(next);
+    cardRefs.current[next]?.scrollIntoView?.({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  }
+
+  return (
+    <div className="output-carousel" role="group" aria-roledescription="캐러셀" aria-label={payload.text || `카드 ${cards.length}개`}>
+      {payload.text && <p className="output-text">{payload.text}</p>}
+      <div className="output-carousel-track">
+        {cards.map((c, i) => (
+          <div
+            key={i}
+            ref={(el) => {
+              cardRefs.current[i] = el;
+            }}
+            className="output-carousel-card"
+            role="group"
+            aria-roledescription="카드"
+            aria-label={`${cards.length}개 중 ${i + 1}번째: ${c.title}`}
+          >
+            {c.imageUrl && isSafeRichUrl(c.imageUrl) && <img className="output-card-image" src={c.imageUrl} alt={c.altText ?? ''} loading="lazy" />}
+            <h4 className="output-card-title">{c.title}</h4>
+            {c.description && <p className="output-card-desc">{c.description}</p>}
+            {c.buttons && c.buttons.length > 0 && <ButtonGroup buttons={c.buttons} onButtonClick={onButtonClick} allowStackedLayout={false} />}
+          </div>
+        ))}
+      </div>
+      <div className="output-carousel-nav">
+        <button
+          type="button"
+          className="btn btn-secondary output-carousel-nav-btn"
+          aria-label={MESSAGES.richMessages.carouselPrevCard}
+          aria-disabled={clamped === 0}
+          onClick={() => goTo(clamped - 1)}
+        >
+          ◀
+        </button>
+        <span aria-hidden="true">{MESSAGES.richMessages.carouselPosition(clamped + 1, cards.length)}</span>
+        <button
+          type="button"
+          className="btn btn-secondary output-carousel-nav-btn"
+          aria-label={MESSAGES.richMessages.carouselNextCard}
+          aria-disabled={clamped === cards.length - 1}
+          onClick={() => goTo(clamped + 1)}
+        >
+          ▶
+        </button>
+      </div>
     </div>
   );
 }

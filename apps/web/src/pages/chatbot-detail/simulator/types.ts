@@ -1,4 +1,15 @@
-import type { ApiStepView, ButtonAction, DialogOutput, MatchTrace, ResolvedBundleTarget, SimulatedAnsweredTopic, SurveyStepView, TraceStep, WorkflowStepView } from '@chat-bot/shared-types';
+import type {
+  ApiStepView,
+  ButtonAction,
+  DegradePreview,
+  DialogOutput,
+  MatchTrace,
+  ResolvedBundleTarget,
+  SimulatedAnsweredTopic,
+  SurveyStepView,
+  TraceStep,
+  WorkflowStepView,
+} from '@chat-bot/shared-types';
 
 /** 시뮬레이터 대화 1건(사용자/봇/시스템 안내/오류). SIM1·SIM1-D가 공유한다. */
 export interface SimMessage {
@@ -26,4 +37,8 @@ export interface SimMessage {
   target?: ResolvedBundleTarget;
   /** 오류 말풍선의 "다시 시도"가 재전송할 원본 요청. */
   retryPayload?: { message?: string; buttonAction?: ButtonAction };
+  /** [신규 No.46] 통합 인박스 시뮬레이션(No.42)의 채널 격하 미리보기(RM-7) — 그 밖의 소비자는 undefined. */
+  degradePreview?: 'NOT_DEFINED' | DegradePreview;
+  /** [신규 No.46] RM-6 — 이 말풍선의 바로연결 칩을 사용(클릭 또는 다음 턴 전송)했으면 `true`(D-4). */
+  quickReplyUsed?: boolean;
 }

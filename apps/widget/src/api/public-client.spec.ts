@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe('widget api/public-client — No.24 계약 확장(ADR-0036)', () => {
-  it('sendMessage는 항상 features:["handoff-v1", "feedback-v1"]를 본문에 싣는다(No.44 X-8)', async () => {
+  it('sendMessage는 항상 features:["handoff-v1", "feedback-v1", "rich-v1"]를 본문에 싣는다(No.44 X-8 · No.46 X-1)', async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({ messageId: '1', outputs: [], state: {}, stateReset: false }),
     );
@@ -24,7 +24,7 @@ describe('widget api/public-client — No.24 계약 확장(ADR-0036)', () => {
 
     const [, init] = fetchMock.mock.calls[0];
     const body = JSON.parse(String(init?.body)) as { features?: string[] };
-    expect(body.features).toEqual(['handoff-v1', 'feedback-v1']);
+    expect(body.features).toEqual(['handoff-v1', 'feedback-v1', 'rich-v1']);
   });
 
   it('토큰이 있으면 x-cb-handoff-token 헤더를 보내고 Content-Type은 그대로 유지한다(헤더 병합 결함 수정)', async () => {

@@ -286,6 +286,68 @@ export const WIDGET_STYLES = `
 .cb-feedback-icon { font-size: 14px; }
 .cb-feedback-note { font-size: 11px; color: #6b7280; }
 
+/* [신규 No.46] 캐러셀(RM-9, §3.9) — 자동 넘김 금지(타이머 0), 모든 카드 DOM 유지. */
+.cb-carousel { display: flex; flex-direction: column; gap: 6px; }
+.cb-carousel-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 2px;
+}
+.cb-carousel-card {
+  flex: 0 0 80%;
+  scroll-snap-align: start;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #fff;
+}
+/* [코드 리뷰 R1 Medium] 카드 이미지 고정 비율 상자(§12.3) — 로드 실패로 <img>가 대체 텍스트로
+   바뀌어도 카드 높이가 흔들리지 않는다. */
+.cb-carousel-image-box {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cb-carousel-image-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cb-carousel-image-box .cb-msg-text { padding: 8px; text-align: center; font-size: 13px; color: #6b7280; }
+.cb-carousel-nav { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.cb-carousel-nav-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--cb-primary, #4f46e5);
+  background: #fff;
+  color: var(--cb-primary, #4f46e5);
+  cursor: pointer;
+}
+.cb-carousel-nav-btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
+.cb-carousel-nav-btn:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.cb-carousel-position { font-size: 12px; color: #6b7280; }
+@media (prefers-reduced-motion: reduce) {
+  .cb-carousel-track { scroll-behavior: auto; }
+}
+
+/* [신규 No.46] 바로연결 칩(RM-10, §3.10) — 말풍선 아래·평가 막대 앞, 44px 이상. */
+.cb-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.cb-quick-reply {
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--cb-primary, #4f46e5);
+  background: #fff;
+  color: var(--cb-primary, #4f46e5);
+  font-size: 14px;
+  cursor: pointer;
+}
+.cb-quick-reply:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+
 @media (max-width: 420px) {
   .cb-panel { bottom: 0; right: 0; left: 0; width: 100vw; max-width: 100vw; }
 }

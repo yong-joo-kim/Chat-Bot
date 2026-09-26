@@ -18,6 +18,7 @@ import { FormActions } from './FormActions';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 import { ChatbotRetentionSection } from '../settings/data-governance/ChatbotRetentionSection';
 import { ChatbotInboxSettingsSection } from './inbox-settings/ChatbotInboxSettingsSection';
+import { RichUrlPolicySection } from './settings/RichUrlPolicySection';
 
 interface SettingsFormState {
   name: string;
@@ -71,9 +72,17 @@ export function SettingsTab(): JSX.Element {
   // [신규 No.42] OI-9 — "통합 인박스" 서브탭은 `chatbot:read`만 있으면 보인다(EDITOR도 참여 여부를
   // 알아야 하므로 조회를 넓게 연다, omnichannel-inbox-ui-spec.md §3.9).
   const requestedSection = searchParams.get('section');
-  const section: 'basic' | 'retention' | 'inbox' =
-    requestedSection === 'retention' && canSeeRetention ? 'retention' : requestedSection === 'inbox' ? 'inbox' : 'basic';
-  function setSection(next: 'basic' | 'retention' | 'inbox'): void {
+  // [신규 No.46] 4번째 서브탭 "이미지·링크 허용 도메인" — `chatbot:read`만 있으면 보인다(No.42 `inbox`와 같은 이유,
+  // channel-rich-messages-ui-spec.md §3.5).
+  const section: 'basic' | 'retention' | 'inbox' | 'richUrlPolicy' =
+    requestedSection === 'retention' && canSeeRetention
+      ? 'retention'
+      : requestedSection === 'inbox'
+        ? 'inbox'
+        : requestedSection === 'richUrlPolicy'
+          ? 'richUrlPolicy'
+          : 'basic';
+  function setSection(next: 'basic' | 'retention' | 'inbox' | 'richUrlPolicy'): void {
     const params = new URLSearchParams(searchParams);
     if (next !== 'basic') params.set('section', next);
     else params.delete('section');
@@ -208,6 +217,16 @@ export function SettingsTab(): JSX.Element {
         >
           {MESSAGES.inboxSettings.tabLabel}
         </button>
+        {/* [신규 No.46] RM-5 서브탭 — channel-rich-messages-ui-spec.md §3.5(D-6 확정 이름) */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'richUrlPolicy'}
+          className={`sub-tab-button${section === 'richUrlPolicy' ? ' sub-tab-button--active' : ''}`}
+          onClick={() => setSection('richUrlPolicy')}
+        >
+          {MESSAGES.richUrlPolicy.tabLabel}
+        </button>
       </div>
 
       {section === 'basic' && (
@@ -312,6 +331,9 @@ export function SettingsTab(): JSX.Element {
 
       {/* [신규 No.42] OI-9 — omnichannel-inbox-ui-spec.md §3.9 */}
       {section === 'inbox' && <ChatbotInboxSettingsSection chatbotId={chatbot.id} isArchived={isArchived} />}
+
+      {/* [신규 No.46] RM-5 — channel-rich-messages-ui-spec.md §3.5 */}
+      {section === 'richUrlPolicy' && <RichUrlPolicySection chatbotId={chatbot.id} isArchived={isArchived} />}
     </div>
   );
 }

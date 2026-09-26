@@ -1715,6 +1715,60 @@ a:focus-visible {
   margin-top: 6px;
 }
 
+/* [신규 No.46] 캐러셀 미리보기(콘솔·시뮬레이터 공용, RM-3·RM-6) — 최대 320px + 내부 스크롤은
+   `ChannelPreviewSection`의 컨테이너가 담당한다(이 클래스는 카드 트랙 자체). */
+.output-carousel { display: flex; flex-direction: column; gap: 6px; }
+.output-carousel-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+}
+.output-carousel-card {
+  flex: 0 0 80%;
+  scroll-snap-align: start;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--color-bg);
+}
+.output-carousel-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+.output-carousel-nav-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+.output-carousel-nav-btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* [신규 No.46] RM-3 채널별 미리보기 — 확정(D-5) 최대 높이 320px + 내부 세로 스크롤. */
+.channel-preview-container {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+/* [신규 No.46] 바로연결 칩 묶음(RM-3·RM-6·RM-7 공용, UIUX §8 일시 선택지) */
+.output-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.output-quick-reply {
+  min-height: 44px;
+  border-radius: 999px;
+}
+
 .session-state-panel {
   border: 1px solid var(--color-border);
   border-radius: 8px;

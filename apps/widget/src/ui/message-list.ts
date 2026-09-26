@@ -1,7 +1,8 @@
 import type { ButtonActionView, OutputView } from '@chat-bot/shared-types/output-view';
 import type { ButtonItem, PendingAnswerSource } from '@chat-bot/shared-types';
 import { planPauseSchedule } from '../core/pause-schedule';
-import { renderOutputView, type ButtonGroupOptions } from './renderers';
+import { splitQuickReply } from '../core/quick-reply';
+import { renderOutputView, renderQuickReplies, type ButtonGroupOptions } from './renderers';
 import { renderSourceList } from './renderers/sources';
 import { renderButtonGroup } from './renderers/button';
 import { createPendingIndicator, removePendingIndicator as removePendingIndicatorDom } from './renderers/pending-indicator';
@@ -49,12 +50,15 @@ export interface MessageListController {
     onTyping?: (active: boolean) => void,
     buttonGroupOptions?: ButtonGroupOptions,
     feedback?: FeedbackBarBinding,
+    onCarouselAnnounce?: (text: string) => void,
   ): Promise<void>;
   /**
    * PENDING 최종 답변(§4.4.2-4) — 아웃풋 + 출처를 같은 말풍선에 렌더한다. `messageId`는 이번
    * 답변이 그 이전의 인터림 안내 말풍선과 구분되는 **새 노드**임을 보장하기 위한 식별용일 뿐,
    * 기존 노드를 찾아 수정하지 않는다(`aria-relevant="additions"` 계약 유지). `feedback`(No.44,
    * 선택)은 보류 RAG 최종 답변(READY·FAILED)에만 — 인터림 안내·정리 문구에는 전달하지 않는다.
+   * [신규 No.46, 코드 리뷰 R1 Medium] `addBotOutputs`와 같은 규칙 — 바로연결 칩 분리(마지막
+   * 1개만)·`onCarouselAnnounce`(캐러셀 위치 안내)를 이 경로(보류 RAG 최종 답변)에도 적용한다.
    */
   addBotAnswer(
     messageId: string,
@@ -62,11 +66,19 @@ export interface MessageListController {
     sources: PendingAnswerSource[] | undefined,
     onButtonAction: (action: ButtonActionView) => void,
     feedback?: FeedbackBarBinding,
+    onCarouselAnnounce?: (text: string) => void,
   ): Promise<void>;
   /** 진행 인디케이터를 봇 메시지 다음에 추가한다(§4.4.2-2). */
   addPendingIndicator(messageId: string): void;
   /** `messageId`를 지정하면 해당 인디케이터만, 생략하면 전부 제거한다(§4.4.2-3/4). */
   removePendingIndicator(messageId?: string): void;
+  /**
+   * [신규 No.46] RM-10 — 현재 화면에 남아 있는 바로연결 칩 묶음을 전부 `hidden`으로 숨긴다
+   * (새 DOM 노드 0 — `feedback-bar.ts`와 같은 원칙). 사용자가 다음 입력을 보내는 순간(칩 클릭·
+   * 버튼 클릭·직접 입력) 호출한다. 숨긴 칩 중 하나에 포커스가 있었으면 `true`를 반환한다
+   * (호출부가 입력창으로 포커스를 옮길 수 있게, NFR-RMA4).
+   */
+  hideQuickReplies(): boolean;
 }
 
 /** `#cb-messages` — `role="log" aria-live="polite"`(FR-W-21). 새 메시지마다 스크롤을 끝으로 이동한다. */
@@ -104,6 +116,10 @@ export function createMessageList(): MessageListController {
     scrollToEnd();
   }
 
+  // [신규 No.46] RM-10 — 현재 화면에 남아 있는(숨기지 않은) 바로연결 칩 묶음들. 사용자가 다음
+  // 입력을 보내는 순간 전부 `hidden` 처리한다(§3.10 — 새 DOM 노드 0).
+  let activeQuickReplyGroups: HTMLElement[] = [];
+
   return {
     root,
     addUserText(text) {
@@ -132,30 +148,43 @@ export function createMessageList(): MessageListController {
       root.appendChild(el);
       scrollToEnd();
     },
-    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions, feedback) {
+    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions, feedback, onCarouselAnnounce) {
+      // [신규 No.46] RM-10 — 마지막 바로연결만 칩으로 분리한다(EX-RM-11, 나머지는 말풍선 안 일반 버튼).
+      const { views: mainViews, quickReply } = splitQuickReply(views);
       const el = wrapMessage('bot');
       const b = bubble();
       el.appendChild(b);
-      // [No.44] 말풍선이 #cb-messages에 추가되는 같은 삽입 동작 안에서 평가 막대를 붙인다 —
-      // root.appendChild(el) 이후 새 노드를 추가하지 않는다(재낭독 방지, §3.2.1).
+      // 말풍선 아래 · 평가 막대 앞(제약 ⑩) — 같은 삽입 동작 안에서 완성한다(재낭독 방지, §3.2.1).
+      if (quickReply) {
+        const group = renderQuickReplies(quickReply.payload.buttons, onButtonAction);
+        el.appendChild(group);
+        activeQuickReplyGroups.push(group);
+      }
       if (feedback) {
         el.appendChild(createFeedbackBar(feedback));
       }
       root.appendChild(el);
       scrollToEnd();
-      await renderViewsIntoBubble(b, views, onButtonAction, onTyping, buttonGroupOptions);
+      await renderViewsIntoBubble(b, mainViews, onButtonAction, onTyping, buttonGroupOptions, onCarouselAnnounce);
       scrollToEnd();
     },
-    async addBotAnswer(_messageId, views, sources, onButtonAction, feedback) {
+    async addBotAnswer(_messageId, views, sources, onButtonAction, feedback, onCarouselAnnounce) {
+      // [신규 No.46, 코드 리뷰 R1 Medium] `addBotOutputs`와 동일 — 마지막 바로연결만 칩으로 분리한다.
+      const { views: mainViews, quickReply } = splitQuickReply(views);
       const el = wrapMessage('bot');
       const b = bubble();
       el.appendChild(b);
+      if (quickReply) {
+        const group = renderQuickReplies(quickReply.payload.buttons, onButtonAction);
+        el.appendChild(group);
+        activeQuickReplyGroups.push(group);
+      }
       if (feedback) {
         el.appendChild(createFeedbackBar(feedback));
       }
       root.appendChild(el);
       scrollToEnd();
-      await renderViewsIntoBubble(b, views, onButtonAction);
+      await renderViewsIntoBubble(b, mainViews, onButtonAction, undefined, undefined, onCarouselAnnounce);
       const sourceBlock = sources && sources.length > 0 ? renderSourceList(sources) : null;
       if (sourceBlock) {
         b.appendChild(sourceBlock);
@@ -191,6 +220,15 @@ export function createMessageList(): MessageListController {
       root.appendChild(el);
       scrollToEnd();
     },
+    hideQuickReplies() {
+      if (activeQuickReplyGroups.length === 0) return false;
+      const focusWasInside = activeQuickReplyGroups.some((g) => g.contains(document.activeElement));
+      activeQuickReplyGroups.forEach((g) => {
+        g.hidden = true;
+      });
+      activeQuickReplyGroups = [];
+      return focusWasInside;
+    },
   };
 }
 
@@ -201,6 +239,7 @@ async function renderViewsIntoBubble(
   onButtonAction: (action: ButtonActionView) => void,
   onTyping?: (active: boolean) => void,
   buttonGroupOptions?: ButtonGroupOptions,
+  onCarouselAnnounce?: (text: string) => void,
 ): Promise<void> {
   const delays = planPauseSchedule(views);
   let renderedAny = false;
@@ -215,7 +254,7 @@ async function renderViewsIntoBubble(
       }
       continue;
     }
-    const node = renderOutputView(view, onButtonAction, buttonGroupOptions);
+    const node = renderOutputView(view, onButtonAction, buttonGroupOptions, onCarouselAnnounce);
     if (node) {
       b.appendChild(node);
       renderedAny = true;

@@ -10,10 +10,16 @@ export interface ButtonItemEditorProps {
   idPrefix: string;
   labelError?: string;
   valueError?: string;
+  /**
+   * [신규 No.46] 특정 동작을 선택할 수 없게 하고 이유를 병기한다(D-3, `<option disabled>` +
+   * 옆에 이유 텍스트 — 색상만으로 "왜 안 되는지" 전달하지 않는다, UIUX §4). 바로연결에서 LINK를
+   * 막을 때 쓴다. 컴포넌트 자체는 그 밖의 동작을 바꾸지 않는다(기존 소비자는 무수정).
+   */
+  disabledAction?: { action: ButtonItem['action']; reason: string };
 }
 
 /** 버튼 아이템 공용 서브컴포넌트(ui-spec §4.2.1 표 하단) — `action`에 따라 `value` 입력 UI가 바뀐다. */
-export function ButtonItemEditor({ value, onChange, chatbotId, idPrefix, labelError, valueError }: ButtonItemEditorProps): JSX.Element {
+export function ButtonItemEditor({ value, onChange, chatbotId, idPrefix, labelError, valueError, disabledAction }: ButtonItemEditorProps): JSX.Element {
   const msg = MESSAGES.dialogue.outputFields;
 
   function handleActionChange(action: ButtonItem['action']): void {
@@ -38,9 +44,16 @@ export function ButtonItemEditor({ value, onChange, chatbotId, idPrefix, labelEr
         <label htmlFor={`${idPrefix}-action`}>{msg.buttonAction}</label>
         <select id={`${idPrefix}-action`} value={value.action} onChange={(e) => handleActionChange(e.target.value as ButtonItem['action'])}>
           <option value="MESSAGE">{msg.buttonActionMessage}</option>
-          <option value="LINK">{msg.buttonActionLink}</option>
+          <option value="LINK" disabled={disabledAction?.action === 'LINK'}>
+            {msg.buttonActionLink}
+          </option>
           <option value="NODE">{msg.buttonActionNode}</option>
         </select>
+        {disabledAction && (
+          <p className="field-hint">
+            <span aria-hidden="true">ⓘ</span> {disabledAction.reason}
+          </p>
+        )}
       </div>
       {value.action === 'MESSAGE' && (
         <div className="form-field">

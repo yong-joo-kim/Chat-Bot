@@ -209,9 +209,18 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay, environme
     }
   }
 
+  /**
+   * [신규 No.46] RM-6 — 다음 입력을 보내는 순간 지금까지의 바로연결 칩을 전부 "사용됨"으로
+   * 표시한다(위젯 `hideQuickReplies()`와 같은 사용자 경험, D-4). "대화 초기화"(handleReset)로
+   * `messages`를 통째로 비우면 다음 턴의 새 말풍선은 이 표시가 없어 칩이 다시 보인다.
+   */
+  function markQuickRepliesUsed(prev: SimMessage[]): SimMessage[] {
+    return prev.map((m) => (m.role === 'bot' && !m.quickReplyUsed ? { ...m, quickReplyUsed: true } : m));
+  }
+
   function handleSend(text: string): void {
     if (sending) return;
-    setMessages((prev) => [...prev, { id: nextId(), role: 'user', text }]);
+    setMessages((prev) => [...markQuickRepliesUsed(prev), { id: nextId(), role: 'user', text }]);
     void sendTurn({ message: text });
   }
 
@@ -222,12 +231,12 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay, environme
       return;
     }
     if (action.kind === 'MESSAGE') {
-      setMessages((prev) => [...prev, { id: nextId(), role: 'user', text: action.text }]);
+      setMessages((prev) => [...markQuickRepliesUsed(prev), { id: nextId(), role: 'user', text: action.text }]);
       void sendTurn({ message: action.text });
       return;
     }
     // NODE
-    setMessages((prev) => [...prev, { id: nextId(), role: 'user', text: msg.userButtonPrefix(action.label) }]);
+    setMessages((prev) => [...markQuickRepliesUsed(prev), { id: nextId(), role: 'user', text: msg.userButtonPrefix(action.label) }]);
     void sendTurn({ buttonAction: { kind: 'NODE', nodeId: action.nodeId as string, label: action.label } });
   }
 
@@ -240,7 +249,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay, environme
     } catch {
       // 이름 조회 실패해도 테스트는 계속 진행한다(§4.1.3 — 존재하지 않아도 폴백으로 정상 처리됨).
     }
-    setMessages((prev) => [...prev, { id: nextId(), role: 'system', text: msg.nodeJumpSystemMessage(nodeLabel) }]);
+    setMessages((prev) => [...markQuickRepliesUsed(prev), { id: nextId(), role: 'system', text: msg.nodeJumpSystemMessage(nodeLabel) }]);
     void sendTurn({ buttonAction: { kind: 'NODE', nodeId } });
   }
 
