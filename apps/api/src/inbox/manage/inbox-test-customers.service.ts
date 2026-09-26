@@ -7,6 +7,7 @@ import { BannedWordFilterService } from '../../banned-words/banned-word-filter.s
 import { PrismaService } from '../../prisma/prisma.service';
 import { SimulationService } from '../../simulation/simulation.service';
 import { buildBotResponseText } from '../../conversation/lib/conversation-log';
+import { buildDegradePreview } from './lib/degrade-preview';
 import { InboxStore } from '../core/inbox.store';
 import { maskForInbox } from '../core/lib/masked-text';
 import { prepareDisplayName } from '../core/lib/display-name';
@@ -79,7 +80,8 @@ export class InboxTestCustomersService {
         { kind: 'SIM_USER', at: now, entryId: userEntryId, text: userText },
         { kind: 'SIM_BOT', at: now, entryId: botEntryId, text: botText },
       ] as never,
-      degradePreview: 'NOT_DEFINED',
+      // [신규 No.46] 채널별 강등 미리보기(R-18) — 스레드 기록(위 userText/botText)은 원형 요약 그대로다.
+      degradePreview: buildDegradePreview(result.outputs, dto.simulatedChannel),
     };
   }
 }

@@ -1,5 +1,5 @@
 import { normalizeText } from '@chat-bot/shared-types';
-import type { VersionAssetKind, VersionChangeKind, VersionDiffSummary, VersionFieldDiff } from '@chat-bot/shared-types';
+import type { DialogOutput, VersionAssetKind, VersionChangeKind, VersionDiffSummary, VersionFieldDiff } from '@chat-bot/shared-types';
 import type { SnapshotEnvelope } from './snapshot-envelope';
 import { omitKeys, stableStringify } from './snapshot-canonical';
 
@@ -21,6 +21,12 @@ export interface DiffItem {
   name: string;
   recreated?: { counterpartId: string };
   changedFields?: string[];
+  /**
+   * [신규 No.46 — 프론트 계약 보강] `NODE` 항목에 한해 채운다(FR-RM5-6). L2 항목 목록이 노드 상세를
+   * 열지 않고도 "캐러셀(카드 N장)" 요약을 보여줄 수 있도록, 아웃풋 중 `CAROUSEL`만 문자열로 뽑는다
+   * (그 외 타입은 목록 화면이 이미 아이콘 배지로 표시 — §3.8 · `channel-rich-messages-설계.md` §25 I-1).
+   */
+  outputSummary?: string[];
 }
 
 export interface DiffResult {
@@ -84,6 +90,25 @@ export function buildRefNameResolver(base: SnapshotEnvelope, target: SnapshotEnv
   };
 }
 
+/**
+ * [신규 No.46] `NODE` 아웃풋 중 `CAROUSEL`만 "캐러셀(카드 N장)" 문자열로 요약한다 — 반환값이 없으면
+ * (캐러셀이 없으면) `undefined`(항목에 키 자체를 싣지 않아 기존 응답과 바이트 동일 · 하위 호환).
+ */
+function outputSummaryOf(kind: VersionAssetKind, entity: DiffEntity): string[] | undefined {
+  if (kind !== 'NODE') return undefined;
+  const outputs = entity.outputs;
+  if (!Array.isArray(outputs)) return undefined;
+  const summary = (outputs as DialogOutput[])
+    .filter((o): o is Extract<DialogOutput, { type: 'CAROUSEL' }> => o?.type === 'CAROUSEL')
+    .map((o) => `캐러셀(카드 ${o.payload.cards.length}장)`);
+  return summary.length > 0 ? summary : undefined;
+}
+
+function withOutputSummary(kind: VersionAssetKind, entity: DiffEntity): { outputSummary?: string[] } {
+  const summary = outputSummaryOf(kind, entity);
+  return summary ? { outputSummary: summary } : {};
+}
+
 function diffEntityList(
   kind: Exclude<VersionAssetKind, 'ANSWER_SETTING' | 'PROFILE'>,
   baseList: readonly DiffEntity[],
@@ -98,14 +123,14 @@ function diffEntityList(
 
   for (const [id, entity] of baseMap) {
     if (!targetMap.has(id)) {
-      items.push({ id, kind, change: 'REMOVED', name: nameOf(kind, entity) });
+      items.push({ id, kind, change: 'REMOVED', name: nameOf(kind, entity), ...withOutputSummary(kind, entity) });
       removed += 1;
     }
   }
   for (const [id, entity] of targetMap) {
     const baseEntity = baseMap.get(id);
     if (!baseEntity) {
-      items.push({ id, kind, change: 'ADDED', name: nameOf(kind, entity) });
+      items.push({ id, kind, change: 'ADDED', name: nameOf(kind, entity), ...withOutputSummary(kind, entity) });
       added += 1;
       continue;
     }
@@ -115,7 +140,7 @@ function diffEntityList(
         const afterVal = (comparableOf(kind, entity) as Record<string, unknown>)[field];
         return stableStringify(beforeVal) !== stableStringify(afterVal);
       });
-      items.push({ id, kind, change: 'MODIFIED', name: nameOf(kind, entity), changedFields });
+      items.push({ id, kind, change: 'MODIFIED', name: nameOf(kind, entity), changedFields, ...withOutputSummary(kind, entity) });
       modified += 1;
     }
   }

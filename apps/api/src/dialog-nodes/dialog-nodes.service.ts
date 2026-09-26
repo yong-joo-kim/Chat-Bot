@@ -15,6 +15,7 @@ import {
   UpdateDialogNodeDto,
   findLegacyApiOutputIndexes,
   findLegacySurveyOutputIndexes,
+  findQuickReplyPlacementIssues,
   isApiConditionV2,
   isSurveyV2,
   normalizeText,
@@ -38,6 +39,9 @@ import { annotateFlowTreeWorkflowOutputs } from './lib/annotate-flow-workflow';
 import { TopicLookupService } from '../topics/topic-lookup.service';
 import { validateTopicBoundaries } from '../topics/lib/topic-boundary';
 import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
+import { collectRichUrls } from '../rich-messages/lib/collect-rich-urls';
+import { findDisallowedRichUrl, richUrlDesignIssues } from '../rich-messages/lib/rich-url-issues';
+import { parseRichUrlHosts } from '../rich-messages/lib/rich-url-policy-codec';
 
 const NOT_FOUND_MESSAGE = '요청하신 대화 노드를 찾을 수 없습니다.';
 
@@ -105,6 +109,37 @@ export class DialogNodesService {
         '설문 연결을 새 방식으로 바꿔야 저장할 수 있습니다. 설문을 선택해 주세요.',
         indexes.map((i) => ({ field: `outputs[${i}]`, message: '이전 형식 설문 연결은 저장할 수 없습니다.' })),
       );
+    }
+  }
+
+  /** [신규 No.46] 바로연결(`display: 'QUICK_REPLY'`) 배치 규칙 — 서비스 저장 단언(읽기 스키마 불변, R-15). */
+  private assertQuickReplyPlacement(outputs: DialogOutput[]): void {
+    const issues = findQuickReplyPlacementIssues(outputs);
+    if (issues.length === 0) return;
+    throw new ApiException(
+      'OUTPUT_PAYLOAD_INVALID',
+      400,
+      '바로연결은 응답 맨 끝에 한 번만 둘 수 있습니다.',
+      issues.map((issue) => ({
+        field: `outputs.${issue.index}.payload.display`,
+        message: issue.reason === 'MULTIPLE' ? '바로연결은 한 노드에 하나만 둘 수 있습니다.' : '바로연결은 응답 맨 끝에 한 번만 둘 수 있습니다.',
+      })),
+    );
+  }
+
+  /**
+   * [신규 No.46] 새 컴포넌트(캐러셀 카드 이미지·LINK 버튼) 주소가 챗봇별 허용 도메인 목록 안인지
+   * 검사한다. 새 컴포넌트 URL이 없으면 조회 0(NFR-RMP1) · 목록이 비어 있으면(제한 없음) 통과한다.
+   */
+  private async assertRichUrlsAllowed(chatbotId: string, outputs: DialogOutput[]): Promise<void> {
+    if (collectRichUrls(outputs).length === 0) return;
+    const row = await this.prisma.chatbotRichUrlPolicy.findUnique({ where: { chatbotId }, select: { hosts: true } });
+    const rules = row ? parseRichUrlHosts(row.hosts) : [];
+    if (rules.length === 0) return;
+    const disallowed = findDisallowedRichUrl(outputs, rules);
+    if (disallowed) {
+      const message = `허용 도메인 목록에 없는 주소입니다(${disallowed.host}).`;
+      throw new ApiException('VALIDATION_FAILED', 400, message, [{ field: disallowed.field, message }]);
     }
   }
 
@@ -207,9 +242,11 @@ export class DialogNodesService {
     this.assertNoLegacyApiOutputs(dto.outputs);
     this.assertNoLegacySurveyOutputs(dto.outputs);
     this.assertWorkflowOutputLimit(dto.outputs);
+    this.assertQuickReplyPlacement(dto.outputs);
     await this.assertNameFree(chatbotId, nameNormalized);
     await this.assertNodeTypeSingleton(chatbotId, dto.nodeType);
     await this.validateReferences(chatbotId, dto);
+    await this.assertRichUrlsAllowed(chatbotId, dto.outputs);
     this.assertNotSystemNodeWithTopic(dto.nodeType, dto.topicId);
     if (dto.topicId) await this.topicLookup.assertTopicInChatbot(chatbotId, dto.topicId);
 
@@ -359,6 +396,7 @@ export class DialogNodesService {
       this.assertNoLegacyApiOutputs(dto.outputs);
       this.assertNoLegacySurveyOutputs(dto.outputs);
       this.assertWorkflowOutputLimit(dto.outputs);
+      this.assertQuickReplyPlacement(dto.outputs);
     }
 
     let name = current.name;
@@ -390,6 +428,7 @@ export class DialogNodesService {
     }
 
     await this.validateReferences(chatbotId, { intentIds, keywordIds, contextVariableId, outputs });
+    if (dto.outputs !== undefined) await this.assertRichUrlsAllowed(chatbotId, dto.outputs);
 
     const finalTopicId = dto.topicId !== undefined ? dto.topicId : (current.topicId ?? undefined);
     this.assertNotSystemNodeWithTopic(nodeType, finalTopicId);
@@ -473,6 +512,11 @@ export class DialogNodesService {
     const excludedLegacyApiOutputCount = legacyIndexes.size;
     const excludedLegacySurveyOutputCount = legacySurveyIndexes.size;
 
+    // [신규 No.46 — 코드 리뷰 R1 M-1] copy도 create·update와 같은 저장 단언을 거친다(§10.1). 원본이
+    // 저장된 뒤 허용 도메인 목록이 좁아졌다면(예: 이후 관리자가 목록을 좁힘) 사본 생성을 거부한다.
+    this.assertQuickReplyPlacement(filteredOutputs);
+    await this.assertRichUrlsAllowed(chatbotId, filteredOutputs);
+
     const row = await this.prisma.$transaction(async (tx) => {
       const created = await tx.dialogNode.create({
         data: {
@@ -554,13 +598,28 @@ export class DialogNodesService {
 
     // [신규 No.22 — §7.3] 토픽 규칙 4종을 엔진 결과 뒤에 합친다(엔진 코드 변경 0). 토픽이 없는
     // 챗봇은 +1 조회만 하고 결과는 바이트 동일이다(AC-TP4-4).
+    // [신규 No.46] 리치 메시지 허용 도메인 목록 점검(§10.2) — 엔진 결과 뒤에 합친다(엔진 코드 변경
+    // 0). 새 컴포넌트를 쓰지 않는 챗봇은 richUrlIssues가 항상 빈 배열이라 바이트 동일이다(AC-RM1-1).
+    const richUrlPolicyRow = await this.prisma.chatbotRichUrlPolicy.findUnique({ where: { chatbotId }, select: { hosts: true } });
+    const richUrlRules = richUrlPolicyRow ? parseRichUrlHosts(richUrlPolicyRow.hosts) : [];
+    const richUrlIssues = richUrlDesignIssues(bundle.dialogNodes, richUrlRules);
+
     const topics = await this.topicLookup.listForChatbot(chatbotId);
-    if (topics.length === 0) return engineReport;
+    if (topics.length === 0) {
+      if (richUrlIssues.length === 0) return engineReport;
+      const issues = [...engineReport.issues, ...richUrlIssues];
+      const summary = {
+        error: issues.filter((i) => i.severity === 'ERROR').length,
+        warning: issues.filter((i) => i.severity === 'WARNING').length,
+        info: issues.filter((i) => i.severity === 'INFO').length,
+      };
+      return { issues, summary, checkedAt: engineReport.checkedAt };
+    }
 
     const handoffSetting = await this.prisma.chatbotHandoffSetting.findUnique({ where: { chatbotId }, select: { endButtonNodeId: true } });
     const { issues: topicIssues, ruleTotals } = validateTopicBoundaries(bundle, topics, { handoffEndButtonNodeId: handoffSetting?.endButtonNodeId ?? null });
 
-    const issues = [...engineReport.issues, ...topicIssues];
+    const issues = [...engineReport.issues, ...richUrlIssues, ...topicIssues];
     const summary = {
       error: issues.filter((i) => i.severity === 'ERROR').length,
       warning: issues.filter((i) => i.severity === 'WARNING').length,

@@ -420,6 +420,9 @@ export class ChatbotsService {
       // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §16) — 참여 설정은 설정
       // 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 22 → 23테이블. `chatbot.delete` 직전.
       await tx.chatbotInboxSetting.deleteMany({ where: { chatbotId: id } });
+      // 채널별 리치 메시지(No.46) 그룹 추가(channel-rich-messages-설계.md §14) — 허용 도메인 목록은
+      // 설정 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 23 → 24테이블. `chatbot.delete` 직전.
+      await tx.chatbotRichUrlPolicy.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

@@ -21,12 +21,14 @@ export class ChatbotScopeService {
     return { prodVersionId: row.prodVersionId };
   }
 
-  async assertWritable(chatbotId: string): Promise<{ prodVersionId: string | null }> {
-    const row = await this.prisma.chatbot.findUnique({ where: { id: chatbotId }, select: { status: true, prodVersionId: true } });
+  /** [신규 No.46 — L-1] 반환형 확장 — `select`에 `name` 1컬럼 추가(쿼리 수 불변). 기존 호출부는
+   * 반환값을 무시하므로 영향이 없다(호출부가 이름을 다시 조회할 필요가 없어져 쿼리가 줄어든다). */
+  async assertWritable(chatbotId: string): Promise<{ prodVersionId: string | null; name: string }> {
+    const row = await this.prisma.chatbot.findUnique({ where: { id: chatbotId }, select: { status: true, prodVersionId: true, name: true } });
     if (!row) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
     if (row.status === 'ARCHIVED') {
       throw new ApiException('CHATBOT_ARCHIVED', 409, '보관된 챗봇은 수정할 수 없습니다. 초안으로 되돌린 뒤 수정해 주세요.');
     }
-    return { prodVersionId: row.prodVersionId };
+    return { prodVersionId: row.prodVersionId, name: row.name };
   }
 }

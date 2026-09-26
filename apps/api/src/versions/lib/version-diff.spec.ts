@@ -116,6 +116,64 @@ describe('version-diff — §7.2 diffSnapshots', () => {
     expect(row).toEqual({ kind: 'INTEGRITY_WARNING', added: 5, removed: 3, modified: 0 });
   });
 
+  describe('[신규 No.46 — 프론트 계약 보강] NODE 항목의 outputSummary(FR-RM5-6 "캐러셀(카드 N장)")', () => {
+    const carouselOutput = (cardCount: number) => ({
+      type: 'CAROUSEL',
+      payload: { version: 1, cards: Array.from({ length: cardCount }, (_, i) => ({ title: `카드${i}` })) },
+    });
+
+    it('MODIFIED 노드에 CAROUSEL 아웃풋이 있으면 "캐러셀(카드 N장)"이 담긴다(target 기준)', () => {
+      const base = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [] }] });
+      const target = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [carouselOutput(3)] }] });
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'NODE' && i.id === 'n1')!;
+      expect(item.change).toBe('MODIFIED');
+      expect(item.outputSummary).toEqual(['캐러셀(카드 3장)']);
+    });
+
+    it('CAROUSEL이 여럿이면 각각 별도 문자열로 담긴다', () => {
+      const base = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [] }] });
+      const target = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [carouselOutput(2), carouselOutput(10)] }] });
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'NODE' && i.id === 'n1')!;
+      expect(item.outputSummary).toEqual(['캐러셀(카드 2장)', '캐러셀(카드 10장)']);
+    });
+
+    it('CAROUSEL이 없으면 outputSummary 키 자체가 없다(기존 응답과 바이트 동일 · 하위 호환)', () => {
+      const base = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [] }] });
+      const target = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '노드1', outputs: [{ type: 'TEXT', payload: { text: '안녕' } }] }] });
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'NODE' && i.id === 'n1')!;
+      expect(item.outputSummary).toBeUndefined();
+    });
+
+    it('NODE가 아닌 다른 종류(INTENT)는 outputSummary를 담지 않는다', () => {
+      const base = envelope([]);
+      const target = envelope([{ id: 'a', name: 'A', examples: [] }]);
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'INTENT' && i.id === 'a')!;
+      expect(item.outputSummary).toBeUndefined();
+    });
+
+    it('ADDED 노드도 outputSummary가 담긴다', () => {
+      const base = fullEnvelope({ dialogNodes: [] });
+      const target = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '새노드', outputs: [carouselOutput(4)] }] });
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'NODE' && i.id === 'n1')!;
+      expect(item.change).toBe('ADDED');
+      expect(item.outputSummary).toEqual(['캐러셀(카드 4장)']);
+    });
+
+    it('REMOVED 노드는 base(삭제 전) 기준으로 outputSummary가 담긴다', () => {
+      const base = fullEnvelope({ dialogNodes: [{ id: 'n1', name: '옛노드', outputs: [carouselOutput(5)] }] });
+      const target = fullEnvelope({ dialogNodes: [] });
+      const result = diffSnapshots(base, target, 0, 0);
+      const item = result.items.find((i) => i.kind === 'NODE' && i.id === 'n1')!;
+      expect(item.change).toBe('REMOVED');
+      expect(item.outputSummary).toEqual(['캐러셀(카드 5장)']);
+    });
+  });
+
   describe('REF_SET(§7.3, FR-H2-8, H-1) — 노드 intentIds/keywordIds 필드 상세', () => {
     it('추가/제거된 참조 id가 정확히 계산된다', () => {
       const before: DiffEntity = { id: 'n1', name: '노드1', intentIds: ['i1', 'i2'], keywordIds: [] };

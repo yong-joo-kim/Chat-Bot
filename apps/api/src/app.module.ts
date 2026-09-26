@@ -44,6 +44,7 @@ import { EnvironmentModule } from './environment/environment.module';
 import { GovernanceModule } from './governance/governance.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { InboxModule } from './inbox/inbox.module';
+import { RichMessagesModule } from './rich-messages/rich-messages.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -99,6 +100,8 @@ import { validate } from './config/env.validation';
     WorkflowModule,
     // [신규 No.42] imports 맨 끝 — 루프·타이머가 없어 순서 의존은 없다(§2.2).
     InboxModule,
+    // [신규 No.46] imports 맨 끝 — 루프·타이머가 없어 순서 의존은 없다(§2.2).
+    RichMessagesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

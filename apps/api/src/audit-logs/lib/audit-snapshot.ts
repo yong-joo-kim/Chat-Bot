@@ -31,6 +31,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'fallbackPolicy',
     'showSources',
     'ragTimeoutMs',
+    // [신규 No.46] 리치 메시지 허용 도메인 목록 변경 감사(호스트 문자열 배열 — 비개인정보,
+    // channel-rich-messages-설계.md §13 · NFR-RMS4).
+    'richUrlHosts',
   ],
   // [신규 No.22] 자산 6종에 'topicId' 추가 — 서비스가 값이 있을 때만 스냅샷 입력에 넣는다(토픽 없는
   // 챗봇의 감사 본문 불변, topic-system-설계.md §15).
