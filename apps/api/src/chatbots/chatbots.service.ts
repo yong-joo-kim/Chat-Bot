@@ -405,6 +405,11 @@ export class ChatbotsService {
       // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §3.1) — 보존 정책 재정의는 설정
       // 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 19 → 20테이블. `chatbot.delete` 직전.
       await tx.retentionPolicy.deleteMany({ where: { chatbotId: id } });
+      // 업무 자동화 워크플로우(No.41) 그룹 추가(workflow-automation-설계.md §10.4, ADR-0041) — 발송
+      // 이력(`WorkflowRun`)·구독(`WorkflowSubscription`)은 동반 삭제 대상이다(사전검사 409 대상이 아니다.
+      // `WorkflowTarget`은 전역이라 무관). 20 → 22테이블. `chatbot.delete` 직전.
+      await tx.workflowRun.deleteMany({ where: { chatbotId: id } });
+      await tx.workflowSubscription.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

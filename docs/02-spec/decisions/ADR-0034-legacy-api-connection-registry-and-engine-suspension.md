@@ -176,3 +176,16 @@
 3. **시크릿 저장 방식은 1차 불변** — 재검토 트리거 "No.45 필드 암호화 착수"는 검토 결과 미발동(DB에 값 0이 더 강하다). No.45 키링(`KeyProvider`)이 구독형 셀프서비스 요구 시의 재사용 확장점이다.
 4. 재검토 트리거 "`ApiCallLog` 1,000만 행 · No.45 착수 → 보존 자동 정리"를 **이행**한다 — 보존기간(`CALL_LOGS` — 전역) 경과 행을 파기 잡(`PollingLoop` 재사용)이 행 삭제한다.
 5. §7(v1 평문 헤더)은 불변 — 자동 스크럽 없이 데이터 지도가 "평문 토큰 잔존 노드 수·스냅샷 수"를 점검 표시한다.
+
+
+---
+
+## 갱신 (2026-09-26 — No.41: 재검토 트리거 "쓰기형 후속 액션" 이행 · 전송 부품 공유 · 선택 필드 2)
+
+업무 자동화(No.41, **ADR-0041 §4·§6**). 결정 1~11은 불변이다.
+
+1. 재검토 트리거 "**쓰기형 후속 액션(승인·티켓 생성) 요구 → No.41(재시도 큐·멱등키·비동기 콜백)**"을 **이행**한다 — 재시도·멱등키·재시도 큐는 No.41의 DB 발송함(POST 고정 · 최소 1회 + `deliveryId`)이다. 비동기 콜백은 No.41 2차. 같은 턴 결과(접수번호 즉시 표시)는 여전히 이 결정의 동기 `API_CONDITION`이다.
+2. **전송·DNS·주소 판정 부품 공유**: 업무 자동화 발송기가 `NodeHttpTransport`·`NodeDnsResolver`를 **파일 이동 없이** 자기 모듈의 두 번째 DI 토큰으로 등록하고 `lib/ip-policy.ts`를 import한다 — 결정 4의 방어 층(DNS 1회·모든 주소 검사·절대 차단 대역·사설 allowlist·검증 주소 고정·단일 데드라인·리다이렉트 불추종)이 두 출구에서 한 벌이다. `LegacyApiModule`·`LegacyApiHttpClient`·`ValidatedLegacyRequest`·시크릿 리졸버는 공유하지 않는다 — L-2(`node:http(s)`·`node:dns` import 1파일씩)·L-4(`LegacyApiHttpClient` 주입 1파일) **불변**.
+3. **전송 포트 선택 필드 2개**(기본값 = 현행 — 레거시 호출부·spec 무수정): `exitId?`(방어 이중화 가드의 출구 id — 기본 `LEGACY_API`) · `responseMode?: 'BODY'｜'STATUS_ONLY'`(웹훅은 상태 코드만 — 본문 상한 초과로 성공을 잃지 않게) + 결과 선택 필드 `retryAfter?`(`STATUS_ONLY`일 때만).
+4. 사설 대역 허용 목록은 **출구별로 분리**한다(`LEGACY_API_PRIVATE_ALLOWLIST` · `WORKFLOW_PRIVATE_ALLOWLIST`) — 조회 연동을 위해 연 사설 대역이 쓰기형 웹훅에 자동으로 열리지 않게(최소 권한).
+5. 새 재검토 트리거: **세 번째 출구가 같은 부품을 공유** → `transport/*`·`lib/ip-policy.ts`를 `common/outbound/`로 이동(L-2 경로 갱신).

@@ -186,6 +186,7 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay, environme
         matchTrace: res.matchTrace,
         apiStep: res.apiStep,
         surveyStep: res.surveyStep,
+        workflowSteps: res.workflowSteps,
         answeredTopic: res.answeredTopic,
         target: res.target,
       });

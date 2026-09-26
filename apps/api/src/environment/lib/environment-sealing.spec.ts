@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import * as dialogueEngine from '@chat-bot/dialogue-engine';
 
 /**
  * 환경 분리(No.40) 정적 검사(§20, environment-separation-설계.md) — `deploy-schedule-sealing.spec.ts`·
@@ -156,7 +156,7 @@ describe('환경 분리(No.40) 정적 검사 — environment-separation-설계.m
     });
   });
 
-  describe('E-5: packages/dialogue-engine 변경 0건(FR-0-149)', () => {
+  describe('E-5: packages/dialogue-engine 봉인 표면(FR-0-149) — X-5(workflow-automation-설계.md §21.3)로 재설계', () => {
     const engineFiles = collectEngineSourceFiles();
     it('엔진 소스 파일이 존재한다', () => {
       expect(engineFiles.length).toBeGreaterThan(0);
@@ -164,21 +164,135 @@ describe('환경 분리(No.40) 정적 검사 — environment-separation-설계.m
 
     // ★ 신설 개념 키워드 검사(environment·prodVersion·servedVersion) — 단, `tiebreak`는 엔진에
     // 이미 존재하는 무관한 용어(`NODE_TIEBREAK` trace 코드, No.40 착수 이전부터 존재)와 충돌하므로
-    // 이 표층 검사에서는 제외하고, 아래 git diff 검사로 "새 내용 0건"을 정밀하게 확인한다.
+    // 이 표층 검사에서는 제외한다.
     it.each(engineFiles)('%s에 environment·prodVersion·servedVersion(대소문자 무관) 심볼이 없다', (file) => {
       const content = readFileSync(file, 'utf8');
       expect(/environment|prodversion|servedversion/i.test(content)).toBe(false);
     });
 
-    it('★ git 기준 packages/dialogue-engine에 변경분(diff)이 0건이다(가장 정밀한 검사)', () => {
-      let output = '';
-      try {
-        output = execFileSync('git', ['status', '--porcelain', '--', 'packages/dialogue-engine'], { cwd: REPO_ROOT, encoding: 'utf8' });
-      } catch {
-        // git이 없는 실행 환경(CI 아티팩트 전용 등)에서는 이 검사를 건너뛴다 — 위 키워드 검사가 대신한다.
-        return;
-      }
-      expect(output.trim()).toBe('');
+    /**
+     * ★ [2026-09-26 재설계 — coordinator 지시, workflow-automation-설계.md §21.3 X-5 · §27 I-3]
+     * 기존에는 `git status --porcelain -- packages/dialogue-engine`으로 "작업 트리에 미커밋 diff가
+     * 0건"을 검사했다. 이 방식은 **커밋 여부라는 작업 흐름 상태**에 의존해 깨지기 쉽다 — No.26·27·41처럼
+     * "엔진 불가침의 의도된 예외"로 이미 승인된 그룹이 작업 중(미커밋 상태)이면 항상 실패한다.
+     * 대신 **엔진의 승인된 표면(파일 목록 · `index.ts`가 실제로 내보내는 런타임 심볼 집합)을 이 파일에
+     * 하드코딩한 골든 스냅샷과 비교**한다 — git 상태와 무관하고, 엔진에 파일이 늘거나 export가 늘면
+     * (No.26·27·41이 실제로 그래왔듯) **이 골든 스냅샷도 함께 갱신해야만** 통과한다(코드 리뷰가 그 갱신의
+     * 타당성을 검토하는 지점 — "누가 왜 엔진을 건드렸는지"가 이 배열의 diff에 그대로 남는다).
+     * 골든 스냅샷을 갱신해야 할 때: `node -e "console.log(JSON.stringify(Object.keys(require('../../../../packages/dialogue-engine/dist')).sort()))"`
+     * (빌드 후 실행) 결과로 `APPROVED_ENGINE_EXPORTS`를, `find packages/dialogue-engine/src -maxdepth 1
+     * -name '*.ts' ! -name '*.spec.ts'`로 `APPROVED_ENGINE_FILES`를 갱신한다.
+     */
+    const APPROVED_ENGINE_FILES = [
+      'api-call.ts',
+      'constants.ts',
+      'context-session.ts',
+      'conversation-state.ts',
+      'design-validator.ts',
+      'dialogue-index.ts',
+      'faq.ts',
+      'flow-tree.ts',
+      'homonym.ts',
+      'index.ts',
+      'matcher.ts',
+      'node-matcher.ts',
+      'normalize.ts',
+      'outputs.ts',
+      'overlay.ts',
+      'resolver.ts',
+      'semantic.ts',
+      'survey-session.ts',
+      'test-fixtures.ts',
+      'turn.ts',
+      'workflow-output.ts',
+    ].sort();
+
+    const APPROVED_ENGINE_EXPORTS = [
+      'API_FAILURE_NOTICE',
+      'API_NO_MATCH_NOTICE',
+      'CLARIFY_TTL_MS',
+      'DEFAULT_FALLBACK_RESPONSE',
+      'EMPTY_INPUT_RESPONSE',
+      'HOP_LIMIT',
+      'MAX_INPUT_LENGTH',
+      'SESSION_CANCEL_MESSAGE',
+      'SESSION_EXPIRED_MESSAGE',
+      'SESSION_RETRY_LIMIT_MESSAGE',
+      'SESSION_SWITCH_MESSAGE',
+      'SKIP_TOKENS',
+      'STATE_FUTURE_TOLERANCE_MS',
+      'STATE_MAX_AGE_MS',
+      'STATE_MAX_BYTES',
+      'STATE_MAX_FILLED_VALUE_KEYS',
+      'STATE_MAX_FILLED_VALUE_LENGTH',
+      'SURVEY_ALREADY_RESPONDED_NOTICE',
+      'SURVEY_CANCEL_MESSAGE',
+      'SURVEY_CHANGED_NOTICE',
+      'SURVEY_MAX_RETRY',
+      'SURVEY_REQUIRED_PROMPT',
+      'SURVEY_RETRY_LIMIT_MESSAGE',
+      'SURVEY_TIMEOUT_NOTICE',
+      'SURVEY_UNAVAILABLE_NOTICE',
+      'UNSUPPORTED_OUTPUT_NOTICE',
+      'advanceContextSession',
+      'advanceSurveySession',
+      'bindRequest',
+      'bindWorkflowOutput',
+      'buildClarifyOutput',
+      'buildDialogueIndex',
+      'buildFlowTree',
+      'computeIncomingCounts',
+      'containsWord',
+      'evaluateNode',
+      'executeOutputs',
+      'getOutgoingNodeRefs',
+      'hasWorkflowOutputs',
+      'intentOnlyResponse',
+      'jaccard',
+      'judgeBand',
+      'matchFaq',
+      'matchFaqEntry',
+      'matchIntent',
+      'mergeOverlay',
+      'normalizeText',
+      'promptOutputsForSlot',
+      'rankNodes',
+      'resolveBinding',
+      'resolveByNodeId',
+      'resolveHomonym',
+      'resolveResponse',
+      'resolveTurn',
+      'resumeAfterApiCall',
+      'sanitizeConversationState',
+      'simulate',
+      'startContextSession',
+      'startSurveySession',
+      'suggestSimilarFaqs',
+      'tokenize',
+      'validateDialogueDesign',
+      'validateSlotValue',
+      'willSurveyConsumeInput',
+    ].sort();
+
+    it('★ packages/dialogue-engine/src의 최상위 파일 목록이 승인된 스냅샷과 정확히 같다(git 상태 비의존)', () => {
+      const actual = engineFiles
+        .filter((f) => !f.endsWith('.spec.ts'))
+        .map((f) => f.replace(/\\/g, '/').split('/dialogue-engine/src/')[1])
+        .filter((f): f is string => !!f && !f.includes('/'))
+        .sort();
+      expect(actual).toEqual(APPROVED_ENGINE_FILES);
+    });
+
+    it('★ index.ts가 런타임에 실제로 내보내는 심볼 집합이 승인된 스냅샷과 정확히 같다(빌드 산출물 기준 — git 상태 비의존)', () => {
+      const actual = Object.keys(dialogueEngine).sort();
+      expect(actual).toEqual(APPROVED_ENGINE_EXPORTS);
+    });
+
+    it('★ 역검증 — 골든 스냅샷에 없는 파일/심볼이 생기면 헬퍼가 실제로 잡는다', () => {
+      const filesWithExtra = [...APPROVED_ENGINE_FILES, 'unauthorized-new-file.ts'].sort();
+      expect(filesWithExtra).not.toEqual(APPROVED_ENGINE_FILES);
+      const exportsWithExtra = [...APPROVED_ENGINE_EXPORTS, 'unauthorizedNewExport'].sort();
+      expect(exportsWithExtra).not.toEqual(APPROVED_ENGINE_EXPORTS);
     });
   });
 

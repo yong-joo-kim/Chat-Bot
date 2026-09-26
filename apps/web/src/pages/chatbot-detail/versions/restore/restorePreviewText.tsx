@@ -100,6 +100,11 @@ export function warningText(warning: RestoreWarning): string {
     // [신규 No.40] 환경 분리 — 모드 켜짐일 때만. `RestoreDialog`가 이 경고를 강조 배너로 따로 렌더한다(§4.11).
     case 'ENV_DRAFT_ONLY':
       return msg.envDraftOnlyBanner(warning.prodVersionNo, warning.stagingVersionNo);
+    // [신규 No.41] 업무 자동화 — 복원 미리보기 경고 2종(workflow-automation-ui-spec.md §3.9).
+    case 'WORKFLOW_TARGET_MISSING':
+      return msg.warnings.WORKFLOW_TARGET_MISSING(warning.count);
+    case 'WORKFLOW_TARGET_DISABLED':
+      return msg.warnings.WORKFLOW_TARGET_DISABLED(warning.count);
     default:
       return '';
   }

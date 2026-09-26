@@ -34,6 +34,7 @@ import { NodeRowWithLinks, parseOutputs, toDialogNodeEntity, toDialogNodeRespons
 import { dedupeIds } from './lib/node-links';
 import { buildConditionSummary, extractOutputTypes } from './lib/node-condition-summary';
 import { collectNodeTargetRefs } from './lib/node-target-refs';
+import { annotateFlowTreeWorkflowOutputs } from './lib/annotate-flow-workflow';
 import { TopicLookupService } from '../topics/topic-lookup.service';
 import { validateTopicBoundaries } from '../topics/lib/topic-boundary';
 import { buildTopicIdsWhere } from '../topics/lib/topic-query-filter';
@@ -565,6 +566,8 @@ export class DialogNodesService {
   async flow(chatbotId: string): Promise<FlowTree> {
     await this.scope.assertReadable(chatbotId);
     const bundle = await this.bundleService.build(chatbotId);
-    return buildFlowTree(bundle);
+    const tree = buildFlowTree(bundle);
+    // [신규 No.41 — 프런트엔드 계약 보강] 엔진 결과 후처리(엔진 무수정 — §5.1 닫힌 목록 밖).
+    return annotateFlowTreeWorkflowOutputs(tree, bundle.dialogNodes);
   }
 }

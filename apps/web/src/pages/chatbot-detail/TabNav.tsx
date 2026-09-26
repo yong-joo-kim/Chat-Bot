@@ -7,16 +7,20 @@ import { EnvironmentModeIndicator } from '../../components/EnvironmentModeIndica
 import { deploySchedulesApi } from '../../api/deploySchedules';
 import { NavPendingBadge } from '../stats/NavPendingBadge';
 import { NegativeFeedbackNavBadge } from '../stats/NegativeFeedbackNavBadge';
+import { WorkflowAttentionNavBadge } from './workflow-automation/WorkflowAttentionNavBadge';
 
 /**
- * href 기반 탭 링크(UIUX §9, 키보드 포커스 가능). 라우트는 6개 그대로 두되(AC-C-3),
- * `TabNav` 렌더링만 4개 시각적 그룹(운영/설계/검증/배포)으로 재구성한다
- * (`quality-channel-ui-spec.md` §2). 현재 탭은 밑줄+굵게로 구분(색상 단독 아님).
+ * href 기반 탭 링크(UIUX §9, 키보드 포커스 가능). [신규 No.41] 최상위 라우트는 이미 12개를 넘겼고
+ * (No.28·No.40이 "배포" 그룹에 최상위 탭을 추가한 선례), 이 그룹은 "업무 자동화"를 13번째 최상위
+ * 탭으로 더한다(§13-1 확정 — `legacy-api-integration-ui-spec.md`식 서브탭 흡수 대안은 채택하지 않음).
+ * `TabNav` 렌더링은 4개 시각적 그룹(운영/설계/검증/배포)으로 재구성한다(`quality-channel-ui-spec.md` §2).
+ * 현재 탭은 밑줄+굵게로 구분(색상 단독 아님).
  */
 export function TabNav({
   chatbotId,
   learningSummary,
   environmentStatus,
+  workflowAttention,
   onBeforeNavigate,
 }: {
   chatbotId: string;
@@ -29,6 +33,11 @@ export function TabNav({
   learningSummary: UnansweredQuestionSummary | null;
   /** [No.40] "환경" 탭의 소형 점 표시용(§1.4) — `ChatbotDetailLayout`이 내려주는 공유 상태. */
   environmentStatus: EnvironmentStatus | null;
+  /**
+   * [신규 No.41] "업무 자동화" 탭 배지용 — `ChatbotDetailLayout`이 내려주는 공유 상태(§3.13).
+   * 선택 prop(기존 스펙 테스트가 이 값 없이 렌더해도 무수정 통과하도록 기본값 `null`을 쓴다).
+   */
+  workflowAttention?: { count: number } | null;
   onBeforeNavigate?: () => boolean;
 }): JSX.Element {
   const tabClassName = ({ isActive }: { isActive: boolean }): string =>
@@ -125,6 +134,11 @@ export function TabNav({
         </NavLink>
         <NavLink to={`/chatbots/${chatbotId}/environment`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabEnvironment} <EnvironmentModeIndicator status={environmentStatus} />
+        </NavLink>
+        {/* [신규 No.41] "배포" 그룹 5번째 탭 — `chatbot:read`+`dialogue:read`가 없는 AGENT도 탭 링크
+            자체는 보인다(다른 탭과 같은 원칙 — 진입 시 페이지 안에서 `ForbiddenState`로 막는다). */}
+        <NavLink to={`/chatbots/${chatbotId}/workflow-automation`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabWorkflowAutomation} <WorkflowAttentionNavBadge count={workflowAttention?.count ?? 0} />
         </NavLink>
       </div>
     </nav>

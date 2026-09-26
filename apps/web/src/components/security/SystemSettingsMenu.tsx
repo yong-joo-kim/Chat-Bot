@@ -4,12 +4,15 @@ import type { Permission } from '@chat-bot/shared-types';
 import { useAuth } from '../../context/AuthContext';
 import { MESSAGES } from '../../constants/messages';
 import { deploySchedulesApi } from '../../api/deploySchedules';
+import { workflowRunsApi } from '../../api/workflowRuns';
 import { AttentionCountBadge } from '../AttentionCountBadge';
 
 interface MenuItem {
   label: string;
   href: string;
   permission: Permission;
+  /** [신규 No.41] 업무 자동화 항목에만 붙는 경량 점 배지(§3.12 확정 — 숫자 배지는 예약 배포 전용 유지). */
+  workflowAttentionDot?: boolean;
 }
 
 const ITEMS: MenuItem[] = [
@@ -17,6 +20,8 @@ const ITEMS: MenuItem[] = [
   { label: MESSAGES.systemSettings.bannedWords, href: '/settings/banned-words', permission: 'security:read' },
   // [No.26] 레거시 API 연동 — 보안 설정 항목(회원·금지어·API 연결)을 앞쪽에 모은다(ui-spec §5).
   { label: MESSAGES.systemSettings.apiConnections, href: '/settings/api-connections', permission: 'security:read' },
+  // [신규 No.41] 업무 자동화 — "API 연결" 다음, "데이터 거버넌스" 앞(§3.12 확정 순서).
+  { label: MESSAGES.systemSettings.workflowAutomation, href: '/settings/workflow-automation', permission: 'security:read', workflowAttentionDot: true },
   // [신규 No.45] 데이터 거버넌스 — "API 연결" 다음, "이력 관리" 앞(같은 security:read 그룹, ui-spec §3.9).
   { label: MESSAGES.systemSettings.dataGovernance, href: '/settings/data-governance', permission: 'security:read' },
   { label: MESSAGES.systemSettings.auditLogs, href: '/settings/audit-logs', permission: 'audit:read' },
@@ -60,6 +65,21 @@ export function SystemSettingsMenu(): JSX.Element | null {
     };
   }, [canSeeSchedules]);
 
+  // [신규 No.41] 업무 자동화 경량 배지 — `security:read`가 있을 때만, 요약의 `attention`을 합산한
+  // 불리언만 쓴다(숫자 배지는 §3.12 확정에 따라 만들지 않는다).
+  const canSeeWorkflow = can('security:read');
+  const [workflowNeedsAttention, setWorkflowNeedsAttention] = useState(false);
+  useEffect(() => {
+    if (!canSeeWorkflow) return;
+    workflowRunsApi
+      .summary(7)
+      .then((res) => {
+        const a = res.attention;
+        setWorkflowNeedsAttention(a.failingTargets > 0 || a.failedRetained > 0 || a.secretMissingTargets > 0 || a.enqueueFailures24h > 0);
+      })
+      .catch(() => undefined);
+  }, [canSeeWorkflow]);
+
   useEffect(() => {
     if (!open) return undefined;
     function handleClick(e: MouseEvent): void {
@@ -98,6 +118,11 @@ export function SystemSettingsMenu(): JSX.Element | null {
           {visibleItems.map((item) => (
             <Link key={item.href} to={item.href} role="menuitem" className="top-bar-menu-item" onClick={() => setOpen(false)}>
               {item.label}
+              {item.workflowAttentionDot && workflowNeedsAttention && (
+                <span className="workflow-attention-dot" aria-label={MESSAGES.systemSettings.workflowAttentionDotAriaLabel}>
+                  {' '}●
+                </span>
+              )}
             </Link>
           ))}
         </div>

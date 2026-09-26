@@ -5,6 +5,7 @@ import { chatbotsApi } from '../api/chatbots';
 import { groupsApi } from '../api/groups';
 import { learningApi } from '../api/learning';
 import { environmentApi } from '../api/environment';
+import { chatbotWorkflowRunsApi } from '../api/workflowSubscriptions';
 import { ApiError } from '../api/client';
 import { ConfirmDialog } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -41,6 +42,16 @@ export interface ChatbotDetailContext {
   environmentStatus: EnvironmentStatus | null;
   /** 켜기/끄기/승격/전환/롤백/게이트 저장 등 변경 액션 뒤 하위 화면이 호출한다. */
   refreshEnvironmentStatus: () => void;
+  /**
+   * [신규 No.41] "업무 자동화" 탭 배지용 — `learningSummary`/`environmentStatus`와 같은 패턴(챗봇 상세
+   * 마운트당 1회 조회, `chatbot:read`+`dialogue:read`가 없으면 호출 생략, `useLatestRequest`로 경합
+   * 방지, chatbotId 변경 시 null로 초기화 — workflow-automation-ui-spec.md §3.13).
+   */
+  /**
+   * [신규 No.41 2차] `featureEnabled`(`WORKFLOW_ENABLED`)도 같은 조회에 실려 온다 — WF3(이벤트 구독)
+   * 상시 배너가 별도 호출 없이 이 값을 재사용한다(요약을 이미 이 레이아웃이 배지용으로 부르고 있었다).
+   */
+  workflowAttention: { count: number; featureEnabled: boolean } | null;
 }
 
 export function useChatbotDetailContext(): ChatbotDetailContext {
@@ -133,6 +144,40 @@ export function ChatbotDetailLayout(): JSX.Element {
   useEffect(() => {
     refreshEnvironmentStatus();
   }, [refreshEnvironmentStatus]);
+
+  // [신규 No.41, 2차 확장] 업무 자동화 탭 배지 + WF3 기능 꺼짐 배너 — 챗봇 상세 마운트당 1회 조회
+  // (중복 요청 방지 관행 그대로). `featureEnabled`도 같은 응답에 실려 오므로 WF3가 별도로 호출하지
+  // 않고 이 값을 그대로 재사용한다.
+  const [workflowAttention, setWorkflowAttention] = useState<{ count: number; featureEnabled: boolean } | null>(null);
+  const canReadWorkflow = canReadDialogue && can('chatbot:read');
+  const workflowAttentionGuard = useLatestRequest();
+
+  const refreshWorkflowAttention = useCallback(() => {
+    if (!chatbotId || !canReadWorkflow) {
+      setWorkflowAttention(null);
+      return;
+    }
+    const reqId = workflowAttentionGuard.next();
+    chatbotWorkflowRunsApi
+      .summary(chatbotId, 7)
+      .then((res) => {
+        if (workflowAttentionGuard.isStale(reqId)) return;
+        const a = res.attention;
+        const count = a.failingTargets + a.failedRetained + a.secretMissingTargets + a.enqueueFailures24h;
+        setWorkflowAttention({ count, featureEnabled: res.featureEnabled });
+      })
+      .catch(() => {
+        // 배지는 보조 정보다 — 실패해도 화면 전체를 막지 않는다.
+      });
+  }, [chatbotId, canReadWorkflow, workflowAttentionGuard]);
+
+  useEffect(() => {
+    setWorkflowAttention(null);
+  }, [chatbotId]);
+
+  useEffect(() => {
+    refreshWorkflowAttention();
+  }, [refreshWorkflowAttention]);
 
   const load = useCallback(async () => {
     if (!chatbotId) return;
@@ -237,6 +282,7 @@ export function ChatbotDetailLayout(): JSX.Element {
         chatbotId={chatbot.id}
         learningSummary={learningSummary}
         environmentStatus={environmentStatus}
+        workflowAttention={workflowAttention}
         onBeforeNavigate={confirmNavigation}
       />
       <div className="tab-content">
@@ -250,6 +296,7 @@ export function ChatbotDetailLayout(): JSX.Element {
               refreshLearningSummary,
               environmentStatus,
               refreshEnvironmentStatus,
+              workflowAttention,
             } satisfies ChatbotDetailContext
           }
         />

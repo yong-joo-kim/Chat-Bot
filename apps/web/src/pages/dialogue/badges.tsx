@@ -96,6 +96,8 @@ const OUTPUT_ICONS: Record<DialogOutputType, string> = {
   SCENARIO: '◈',
   SURVEY: '▥',
   API_CONDITION: '⇄',
+  // [신규 No.41] 13번째 아웃풋 타입 아이콘 — "🔗 업무 요청"(ui-spec §3.8 `FlowPreviewPanel` 배지와 같은 아이콘).
+  WORKFLOW: '🔗',
 };
 
 /** 노드 목록 행의 아웃풋 요약(아이콘+개수, ui-spec §2.3). */

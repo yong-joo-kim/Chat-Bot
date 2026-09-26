@@ -139,3 +139,14 @@
 - **Postgres 전환** → `secure_delete` 대체(VACUUM 정책) · 체인 헤드 CAS 유지 확인 · 인덱스 `CONCURRENTLY`.
 - **ml-worker가 원격이어야 하는 규제 고객** → 질의 임베딩 마스킹 또는 전송 구간 TLS 강제 옵션.
 - **v1 평문 토큰이 스냅샷에 남은 채 규제 심사** → 스냅샷 스크럽 도구(ADR-0034 §7 판단 재검토).
+
+
+---
+
+## 갱신 (2026-09-26 — No.41: 출구 6클래스 · 암호화 대상 4번째 · `CALL_LOGS` 편입)
+
+업무 자동화(No.41, **ADR-0041 §6·§7**). 결정 1~7은 불변이다 — 재검토 트리거 "새 외부 출구 클래스는 레지스트리 등록"의 첫 이행이다.
+
+1. **출구 5 → 6클래스**: `WORKFLOW_WEBHOOK`(라벨 "업무 자동화 웹훅" · `EgressDataKind` `WORKFLOW_PAYLOAD` · 마스킹 대상별). 발송 파일 `workflow/dispatch/workflow-http.sender.ts`가 DNS 조회 전 `checkEgress('WORKFLOW_WEBHOOK', …)`를 호출하고(G-2 순서 충족), 공유 전송·DNS 파일은 두 클래스 모두에 나열한다(G-1 파일 집합). 모드 ON 저장 시 호스트 검사 `400 EGRESS_HOST_NOT_ALLOWED` · 발송 시 `EGRESS_BLOCKED`(송신 0 · 영구 실패). 공유 전송은 `node:http`라 리다이렉트를 원래 따라가지 않으므로 I-11(모드 ON 리다이렉트 차단)은 모드 무관으로 충족된다. 데이터 지도 `exits[]`는 DB 결정 출구(레거시·웹훅)를 제외하는 기존 규칙 그대로이고 선택 키 `egress.workflowTargets?`로 보여 준다(대상 0개 = 바이트 동일).
+2. **필드 암호화 대상 4번째 `WORKFLOW_PAYLOAD`**(`workflow_runs.payload` — 발송함 재시도 봉투 · AAD = 테이블:컬럼:행 id): 봉인 1파일(적재 writer)·개봉 1파일(발송함 store) — G-5 허용 목록 +1씩. **백필·재암호화 잡 대상이 아니다**(성공 즉시·실패 7일 뒤 소거되는 일시 데이터) · 대신 기동 "옛 키 필요 행" 검사에 포함해 키 선제거를 막는다.
+3. **`CALL_LOGS`에 실행 이력 편입**: 파기 잡 writer가 종단 상태 `WorkflowRun`을 보존기간 경과 시 행 삭제(대기·보류·발송 중 제외) — 보존 종류 신설 0 · 라벨 "호출·발송 로그".

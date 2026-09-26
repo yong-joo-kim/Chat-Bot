@@ -10,6 +10,16 @@ import { EgressJudgementBadge } from '../../../components/DataGovernanceBadges';
 import { MESSAGES } from '../../../constants/messages';
 import { formatDateTime } from '../../../lib/date';
 
+/**
+ * [신규 No.41 2차] 업무 자동화 웹훅 출구 행의 마스킹 라벨은 대상별 정책(각 발송 대상의
+ * `allowRawPersonalData`에 따라 다름)이라 `PER_TARGET`("대상별")로 고정 표시한다 — 서버 `exits[]`는
+ * 이 값을 싣지 않으므로(기존 `YES|NO|PER_CONNECTION` 중 하나로 내려온다) 렌더링 쪽에서 지정한다.
+ */
+function maskedLabelFor(exit: GovernanceMapResponse['egress']['exits'][number], msg: typeof MESSAGES.dataGovernance.map): string {
+  if (exit.exitId === 'WORKFLOW_WEBHOOK') return msg.maskedLabel.PER_TARGET;
+  return msg.maskedLabel[exit.masked];
+}
+
 /** G1 — 데이터 지도(`/settings/data-governance/map`, `data-governance-ui-spec.md` §3.1). 읽기 전용 1회 조회. */
 export function DataGovernanceMapPage(): JSX.Element {
   const msg = MESSAGES.dataGovernance.map;
@@ -85,7 +95,7 @@ export function DataGovernanceMapPage(): JSX.Element {
                   <td>{msg.exitLabel[exit.exitId]}</td>
                   <td>{exit.host ?? msg.notConfigured}</td>
                   <td>{msg.dataKindLabel[exit.dataKind]}</td>
-                  <td>{msg.maskedLabel[exit.masked]}</td>
+                  <td>{maskedLabelFor(exit, msg)}</td>
                   <td>
                     <EgressJudgementBadge decision={exit.decision} />
                   </td>
@@ -111,7 +121,7 @@ export function DataGovernanceMapPage(): JSX.Element {
                   </div>
                   <div>
                     <dt>{msg.egressColumnMasked}</dt>
-                    <dd>{msg.maskedLabel[exit.masked]}</dd>
+                    <dd>{maskedLabelFor(exit, msg)}</dd>
                   </div>
                 </dl>
               </li>
@@ -160,6 +170,61 @@ export function DataGovernanceMapPage(): JSX.Element {
                       <div>
                         <dt>{msg.egressColumnBlocked24h}</dt>
                         <dd>{conn.blockedLast24h}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* [신규 No.41] 업무 자동화 웹훅 대상별 하위 목록(§3.10) — 레거시 연결과 같은 펼침 방식.
+            대상 0개 설치는 선택 키(`egress.workflowTargets`) 자체가 없어 이 절이 렌더되지 않는다. */}
+        {data.egress.workflowTargets && data.egress.workflowTargets.length > 0 && (
+          <>
+            <h3>{msg.egressWorkflowLabel}</h3>
+            <p>{msg.egressWorkflowTargetsHeader(data.egress.workflowTargets.length)}</p>
+            <div className="dialogue-table-wrap">
+              <table className="dialogue-table desktop-only">
+                <thead>
+                  <tr>
+                    <th scope="col">{msg.legacyConnectionNameLabel}</th>
+                    <th scope="col">{msg.egressColumnHost}</th>
+                    <th scope="col">{msg.egressColumnData}</th>
+                    <th scope="col">{msg.egressColumnDecision}</th>
+                    <th scope="col">{msg.egressColumnBlocked24h}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.egress.workflowTargets.map((t) => (
+                    <tr key={t.targetId}>
+                      <td>{t.name}</td>
+                      <td>{t.host}</td>
+                      <td>{msg.dataKindLabel.WORKFLOW_PAYLOAD}</td>
+                      <td>
+                        <EgressJudgementBadge decision={t.decision} />
+                      </td>
+                      <td>{t.failedLast24h}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="settings-card-list mobile-only">
+                {data.egress.workflowTargets.map((t) => (
+                  <li key={t.targetId} className="settings-card">
+                    <div className="settings-card-header">
+                      <span className="settings-card-title">{t.name}</span>
+                      <EgressJudgementBadge decision={t.decision} />
+                    </div>
+                    <dl className="settings-card-fields">
+                      <div>
+                        <dt>{msg.egressColumnHost}</dt>
+                        <dd>{t.host}</dd>
+                      </div>
+                      <div>
+                        <dt>{msg.egressColumnBlocked24h}</dt>
+                        <dd>{t.failedLast24h}</dd>
                       </div>
                     </dl>
                   </li>
@@ -243,6 +308,10 @@ export function DataGovernanceMapPage(): JSX.Element {
         </p>
         {data.risks.v1PlainHeaderNodes > 0 && <p className="field-hint">{msg.v1TokenRemovalHint}</p>}
         <p>{msg.rawPersonalDataConnectionsText(data.risks.rawPersonalDataConnections)}</p>
+        {/* [신규 No.41] 원문 개인정보 전송 허용 업무 자동화 대상 — 대상 0개면 키 자체가 없다(§9.6). */}
+        {data.risks.rawPersonalDataWorkflowTargets !== undefined && (
+          <p>{msg.riskRawPersonalDataWorkflowTargets(data.risks.rawPersonalDataWorkflowTargets)}</p>
+        )}
         <p>{msg.externalLlmAugmentationText(data.risks.externalLlmAugmentation)}</p>
         <p>{msg.maskingModeText(data.risks.piiMaskMode)}</p>
       </section>

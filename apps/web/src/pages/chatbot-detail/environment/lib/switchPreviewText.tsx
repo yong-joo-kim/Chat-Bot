@@ -60,6 +60,11 @@ export function SwitchWarningText(warning: ProdSwitchWarning, gateSettings?: Env
       return restoreWarningText({ code: 'API_CONNECTION_MISSING', count: warning.count });
     case 'API_CONNECTION_DISABLED':
       return restoreWarningText({ code: 'API_CONNECTION_DISABLED', count: warning.count });
+    // [신규 No.41] 업무 자동화 — No.25 복원 경고와 동일 문구 재사용(workflow-automation-설계.md §16).
+    case 'WORKFLOW_TARGET_MISSING':
+      return restoreWarningText({ code: 'WORKFLOW_TARGET_MISSING', count: warning.count });
+    case 'WORKFLOW_TARGET_DISABLED':
+      return restoreWarningText({ code: 'WORKFLOW_TARGET_DISABLED', count: warning.count });
     case 'PROFILE_WILL_CHANGE': {
       const msgRestore = MESSAGES.versions.restore;
       const fields = warning.fields.map((f) => (msgRestore.profileFieldLabel as Record<string, string>)[f] ?? f).join(', ');

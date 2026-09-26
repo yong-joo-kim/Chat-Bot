@@ -288,3 +288,15 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 4. **`EXPORT`는 모드 무관**: 감사로그·설문 결과·TC 결과 CSV 3곳(No.27 갱신의 "CSV 내보내기는 감사 대상이 아니다"를 대체). 자산 내보내기(FAQ·의도·키워드·TC 세트)는 대상 아님.
 5. **대안표 "보존기간 정책·아카이브 배치를 지금 도입 — 기각" · 감수 비용 6(무한 증가) 해소**: 보존기간 정책(`AUDIT_LOGS` — 전역, 서버 하한 기본 365일 이상만)이 파기 잡으로 체인 앞부분을 연속 삭제하고 마지막 삭제 행을 `RETENTION` 앵커로 같은 트랜잭션에 남긴다. 감사 행 삭제 코드는 `governance-data.writer.ts` 1파일뿐이며 이력 API에는 여전히 쓰기·삭제 경로가 없다.
 6. 감사 CSV: 기존 8열 뒤 `seq`·`rowHash` 2열 + 파일 끝 표식 행 2(`#CHAIN_HEAD`·`#CHAIN_VERIFY`). 상세 응답 `chain?`(값 있을 때만) · 목록 응답 불변.
+
+
+---
+
+## 갱신 (2026-09-26 — No.41: 대상 3종 · 발송 1건은 감사가 아니다)
+
+업무 자동화(No.41, **ADR-0041 §8**). 기록 위치·커밋 후 기록·화이트리스트·실패 흡수 규약은 **불변**이다.
+
+1. **`AuditTargetType` 27 → 30**: `WorkflowTarget`(발송 대상)·`WorkflowSubscription`(이벤트 구독)·`WorkflowRun`(업무 요청 실행 — 요약 전용, `AUDIT_FIELDS = []`). **`AuditAction` 추가 0**(16 — `topic-sealing.spec.ts` T-10 불변).
+2. 기록: 대상·구독 `CREATE`·`UPDATE`·`DELETE` · 정지/재개 `STATUS_CHANGE` · 원문 허용 변경 `UPDATE`(before/after) · 재발송·취소 `STATUS_CHANGE` 요약 1건(대상 = 챗봇 · 건수·대상 이름) · 테스트 발송 `WorkflowRun` `CREATE`(결과 코드·HTTP 상태만).
+3. 화이트리스트에 비밀 **참조 이름**(`secretRef`·`signingSecretRef`·`urlSecretRef`)은 넣되 값은 없다(DB에도 없다). 필드 값·봉투·`sessionId`는 넣지 않는다.
+4. **발송 1건 1건·자동 재시도·보류 만료·본문 소거는 감사하지 않는다** — 실행 이력(`WorkflowRun` 메타데이터)이 기록이다(§5 `ApiCallLog` 선례).

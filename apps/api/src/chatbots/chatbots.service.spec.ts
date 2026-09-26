@@ -22,6 +22,9 @@ import { ApiException } from '../common/api.exception';
  * [No.22] 토픽 시스템 그룹이 사전검사에 `topics` 1건을 추가했다(13 → 14종) — 토픽은 대화 자산
  * 성격이라 동반 삭제가 아니라 사전검사(409) 대상이다(topic-system-설계.md §9.7). 동반 삭제
  * 트랜잭션은 변경 없다(토픽 FK가 Restrict라 비어 있지 않으면 애초에 이 지점에 도달하지 않는다).
+ * [No.41] 업무 자동화 워크플로우 그룹이 동반 삭제 트랜잭션에 `workflowRun.deleteMany`·
+ * `workflowSubscription.deleteMany` 2건을 추가했다(20 → 22테이블, workflow-automation-설계.md §10.4,
+ * ADR-0041) — `WorkflowTarget`은 전역이라 무관하다. 사전검사는 불변이다.
  */
 
 const ARCHIVED_CHATBOT = {
@@ -61,6 +64,9 @@ function buildTxMock() {
     chatbotEnvironment: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     // [신규 No.45] 보존 정책 재정의 — 설정 데이터라 동반 삭제 대상(§3.1).
     retentionPolicy: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // [신규 No.41] 발송 이력·구독 — 20 → 22테이블.
+    workflowRun: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    workflowSubscription: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
 }
@@ -99,7 +105,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('20개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.45 retentionPolicy 추가)', async () => {
+  it('22개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.41 workflowRun·workflowSubscription 추가)', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -128,6 +134,8 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.environmentSwitchLog.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbotEnvironment.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.retentionPolicy.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.workflowRun.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.workflowSubscription.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는

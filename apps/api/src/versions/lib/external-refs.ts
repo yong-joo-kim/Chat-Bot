@@ -6,6 +6,8 @@ export interface ExternalRefs {
   apiLegacyFormatCount: number;
   surveyIds: Set<string>;
   surveyLegacyFormatCount: number;
+  /** [신규 No.41] `WORKFLOW`가 참조하는 발송 대상 id 집합(전역 자원 — §16). */
+  workflowTargetIds: Set<string>;
 }
 
 /**
@@ -18,6 +20,7 @@ export function collectExternalRefs(envelope: SnapshotEnvelope): ExternalRefs {
   let apiLegacyFormatCount = 0;
   const surveyIds = new Set<string>();
   let surveyLegacyFormatCount = 0;
+  const workflowTargetIds = new Set<string>();
 
   for (const node of envelope.assets.dialogNodes) {
     for (const output of node.outputs) {
@@ -27,9 +30,11 @@ export function collectExternalRefs(envelope: SnapshotEnvelope): ExternalRefs {
       } else if (output.type === 'SURVEY') {
         if (isSurveyV2(output.payload)) surveyIds.add(output.payload.surveyId);
         else surveyLegacyFormatCount += 1;
+      } else if (output.type === 'WORKFLOW') {
+        workflowTargetIds.add(output.payload.targetId);
       }
     }
   }
 
-  return { apiConnectionIds, apiLegacyFormatCount, surveyIds, surveyLegacyFormatCount };
+  return { apiConnectionIds, apiLegacyFormatCount, surveyIds, surveyLegacyFormatCount, workflowTargetIds };
 }

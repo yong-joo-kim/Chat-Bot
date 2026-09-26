@@ -50,6 +50,20 @@ const ENCRYPTED_COLUMNS: Array<{ field: string; label: string; query: (prisma: P
     },
     count: (prisma, keyId) => prisma.surveyAnswer.count({ where: { textValue: { startsWith: `enc:v1:${keyId}:` } } }),
   },
+  {
+    // [신규 No.41] 발송함 본문(일시 보관) — 백필·재암호화 잡 제외지만 옛 키 필요 행 검사에는 포함한다
+    // (실패 보관 본문이 옛 키로 남았는데 키를 빼면 기동 실패, ADR-0041 §7).
+    field: 'WORKFLOW_PAYLOAD',
+    label: '업무 자동화 발송 본문',
+    query: async (prisma, known) => {
+      const row = await prisma.workflowRun.findFirst({
+        where: { payload: { startsWith: 'enc:v1:' }, AND: known.map((k) => ({ NOT: { payload: { startsWith: `enc:v1:${k}:` } } })) },
+        select: { id: true, payload: true },
+      });
+      return row && row.payload !== null ? { id: row.id, value: row.payload } : null;
+    },
+    count: (prisma, keyId) => prisma.workflowRun.count({ where: { payload: { startsWith: `enc:v1:${keyId}:` } } }),
+  },
 ];
 
 /**

@@ -180,6 +180,21 @@ export class RestoreWarningsService {
     }
     if (targetRefs.surveyLegacyFormatCount > 0) warnings.push({ code: 'SURVEY_LEGACY_FORMAT', count: targetRefs.surveyLegacyFormatCount });
 
+    // [신규 No.41] 업무 자동화 발송 대상 — 전역·스냅샷 밖(참조만 스냅샷, ADR-0041 §8).
+    if (targetRefs.workflowTargetIds.size > 0) {
+      const rows = await this.prisma.workflowTarget.findMany({ where: { id: { in: [...targetRefs.workflowTargetIds] } }, select: { id: true, enabled: true } });
+      const foundMap = new Map(rows.map((r) => [r.id, r.enabled]));
+      let missing = 0;
+      let disabled = 0;
+      for (const id of targetRefs.workflowTargetIds) {
+        const enabled = foundMap.get(id);
+        if (enabled === undefined) missing += 1;
+        else if (!enabled) disabled += 1;
+      }
+      if (missing > 0) warnings.push({ code: 'WORKFLOW_TARGET_MISSING', count: missing });
+      if (disabled > 0) warnings.push({ code: 'WORKFLOW_TARGET_DISABLED', count: disabled });
+    }
+
     return warnings;
   }
 }

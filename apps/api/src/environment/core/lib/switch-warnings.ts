@@ -19,6 +19,8 @@ export function computeSwitchWarnings(input: {
   surveyNotOpenCount: number;
   apiConnectionMissingCount: number;
   apiConnectionDisabledCount: number;
+  workflowTargetMissingCount: number;
+  workflowTargetDisabledCount: number;
 }): ProdSwitchWarning[] {
   const warnings: ProdSwitchWarning[] = [];
 
@@ -33,6 +35,8 @@ export function computeSwitchWarnings(input: {
   if (input.surveyNotOpenCount > 0) warnings.push({ code: 'SURVEY_NOT_OPEN', count: input.surveyNotOpenCount });
   if (input.apiConnectionMissingCount > 0) warnings.push({ code: 'API_CONNECTION_MISSING', count: input.apiConnectionMissingCount });
   if (input.apiConnectionDisabledCount > 0) warnings.push({ code: 'API_CONNECTION_DISABLED', count: input.apiConnectionDisabledCount });
+  if (input.workflowTargetMissingCount > 0) warnings.push({ code: 'WORKFLOW_TARGET_MISSING', count: input.workflowTargetMissingCount });
+  if (input.workflowTargetDisabledCount > 0) warnings.push({ code: 'WORKFLOW_TARGET_DISABLED', count: input.workflowTargetDisabledCount });
   if (input.targetCreatedAt.getTime() < input.draftLatestCapturedAt.getTime()) warnings.push({ code: 'OLDER_THAN_DRAFT' });
 
   const fields: string[] = [];

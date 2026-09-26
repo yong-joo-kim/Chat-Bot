@@ -78,6 +78,14 @@ function FlowNodeItem({ node, chatbotId }: { node: FlowNode; chatbotId: string }
           {node.name}
         </Link>
         {node.repeated && <span> {MESSAGES.dialogue.flow.repeated}</span>}
+        {/* [신규 No.41 2차] WF5 — WORKFLOW 아웃풋을 가진 노드는 비종결·화살표 없음이라 자식 라벨 대신
+            작은 아이콘 배지를 붙인다(ui-spec §3.8). 텍스트 대체("업무 요청")도 함께 표시한다. */}
+        {node.hasWorkflowOutput && (
+          <span className="flow-tree-workflow-badge" aria-label={MESSAGES.dialogue.flow.workflowOutputBadgeAriaLabel}>
+            {' '}
+            <span aria-hidden="true">🔗</span> {MESSAGES.dialogue.flow.workflowOutputBadgeLabel}
+          </span>
+        )}
       </button>
       {hasChildren && expanded && (
         <ul>

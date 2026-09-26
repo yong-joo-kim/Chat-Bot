@@ -274,8 +274,13 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
   });
 
   describe('G-5: sealField(/openField( 호출 파일 집합', () => {
-    it('sealField( 호출 파일 = {handoff-thread.service.ts, survey-response.service.ts, governance-data.writer.ts}', () => {
-      const allowed = ['apps/api/src/handoff/handoff-thread.service.ts', 'apps/api/src/survey-responses/survey-response.service.ts', 'apps/api/src/governance/writer/governance-data.writer.ts'];
+    it('sealField( 호출 파일 = {handoff-thread.service.ts, survey-response.service.ts, governance-data.writer.ts, workflow-run-enqueue.writer.ts}(No.41 +1)', () => {
+      const allowed = [
+        'apps/api/src/handoff/handoff-thread.service.ts',
+        'apps/api/src/survey-responses/survey-response.service.ts',
+        'apps/api/src/governance/writer/governance-data.writer.ts',
+        'apps/api/src/workflow/triggers/workflow-run-enqueue.writer.ts',
+      ];
       const offenders = apiFileContents.filter(({ f, content }) => nonCommentOccurrences(content, /\bsealField\(/) > 0 && !allowed.includes(f) && !f.endsWith('common/crypto/field-crypto.ts')).map(({ f }) => f);
       expect(offenders).toEqual([]);
       for (const f of allowed) {
@@ -283,7 +288,7 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
       }
     });
 
-    it('openField( 호출 파일 = 개봉 6파일(handoff-{transcript,history,public-poll,gate,hints}.service.ts·survey-results.service.ts) + writer', () => {
+    it('openField( 호출 파일 = 개봉 6파일(handoff-{transcript,history,public-poll,gate,hints}.service.ts·survey-results.service.ts) + writer + workflow-run.store.ts(No.41 +1)', () => {
       const allowed = [
         'apps/api/src/handoff/handoff-transcript.service.ts',
         'apps/api/src/handoff/handoff-history.service.ts',
@@ -292,6 +297,7 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
         'apps/api/src/handoff/handoff-hints.service.ts',
         'apps/api/src/stats/surveys/survey-results.service.ts',
         'apps/api/src/governance/writer/governance-data.writer.ts',
+        'apps/api/src/workflow/core/workflow-run.store.ts',
       ];
       const offenders = apiFileContents.filter(({ f, content }) => nonCommentOccurrences(content, /\bopenField\(/) > 0 && !allowed.includes(f) && !f.endsWith('common/crypto/field-crypto.ts')).map(({ f }) => f);
       expect(offenders).toEqual([]);

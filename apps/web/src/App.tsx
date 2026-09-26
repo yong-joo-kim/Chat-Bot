@@ -46,6 +46,13 @@ import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedule
 import { EnvironmentTab } from './pages/chatbot-detail/environment/EnvironmentTab';
 import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
+import { WorkflowAutomationShell } from './pages/settings/workflow-automation/WorkflowAutomationShell';
+import { WorkflowTargetsPage } from './pages/settings/workflow-automation/WorkflowTargetsPage';
+import { WorkflowRunsPage } from './pages/settings/workflow-automation/WorkflowRunsPage';
+import { WorkflowSummaryPage } from './pages/settings/workflow-automation/WorkflowSummaryPage';
+import { ChatbotWorkflowShell } from './pages/chatbot-detail/workflow-automation/ChatbotWorkflowShell';
+import { WorkflowSubscriptionsPage } from './pages/chatbot-detail/workflow-automation/WorkflowSubscriptionsPage';
+import { ChatbotWorkflowRunsPage } from './pages/chatbot-detail/workflow-automation/ChatbotWorkflowRunsPage';
 import { DataGovernanceShell } from './pages/settings/data-governance/DataGovernanceShell';
 import { DataGovernanceMapPage } from './pages/settings/data-governance/DataGovernanceMapPage';
 import { DataGovernanceRetentionPage } from './pages/settings/data-governance/DataGovernanceRetentionPage';
@@ -124,6 +131,12 @@ export function App(): JSX.Element {
             <Route path="channels" element={<ChannelsTab />} />
             <Route path="deploy-schedules" element={<DeployScheduleListPage />} />
             <Route path="environment" element={<EnvironmentTab />} />
+            {/* [신규 No.41] "배포" 그룹 5번째 탭 — 챗봇 스코프 업무 자동화(§13-1 확정, WF3~WF3-b). */}
+            <Route path="workflow-automation" element={<ChatbotWorkflowShell />}>
+              <Route index element={<Navigate to="subscriptions" replace />} />
+              <Route path="subscriptions" element={<WorkflowSubscriptionsPage />} />
+              <Route path="runs" element={<ChatbotWorkflowRunsPage />} />
+            </Route>
             <Route path="deploy-schedules/:scheduleId" element={<DeployScheduleDetailPage />} />
             <Route path="dialogue" element={<DialogueShell />}>
               <Route index element={<Navigate to="nodes" replace />} />
@@ -221,6 +234,20 @@ export function App(): JSX.Element {
               </RequirePermission>
             }
           />
+          {/* [신규 No.41] WF1~WF1-c — 새 서브라우트 트리(`WorkflowAutomationShell`, ui-spec §1). */}
+          <Route
+            path="/settings/workflow-automation"
+            element={
+              <RequirePermission permission="security:read" menuName={MESSAGES.systemSettings.workflowAutomation}>
+                <WorkflowAutomationShell />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<Navigate to="targets" replace />} />
+            <Route path="targets" element={<WorkflowTargetsPage />} />
+            <Route path="runs" element={<WorkflowRunsPage />} />
+            <Route path="summary" element={<WorkflowSummaryPage />} />
+          </Route>
           {/* [신규 No.45] G1~G1-c — 새 서브라우트 트리(`DataGovernanceShell`). G2(챗봇별 재정의)는
               `ChatbotDetailLayout` 하위 `SettingsTab`의 `?section=retention` 서브탭에 있다(2차 완료). */}
           <Route

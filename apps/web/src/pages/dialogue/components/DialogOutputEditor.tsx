@@ -13,6 +13,7 @@ import { ConvertLegacyApiConditionDialog } from './api-condition/ConvertLegacyAp
 import { SurveyOutputEditorV2 } from './survey/SurveyOutputEditorV2';
 import { LegacySurveyReadonlyCard } from './survey/LegacySurveyReadonlyCard';
 import { ConvertLegacySurveyDialog } from './survey/ConvertLegacySurveyDialog';
+import { WorkflowOutputEditor } from './workflow/WorkflowOutputEditor';
 
 export interface DialogOutputEditorProps {
   value: DialogOutput;
@@ -43,6 +44,8 @@ const OUTPUT_TYPES: DialogOutputType[] = [
   'SCENARIO',
   'SURVEY',
   'API_CONDITION',
+  // [신규 No.41] 13번째 아웃풋 타입 — "업무 요청 보내기"(비종결·사용자에게 보이지 않음).
+  'WORKFLOW',
 ];
 
 function defaultPayloadFor(type: DialogOutputType): DialogOutput {
@@ -86,6 +89,9 @@ function defaultPayloadFor(type: DialogOutputType): DialogOutput {
           conditions: [],
         },
       };
+    case 'WORKFLOW':
+      // [신규 No.41] `WORKFLOW`는 이번에 처음 생기는 타입이라 레거시 호환 분기가 필요 없다(v1 한 형태뿐).
+      return { type, payload: { version: 1, targetId: '', actionKey: '', fields: [] } };
     default:
       return { type: 'TEXT', payload: { text: '' } };
   }
@@ -484,6 +490,18 @@ export function DialogOutputEditor({
             />
           </>
         ))}
+
+      {value.type === 'WORKFLOW' && (
+        <WorkflowOutputEditor
+          value={value.payload}
+          onChange={(payload) => setPayload({ type: 'WORKFLOW', payload })}
+          chatbotId={chatbotId}
+          nodeContextVariableId={nodeContextVariableId}
+          errPrefix={errorFieldPrefix}
+          fieldErrors={fieldErrors}
+          firstFieldRef={firstFieldRef}
+        />
+      )}
     </div>
   );
 }

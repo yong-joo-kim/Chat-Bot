@@ -227,4 +227,43 @@ export class ReferenceCheckService {
       );
     }
   }
+
+  /**
+   * [신규 No.41] 업무 자동화 발송 대상 삭제 사전검사(§12.3 · R-8) — 초안 노드(전 챗봇) + 구독만 검사한다.
+   * 운영/스테이징 스냅샷 참조는 검사하지 않는다(스냅샷 본문 테이블 참조 파일 봉인 V-7 · No.26 선례) —
+   * 그 버전이 서빙 중이면 실행 시 `SKIPPED(TARGET_UNAVAILABLE)`로 흡수한다.
+   */
+  async assertWorkflowTargetDeletable(targetId: string): Promise<void> {
+    const candidates = await this.prisma.dialogNode.findMany({
+      where: { outputs: { contains: targetId } },
+      select: { id: true, name: true, outputs: true, chatbotId: true, chatbot: { select: { name: true } } },
+    });
+    const referencing: RefRow[] = [];
+    for (const n of candidates) {
+      try {
+        const outputs = JSON.parse(n.outputs) as Array<{ type: string; payload?: { targetId?: string } }>;
+        const refers = outputs.some((o) => o.type === 'WORKFLOW' && o.payload?.targetId === targetId);
+        if (refers) referencing.push({ id: n.id, name: `${n.chatbot.name} › ${n.name}`, chatbotId: n.chatbotId });
+      } catch {
+        // 무시
+      }
+    }
+
+    const subs = await this.prisma.workflowSubscription.findMany({
+      where: { targetId },
+      take: 5,
+      select: { id: true, eventType: true, chatbotId: true, chatbot: { select: { name: true } } },
+    });
+    for (const s of subs) {
+      referencing.push({ id: s.id, name: `${s.chatbot.name} › 이벤트 구독: ${s.eventType}`, chatbotId: s.chatbotId });
+    }
+
+    if (referencing.length > 0) {
+      this.conflict(
+        'WORKFLOW_TARGET_IN_USE',
+        `이 발송 대상을 참조하는 노드·구독이 ${referencing.length}건 있습니다. 먼저 정리해 주세요.`,
+        referencing.slice(0, 5),
+      );
+    }
+  }
 }

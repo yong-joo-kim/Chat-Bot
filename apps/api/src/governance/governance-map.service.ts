@@ -76,6 +76,9 @@ export class GovernanceMapService {
     const retentionState = await this.prisma.governanceJobState.findUnique({ where: { jobName: 'RETENTION' } });
     const parsed = retentionState ? safeJsonParse<RetentionJobState>(retentionState.state, {}) : {};
 
+    // [신규 No.41] 원문 허용 업무 자동화 대상 — 대상 0개면 키 자체를 생략한다(§9.6).
+    const rawPersonalDataWorkflowTargetsCount = await this.prisma.workflowTarget.count({ where: { allowRawPersonalData: true } });
+
     return {
       v1PlainHeaderNodes,
       v1PlainHeaderSnapshots: parsed.v1TokenCheck?.snapshotCount ?? null,
@@ -83,6 +86,7 @@ export class GovernanceMapService {
       rawPersonalDataConnections: await this.prisma.apiConnection.count({ where: { allowRawPersonalData: true } }),
       externalLlmAugmentation: (this.config.get<string>('AUGMENTATION_PROVIDER') ?? 'rule') === 'gemini',
       piiMaskMode: (this.config.get<string>('PII_MASK_MODE') === 'FULL' ? 'FULL' : 'PARTIAL') as PiiMaskMode,
+      ...(rawPersonalDataWorkflowTargetsCount > 0 ? { rawPersonalDataWorkflowTargets: rawPersonalDataWorkflowTargetsCount } : {}),
     };
   }
 
@@ -114,7 +118,8 @@ export class GovernanceMapService {
       AUGMENT_LOCAL: this.config.get<string>('AUGMENTATION_PROVIDER') === 'local' ? this.config.get<string>('AUGMENTATION_LOCAL_BASE_URL') : undefined,
     };
 
-    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API').map((def) => {
+    // [신규 No.41] `WORKFLOW_WEBHOOK`도 레거시와 같이 DB 결정 출구라 exits[]에서 제외한다(§9.6).
+    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API' && e.exitId !== 'WORKFLOW_WEBHOOK').map((def) => {
       const url = urlByExit[def.exitId];
       const configured = !!url;
       const host = url ? this.safeHost(url) || null : null;
@@ -124,7 +129,8 @@ export class GovernanceMapService {
         configured,
         host,
         dataKind: def.dataKind,
-        masked: def.masked,
+        // WORKFLOW_WEBHOOK(PER_TARGET)은 이미 위 filter에서 제외됐다 — 남은 값은 3종뿐이다.
+        masked: def.masked as 'YES' | 'NO' | 'PER_CONNECTION',
         decision,
         ...(def.exitId === 'EMBEDDING' && host && !/^(127\.|localhost$|\[?::1\]?$)/.test(host) ? { rawTextOffHost: true as const } : {}),
       };
@@ -145,7 +151,43 @@ export class GovernanceMapService {
       return { connectionId: c.id, name: c.name, host, enabled: c.enabled, decision, allowRawPersonalData: c.allowRawPersonalData, blockedLast24h: blockedByConnection.get(c.id) ?? 0 };
     });
 
-    return { allowedHosts, exits, legacyConnections };
+    // [신규 No.41] 업무 자동화 발송 대상 — 대상이 1개 이상일 때만 채운다(대상 0개 설치는 바이트 동일).
+    const workflowTargetRows = await this.prisma.workflowTarget.findMany({
+      select: { id: true, name: true, baseUrl: true, enabled: true, pausedAt: true, allowRawPersonalData: true },
+    });
+    let workflowTargets: GovernanceMapResponse['egress']['workflowTargets'];
+    if (workflowTargetRows.length > 0) {
+      const since24hW = new Date(Date.now() - 24 * 60 * 60_000);
+      const failedGroups = await this.prisma.workflowRun.groupBy({
+        by: ['targetId'],
+        where: { lastOutcome: { not: 'SUCCESS' }, completedAt: { gte: since24hW } },
+        _count: { _all: true },
+      });
+      const failedByTarget = new Map(failedGroups.map((g) => [g.targetId, g._count._all]));
+      const retainedGroups = await this.prisma.workflowRun.groupBy({
+        by: ['targetId'],
+        where: { status: 'FAILED', payloadPurgedAt: null },
+        _count: { _all: true },
+      });
+      const retainedByTarget = new Map(retainedGroups.map((g) => [g.targetId, g._count._all]));
+      workflowTargets = workflowTargetRows.map((t) => {
+        const host = this.safeHost(t.baseUrl) || t.baseUrl;
+        const decision: EgressDecision = governanceRuntime().egress.enforce ? checkEgress('WORKFLOW_WEBHOOK', t.baseUrl) : 'NOT_ENFORCED';
+        return {
+          targetId: t.id,
+          name: t.name,
+          host,
+          enabled: t.enabled,
+          paused: !!t.pausedAt,
+          decision,
+          allowRawPersonalData: t.allowRawPersonalData,
+          failedLast24h: failedByTarget.get(t.id) ?? 0,
+          payloadRetained: retainedByTarget.get(t.id) ?? 0,
+        };
+      });
+    }
+
+    return { allowedHosts, exits, legacyConnections, ...(workflowTargets ? { workflowTargets } : {}) };
   }
 
   private async buildEncryption(): Promise<GovernanceMapResponse['encryption']> {

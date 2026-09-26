@@ -160,3 +160,15 @@ export function simulate(input, intents, faqs, now: Date = new Date()): Simulate
 
 1. 운영·스테이징 버전 번들은 스냅샷 역직렬화로 만든다. **노드 `updatedAt`**은 스냅샷의 해시 밖 보조 필드로 되살리고(없는 과거 스냅샷은 캡처 시각 — 동점은 `id asc`), **6종 배열 순서**는 K-1과 같은 `(createdAt asc, id asc)`로 재정렬한다 — 스냅샷 본문 저장 순서(`id asc`)와 달라 의도·FAQ 동점 승자가 바뀌는 것을 막는다.
 2. 따라서 `rankNodes`(§4 동점 규칙)·`matchIntent`·`matchFaqEntry`의 "먼저 본 항목" 규칙은 그대로이고, 같은 버전을 대상으로 한 공개 대화·시뮬레이터·TC의 결과가 같으며 캡처 시점 초안과도 같다.
+
+
+---
+
+## 갱신 (2026-09-26 — No.41: 세 번째 의도된 엔진 확장 — 비종결 이벤트 방출 `WORKFLOW`)
+
+업무 자동화(No.41, **ADR-0041 §2**). §1~§8의 결정(진입점·우선순위·예외 없음·설계 점검의 엔진 배치)은 불변이다.
+
+1. **아웃풋 13종째 `WORKFLOW`는 실행 지원 타입**이다(`UNSUPPORTED_OUTPUT_TYPES` 불변). 엔진은 이 아웃풋을 **출력에 넣지 않고, 정지하지도 종결하지도 않는다** — 바인딩(No.26 `resolveBinding` 1벌)을 해석한 `WorkflowEmission`을 결과 선택 필드 `workflowEvents?`에 싣고 뒤 아웃풋을 계속 실행한다. 없으면 키 부재(결과 모양 불변).
+2. **§6 "항상 최소 1건 응답"은 그대로다** — 노드 아웃풋이 `WORKFLOW`뿐이면 기존 0건 보장(기본 폴백 문구 + `EMPTY_OUTPUT`)이 적용된다. 엔진은 바꾸지 않고 §7 설계 점검 `WORKFLOW_ONLY_OUTPUT`(WARNING)으로 알린다.
+3. **§7 설계 점검**: 규칙 5종(`WORKFLOW_SLOT_BINDING_UNREACHABLE`·`WORKFLOW_TARGET_UNAVAILABLE`·`WORKFLOW_ONLY_OUTPUT`·`WORKFLOW_NO_FIELDS`·`WORKFLOW_RAW_PERSONAL_DATA`) + 없는 대상 `BROKEN_REFERENCE`. 대상 정보는 `validateDialogueDesign`의 선택 3번째 인자에 `workflowTargets`로 더한다(엔진이 DB를 읽지 않는 원칙 유지).
+4. 엔진 수정은 ADR-0041 §2의 **닫힌 목록 E-1~E-8**이며 엔진 I/O 0건 정적 검사(L-5)가 계속 단언한다. `WORKFLOW`가 없는 번들의 모든 소비자 결과(API 정지 시 `apiCall` 포함)는 바이트 단위로 불변이다.

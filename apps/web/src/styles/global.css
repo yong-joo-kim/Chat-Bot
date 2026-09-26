@@ -4019,3 +4019,38 @@ a:focus-visible {
 .retention-overrides-table {
   margin-top: 16px;
 }
+
+/* ── No.41 업무 자동화 워크플로우 커넥터 ── */
+.workflow-run-row {
+  cursor: pointer;
+}
+.workflow-run-row:hover {
+  background: var(--color-bg-hover, #F9FAFB);
+}
+.workflow-run-detail-panel {
+  padding: 8px 12px;
+  background: var(--color-bg-subtle, #F9FAFB);
+  border-radius: 6px;
+}
+.workflow-run-bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+.workflow-attention-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #9A3412;
+  font-size: 0.85em;
+}
+.workflow-attention-dot {
+  color: #EA580C;
+}
+.workflow-target-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}

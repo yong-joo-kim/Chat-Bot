@@ -6,6 +6,7 @@ import { topicStatusLabel } from '../../dialogue/components/topicBadges';
 import { TracePanel } from './TracePanel';
 import { ApiStepPanel } from './ApiStepPanel';
 import { SurveyStepPanel } from './SurveyStepPanel';
+import { WorkflowStepPanel } from './WorkflowStepPanel';
 import { OverlayBadge } from './OverlayBadge';
 import type { SimMessage } from './types';
 
@@ -84,6 +85,7 @@ export function ChatBubble({
       )}
       {message.apiStep && <ApiStepPanel apiStep={message.apiStep} />}
       {message.surveyStep && <SurveyStepPanel step={message.surveyStep} />}
+      {message.workflowSteps?.map((step, i) => <WorkflowStepPanel key={`${step.nodeId}-${i}`} step={step} />)}
     </div>
   );
 }

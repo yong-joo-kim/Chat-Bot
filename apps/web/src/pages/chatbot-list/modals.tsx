@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ChatbotGroupWithCount, ChatbotListItem } from '@chat-bot/shared-types';
 import { Modal, ConfirmDialog } from '../../components/Modal';
@@ -6,6 +6,7 @@ import { InlineFieldError } from '../../components/InlineFieldError';
 import { SlugAvailabilityField, type SlugCheckStatus } from '../../components/SlugAvailabilityField';
 import { groupsApi } from '../../api/groups';
 import { chatbotsApi } from '../../api/chatbots';
+import { chatbotWorkflowRunsApi } from '../../api/workflowSubscriptions';
 import { ApiError } from '../../api/client';
 import { MESSAGES } from '../../constants/messages';
 import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
@@ -590,6 +591,16 @@ export function PermanentDeleteModal({
   const [bannerHasChildren, setBannerHasChildren] = useState(false);
   const [fieldError, setFieldError] = useState<string | undefined>();
 
+  // [신규 No.41] 대기 중인 업무 자동화 요청 안내(workflow-automation-ui-spec.md §3.11) — 조회 실패해도
+  // 삭제 자체를 막지 않는다(조용히 생략, ui-designer 판단 §12-⑥).
+  const [workflowPendingCount, setWorkflowPendingCount] = useState<number | null>(null);
+  useEffect(() => {
+    chatbotWorkflowRunsApi
+      .summary(chatbot.id, 7)
+      .then((res) => setWorkflowPendingCount(res.totals.pending + res.totals.held))
+      .catch(() => setWorkflowPendingCount(null));
+  }, [chatbot.id]);
+
   const matches = confirmName === chatbot.name;
 
   async function handleConfirm(): Promise<void> {
@@ -630,6 +641,11 @@ export function PermanentDeleteModal({
           <p>{banner}</p>
           {bannerHasChildren && <p>{MESSAGES.chatbot.permanentDeleteStatsHint}</p>}
         </div>
+      )}
+      {workflowPendingCount !== null && workflowPendingCount > 0 && (
+        <p className="field-hint field-hint--warning">
+          <span aria-hidden="true">⚠</span> {MESSAGES.chatbot.permanentDeleteWorkflowPendingNotice(workflowPendingCount)}
+        </p>
       )}
       <div className="form-field">
         <label htmlFor="permanent-delete-confirm-name">{MESSAGES.chatbot.permanentDeleteConfirmLabel}</label>

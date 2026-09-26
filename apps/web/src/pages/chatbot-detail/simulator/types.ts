@@ -1,4 +1,4 @@
-import type { ApiStepView, ButtonAction, DialogOutput, MatchTrace, ResolvedBundleTarget, SimulatedAnsweredTopic, SurveyStepView, TraceStep } from '@chat-bot/shared-types';
+import type { ApiStepView, ButtonAction, DialogOutput, MatchTrace, ResolvedBundleTarget, SimulatedAnsweredTopic, SurveyStepView, TraceStep, WorkflowStepView } from '@chat-bot/shared-types';
 
 /** 시뮬레이터 대화 1건(사용자/봇/시스템 안내/오류). SIM1·SIM1-D가 공유한다. */
 export interface SimMessage {
@@ -18,6 +18,8 @@ export interface SimMessage {
   apiStep?: ApiStepView;
   /** [No.27] 이번 턴에 설문 세션이 관여했을 때만 존재한다. `SurveyStepPanel`이 렌더한다. */
   surveyStep?: SurveyStepView;
+  /** [신규 No.41] 이번 턴에 `WORKFLOW` 방출이 있었을 때만 존재한다. `WorkflowStepPanel`이 렌더한다(모의 — 발송 0). */
+  workflowSteps?: WorkflowStepView[];
   /** [No.22] 답한 자산의 topicId가 있을 때만 존재한다(공통 답변·미응답 = undefined). */
   answeredTopic?: SimulatedAnsweredTopic;
   /** [신규 No.40] 비초안 대상일 때만 존재한다(§4.13). `TracePanel`이 렌더한다. */

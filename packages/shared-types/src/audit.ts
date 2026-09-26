@@ -97,6 +97,11 @@ export const AuditTargetType = z.enum([
   'TestRun',
   'RetentionPolicy',
   'RetentionRun',
+  // 업무 자동화 워크플로우(No.41) 그룹 추가(workflow-automation-설계.md §15, ADR-0041) — 발송 대상·
+  // 이벤트 구독·실행 이력 감사 대상. 27 → 30종.
+  'WorkflowTarget',
+  'WorkflowSubscription',
+  'WorkflowRun',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -128,6 +133,9 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   TestRun: '검증 실행',
   RetentionPolicy: '보존 정책',
   RetentionRun: '보존기간 파기',
+  WorkflowTarget: '발송 대상',
+  WorkflowSubscription: '이벤트 구독',
+  WorkflowRun: '업무 요청 실행',
 };
 
 /**

@@ -237,7 +237,14 @@ export function ApiConnectionEditModal({ isOpen, connection, onClose, onSaved }:
           <label htmlFor="api-conn-allow-raw">{msg.fieldAllowRawPersonalData}</label>
         </div>
         {allowRawPersonalData && (
-          <RawPersonalDataConfirmField connectionName={name.trim()} value={confirmRawPersonalData} onChange={setConfirmRawPersonalData} />
+          <RawPersonalDataConfirmField
+            idPrefix="api-connection"
+            entityName={name.trim()}
+            value={confirmRawPersonalData}
+            onChange={setConfirmRawPersonalData}
+            label={msg.confirmRawPersonalDataLabel}
+            mismatchMessage={msg.confirmRawPersonalDataMismatch}
+          />
         )}
         {confirmMismatch && <InlineFieldError id="api-conn-confirm-raw-mismatch" message={msg.confirmRawPersonalDataMismatch} />}
 

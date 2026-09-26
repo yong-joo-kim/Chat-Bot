@@ -80,6 +80,16 @@ export class GovernanceDataWriter {
       const r = await this.prisma.apiCallLog.deleteMany({ where: { id: { in: apiIds.map((x) => x.id) } } });
       count += r.count;
     }
+    // [신규 No.41] 업무 자동화 실행 이력 — 종단 상태(대기·보류·발송 중 제외)만 파기 대상이다(§10.3).
+    const workflowIds = await this.prisma.workflowRun.findMany({
+      where: { createdAt: { lt: cutoff }, status: { in: ['SUCCEEDED', 'FAILED', 'SKIPPED', 'CANCELLED', 'EXPIRED'] } },
+      select: { id: true },
+      take: batchSize,
+    });
+    if (workflowIds.length > 0) {
+      const r = await this.prisma.workflowRun.deleteMany({ where: { id: { in: workflowIds.map((x) => x.id) } } });
+      count += r.count;
+    }
     return count;
   }
 

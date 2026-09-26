@@ -192,6 +192,19 @@ export class ProdSwitchService {
       }
     }
 
+    // [신규 No.41] 업무 자동화 발송 대상 — 전역·스냅샷 밖(ADR-0041 §8).
+    let workflowTargetMissingCount = 0;
+    let workflowTargetDisabledCount = 0;
+    if (targetRefs.workflowTargetIds.size > 0) {
+      const rows = await this.prisma.workflowTarget.findMany({ where: { id: { in: [...targetRefs.workflowTargetIds] } }, select: { id: true, enabled: true } });
+      const foundMap = new Map(rows.map((r) => [r.id, r.enabled]));
+      for (const id of targetRefs.workflowTargetIds) {
+        const enabled = foundMap.get(id);
+        if (enabled === undefined) workflowTargetMissingCount += 1;
+        else if (!enabled) workflowTargetDisabledCount += 1;
+      }
+    }
+
     const latestVersion = await this.prisma.chatbotVersion.findFirst({ where: { chatbotId }, orderBy: { versionNo: 'desc' }, select: { createdAt: true } });
 
     return {
@@ -212,6 +225,8 @@ export class ProdSwitchService {
           surveyNotOpenCount,
           apiConnectionMissingCount,
           apiConnectionDisabledCount,
+          workflowTargetMissingCount,
+          workflowTargetDisabledCount,
         }),
       ],
     };

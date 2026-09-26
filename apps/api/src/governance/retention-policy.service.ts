@@ -248,11 +248,15 @@ export class RetentionPolicyService {
     if (kind === 'SURVEY_FREE_TEXT') return this.prisma.surveyAnswer.count({ where: { textPurgedAt: null, textValue: { not: null }, answeredAt: { lt: cutoff } } });
     if (kind === 'HANDOFF_TEXT') return this.prisma.handoffMessage.count({ where: { textPurgedAt: null, createdAt: { lt: cutoff }, handoffSession: { status: 'ENDED' } } });
     if (kind === 'CALL_LOGS') {
-      const [rag, api] = await Promise.all([
+      const [rag, api, workflow] = await Promise.all([
         this.prisma.ragCallLog.count({ where: { createdAt: { lt: cutoff } } }),
         this.prisma.apiCallLog.count({ where: { createdAt: { lt: cutoff } } }),
+        // [신규 No.41] 업무 자동화 실행 이력 — 종단 상태만(대기·보류·발송 중 제외, §10.3).
+        this.prisma.workflowRun.count({
+          where: { createdAt: { lt: cutoff }, status: { in: ['SUCCEEDED', 'FAILED', 'SKIPPED', 'CANCELLED', 'EXPIRED'] } },
+        }),
       ]);
-      return rag + api;
+      return rag + api + workflow;
     }
     // AUDIT_LOGS
     return this.prisma.auditLog.count({ where: { createdAt: { lt: cutoff } } });

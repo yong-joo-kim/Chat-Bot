@@ -4,6 +4,7 @@ import { intentsApi, keywordsApi, contextsApi, dialogNodesApi, faqsApi } from '.
 import { chatbotsApi } from '../api/chatbots';
 import { apiConnectionsApi } from '../api/apiConnections';
 import { surveysApi } from '../api/surveys';
+import { workflowTargetsApi } from '../api/workflowTargets';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { MESSAGES } from '../constants/messages';
 import { computeSurveyDisplayStatus, surveyDisplayStatusLabel } from '../lib/surveyDisplay';
@@ -27,7 +28,22 @@ import { InlineFieldError } from './InlineFieldError';
  * `"{이름} · {상태 라벨} · 문항 {n}개"`(survey-management-ui-spec.md §2.2 `SurveyPickerField`) —
  * `apiConnection`이 이름 뒤에 "(사용 중지)" 접미사를 붙이는 것과 같은 텍스트 접미 방식을 따른다.
  */
-export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq' | 'apiConnection' | 'survey';
+/**
+ * `workflowTarget`은 [No.41]이 추가한 9번째 타입이다. `apiConnection`과 같은 모양(전역 자원 —
+ * `chatbotId` 불요, `GET /workflow-targets/picker`(`dialogue:read`)). 사용 중지·정지된 대상도
+ * 후보에 남기되 이름에 접미사를 붙인다(workflow-automation-ui-spec.md §2.2 `WorkflowTargetPickerField`).
+ */
+export type ResourcePickerType = 'intent' | 'keyword' | 'context' | 'node' | 'chatbot' | 'faq' | 'apiConnection' | 'survey' | 'workflowTarget';
+
+function formatWorkflowTargetOptionName(t: { name: string; enabled: boolean; paused: boolean; ready: boolean; allowRawPersonalData: boolean }): string {
+  const msg = MESSAGES.workflowTargets;
+  let name = t.name;
+  if (!t.enabled) name += ` ${msg.pickerDisabledSuffix}`;
+  else if (t.paused) name += ` ${msg.pickerPausedSuffix}`;
+  if (!t.ready) name += ` ${msg.pickerSecretMissingSuffix}`;
+  if (t.allowRawPersonalData) name += ` ${msg.pickerRawPersonalDataSuffix}`;
+  return name;
+}
 
 function formatSurveyOptionName(s: { name: string; status: string; activeFrom?: unknown; activeTo?: unknown; questionCount: number }): string {
   const displayStatus = computeSurveyDisplayStatus(s as never);
@@ -65,6 +81,11 @@ async function searchResource(chatbotId: string, type: ResourcePickerType, q: st
       const { items } = await surveysApi.list(chatbotId, { q });
       return items.map((s) => ({ id: s.id, name: formatSurveyOptionName(s) }));
     }
+    case 'workflowTarget': {
+      const { items } = await workflowTargetsApi.picker();
+      const lowered = q.toLowerCase();
+      return items.filter((t) => t.name.toLowerCase().includes(lowered)).map((t) => ({ id: t.id, name: formatWorkflowTargetOptionName(t) }));
+    }
     default:
       return [];
   }
@@ -96,6 +117,11 @@ async function findOneResource(chatbotId: string, type: ResourcePickerType, id: 
       case 'survey': {
         const s = await surveysApi.findOne(chatbotId, id);
         return { id: s.id, name: formatSurveyOptionName({ ...s, questionCount: s.questions.length }) };
+      }
+      case 'workflowTarget': {
+        const { items } = await workflowTargetsApi.picker();
+        const found = items.find((t) => t.id === id);
+        return found ? { id: found.id, name: formatWorkflowTargetOptionName(found) } : null;
       }
       default:
         return null;

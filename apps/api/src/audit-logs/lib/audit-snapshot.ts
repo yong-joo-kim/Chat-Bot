@@ -100,6 +100,26 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'pendingEffectiveAt',
   ],
   RetentionRun: ['kind', 'status', 'affectedByKind', 'headSeq', 'anchorSeq'],
+  // 업무 자동화 워크플로우(No.41) 그룹 추가(workflow-automation-설계.md §15, ADR-0041) — ref **이름**만
+  // (값은 DB에도 없다). `payload`·`fields`·`value`·`sessionId`·비밀 값 필드명은 절대 포함하지 않는다(W-6).
+  WorkflowTarget: [
+    'name',
+    'description',
+    'baseUrl',
+    'authType',
+    'authHeaderName',
+    'secretRef',
+    'signingEnabled',
+    'signingSecretRef',
+    'urlSecretRef',
+    'timeoutMs',
+    'maxAttempts',
+    'allowRawPersonalData',
+    'enabled',
+  ],
+  WorkflowSubscription: ['eventType', 'targetId', 'enabled', 'conditions'],
+  // 발송 1건 1건은 감사가 아니다(요약 전용) — before/after 없음.
+  WorkflowRun: [],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */
