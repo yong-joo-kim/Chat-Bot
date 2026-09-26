@@ -172,6 +172,28 @@ const EnvSchema = z.object({
   DATA_RETENTION_BATCH_PAUSE_MS: z.coerce.number().int().min(0).max(10000).default(200),
   DATA_RETENTION_MAX_ROWS_PER_RUN: z.coerce.number().int().min(1000).default(500000),
   PII_MASK_MODE: z.enum(['PARTIAL', 'FULL']).default('PARTIAL'),
+  // 업무 자동화 워크플로우(No.41) 그룹 추가 — 전부 선택(기본값 있음, FR-0-181). 모두 미설정이어도
+  // 기동한다(대상 0개 = 관측 가능한 변화 0). `WORKFLOW_SECRET__*`는 접두 규약이라 이 스키마에 넣지
+  // 않는다(리졸버 1파일만 `process.env`를 직접 읽는다 — 레거시 시크릿 선례).
+  WORKFLOW_ENABLED: envBoolean(true),
+  WORKFLOW_DISPATCH_ENABLED: envBoolean(true),
+  WORKFLOW_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(1000).max(60000).default(5000),
+  WORKFLOW_DISPATCH_BATCH: z.coerce.number().int().min(1).max(100).default(20),
+  WORKFLOW_CLAIM_LEASE_MS: z.coerce.number().int().min(10000).max(600000).default(60000),
+  WORKFLOW_MAX_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15000).default(15000),
+  WORKFLOW_MAX_ATTEMPTS_CAP: z.coerce.number().int().min(1).max(10).default(10),
+  WORKFLOW_BACKOFF_SCHEDULE: z
+    .string()
+    .regex(/^\d+(s|m|h)(,\d+(s|m|h)){0,9}$/, 'WORKFLOW_BACKOFF_SCHEDULE 형식이 올바르지 않습니다.')
+    .default('30s,2m,10m,30m,2h'),
+  WORKFLOW_PAYLOAD_MAX_BYTES: z.coerce.number().int().min(1024).max(65536).default(16384),
+  WORKFLOW_SESSION_LIMIT: z.coerce.number().int().min(1).max(50).default(3),
+  WORKFLOW_SESSION_WINDOW_MIN: z.coerce.number().int().min(1).max(1440).default(10),
+  WORKFLOW_TARGET_RATE_PER_MIN: z.coerce.number().int().min(1).max(6000).default(60),
+  WORKFLOW_HOLD_MAX_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  WORKFLOW_FAILED_PAYLOAD_RETENTION_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  WORKFLOW_PRIVATE_ALLOWLIST: z.string().default(''),
+  WORKFLOW_ALLOW_HTTP: envBoolean(false),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -224,6 +246,17 @@ export function validate(config: Record<string, unknown>): EnvConfig {
   } catch {
     // eslint-disable-next-line no-console
     console.warn(`STATS_TIMEZONE(${result.data.STATS_TIMEZONE})이 유효한 IANA 시간대가 아닙니다. 예약 표시는 Asia/Seoul로 대체됩니다.`);
+  }
+
+  // 업무 자동화 워크플로우(No.41) §3.4 — 임대(lease)는 대상 타임아웃 상한 + 30초보다 길어야 한다.
+  // 미달이면 기동 실패로 만들지 않고 하한으로 상향 보정한다(경고만 — No.28 선례).
+  const workflowLeaseFloorMs = result.data.WORKFLOW_MAX_TIMEOUT_MS + 30_000;
+  if (result.data.WORKFLOW_CLAIM_LEASE_MS < workflowLeaseFloorMs) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `WORKFLOW_CLAIM_LEASE_MS(${result.data.WORKFLOW_CLAIM_LEASE_MS}ms)가 타임아웃 상한 기준 하한(${workflowLeaseFloorMs}ms) 미만이라 자동 보정합니다.`,
+    );
+    result.data.WORKFLOW_CLAIM_LEASE_MS = workflowLeaseFloorMs;
   }
 
   // 데이터 거버넌스(No.45) §3.4 — validate() 교차 검사 3건.

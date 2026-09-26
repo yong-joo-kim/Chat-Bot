@@ -9,7 +9,8 @@ export interface EgressExitDef {
   /** 정적 검사 대조 대상(레지스트리와 실제 출구 파일 집합이 1:1이어야 한다). */
   readonly files: readonly string[];
   readonly dataKind: EgressDataKind;
-  readonly masked: 'YES' | 'NO' | 'PER_CONNECTION';
+  /** [신규 No.41] `PER_TARGET` 추가 — 응답 스키마의 `exits[]`에는 나타나지 않는다(§9.6, DB 결정 출구 제외). */
+  readonly masked: 'YES' | 'NO' | 'PER_CONNECTION' | 'PER_TARGET';
   readonly label: string;
 }
 
@@ -52,6 +53,19 @@ export const EGRESS_REGISTRY: readonly EgressExitDef[] = [
     dataKind: 'FORM_SLOT',
     masked: 'PER_CONNECTION',
     label: '레거시 API',
+  },
+  {
+    // [신규 No.41] 6번째 클래스 — 발송 파일은 출구 문자열을 직접 쓰지 않고 공유 전송 포트를 호출하지만
+    // 등록 자체는 필수다(가드 대상이 되게 함 · `workflow-sealing.spec.ts` W-2가 보강 단언).
+    exitId: 'WORKFLOW_WEBHOOK',
+    files: [
+      'workflow/dispatch/workflow-http.sender.ts',
+      'legacy-api/transport/node-http.transport.ts',
+      'legacy-api/transport/node-dns.resolver.ts',
+    ],
+    dataKind: 'WORKFLOW_PAYLOAD',
+    masked: 'PER_TARGET',
+    label: '업무 자동화 웹훅',
   },
 ];
 

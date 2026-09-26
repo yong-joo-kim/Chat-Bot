@@ -1,7 +1,11 @@
+import type { EgressExitId } from '@chat-bot/shared-types';
+
 /**
  * [No.26] 전송 포트(§7.3, §7.6) — 테스트 대체 지점(NFR-LM2). DB·Nest·네트워크 무의존 인터페이스만.
  * 구현은 `node-http.transport.ts`(★ `node:http`/`node:https` import 유일 파일) ·
  * `node-dns.resolver.ts`(★ `node:dns` import 유일 파일)뿐이다.
+ * [신규 No.41] `exitId`·`responseMode` 선택 필드 추가 — 업무 자동화 웹훅 발송기가 같은 전송 파일을
+ * 이동 없이 두 번째 출구로 공유한다(ADR-0041 §6). 기본값 = 현행 동작(레거시 호출부·spec 무수정).
  */
 
 export interface LegacyTransportRequest {
@@ -15,12 +19,17 @@ export interface LegacyTransportRequest {
   hostname: string;
   timeoutMs: number;
   maxBytes: number;
+  /** [신규 No.41] 방어 이중화 가드(`checkEgress`)의 출구 id — 미지정 시 `LEGACY_API`(현행 동작). */
+  exitId?: EgressExitId;
+  /** [신규 No.41] `STATUS_ONLY`면 헤더 수신 시 상태 확정 → 본문은 `maxBytes`까지만 소비 후 폐기
+   * (큰 본문이 상태 코드를 삼키는 것을 막는다, §9.4 제약①). 미지정 시 `BODY`(현행 동작). */
+  responseMode?: 'BODY' | 'STATUS_ONLY';
 }
 
 export type LegacyTransportOutcome = 'TIMEOUT' | 'NETWORK_ERROR' | 'REDIRECT_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE';
 
 export type LegacyTransportResult =
-  | { kind: 'RESPONSE'; status: number; contentType?: string; bytes: number; body: Buffer }
+  | { kind: 'RESPONSE'; status: number; contentType?: string; bytes: number; body: Buffer; retryAfter?: string }
   | { kind: 'ERROR'; outcome: LegacyTransportOutcome; errorCode?: string };
 
 export interface LegacyTransport {

@@ -65,3 +65,7 @@ process.env.DEPLOY_SCHEDULE_ENABLED = 'false';
 // 검증은 `RetentionJob.tick()`/`FieldCryptoJob.tick()` 직접 호출로 한다.
 process.env.DATA_RETENTION_JOB_ENABLED = 'false';
 process.env.DATA_REENCRYPT_JOB_ENABLED = 'false';
+
+// 업무 자동화 워크플로우(No.41) 발송 루프도 같은 이유로 기본값을 끈다(CLAUDE.md 규약). 루프 동작
+// 검증은 `WorkflowDispatchJob.tick()` 직접 호출로 한다.
+process.env.WORKFLOW_DISPATCH_ENABLED = 'false';

@@ -22,7 +22,8 @@ export class NodeHttpTransport implements LegacyTransport {
   request(req: LegacyTransportRequest): Promise<LegacyTransportResult> {
     return new Promise((resolve) => {
       // [신규 No.45] 방어 이중화 — 클라이언트 우회 경로를 막는다(§6.5).
-      if (checkEgress('LEGACY_API', req.url) === 'BLOCKED') {
+      // [신규 No.41] 두 번째 출구 공유 — `exitId` 미지정 시 현행 동작(`LEGACY_API`).
+      if (checkEgress(req.exitId ?? 'LEGACY_API', req.url) === 'BLOCKED') {
         resolve({ kind: 'ERROR', outcome: 'NETWORK_ERROR', errorCode: 'EGRESS_BLOCKED' });
         return;
       }
@@ -81,6 +82,26 @@ export class NodeHttpTransport implements LegacyTransport {
           return;
         }
         const contentType = res.headers['content-type'];
+        const retryAfterHeader = res.headers['retry-after'];
+        const retryAfter = Array.isArray(retryAfterHeader) ? retryAfterHeader[0] : retryAfterHeader;
+
+        // [신규 No.41] §9.4 제약① — `STATUS_ONLY`는 헤더 수신 시 상태를 확정한다(받는 쪽이 큰 본문과
+        // 함께 200을 줘도 상태 코드를 잃지 않는다). 본문은 `maxBytes`까지만 소비한 뒤 버린다(미보관).
+        if (req.responseMode === 'STATUS_ONLY') {
+          let consumed = 0;
+          res.on('data', (chunk: Buffer) => {
+            consumed += chunk.length;
+            if (consumed >= req.maxBytes) res.destroy();
+          });
+          res.on('close', () => {
+            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}) });
+          });
+          res.on('error', () => {
+            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}) });
+          });
+          return;
+        }
+
         const contentLengthHeader = res.headers['content-length'];
         if (contentLengthHeader && Number(contentLengthHeader) > req.maxBytes) {
           res.destroy();

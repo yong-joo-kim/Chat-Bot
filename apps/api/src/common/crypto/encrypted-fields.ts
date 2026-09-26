@@ -13,6 +13,8 @@ export const ENCRYPTED_FIELDS: readonly EncryptedFieldDef[] = [
   { field: 'HANDOFF_RAW_TEXT', table: 'handoff_messages', column: 'rawText' },
   { field: 'HANDOFF_TEXT', table: 'handoff_messages', column: 'text' },
   { field: 'SURVEY_TEXT_VALUE', table: 'survey_answers', column: 'textValue' },
+  // [신규 No.41] 발송함 본문(재시도용 일시 보관) — 백필·재암호화 잡 대상 아님(일시 데이터, ADR-0041 §7).
+  { field: 'WORKFLOW_PAYLOAD', table: 'workflow_runs', column: 'payload' },
 ];
 
 export function encryptedFieldDef(field: EncryptedFieldId): EncryptedFieldDef {
