@@ -171,3 +171,17 @@ No.14와 같은 방식(DB `groupBy` + 순수 함수)을 **`where` 절만 넓혀*
 1. **`ConversationLog.servedVersionId`**: 턴 처리 시점의 운영 포인터(모드 켜짐 — 엔진·BLOCK·상담 턴 공통 · 모드 꺼짐 = null). `groupId`·`topicId`와 같이 **적재 시점에 확정되는 사실**이며 `record()` 1곳에서만 쓰고 적재 후 바꾸지 않는다(R-9/R-10 불변). FK·인덱스 없음 · 백필 없음.
 2. 1차는 적재만 한다 — 버전별 통계 비교·비율 분할은 2차이며, 그때 인덱스와 세션 귀속 규칙을 이 컬럼 위에 올린다. 누적 통계·그룹 귀속 집계는 불변이다.
 3. 환경 전환 이력(`EnvironmentSwitchLog`)은 운영 이력이지 대화 원천이 아니다 — 삭제·갱신 코드 0(영구삭제 동반 삭제만).
+
+
+---
+
+## 갱신 (2026-09-26 — No.45: 보존 파기 = 텍스트 소거 · 결정 3 삭제 규약 불변 · L3 "로그 `update*` 0건"의 소거 1파일 예외)
+
+데이터 거버넌스(No.45, **ADR-0040 §4** — PM 확정 P-3 (a)). 결정 1·2(L1·L2)·3·4~8은 불변이다.
+
+1. **보존기간 파기는 행을 지우지 않는다.** 대화 원천 4종(`ConversationLog`·`UnansweredQuestion` 종결 항목·`SurveyAnswer.textValue`·종료 상담 `HandoffMessage.text`)의 **텍스트만 `""`로 소거**하고 `textPurgedAt`을 채운다(미응답 큐 `questionNormalized`는 유일 키 보존을 위해 `#PURGED#<id>`). 행·버킷·`sessionId`·`groupId`·매칭 id·설문 선택/척도·상담 수치가 그대로라 **모든 수치 통계가 바이트 단위로 불변**이고 롤업 테이블이 필요 없다.
+2. **결정 3(삭제 경로 = 단일 서비스 + 같은 트랜잭션 롤업 선적재)은 불변이며 이번에 발동하지 않는다.** `LOG_DELETION_ALLOWLIST`는 **빈 배열 그대로**다(R-4 불변). 재검토 트리거 ③(로그 삭제 경로 도입)도 미발동 — "행 자체 삭제" 규제 해석이 확정되면 그때 대안 B로 얹는다.
+3. **L3 개정(유일한 예외)**: "로그 `update*` 0건"(R-10 · `feedback-sealing.spec.ts` F-10)은 **소거 서비스 1파일 `governance/writer/governance-data.writer.ts`** 만 허용한다 — 그 파일의 로그 `updateMany` data 키는 `userMessage`·`botResponse`·`textPurgedAt`로 정적 검사(G-8)가 제한한다. 설문(S-2)·상담(H-2)·큐(F-9) 쓰기 파일 봉인에도 같은 1파일만 추가된다. 삭제 0건(R-1·R-2·R-3·S-1·H-1·F-1)은 전부 유지.
+4. **질문 순위의 원천 규칙 보강**: 공유 상수 `QUESTION_RANKING_LOG_FILTER`에 `textPurgedAt: null`을 더해 모든 스코프의 질문 순위에서 소거 행을 제외한다(기존 행은 전부 null — 수치 불변).
+5. 소거 트랜잭션은 기존 `enableSecureDelete()`(No.24 격리 파일)를 재사용한다 — R-7 원시 SQL 보유 파일 4개 불변.
+6. 감수 비용 2(대화로그 무기한)는 **해소**된다 — 기본값은 여전히 무기한(현행과 같음)이며 운영자가 정책을 정하면 기한이 생긴다.

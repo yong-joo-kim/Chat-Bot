@@ -85,11 +85,12 @@ describe('설문관리(No.27) 봉인 정적 검사 — ADR-0035 §14', () => {
     expect(rawOffenders).toEqual([]);
   });
 
-  it('S-2) surveyResponse·surveyAnswer의 create|createMany|update|updateMany|upsert 호출 파일은 survey-response.service.ts 1개뿐이다', () => {
+  it('S-2) surveyResponse·surveyAnswer의 create|createMany|update|updateMany|upsert 호출 파일은 survey-response.service.ts·governance-data.writer.ts(No.45 소거·재암호화) 2개뿐이다', () => {
     const pattern = /\.(surveyResponse|surveyAnswer)\s*\.\s*(create|createMany|update|updateMany|upsert)\b/;
     const owners = [...new Set(apiFileContents.filter(({ content }) => pattern.test(content)).map(({ f }) => f))];
-    expect(owners.length).toBe(1);
-    expect(owners[0].endsWith('/survey-responses/survey-response.service.ts')).toBe(true);
+    expect(owners.length).toBe(2);
+    expect(owners.some((f) => f.endsWith('/survey-responses/survey-response.service.ts'))).toBe(true);
+    expect(owners.some((f) => f.endsWith('/governance/writer/governance-data.writer.ts'))).toBe(true);
   });
 
   it('S-3) schema.prisma의 SurveyResponse·SurveyAnswer에 Cascade|SetNull이 없고 Restrict가 있으며 금지 필드가 없다', () => {

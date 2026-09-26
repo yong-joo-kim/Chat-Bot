@@ -241,3 +241,14 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - **`chatbot:deploy`**(ADMIN 전용) — 운영 전환·롤백·운영 전환 예약·환경 모드 켜기/끄기·게이트 설정. "편집자 = 배포자"를 분리하는 최소 단위이며, 역할 신설("배포 관리자")은 매트릭스 전체 파급 때문에 기각했다. 명명은 기존 챗봇 도메인(`chatbot:*`)을 따른다.
 - 스테이징 승격 = 기존 `dialogue:write` AND `chatbot:write`(편집자 가능) · 현황·미리보기 = `chatbot:read` AND `dialogue:read` · 이력 = `chatbot:read` · 긴급 차단 = 기존 `channel:write`(WEB 채널 닫기).
 - 예약 전환의 실행 직전 재검증은 `chatbot:deploy`를 본다. 개수 고정 테스트 2파일(`permission-matrix.spec.ts`·`topic-sealing.spec.ts` T-10)은 무력화하지 않고 18로 갱신한다.
+
+
+---
+
+## 갱신 (2026-09-26 — No.45 데이터 거버넌스: 신규 권한·역할 0종 · 완화는 환경변수 · AUDITOR는 2차)
+
+데이터 거버넌스(No.45, **ADR-0040 §6**)는 **신규 권한·역할 0종**이다(PM 확정 P-4 (1)). 권한 18종·역할 4종·fail-closed 판정 순서·`@Public()` 8곳 불변.
+
+- 데이터 지도·보존 조회·파기 이력 = `security:read` · 보존 저장·유예 취소 = `security:write` · 체인 검증·감사 내보내기 = `audit:read`(전부 ADMIN). 챗봇 재정의 경로는 `chatbot:read` AND `security:*`.
+- **완화 방향 설정(모드·저장 경로·출구 허용 목록·필드 암호화·키·보존 하한·마스킹 강도)은 환경변수로만** — ADMIN 계정 하나로 감사 흔적 삭제·출구 개방·암호화 해제가 가능해지지 않게 한다.
+- 감수 비용 1의 재검토 트리거(No.45)는 **검토 결과 1차 미발동**이다 — 감사 전용 역할(AUDITOR = `audit:read`+`security:read` — 직무 분리)은 역할 4 → 5의 매트릭스 전체 파급 때문에 금융 고객의 직무 분리 요구가 확인될 때 2차로 도입한다.

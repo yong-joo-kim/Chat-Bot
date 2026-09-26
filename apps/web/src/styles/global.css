@@ -3966,3 +3966,56 @@ a:focus-visible {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ── No.45 데이터 거버넌스(data-governance-ui-spec.md) ── */
+.purged-text {
+  color: #6b7280;
+  font-style: italic;
+}
+.decrypt-failed-text {
+  color: #92400e;
+  font-weight: 600;
+}
+.truncated-hash code {
+  background: var(--color-bg-subtle);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.retention-kind-editor {
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 0;
+}
+.retention-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.retention-fieldset:disabled {
+  opacity: 0.7;
+}
+.audit-chain-verify-panel {
+  margin: 12px 0;
+}
+.audit-chain-verify-body {
+  margin-top: 8px;
+}
+.audit-chain-info {
+  margin-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 8px;
+}
+
+/* ── No.45 데이터 거버넌스 2차(G2 챗봇별 재정의·G1-b 재정의 목록) ── */
+.chatbot-retention-kind-editor {
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 0;
+  margin: 0;
+}
+.chatbot-retention-section {
+  margin-top: 8px;
+}
+.retention-overrides-table {
+  margin-top: 16px;
+}

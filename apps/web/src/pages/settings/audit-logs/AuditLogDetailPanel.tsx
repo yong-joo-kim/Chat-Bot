@@ -1,5 +1,31 @@
 import type { AuditLogDetail } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../../constants/messages';
+import { CopyButton } from '../../../components/CopyButton';
+
+/**
+ * [신규 No.45] 체인 정보 소절(`chain?` 값이 있을 때만) — 앞 12자 + 전체 복사 버튼 방식(2026-09-26 PM
+ * 확정 §13-4, data-governance-ui-spec.md §3.5).
+ */
+function AuditChainInfo({ chain }: { chain: NonNullable<AuditLogDetail['chain']> }): JSX.Element {
+  const msg = MESSAGES.auditLogs;
+  return (
+    <div className="audit-chain-info">
+      <h3>{msg.chainInfoTitle}</h3>
+      <p>
+        {msg.chainSeqLabel}: {chain.seq}
+      </p>
+      <p>
+        {msg.chainPrevHashLabel}: <code>{chain.prevHash.slice(0, 12)}…</code>{' '}
+        <CopyButton text={chain.prevHash} label={msg.copyPrevHashLabel} />
+      </p>
+      <p>
+        {msg.chainRowHashLabel}: <code>{chain.rowHash.slice(0, 12)}…</code>{' '}
+        <CopyButton text={chain.rowHash} label={msg.copyRowHashLabel} />
+      </p>
+      <p>{chain.method === 'HMAC' ? msg.chainMethodSigned : msg.chainMethodUnsigned}</p>
+    </div>
+  );
+}
 
 /** §3.9 `AuditDiffTable` — `changedFields`만 좌/우로 렌더한다. */
 function AuditDiffTable({ detail }: { detail: AuditLogDetail }): JSX.Element {
@@ -97,14 +123,21 @@ function AuditSessionMeta({ detail }: { detail: AuditLogDetail }): JSX.Element {
  * `PERMISSION_DENIED`는 `summary` 텍스트 한 줄만 보여준다(IP/UA보다 사유가 우선).
  */
 export function AuditLogDetailPanel({ detail }: { detail: AuditLogDetail }): JSX.Element {
+  let body: JSX.Element;
   if (detail.action === 'PERMISSION_DENIED') {
-    return <p className="field-hint">{detail.summary}</p>;
+    body = <p className="field-hint">{detail.summary}</p>;
+  } else if (detail.targetType === 'Session') {
+    body = <AuditSessionMeta detail={detail} />;
+  } else if (detail.action === 'IMPORT' || detail.action === 'BULK_DELETE') {
+    body = <AuditBulkSummary detail={detail} />;
+  } else {
+    body = <AuditDiffTable detail={detail} />;
   }
-  if (detail.targetType === 'Session') {
-    return <AuditSessionMeta detail={detail} />;
-  }
-  if (detail.action === 'IMPORT' || detail.action === 'BULK_DELETE') {
-    return <AuditBulkSummary detail={detail} />;
-  }
-  return <AuditDiffTable detail={detail} />;
+  return (
+    <>
+      {body}
+      {/* [신규 No.45] 체인 도입 후 행만(§3.5) */}
+      {detail.chain && <AuditChainInfo chain={detail.chain} />}
+    </>
+  );
 }

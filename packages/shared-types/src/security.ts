@@ -170,6 +170,13 @@ export type LoginRequestDto = z.infer<typeof LoginRequestSchema>;
 
 export const CurrentUserSchema = UserSchema.extend({
   permissions: z.array(Permission),
+  /**
+   * [신규 No.45 — 데이터 거버넌스, PM 결정 §27] 거버넌스 런타임 설치 상태에서 읽은 서버 단위
+   * 모드 값. `security:read`가 없는 역할(AGENT·EDITOR 등)도 열람 감사 배너("열람이 기록됩니다")를
+   * 표시해야 하므로 `GET /governance/map` 대신 인증 사용자 전원이 받는 `/auth/me`(및 `/auth/login`
+   * 응답의 `user`— 같은 매퍼 `AuthService.toCurrentUser()`가 채운다)에 싣는다. 모드 OFF 기본값 = false.
+   */
+  governanceModeOn: z.boolean(),
 });
 export type CurrentUser = z.infer<typeof CurrentUserSchema>;
 

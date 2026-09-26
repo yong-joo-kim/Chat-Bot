@@ -81,6 +81,8 @@ const OUTCOME_TONE: Record<ApiCallOutcome, { bg: string; fg: string }> = {
   SECRET_MISSING: { bg: '#F3F4F6', fg: '#374151' },
   BINDING_MISSING: { bg: '#F3F4F6', fg: '#374151' },
   FEATURE_DISABLED: { bg: '#F3F4F6', fg: '#374151' },
+  /** [신규 No.45] 출구 허용 목록 밖 호스트 차단(`BLOCKED_ADDRESS`·`BLOCKED_URL`과 같은 중립-경고 톤). */
+  EGRESS_BLOCKED: { bg: '#F3F4F6', fg: '#374151' },
 };
 
 /** 외부 연동 로그(L1) 전용 — 관리자 화면에만 노출한다(FR-L9-7, 사용자에게는 절대 노출되지 않음). */

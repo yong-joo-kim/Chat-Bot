@@ -1,10 +1,31 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '../../components/Toast';
 import { makeChatbot } from '../../test/fixtures';
 import type { ChatbotDetailContext } from '../ChatbotDetailLayout';
 import { SettingsTab } from './SettingsTab';
+
+// [신규 No.45 2차] G2 서브탭(`?section=retention`)이 `useAuth().can('security:read')`로 노출 여부를
+// 가른다(data-governance-ui-spec.md §3.4).
+let mockCanSeeRetention = true;
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { permissions: mockCanSeeRetention ? ['security:read', 'security:write'] : [] },
+    can: (p: string) => (p === 'security:read' ? mockCanSeeRetention : true),
+  }),
+}));
+
+const mockRetentionGet = vi.fn();
+vi.mock('../../api/governance', () => ({
+  chatbotRetentionApi: {
+    get: (...args: unknown[]) => mockRetentionGet(...args),
+    update: vi.fn(),
+    preview: vi.fn(),
+    cancelPending: vi.fn(),
+  },
+}));
 
 const chatbot = makeChatbot({ slug: 'order-bot', status: 'ACTIVE' });
 
@@ -40,9 +61,11 @@ vi.mock('../../api/chatbots', () => ({
 
 function renderSettingsTab(): ReturnType<typeof render> {
   return render(
-    <ToastProvider>
-      <SettingsTab />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <SettingsTab />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -59,6 +82,7 @@ describe('SettingsTab — slug 변경 경고 모달 (AC-3-7)', () => {
       slug: 'order-bot-v2',
       updatedAt: new Date('2026-09-19T01:00:00.000Z'),
     });
+    mockCanSeeRetention = true;
   });
 
   it('slug를 변경하지 않고 저장하면 경고 모달 없이 바로 저장된다', async () => {
@@ -120,5 +144,50 @@ describe('SettingsTab — slug 변경 경고 모달 (AC-3-7)', () => {
 
     await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledWith(chatbot.id, { slug: 'order-bot-v2' }));
     expect(await screen.findByText('저장되었습니다.')).toBeInTheDocument();
+  });
+});
+
+/** [신규 No.45 2차] G2 — "보존기간" 서브탭 노출은 `security:read` 권한별로 갈린다(data-governance-ui-spec.md §3.4). */
+describe('SettingsTab — G2 보존기간 서브탭(권한별 렌더)', () => {
+  beforeEach(() => {
+    mockUpdateSettings.mockReset();
+    mockRetentionGet.mockReset();
+    mockRetentionGet.mockResolvedValue({
+      scope: 'CHATBOT',
+      chatbotId: chatbot.id,
+      kinds: [
+        { kind: 'CONVERSATION_TEXT', days: 180, source: 'GLOBAL' },
+        { kind: 'UNANSWERED_CLOSED', days: 180, source: 'GLOBAL' },
+        { kind: 'SURVEY_FREE_TEXT', days: 180, source: 'GLOBAL' },
+        { kind: 'HANDOFF_TEXT', days: 180, source: 'GLOBAL' },
+      ],
+      bounds: { minConversationDays: 7, minAuditDays: 365, maxDays: 3650, shortenGraceDays: 7 },
+      updatedAt: null,
+      updatedByEmail: null,
+    });
+  });
+
+  it('security:read가 없으면(EDITOR 등) 서브탭 자체가 렌더되지 않는다', async () => {
+    mockCanSeeRetention = false;
+    renderSettingsTab();
+
+    await screen.findByLabelText('이름 *');
+    expect(screen.queryByRole('tab', { name: '보존기간' })).not.toBeInTheDocument();
+    expect(mockRetentionGet).not.toHaveBeenCalled();
+  });
+
+  it('security:read가 있으면 서브탭이 보이고, 전환하면 ChatbotRetentionSection이 로드된다', async () => {
+    mockCanSeeRetention = true;
+    const user = userEvent.setup();
+    renderSettingsTab();
+
+    await screen.findByLabelText('이름 *');
+    const retentionTab = screen.getByRole('tab', { name: '보존기간' });
+    await user.click(retentionTab);
+
+    expect(await screen.findByText(`보존기간 재정의 — ${chatbot.name}`)).toBeInTheDocument();
+    expect(mockRetentionGet).toHaveBeenCalledWith(chatbot.id);
+    // "기본 정보" 폼은 더 이상 보이지 않는다(서브탭 전환).
+    expect(screen.queryByLabelText('이름 *')).not.toBeInTheDocument();
   });
 });

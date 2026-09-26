@@ -1,5 +1,5 @@
 import { API_BASE_URL, apiClient } from './client';
-import type { AuditLogDetail, AuditLogListQuery, AuditLogListResponse } from '@chat-bot/shared-types';
+import type { AuditChainVerifyRequestDto, AuditChainVerifyResponse, AuditLogDetail, AuditLogListQuery, AuditLogListResponse } from '@chat-bot/shared-types';
 
 export interface AuditLogListParams {
   from?: string;
@@ -36,4 +36,6 @@ export const auditLogsApi = {
    * 동일 출처(`/api/v1` 프록시)라 쿠키가 자동으로 실리며 별도 fetch/blob 처리가 필요 없다.
    */
   exportUrl: (params: AuditLogListParams): string => `${API_BASE_URL}/audit-logs/export?${buildQuery(params).toString()}`,
+  /** [신규 No.45] 감사 해시 체인 무결성 검증(`audit:read`, data-governance-ui-spec.md §3.5). */
+  verify: (dto: AuditChainVerifyRequestDto) => apiClient.post<AuditChainVerifyResponse>('/audit-logs/verify', dto),
 };

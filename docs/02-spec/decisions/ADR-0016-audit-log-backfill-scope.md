@@ -274,3 +274,17 @@ FR-13-12와 FR-13-13의 모순을 다음과 같이 해소한다.
 2. 화이트리스트 = `enabled`·`stagingVersionNo`·`prodVersionNo`·`gateMode`·`gateTestSetId`·`gateMinPassRate`·`gateValidHours`. **사유 메모 본문은 담지 않는다**(summary에 유무만).
 3. 예약 전환 실행은 주체 = 예약자(`actorOverride`) + summary 접두 `[예약 실행 #…]`(ADR-0032 §5 규약 그대로).
 4. NOOP·미리보기·이력 조회·보존 정리·벡터 보존/GC와 `ENV_INIT`/`PROMOTE` 버전 생성 자체는 기록하지 않는다(환경 감사 1건에 버전 번호로 포함 — 자동 스냅샷 비감사 선례).
+
+
+---
+
+## 갱신 (2026-09-26 — No.45: 해시 체인 · `VIEW`/`EXPORT` · 대상 6종 · 대안표 2항 부분 대체 · 무한 증가 해소)
+
+데이터 거버넌스(No.45, **ADR-0040 §5·§7**). 명시 호출·커밋 후 별도 쓰기·실패 흡수·화이트리스트·`RequestContextService.get()` 1곳 규약은 **불변**이다.
+
+1. **해시 체인(모드 무관 항상)**: `AuditLog`에 `seq`(유일)·`prevHash`·`rowHash`. `record()` **1곳**이 한 트랜잭션에서 싱글턴 `AuditChainHead`를 읽고 `createdAt`을 **명시**한 뒤 정규 직렬화(고정 순서 배열 JSON v1)의 SHA-256(`AUDIT_CHAIN_KEY`가 있으면 HMAC-SHA256)을 계산해 헤드를 **기대 seq 조건부 갱신(CAS)** 으로 전진시키고 행을 삽입한다 — 번호는 커밋된 행에만 붙는다. 경합 재시도 초과 시 **체인 없이 기록 + 경고**(§4 "기록 실패 흡수"의 연장 — 행을 잃지 않는다). `auditLog.create` 호출 파일은 여전히 1개다.
+2. **`AuditAction` 14 → 16**: `VIEW`(열람)·`EXPORT`(내보내기 — 요약 액션: 기간·행 수·필터 열거값만, `isBulkSummary` 분기에 추가). 둘 다 파괴적 목록 밖. **`AuditTargetType` 21 → 27**: `ConversationLog`·`UnansweredQuestion`·`AuditLog`·`TestRun`·`RetentionPolicy`·`RetentionRun`(전부 Prisma 모델명 — §9.3 규칙 유지). 보존기간 파기 요약은 기존 `PURGE`(주체 system · 대상 `RetentionRun`).
+3. **대안표 "조회(READ) 이력도 기록 — 기각"을 부분 대체**: 거버넌스 모드에서 개인정보 원천 화면 **닫힌 목록 8핸들러**만 (열람자·대상·KST 일)당 1건 `VIEW`. 기록 기계는 **선언적 데코레이터 `@AuditView` + 인터셉터 1개**다 — §2가 인터셉터를 기각한 근거(① `beforeValue` 불가 ② 경로 파싱 추론 ③ 대량 요약 역추론)는 열람에 해당하지 않는다(대상은 데코레이터가 이름으로 지정 · before/after 없음). 쓰기 감사는 계속 명시 호출이다. `RAW_VIEW`(No.24)는 불변 — 같은 요청에서 `VIEW`와 함께 남을 수 있다.
+4. **`EXPORT`는 모드 무관**: 감사로그·설문 결과·TC 결과 CSV 3곳(No.27 갱신의 "CSV 내보내기는 감사 대상이 아니다"를 대체). 자산 내보내기(FAQ·의도·키워드·TC 세트)는 대상 아님.
+5. **대안표 "보존기간 정책·아카이브 배치를 지금 도입 — 기각" · 감수 비용 6(무한 증가) 해소**: 보존기간 정책(`AUDIT_LOGS` — 전역, 서버 하한 기본 365일 이상만)이 파기 잡으로 체인 앞부분을 연속 삭제하고 마지막 삭제 행을 `RETENTION` 앵커로 같은 트랜잭션에 남긴다. 감사 행 삭제 코드는 `governance-data.writer.ts` 1파일뿐이며 이력 API에는 여전히 쓰기·삭제 경로가 없다.
+6. 감사 CSV: 기존 8열 뒤 `seq`·`rowHash` 2열 + 파일 끝 표식 행 2(`#CHAIN_HEAD`·`#CHAIN_VERIFY`). 상세 응답 `chain?`(값 있을 때만) · 목록 응답 불변.

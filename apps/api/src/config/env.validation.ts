@@ -147,6 +147,31 @@ const EnvSchema = z.object({
   FEEDBACK_CHANGE_WINDOW_HOURS: z.coerce.number().int().min(1).max(168).default(24),
   FEEDBACK_MAX_CHANGES: z.coerce.number().int().min(0).max(20).default(5),
   FEEDBACK_QUEUE_MAX_PENDING: z.coerce.number().int().positive().default(2000),
+  // 데이터 거버넌스(No.45) 그룹 추가 — 전부 선택(기본값 있음, FR-0-170). 모드 OFF에서는 기동 조건이
+  // 아니다. **필드 암호화·감사 체인 서명 키 2종은 이 스키마에 넣지 않는다** — `common/crypto/
+  // env-key.provider.ts` 1파일만 `process.env`에서 직접 읽는다(정적 검사 G-4, 레거시 API 시크릿
+  // 리졸버 선례와 같은 규약).
+  DATA_GOVERNANCE_MODE: z.enum(['OFF', 'ON']).default('OFF'),
+  DATA_RESIDENCY_ALLOWED_DIRS: z.string().default(''),
+  DATA_RESIDENCY_ALLOWED_DB_HOSTS: z.string().default(''),
+  DATA_AT_REST_ENCRYPTION_DECLARED: envBoolean(false),
+  DATA_EGRESS_ALLOWED_HOSTS: z.string().default(''),
+  DATA_ENCRYPTION_ENABLED: envBoolean(false),
+  DATA_REENCRYPT_JOB_ENABLED: envBoolean(true),
+  DATA_REENCRYPT_BATCH_SIZE: z.coerce.number().int().min(50).max(5000).default(500),
+  RETENTION_MIN_DAYS_CONVERSATION: z.coerce.number().int().min(1).default(7),
+  RETENTION_MIN_DAYS_AUDIT: z.coerce.number().int().min(1).default(365),
+  RETENTION_MAX_DAYS: z.coerce.number().int().min(1).default(3650),
+  RETENTION_SHORTEN_GRACE_DAYS: z.coerce.number().int().min(0).max(90).default(7),
+  DATA_RETENTION_JOB_ENABLED: envBoolean(true),
+  DATA_RETENTION_WINDOW: z
+    .string()
+    .regex(/^\d{2}:\d{2}-\d{2}:\d{2}$/, 'DATA_RETENTION_WINDOW는 "HH:MM-HH:MM" 형식이어야 합니다.')
+    .default('02:00-05:00'),
+  DATA_RETENTION_BATCH_SIZE: z.coerce.number().int().min(50).max(5000).default(500),
+  DATA_RETENTION_BATCH_PAUSE_MS: z.coerce.number().int().min(0).max(10000).default(200),
+  DATA_RETENTION_MAX_ROWS_PER_RUN: z.coerce.number().int().min(1000).default(500000),
+  PII_MASK_MODE: z.enum(['PARTIAL', 'FULL']).default('PARTIAL'),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -199,6 +224,24 @@ export function validate(config: Record<string, unknown>): EnvConfig {
   } catch {
     // eslint-disable-next-line no-console
     console.warn(`STATS_TIMEZONE(${result.data.STATS_TIMEZONE})이 유효한 IANA 시간대가 아닙니다. 예약 표시는 Asia/Seoul로 대체됩니다.`);
+  }
+
+  // 데이터 거버넌스(No.45) §3.4 — validate() 교차 검사 3건.
+  if (result.data.RETENTION_MIN_DAYS_CONVERSATION > result.data.RETENTION_MAX_DAYS || result.data.RETENTION_MIN_DAYS_AUDIT > result.data.RETENTION_MAX_DAYS) {
+    const issue = '데이터 거버넌스: RETENTION_MIN_DAYS_CONVERSATION/RETENTION_MIN_DAYS_AUDIT가 RETENTION_MAX_DAYS보다 큽니다.';
+    // eslint-disable-next-line no-console
+    console.error(issue);
+    throw new Error(issue);
+  }
+  if (result.data.RETENTION_MIN_DAYS_AUDIT < 365) {
+    // eslint-disable-next-line no-console
+    console.warn(`RETENTION_MIN_DAYS_AUDIT(${result.data.RETENTION_MIN_DAYS_AUDIT}일)이 권고 하한(365일) 미만입니다(EX-DG-17 — 허용·경고).`);
+  }
+  if (result.data.DATA_ENCRYPTION_ENABLED && result.data.DATA_GOVERNANCE_MODE === 'OFF') {
+    const issue = '데이터 거버넌스: 필드 암호화(DATA_ENCRYPTION_ENABLED)는 거버넌스 모드(DATA_GOVERNANCE_MODE=ON)가 필요합니다.';
+    // eslint-disable-next-line no-console
+    console.error(issue);
+    throw new Error(issue);
   }
 
   return result.data;

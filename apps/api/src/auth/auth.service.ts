@@ -15,6 +15,7 @@ import { ApiException } from '../common/api.exception';
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { hashPassword, verifyPassword } from '../common/auth/lib/password-hash';
 import type { SessionUser } from '../common/auth/session-context';
+import { governanceRuntime } from '../common/governance/governance-runtime';
 import { SessionService } from './session.service';
 
 export interface LoginMeta {
@@ -195,6 +196,8 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       permissions: [...ROLE_PERMISSIONS[role]],
+      // [신규 No.45] security:read 없는 역할도 열람 감사 배너를 표시할 수 있게 한다.
+      governanceModeOn: governanceRuntime().mode === 'ON',
     };
   }
 }

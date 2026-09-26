@@ -46,6 +46,10 @@ import { DeployScheduleDetailPage } from './pages/chatbot-detail/deploy-schedule
 import { EnvironmentTab } from './pages/chatbot-detail/environment/EnvironmentTab';
 import { DeploySchedulesPage } from './pages/settings/DeploySchedulesPage';
 import { ApiConnectionsPage } from './pages/settings/ApiConnectionsPage';
+import { DataGovernanceShell } from './pages/settings/data-governance/DataGovernanceShell';
+import { DataGovernanceMapPage } from './pages/settings/data-governance/DataGovernanceMapPage';
+import { DataGovernanceRetentionPage } from './pages/settings/data-governance/DataGovernanceRetentionPage';
+import { PurgeHistoryPage } from './pages/settings/data-governance/PurgeHistoryPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
 import { CannedResponsesPage } from './pages/dialogue/CannedResponsesPage';
 import { TopicsPage } from './pages/dialogue/TopicsPage';
@@ -217,6 +221,21 @@ export function App(): JSX.Element {
               </RequirePermission>
             }
           />
+          {/* [신규 No.45] G1~G1-c — 새 서브라우트 트리(`DataGovernanceShell`). G2(챗봇별 재정의)는
+              `ChatbotDetailLayout` 하위 `SettingsTab`의 `?section=retention` 서브탭에 있다(2차 완료). */}
+          <Route
+            path="/settings/data-governance"
+            element={
+              <RequirePermission permission="security:read" menuName={MESSAGES.systemSettings.dataGovernance}>
+                <DataGovernanceShell />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<Navigate to="map" replace />} />
+            <Route path="map" element={<DataGovernanceMapPage />} />
+            <Route path="retention" element={<DataGovernanceRetentionPage />} />
+            <Route path="purge-history" element={<PurgeHistoryPage />} />
+          </Route>
         </Routes>
       </main>
     </UnsavedGuardProvider>

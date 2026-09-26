@@ -371,6 +371,8 @@ export const SurveyResponseAnswerViewSchema = z.object({
   questionKey: z.string(),
   kind: z.enum(['ANSWERED', 'SKIPPED']),
   display: z.string(),
+  /** [신규 No.45] 보존기간 경과로 소거된 자유 텍스트 답일 때만(true). */
+  purged: z.literal(true).optional(),
 });
 
 export const SurveyResponseListItemSchema = z.object({
@@ -401,6 +403,8 @@ export const SurveyTextAnswerItemSchema = z.object({
   responseNo: z.string(),
   answeredAt: z.coerce.date(),
   text: z.string(),
+  /** [신규 No.45] 보존기간 경과로 소거된 행일 때만(true). */
+  purged: z.literal(true).optional(),
 });
 export type SurveyTextAnswerItem = z.infer<typeof SurveyTextAnswerItemSchema>;
 

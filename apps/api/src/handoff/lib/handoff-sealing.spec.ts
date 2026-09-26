@@ -84,13 +84,13 @@ describe('하이브리드 CS(No.24) 봉인 정적 검사 — hybrid-cs-설계.md
     expect(nonCommentOccurrences(fixture, pattern)).toBeGreaterThan(0);
   });
 
-  it('H-2) handoffSession·handoffMessage의 create|createMany|update|updateMany|upsert 호출 파일은 handoff-thread.service.ts 1개뿐이다(쓰기 주체 확산 금지)', () => {
+  it('H-2) handoffSession·handoffMessage의 create|createMany|update|updateMany|upsert 호출 파일은 handoff-thread.service.ts·governance-data.writer.ts(No.45 소거·재암호화) 2개뿐이다(쓰기 주체 확산 금지)', () => {
     const pattern = /\.(handoffSession|handoffMessage)\s*\.\s*(create|createMany|update|updateMany|upsert)\b/;
     const owners = new Set(fileContents.filter(({ content }) => nonCommentOccurrences(content, pattern) > 0).map(({ f }) => normPath(f)));
     for (const owner of owners) {
-      expect(owner.endsWith('handoff/handoff-thread.service.ts')).toBe(true);
+      expect(owner.endsWith('handoff/handoff-thread.service.ts') || owner.endsWith('governance/writer/governance-data.writer.ts')).toBe(true);
     }
-    expect(owners.size).toBe(1);
+    expect(owners.size).toBe(2);
   });
 
   it('H-3) handoff-thread.service.ts 안 handoffMessage.update|updateMany 호출의 data 키는 {rawText, rawExpiresAt} 이하이고 값은 null이다(원문 소거 전용 — 메시지 변조 금지)', () => {

@@ -3,6 +3,7 @@ import type { FeedbackTargetRef, UnansweredSource, UnansweredQuestionStatus } fr
 import { UNANSWERED_STATUS_LABELS, UNANSWERED_SOURCE_LABELS } from '@chat-bot/shared-types';
 import { MESSAGES } from '../../constants/messages';
 import { formatDateTime } from '../../lib/date';
+import { GovernedTextValue } from '../../components/DataGovernanceBadges';
 
 /**
  * [신규 No.40 — §4.16, §15.2] 부정 평가 상세 1건 조회에서만 채워지는 초안 대비 정보. 목록은 버전을
@@ -58,17 +59,20 @@ export function LastFeedbackAnswerPanel({
   botResponse,
   turnAt,
   target,
+  purged,
 }: {
   chatbotId: string;
   botResponse: string;
   turnAt: string | Date;
   target: FeedbackTargetRefWithDraftInfo;
+  /** [신규 No.45] 당시 봇 답변 로그가 보존기간 경과로 소거됐을 때만(true, EX-DG-11). */
+  purged?: boolean;
 }): JSX.Element {
   return (
     <div className="last-feedback-answer-panel">
       <h4>{MESSAGES.learning.lastFeedbackAnswerTitle}</h4>
       <p className="last-feedback-answer-text">
-        &ldquo;{botResponse}&rdquo; ({feedbackTargetLabel(target)})
+        &ldquo;<GovernedTextValue text={botResponse} purged={purged} />&rdquo; ({feedbackTargetLabel(target)})
         {' '}
         <FeedbackTargetEditLink chatbotId={chatbotId} target={target} />
       </p>

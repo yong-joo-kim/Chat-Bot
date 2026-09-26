@@ -10,9 +10,10 @@ vi.mock('../../api/handoff', () => ({ handoffApi: { transcript: vi.fn() } }));
 let mockRole: RoleName = 'ADMIN';
 let mockCanWrite = true;
 let mockUserName = '박관리';
+let mockGovernanceModeOn = false;
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { name: mockUserName, role: mockRole },
+    user: { name: mockUserName, role: mockRole, governanceModeOn: mockGovernanceModeOn },
     can: (p: string) => (p === 'cs:write' ? mockCanWrite : true),
   }),
 }));
@@ -55,6 +56,7 @@ describe('TranscriptPanel — 원문 토글 노출 조건·기본 꺼짐·rawVis
     mockRole = 'ADMIN';
     mockCanWrite = true;
     mockUserName = '박관리';
+    mockGovernanceModeOn = false;
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -198,5 +200,65 @@ describe('TranscriptPanel — 원문 토글 노출 조건·기본 꺼짐·rawVis
     expect(calledChatbotId).toBe('bot-1');
     expect(calledSessionRef).toBe(SESSION_REF_B);
     expect(query.includeRaw).toBe(false);
+  });
+});
+
+/** [신규 No.45] G5 파기 표시·G7 열람 감사 배너(data-governance-ui-spec.md §3.7·§3.10). */
+describe('TranscriptPanel — 데이터 거버넌스(No.45) 표시', () => {
+  beforeEach(() => {
+    vi.mocked(handoffApi.transcript).mockReset();
+    mockRole = 'ADMIN';
+    mockCanWrite = true;
+    mockUserName = '박관리';
+    mockGovernanceModeOn = false;
+  });
+
+  it('purged:true인 BOT_TURN/HANDOFF 항목은 원문 대신 "보존기간 경과로 파기됨"을 보여준다', async () => {
+    vi.mocked(handoffApi.transcript).mockResolvedValue(
+      baseResponse({
+        entries: [
+          {
+            kind: 'BOT_TURN',
+            logId: 'log-1',
+            at: new Date('2026-09-24T01:00:00.000Z'),
+            userText: '',
+            botText: '',
+            isAnswered: true,
+            blocked: false,
+            purged: true,
+          },
+          {
+            kind: 'HANDOFF',
+            messageId: 'm1',
+            handoffId: 'h1',
+            seq: 1,
+            at: new Date('2026-09-24T01:05:00.000Z'),
+            sender: 'AGENT',
+            text: '',
+            purged: true,
+          },
+        ],
+      }),
+    );
+    render(<TranscriptPanel chatbotId="bot-1" sessionRef={SESSION_REF} />);
+
+    // BOT_TURN은 userText·botText 둘 다 소거되고(2건), HANDOFF는 text 1건 — 총 3건.
+    const notices = await screen.findAllByText('보존기간 경과로 파기됨');
+    expect(notices.length).toBe(3);
+  });
+
+  it('governanceModeOn=true면 대화 로그 위에 G7 배너를 보여준다', async () => {
+    mockGovernanceModeOn = true;
+    vi.mocked(handoffApi.transcript).mockResolvedValue(baseResponse({ handoff: null }));
+    render(<TranscriptPanel chatbotId="bot-1" sessionRef={SESSION_REF} />);
+    expect(await screen.findByText('이 화면 열람은 감사로그에 기록됩니다.')).toBeInTheDocument();
+  });
+
+  it('governanceModeOn=false면 G7 배너를 보여주지 않는다', async () => {
+    mockGovernanceModeOn = false;
+    vi.mocked(handoffApi.transcript).mockResolvedValue(baseResponse({ handoff: null }));
+    render(<TranscriptPanel chatbotId="bot-1" sessionRef={SESSION_REF} />);
+    await waitFor(() => expect(handoffApi.transcript).toHaveBeenCalled());
+    expect(screen.queryByText('이 화면 열람은 감사로그에 기록됩니다.')).not.toBeInTheDocument();
   });
 });

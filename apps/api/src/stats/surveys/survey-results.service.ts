@@ -23,6 +23,8 @@ import { assembleSurveyQuestionStats } from './lib/survey-question-assembler';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
 
 const NOT_FOUND_MESSAGE = '요청하신 설문을 찾을 수 없습니다.';
+/** [신규 No.45] 보존기간 경과로 소거된 자유 텍스트 표시 문구(§9.2·NFR-DGA4) — CSV·목록 공용. */
+const SURVEY_TEXT_PURGED_LABEL = '보존기간 경과로 파기됨';
 
 export interface SurveyExportResult {
   content: string;
@@ -85,16 +87,22 @@ export class SurveyResultsService {
     }
 
     const items: SurveyResponseListItem[] = rows.map((row) => {
-      // [신규 No.45] 자유 텍스트만 개봉(다른 유형은 textValue=null이라 영향 없음).
+      // [신규 No.45] 자유 텍스트만 개봉(다른 유형은 textValue=null이라 영향 없음) · 소거 행은 "파기됨" 표시.
       const rowAnswers = (answersByResponse.get(row.id) ?? []).map((a) => ({
         ...a,
-        textValue: a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
+        textValue: a.textPurgedAt ? SURVEY_TEXT_PURGED_LABEL : a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
       }));
       const answerItems = survey.questions
         .map((q) => {
           const qRows = rowAnswers.filter((a) => a.questionKey === q.key);
           if (qRows.length === 0) return undefined;
-          return { questionKey: q.key, kind: qRows[0].kind as 'ANSWERED' | 'SKIPPED', display: displayAnswer(findQuestion(survey, q.key), qRows) };
+          const purged = qRows.some((a) => a.textPurgedAt !== null);
+          return {
+            questionKey: q.key,
+            kind: qRows[0].kind as 'ANSWERED' | 'SKIPPED',
+            display: purged ? SURVEY_TEXT_PURGED_LABEL : displayAnswer(findQuestion(survey, q.key), qRows),
+            ...(purged ? { purged: true as const } : {}),
+          };
         })
         .filter((v): v is NonNullable<typeof v> => v !== undefined);
 
@@ -145,11 +153,15 @@ export class SurveyResultsService {
         this.prisma.surveyAnswer.count({ where }),
       ]),
     );
-    const items: SurveyTextAnswerItem[] = rows.map((r) => ({
-      responseNo: toResponseNo(r.responseId),
-      answeredAt: r.answeredAt,
-      text: openField('SURVEY_TEXT_VALUE', r.id, r.textValue) ?? '',
-    }));
+    const items: SurveyTextAnswerItem[] = rows.map((r) => {
+      const purged = r.textPurgedAt !== null;
+      return {
+        responseNo: toResponseNo(r.responseId),
+        answeredAt: r.answeredAt,
+        text: purged ? SURVEY_TEXT_PURGED_LABEL : (openField('SURVEY_TEXT_VALUE', r.id, r.textValue) ?? ''),
+        ...(purged ? { purged: true as const } : {}),
+      };
+    });
     return toPaginated(items, total, query.page, query.pageSize);
   }
 
@@ -238,7 +250,7 @@ export class SurveyResultsService {
           kind: a.kind,
           choiceKey: a.choiceKey,
           numericValue: a.numericValue,
-          textValue: a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
+          textValue: a.textPurgedAt ? SURVEY_TEXT_PURGED_LABEL : a.textValue === null ? null : openField('SURVEY_TEXT_VALUE', a.id, a.textValue),
           isHead: a.isHead,
         });
         answersByResponse.set(a.responseId, list);

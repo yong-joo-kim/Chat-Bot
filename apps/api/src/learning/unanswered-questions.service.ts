@@ -379,6 +379,8 @@ export class UnansweredQuestionsService {
           matchedIntentId: true,
           // [신규 No.40 — §15.2] 초안에서 이름을 못 찾을 때만 이 버전 코어에서 이름을 찾는다.
           servedVersionId: true,
+          // [신규 No.45] 당시 로그가 보존기간 경과로 소거됐는지(§9.5 EX-DG-11).
+          textPurgedAt: true,
         },
       });
       if (log) {
@@ -411,8 +413,15 @@ export class UnansweredQuestionsService {
           }
         }
         lastFeedbackMatchedIntentId = log.matchedIntentId ?? undefined;
-        const truncated = log.botResponse.length > 2000 ? `${log.botResponse.slice(0, 2000)}…` : log.botResponse;
-        lastFeedback = { botResponse: truncated, turnAt: log.createdAt, target: detailTarget, matchedIntentId: lastFeedbackMatchedIntentId };
+        const purged = !!log.textPurgedAt;
+        const truncated = purged ? '보존기간 경과로 파기됨' : log.botResponse.length > 2000 ? `${log.botResponse.slice(0, 2000)}…` : log.botResponse;
+        lastFeedback = {
+          botResponse: truncated,
+          turnAt: log.createdAt,
+          target: detailTarget,
+          matchedIntentId: lastFeedbackMatchedIntentId,
+          ...(purged ? { purged: true as const } : {}),
+        };
       }
     }
 

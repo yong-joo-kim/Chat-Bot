@@ -59,6 +59,8 @@ function buildTxMock() {
     embeddingTextVector: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     environmentSwitchLog: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbotEnvironment: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // [신규 No.45] 보존 정책 재정의 — 설정 데이터라 동반 삭제 대상(§3.1).
+    retentionPolicy: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
 }
@@ -97,7 +99,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('19개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다', async () => {
+  it('20개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.45 retentionPolicy 추가)', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -125,6 +127,7 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.embeddingTextVector.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.environmentSwitchLog.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbotEnvironment.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.retentionPolicy.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는

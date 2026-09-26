@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { Chatbot, UpdateChatbotSettingsDto } from '@chat-bot/shared-types';
 import { useChatbotDetailContext } from '../ChatbotDetailLayout';
 import { chatbotsApi } from '../../api/chatbots';
 import { ApiError } from '../../api/client';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../context/AuthContext';
 import { InlineFieldError } from '../../components/InlineFieldError';
 import { SlugAvailabilityField, type SlugCheckStatus } from '../../components/SlugAvailabilityField';
 import { CopyButton } from '../../components/CopyButton';
@@ -14,6 +16,7 @@ import { fieldErrorsFromApiError } from '../../lib/apiErrorHelpers';
 import { ArchivedBanner } from './ArchivedBanner';
 import { FormActions } from './FormActions';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
+import { ChatbotRetentionSection } from '../settings/data-governance/ChatbotRetentionSection';
 
 interface SettingsFormState {
   name: string;
@@ -58,6 +61,19 @@ function validate(form: SettingsFormState): Record<string, string> {
 export function SettingsTab(): JSX.Element {
   const { chatbot, reload, setUnsavedGuard } = useChatbotDetailContext();
   const { showToast } = useToast();
+  const { can } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // [신규 No.45 2차] G2 — "보존기간" 서브탭은 `security:read`가 있을 때만 존재한다(data-governance-ui-spec.md
+  // §3.4 — EDITOR 등에게는 서브탭 자체가 렌더되지 않는다. App.tsx 라우트는 바꾸지 않고 쿼리스트링만 쓴다,
+  // 2026-09-26 PM 확정 §13-1).
+  const canSeeRetention = can('security:read');
+  const section = canSeeRetention && searchParams.get('section') === 'retention' ? 'retention' : 'basic';
+  function setSection(next: 'basic' | 'retention'): void {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'retention') params.set('section', 'retention');
+    else params.delete('section');
+    setSearchParams(params, { replace: false });
+  }
   const [initial, setInitial] = useState<SettingsFormState>(() => toFormState(chatbot));
   const [form, setForm] = useState<SettingsFormState>(() => toFormState(chatbot));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -156,97 +172,128 @@ export function SettingsTab(): JSX.Element {
 
   return (
     <div className="settings-tab">
-      <ArchivedBanner visible={isArchived} />
-      <ScheduleConflictBanner chatbotId={chatbot.id} />
-      <form onSubmit={handleSubmit} noValidate>
-        <fieldset disabled={isArchived} className="settings-fieldset">
-          <legend className="sr-only">{MESSAGES.settings.title}</legend>
+      {canSeeRetention && (
+        <div className="sub-tabs" role="tablist" aria-label={MESSAGES.settings.title}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === 'basic'}
+            className={`sub-tab-button${section === 'basic' ? ' sub-tab-button--active' : ''}`}
+            onClick={() => setSection('basic')}
+          >
+            {MESSAGES.settings.subTabBasic}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === 'retention'}
+            className={`sub-tab-button${section === 'retention' ? ' sub-tab-button--active' : ''}`}
+            onClick={() => setSection('retention')}
+          >
+            {MESSAGES.settings.subTabRetention}
+          </button>
+        </div>
+      )}
 
-          <div className="form-field">
-            <label htmlFor="name">
-              {MESSAGES.settings.nameLabel}{' '}
-              <span className="required-mark" aria-hidden="true">
-                *
-              </span>
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={form.name}
-              maxLength={100}
-              required
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              aria-describedby={fieldErrors.name ? 'name-error' : undefined}
-              aria-invalid={Boolean(fieldErrors.name)}
-            />
-            <InlineFieldError id="name-error" message={fieldErrors.name} />
-          </div>
+      {section === 'basic' && (
+        <>
+          <ArchivedBanner visible={isArchived} />
+          <ScheduleConflictBanner chatbotId={chatbot.id} />
+          <form onSubmit={handleSubmit} noValidate>
+            <fieldset disabled={isArchived} className="settings-fieldset">
+              <legend className="sr-only">{MESSAGES.settings.title}</legend>
 
-          <div className="form-field">
-            <label htmlFor="avatarUrl">{MESSAGES.settings.avatarLabel}</label>
-            <div className="avatar-field-row">
-              <input
-                id="avatarUrl"
-                type="text"
-                value={form.avatarUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, avatarUrl: e.target.value }))}
-                aria-describedby={fieldErrors.avatarUrl ? 'avatarUrl-error' : undefined}
-                aria-invalid={Boolean(fieldErrors.avatarUrl)}
-              />
-              <Avatar name={form.name || chatbot.name} avatarUrl={form.avatarUrl || undefined} size={36} />
-            </div>
-            <InlineFieldError id="avatarUrl-error" message={fieldErrors.avatarUrl} />
-          </div>
-
-          <div className="form-field">
-            <label htmlFor="description">{MESSAGES.settings.descriptionLabel}</label>
-            <textarea
-              id="description"
-              value={form.description}
-              maxLength={2000}
-              rows={3}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              aria-describedby={`description-count${fieldErrors.description ? ' description-error' : ''}`}
-              aria-invalid={Boolean(fieldErrors.description)}
-            />
-            <p id="description-count" className={`char-counter${form.description.length > 500 ? ' char-counter--over' : ''}`}>
-              {MESSAGES.settings.descriptionCount(form.description.length, 500)}
-            </p>
-            <InlineFieldError id="description-error" message={fieldErrors.description} />
-          </div>
-
-          <SlugAvailabilityField
-            id="slug"
-            label={MESSAGES.settings.slugLabel}
-            value={form.slug}
-            onChange={(value) => setForm((prev) => ({ ...prev, slug: value }))}
-            excludeChatbotId={chatbot.id}
-            externalError={fieldErrors.slug}
-            onStatusChange={setSlugStatus}
-          />
-
-          {publicUrl && (
-            <div className="form-field">
-              <span className="field-label-static">{MESSAGES.settings.publicUrlLabel}</span>
-              <div className="public-url-row">
-                <span className="public-url-text">{publicUrl}</span>
-                <CopyButton text={publicUrl} />
+              <div className="form-field">
+                <label htmlFor="name">
+                  {MESSAGES.settings.nameLabel}{' '}
+                  <span className="required-mark" aria-hidden="true">
+                    *
+                  </span>
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={form.name}
+                  maxLength={100}
+                  required
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  aria-describedby={fieldErrors.name ? 'name-error' : undefined}
+                  aria-invalid={Boolean(fieldErrors.name)}
+                />
+                <InlineFieldError id="name-error" message={fieldErrors.name} />
               </div>
-            </div>
-          )}
-        </fieldset>
 
-        {!isArchived && <FormActions dirty={dirty} saving={saving} onCancel={handleCancel} />}
-      </form>
+              <div className="form-field">
+                <label htmlFor="avatarUrl">{MESSAGES.settings.avatarLabel}</label>
+                <div className="avatar-field-row">
+                  <input
+                    id="avatarUrl"
+                    type="text"
+                    value={form.avatarUrl}
+                    onChange={(e) => setForm((prev) => ({ ...prev, avatarUrl: e.target.value }))}
+                    aria-describedby={fieldErrors.avatarUrl ? 'avatarUrl-error' : undefined}
+                    aria-invalid={Boolean(fieldErrors.avatarUrl)}
+                  />
+                  <Avatar name={form.name || chatbot.name} avatarUrl={form.avatarUrl || undefined} size={36} />
+                </div>
+                <InlineFieldError id="avatarUrl-error" message={fieldErrors.avatarUrl} />
+              </div>
 
-      <ConfirmDialog
-        isOpen={slugChangeModalOpen}
-        title={MESSAGES.settings.slugChangeWarningTitle}
-        description={MESSAGES.settings.slugChangeWarningDesc}
-        confirmLabel={MESSAGES.settings.slugChangeWarningConfirm}
-        onConfirm={() => void doSubmit()}
-        onCancel={() => setSlugChangeModalOpen(false)}
-      />
+              <div className="form-field">
+                <label htmlFor="description">{MESSAGES.settings.descriptionLabel}</label>
+                <textarea
+                  id="description"
+                  value={form.description}
+                  maxLength={2000}
+                  rows={3}
+                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                  aria-describedby={`description-count${fieldErrors.description ? ' description-error' : ''}`}
+                  aria-invalid={Boolean(fieldErrors.description)}
+                />
+                <p id="description-count" className={`char-counter${form.description.length > 500 ? ' char-counter--over' : ''}`}>
+                  {MESSAGES.settings.descriptionCount(form.description.length, 500)}
+                </p>
+                <InlineFieldError id="description-error" message={fieldErrors.description} />
+              </div>
+
+              <SlugAvailabilityField
+                id="slug"
+                label={MESSAGES.settings.slugLabel}
+                value={form.slug}
+                onChange={(value) => setForm((prev) => ({ ...prev, slug: value }))}
+                excludeChatbotId={chatbot.id}
+                externalError={fieldErrors.slug}
+                onStatusChange={setSlugStatus}
+              />
+
+              {publicUrl && (
+                <div className="form-field">
+                  <span className="field-label-static">{MESSAGES.settings.publicUrlLabel}</span>
+                  <div className="public-url-row">
+                    <span className="public-url-text">{publicUrl}</span>
+                    <CopyButton text={publicUrl} />
+                  </div>
+                </div>
+              )}
+            </fieldset>
+
+            {!isArchived && <FormActions dirty={dirty} saving={saving} onCancel={handleCancel} />}
+          </form>
+
+          <ConfirmDialog
+            isOpen={slugChangeModalOpen}
+            title={MESSAGES.settings.slugChangeWarningTitle}
+            description={MESSAGES.settings.slugChangeWarningDesc}
+            confirmLabel={MESSAGES.settings.slugChangeWarningConfirm}
+            onConfirm={() => void doSubmit()}
+            onCancel={() => setSlugChangeModalOpen(false)}
+          />
+        </>
+      )}
+
+      {section === 'retention' && canSeeRetention && (
+        <ChatbotRetentionSection chatbotId={chatbot.id} chatbotName={chatbot.name} isArchived={isArchived} />
+      )}
     </div>
   );
 }

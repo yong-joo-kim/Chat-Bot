@@ -17,6 +17,8 @@ const ITEMS: MenuItem[] = [
   { label: MESSAGES.systemSettings.bannedWords, href: '/settings/banned-words', permission: 'security:read' },
   // [No.26] 레거시 API 연동 — 보안 설정 항목(회원·금지어·API 연결)을 앞쪽에 모은다(ui-spec §5).
   { label: MESSAGES.systemSettings.apiConnections, href: '/settings/api-connections', permission: 'security:read' },
+  // [신규 No.45] 데이터 거버넌스 — "API 연결" 다음, "이력 관리" 앞(같은 security:read 그룹, ui-spec §3.9).
+  { label: MESSAGES.systemSettings.dataGovernance, href: '/settings/data-governance', permission: 'security:read' },
   { label: MESSAGES.systemSettings.auditLogs, href: '/settings/audit-logs', permission: 'audit:read' },
   // No.28: 전역 예약 배포 현황(§1.4) — `chatbot:read`는 사실상 모든 로그인 사용자가 보유해 VIEWER도 보인다.
   { label: MESSAGES.systemSettings.deploySchedules, href: '/settings/deploy-schedules', permission: 'chatbot:read' },

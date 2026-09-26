@@ -52,5 +52,7 @@ export function toUnansweredQuestionListItem(
     // "직접 수정 완료" = RESOLVED인데 resolvedIntentId가 없다(반영 흐름은 항상 값을 채운다 — 파생 판정, 컬럼 추가 0).
     resolvedDirectly: row.status === 'RESOLVED' && row.resolvedIntentId == null ? true : undefined,
     prodReflection: opts.prodReflection,
+    // [신규 No.45] 보존기간 경과로 questionText·variants가 소거된 항목만 true.
+    purged: row.textPurgedAt ? true : undefined,
   };
 }

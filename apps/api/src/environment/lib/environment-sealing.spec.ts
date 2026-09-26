@@ -305,7 +305,8 @@ describe('환경 분리(No.40) 정적 검사 — environment-separation-설계.m
   });
 
   describe('E-4: chatbotVersionPayload 토큰 — V-7 허용 목록의 부분집합 · environment/**·embedding/**는 0', () => {
-    const ALLOWED = ['versions/capture/version-capture.service.ts', 'versions/capture/version-retention.service.ts', 'chatbots/chatbots.service.ts'];
+    // [신규 No.45] governance/jobs/retention.job.ts — v1 평문 헤더 토큰 주간 점검(읽기 전용) 추가.
+    const ALLOWED = ['versions/capture/version-capture.service.ts', 'versions/capture/version-retention.service.ts', 'chatbots/chatbots.service.ts', 'governance/jobs/retention.job.ts'];
 
     it('저장소 전체에서 chatbotVersionPayload 참조 파일이 V-7 허용 목록의 부분집합이다', () => {
       const offenders = apiFileContents
@@ -331,9 +332,10 @@ describe('환경 분리(No.40) 정적 검사 — environment-separation-설계.m
     });
   });
 
-  describe('E-8: conversationLog.update* 0(R-10) · conversation-log.service.ts create.data에 servedVersionId 키', () => {
-    it('저장소 전체에 conversationLog.update|updateMany가 없다', () => {
-      for (const { content } of apiFileContents.filter(({ f }) => !f.endsWith('.spec.ts'))) {
+  describe('E-8: conversationLog.update* 는 governance-data.writer.ts(텍스트 소거 1파일)뿐(R-10 — No.45 갱신) · conversation-log.service.ts create.data에 servedVersionId 키', () => {
+    it('저장소 전체에서 conversationLog.update|updateMany 호출 파일은 writer 1개뿐이다', () => {
+      for (const { f, content } of apiFileContents.filter(({ f }) => !f.endsWith('.spec.ts'))) {
+        if (f.replace(/\\/g, '/').endsWith('src/governance/writer/governance-data.writer.ts')) continue;
         expect(nonCommentOccurrences(content, /conversationLog\.(update|updateMany)\(/g)).toBe(0);
       }
     });

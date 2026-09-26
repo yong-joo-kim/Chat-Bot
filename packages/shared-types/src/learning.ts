@@ -90,6 +90,8 @@ export const UnansweredQuestionListItemSchema = z.object({
    * 판정, 수집기 불변). 값이 없으면 모드 꺼짐이거나 대상 외 상태다(하위호환).
    */
   prodReflection: ProdReflectionSchema.optional(),
+  /** [신규 No.45] 보존기간 경과로 questionText·variants가 소거된 항목일 때만(true). */
+  purged: z.literal(true).optional(),
 });
 export type UnansweredQuestionListItem = z.infer<typeof UnansweredQuestionListItemSchema>;
 
@@ -144,6 +146,8 @@ export const UnansweredQuestionDetailSchema = UnansweredQuestionListItemSchema.e
         nameFromVersion: z.string().optional(),
       }),
       matchedIntentId: z.string().uuid().optional(),
+      /** [신규 No.45] 당시 봇 답변 로그가 보존기간 경과로 소거됐을 때만(true). */
+      purged: z.literal(true).optional(),
     })
     .optional(),
   /** [신규 No.44] 같은 정규화 질문의 다른 소스 항목(있으면) — 반영·오답 왕복 표시(FR-FB7-5). */

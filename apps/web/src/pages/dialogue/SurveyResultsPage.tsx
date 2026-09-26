@@ -19,6 +19,9 @@ import { EmptyState } from '../../components/EmptyState';
 import { SkeletonCard, SkeletonRow } from '../../components/Skeleton';
 import { Pagination } from '../../components/Pagination';
 import { DateRangeField } from '../../components/DateRangeField';
+import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { GovernedTextValue } from '../../components/DataGovernanceBadges';
+import { useAuth } from '../../context/AuthContext';
 import { MESSAGES } from '../../constants/messages';
 import { formatDate, formatDateTime, addDaysToDateInputValue, kstTodayDateInputValue } from '../../lib/date';
 import { useLatestRequest } from '../../lib/useLatestRequest';
@@ -50,6 +53,7 @@ export function SurveyResultsPage(): JSX.Element {
   const { chatbot } = useChatbotDetailContext();
   const { surveyId } = useParams<{ surveyId: string }>();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const msg = MESSAGES.surveyResults;
   const summaryGuard = useLatestRequest();
   const questionsGuard = useLatestRequest();
@@ -235,6 +239,8 @@ export function SurveyResultsPage(): JSX.Element {
         <h2>{MESSAGES.surveys.titleEdit(surveyName)}</h2>
       </div>
       <SurveyTabs chatbotId={chatbot.id} surveyId={surveyId} active="results" />
+      {/* [신규 No.45] G7 — 설문 응답 목록(V-4)·자유 텍스트 목록(V-5)이 이 한 화면에 함께 있어 배너 1개로 겸한다(§3.10). */}
+      <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />
 
       <div className="dialogue-toolbar">
         <fieldset className="form-field form-field--inline" role="radiogroup" aria-label={MESSAGES.stats.granularityLegend}>
@@ -396,7 +402,7 @@ export function SurveyResultsPage(): JSX.Element {
                 <ul>
                   {textAnswers.map((a, i) => (
                     <li key={i}>
-                      {formatDateTime(a.answeredAt)} · {a.text}
+                      {formatDateTime(a.answeredAt)} · <GovernedTextValue text={a.text} purged={a.purged} />
                     </li>
                   ))}
                 </ul>
@@ -460,7 +466,15 @@ export function SurveyResultsPage(): JSX.Element {
                   {questionDefs.map((qd) => {
                     const answer = r.answers.find((a) => a.questionKey === qd.key);
                     return (
-                      <td key={qd.key}>{!answer ? msg.noAnswer : answer.kind === 'SKIPPED' ? msg.skippedAnswer : answer.display}</td>
+                      <td key={qd.key}>
+                        {!answer ? (
+                          msg.noAnswer
+                        ) : answer.kind === 'SKIPPED' ? (
+                          msg.skippedAnswer
+                        ) : (
+                          <GovernedTextValue text={answer.display} purged={answer.purged} />
+                        )}
+                      </td>
                     );
                   })}
                 </tr>

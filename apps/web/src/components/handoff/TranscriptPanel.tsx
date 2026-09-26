@@ -8,6 +8,8 @@ import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
 import { RawTextToggle } from './RawTextToggle';
 import { RawViewBadge } from './badges';
+import { GovernedTextValue } from '../DataGovernanceBadges';
+import { GovernanceViewAuditBanner } from '../GovernanceViewAuditBanner';
 
 const POLL_INTERVAL_MS = 2000;
 const STALE_THRESHOLD = 15; // 2초 × 15 = 30초 연속 실패
@@ -181,6 +183,9 @@ export function TranscriptPanel({
           <span aria-hidden="true">⚠</span> {msg.pollingStaleBanner}
         </p>
       )}
+      {/* [신규 No.45] G7 — 대화 보기(V-2), 대화 로그(role="log") 영역 위(§3.10). readOnly(이력 상세)는
+          이 패널을 쓰지 않는다(TranscriptEntryList 재사용, 그 화면은 HandoffHistoryDetailPage가 직접 배너를 넣는다). */}
+      {!readOnly && <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />}
       <div className="transcript-log" role="log" aria-live="polite" aria-label={msg.transcriptTitle}>
         {loading && entries.length === 0 ? (
           <div className="skeleton skeleton-row" />
@@ -219,11 +224,12 @@ function TranscriptEntryRow({ entry, hideRaw = false }: { entry: TranscriptEntry
     return (
       <div className="transcript-entry transcript-entry--bot">
         <p className="transcript-line">
-          <strong>사용자</strong> {entry.userText} <span className="field-hint">{formatDateTime(entry.at)}</span>
+          <strong>사용자</strong> <GovernedTextValue text={entry.userText} purged={entry.purged} />{' '}
+          <span className="field-hint">{formatDateTime(entry.at)}</span>
         </p>
         <p className="transcript-line">
           <strong>봇</strong>{' '}
-          {entry.isAnswered ? entry.botText : MESSAGES.handoffConsole.unansweredReasonFallback}
+          {entry.isAnswered ? <GovernedTextValue text={entry.botText} purged={entry.purged} /> : MESSAGES.handoffConsole.unansweredReasonFallback}
           {entry.answeredBy && <span className="dialogue-badge dialogue-badge--neutral">{entry.answeredBy.kind}</span>}
         </p>
       </div>
@@ -233,7 +239,7 @@ function TranscriptEntryRow({ entry, hideRaw = false }: { entry: TranscriptEntry
   return (
     <div className={`transcript-entry transcript-entry--handoff transcript-entry--${entry.sender.toLowerCase()}`}>
       <p className="transcript-line">
-        <strong>{entry.senderName ?? SENDER_LABEL[entry.sender]}</strong> {entry.text}{' '}
+        <strong>{entry.senderName ?? SENDER_LABEL[entry.sender]}</strong> <GovernedTextValue text={entry.text} purged={entry.purged} />{' '}
         {showRaw && (
           <>
             <RawViewBadge /> <span className="transcript-raw-text">{entry.rawText}</span>

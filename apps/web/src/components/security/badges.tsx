@@ -61,6 +61,10 @@ const AUDIT_ACTION_COLOR: Record<AuditAction, { bg: string; fg: string }> = {
   RESTORE: { bg: '#FFEDD5', fg: '#9A3412' },
   /** [신규 No.24] 원문 열람(`RAW_VIEW`) — 하이브리드 CS 상담 중 원문 토글 감사(hybrid-cs-설계.md §16). */
   RAW_VIEW: { bg: '#E0E7FF', fg: '#3730A3' },
+  /** [신규 No.45] 열람(마스킹본, `VIEW`)·내보내기(`EXPORT`) — `RAW_VIEW`와 톤이 겹치지 않게 구분한다
+   * (data-governance-ui-spec.md §2.2 — 같은 목록에 `VIEW`·`RAW_VIEW`가 함께 나타날 수 있다). */
+  VIEW: { bg: '#E0F2FE', fg: '#075985' },
+  EXPORT: { bg: '#DBEAFE', fg: '#1D4ED8' },
 };
 
 /** 파괴적 동작 3종은 굵게+좌측 강조선으로 한 번 더 구분한다(FR-13-21). */
@@ -73,6 +77,8 @@ export function AuditActionBadge({ action }: { action: AuditAction }): JSX.Eleme
       style={{ backgroundColor: cfg.bg, color: cfg.fg }}
     >
       {action === 'PERMISSION_DENIED' && <span aria-hidden="true">⚠ </span>}
+      {action === 'VIEW' && <span aria-hidden="true">👁 </span>}
+      {action === 'EXPORT' && <span aria-hidden="true">⬇ </span>}
       {AUDIT_ACTION_LABELS[action]}
     </span>
   );

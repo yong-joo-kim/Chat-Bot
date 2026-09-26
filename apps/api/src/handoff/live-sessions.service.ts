@@ -72,8 +72,11 @@ export class LiveSessionsService {
     // ③ 페이지 대상 세션의 마지막 사용자 발화(전체가 아니라 정렬·필터 후 최대 pageSize만 조회하고 싶지만
     // 정렬이 메모리 조립이라 여기서는 세션 전체의 마지막 로그 id 목록으로 1회 조회한다).
     const lastLogIds = Array.from(bySession.values()).map((a) => a.lastLogId);
-    const lastLogTexts = lastLogIds.length > 0 ? await this.prisma.conversationLog.findMany({ where: { id: { in: lastLogIds } }, select: { id: true, userMessage: true } }) : [];
+    const lastLogTexts =
+      lastLogIds.length > 0 ? await this.prisma.conversationLog.findMany({ where: { id: { in: lastLogIds } }, select: { id: true, userMessage: true, textPurgedAt: true } }) : [];
     const textByLogId = new Map(lastLogTexts.map((r) => [r.id, r.userMessage]));
+    // [신규 No.45] 마지막 발화 원천 행이 보존기간 경과로 소거됐으면 표시(ui-spec §3.7). 추가 쿼리 없음 — 이미 읽는 행에서 판정.
+    const purgedByLogId = new Map(lastLogTexts.map((r) => [r.id, r.textPurgedAt != null]));
 
     const sessionRefs = Array.from(bySession.keys())
       .map((sid) => computeSessionRef(chatbotId, sid))
@@ -96,6 +99,7 @@ export class LiveSessionsService {
         blockedCount: alert.blockedCount,
         alertLevel: alert.alertLevel,
         lastUserText: (textByLogId.get(agg.lastLogId) ?? '').slice(0, 100),
+        lastUserTextPurged: purgedByLogId.get(agg.lastLogId) ? true : undefined,
         lastUnansweredReason: alert.lastUnansweredReason,
         handoff: handoff
           ? {

@@ -33,6 +33,8 @@ const OUTCOMES: ApiCallOutcome[] = [
   'SECRET_MISSING',
   'BINDING_MISSING',
   'FEATURE_DISABLED',
+  // [신규 No.45] 출구 허용 목록 밖 호스트 차단.
+  'EGRESS_BLOCKED',
 ];
 
 /** L1 — 외부 연동 로그(`StatsShell` 3번째 서브탭, `legacy-api-integration-ui-spec.md` §3.8). 메타데이터 전용(원문 0건). */

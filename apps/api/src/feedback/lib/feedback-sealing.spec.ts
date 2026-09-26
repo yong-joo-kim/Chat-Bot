@@ -290,24 +290,26 @@ describe('피드백 기반 개선 루프(No.44) 정적 검사 — feedback-loop-
     });
   });
 
-  describe('F-9: unansweredQuestion 쓰기 호출 파일 집합 = 정확히 3개(FR-0-141 정정, §10.1)', () => {
+  describe('F-9: unansweredQuestion 쓰기 호출 파일 집합 = 정확히 4개(FR-0-141 정정, §10.1 — No.45 writer 추가)', () => {
     const pattern = /(?:prisma|tx)\.unansweredQuestion\.(create|createMany|update|updateMany|upsert)\(/;
-    it('등장 파일이 정확히 3개다', () => {
+    it('등장 파일이 정확히 4개다', () => {
       const offenders = apiFileContents.filter(({ content }) => pattern.test(content)).map(({ f }) => f);
       expect(new Set(offenders)).toEqual(
         new Set([
           'apps/api/src/learning/unanswered-collector.service.ts',
           'apps/api/src/learning/unanswered-questions.service.ts',
           'apps/api/src/learning/decomposed-resolve.service.ts',
+          'apps/api/src/governance/writer/governance-data.writer.ts',
         ]),
       );
     });
   });
 
-  describe('F-10: conversationLog update* 0(R-10 재확인) · record()의 create.data에 feedbackOffered·inputKind 키 존재(FR-FB2-3)', () => {
-    it('conversationLog.update·updateMany·upsert 호출이 0건이다', () => {
+  describe('F-10: conversationLog update* 는 governance/writer/governance-data.writer.ts(텍스트 소거 1파일)뿐(R-10 재확인 — No.45 갱신) · record()의 create.data에 feedbackOffered·inputKind 키 존재(FR-FB2-3)', () => {
+    it('conversationLog.update·updateMany·upsert 호출 파일은 writer 1개뿐이다', () => {
       const pattern = /conversationLog\.(update|updateMany|upsert)\(/;
-      for (const { content } of apiFileContents) {
+      for (const { f, content } of apiFileContents) {
+        if (f.replace(/\\/g, '/').endsWith('apps/api/src/governance/writer/governance-data.writer.ts')) continue;
         expect(nonCommentOccurrences(content, pattern)).toBe(0);
       }
     });

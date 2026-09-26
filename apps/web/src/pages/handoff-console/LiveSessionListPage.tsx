@@ -7,6 +7,8 @@ import { ErrorState } from '../../components/ErrorState';
 import { EmptyState } from '../../components/EmptyState';
 import { LiveSessionFilterBar } from '../../components/handoff/LiveSessionFilterBar';
 import { LiveSessionTable, SessionSummaryBar, PollingStaleBanner } from '../../components/handoff/LiveSessionTable';
+import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { useAuth } from '../../context/AuthContext';
 import { MESSAGES } from '../../constants/messages';
 import { useHandoffConsoleChatbotContext } from './HandoffConsoleChatbotShell';
 
@@ -16,6 +18,7 @@ const HIDDEN_POLL_INTERVAL_MS = 30000;
 /** HC1 — 진행 중 세션 목록(hybrid-cs-ui-spec.md §3.2, `/handoff-console/:chatbotId/live`). */
 export function LiveSessionListPage(): JSX.Element {
   const { chatbotId, chatbotName } = useHandoffConsoleChatbotContext();
+  const { user } = useAuth();
   const msg = MESSAGES.handoffConsole;
 
   const [alert, setAlert] = useState<AlertLevel[]>([]);
@@ -69,6 +72,8 @@ export function LiveSessionListPage(): JSX.Element {
       <h2>
         {msg.pickerTitle} &gt; {chatbotName}
       </h2>
+      {/* [신규 No.45] G7 — 진행 중 세션 목록(V-1), 필터바 위(다른 상시 배너 없음, §3.10). */}
+      <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />
 
       {data && !data.handoffEnabled && data.items.length > 0 && (
         <p className="field-hint" role="status">

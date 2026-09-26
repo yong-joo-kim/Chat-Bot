@@ -151,6 +151,8 @@ export const LiveSessionRowSchema = z.object({
   blockedCount: z.number().int().nonnegative(),
   alertLevel: AlertLevel,
   lastUserText: z.string(),
+  /** [신규 No.45] 마지막 사용자 발화(`lastUserText`)가 보존기간 경과로 소거된 행일 때만(true) — ui-spec §3.7. */
+  lastUserTextPurged: z.literal(true).optional(),
   lastUnansweredReason: UnansweredReason.optional(),
   handoff: LiveSessionHandoffBriefSchema.optional(),
   handoffSupported: z.boolean(),
@@ -198,6 +200,8 @@ export const TranscriptBotTurnSchema = z.object({
   blocked: z.boolean(),
   answeredBy: TranscriptAnsweredBySchema.optional(),
   unansweredReason: UnansweredReason.optional(),
+  /** [신규 No.45] 보존기간 경과로 소거된 행일 때만(true). */
+  purged: z.literal(true).optional(),
 });
 
 /** ★ `rawText`는 이 스키마에서만 등장한다(§9.3) — 키가 아예 없으면 직렬화되지 않는다(optional). */
@@ -212,6 +216,8 @@ export const TranscriptHandoffEntrySchema = z.object({
   text: z.string(),
   rawText: z.string().optional(),
   senderName: z.string().optional(),
+  /** [신규 No.45] 보존기간 경과로 소거된 행일 때만(true). */
+  purged: z.literal(true).optional(),
 });
 
 export const TranscriptEntrySchema = z.discriminatedUnion('kind', [TranscriptBotTurnSchema, TranscriptHandoffEntrySchema]);

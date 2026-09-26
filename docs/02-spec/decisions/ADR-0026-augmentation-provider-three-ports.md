@@ -158,3 +158,14 @@ export interface AugmentationProvider {
 - **G3 실측에서 ④ 생성 지연이 관리자 대기 UX를 깨뜨림**(예: 후보 20건 P95 > 60초) → 서빙 엔진·양자화·배치 전략 재검토, 그래도 미달이면 G2 기본 전환.
 - **`both` 프로파일 운영 중 대화 P95 회귀 관측** → 프로세스 분리를 권고가 아닌 **강제**로 승격.
 - **Gemini 외 제공자 요구**(Azure OpenAI·사내 vLLM 게이트웨이 등) → `AugmentationProviderId` 유니온 확장 1곳 + 구현체 추가로 흡수. 포트는 바뀌지 않는다.
+
+
+---
+
+## 갱신 (2026-09-26 — No.45: G2·G3 출구 게이트 · 폴백 경로 불변)
+
+데이터 거버넌스(No.45, **ADR-0040 §2**). 포트 1 + 구현 3종·모든 실패의 G1 수렴·강제 5단계는 **불변**이다.
+
+- G2(Gemini)·G3(로컬)의 `fetch` 직전에 `assertEgressAllowed()`를 호출한다(Gemini는 URL에 키가 붙으므로 **기준 URL로 판정**하고 오류 메시지에 호스트만). 차단 예외는 기존 `catch`가 빈 배열(G1 폴백)·`healthy()=false`로 흡수한다 — 새 실패 모드 없음. 생성자·팩토리 무변경(가드는 전역 설치 정책을 읽는다).
+- 거버넌스 모드에서 `AUGMENTATION_PROVIDER=gemini`(키 있음)이면 Gemini 호스트(기본 `generativelanguage.googleapis.com` — 상수 export)가, `local`이면 `AUGMENTATION_LOCAL_BASE_URL` 호스트가 출구 허용 목록에 있어야 **기동**한다.
+- 데이터 지도는 G2 송신을 "예문 시드(마스킹)", G3 송신을 "예문 시드(마스킹 없음 — 관리자 자산 + 이미 마스킹된 학습 반영 예문)"로 표시한다.

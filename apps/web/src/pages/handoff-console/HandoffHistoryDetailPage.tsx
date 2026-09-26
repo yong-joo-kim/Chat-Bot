@@ -9,6 +9,8 @@ import { SkeletonRow } from '../../components/Skeleton';
 import { EndReasonBadge } from '../../components/handoff/badges';
 import { SessionRefLabel } from '../../components/handoff/SessionRefLabel';
 import { TranscriptEntryList } from '../../components/handoff/TranscriptPanel';
+import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { useAuth } from '../../context/AuthContext';
 import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
 import { useHandoffConsoleChatbotContext } from './HandoffConsoleChatbotShell';
@@ -20,6 +22,7 @@ import { useHandoffConsoleChatbotContext } from './HandoffConsoleChatbotShell';
 export function HandoffHistoryDetailPage(): JSX.Element {
   const { chatbotId, chatbotName } = useHandoffConsoleChatbotContext();
   const { handoffId } = useParams<{ handoffId: string }>();
+  const { user } = useAuth();
   const msg = MESSAGES.handoffConsole;
 
   const [detail, setDetail] = useState<HandoffHistoryDetailResponse | null>(null);
@@ -57,6 +60,8 @@ export function HandoffHistoryDetailPage(): JSX.Element {
       <p>
         {msg.historyDetailAlertAtStart}: {ALERT_LEVEL_LABELS[handoff.alertLevelAtStart]}
       </p>
+      {/* [신규 No.45] G7 — 상담 이력 상세(V-3), 메시지 목록 위(§3.10). */}
+      <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />
       <TranscriptEntryList entries={detail.entries} />
     </div>
   );

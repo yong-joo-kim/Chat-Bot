@@ -402,6 +402,9 @@ export class ChatbotsService {
       await tx.embeddingTextVector.deleteMany({ where: { chatbotId: id } });
       await tx.environmentSwitchLog.deleteMany({ where: { chatbotId: id } });
       await tx.chatbotEnvironment.deleteMany({ where: { chatbotId: id } });
+      // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §3.1) — 보존 정책 재정의는 설정
+      // 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 19 → 20테이블. `chatbot.delete` 직전.
+      await tx.retentionPolicy.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

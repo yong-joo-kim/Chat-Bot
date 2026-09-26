@@ -30,6 +30,11 @@ const mockContext: ChatbotDetailContext = {
 vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
 }));
+// [신규 No.45] G7 배너가 `useAuth().user.governanceModeOn`을 읽는다(data-governance-ui-spec.md §3.10).
+let mockGovernanceModeOn = false;
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { name: '박편집', role: 'EDITOR', governanceModeOn: mockGovernanceModeOn }, can: () => true }),
+}));
 
 function makeSurveyDetail(overrides: Partial<SurveyDetail> = {}): SurveyDetail {
   return {
@@ -108,6 +113,7 @@ describe('SurveyResultsPage', () => {
     mockSummary.mockReset();
     mockQuestions.mockReset();
     mockResponses.mockReset();
+    mockGovernanceModeOn = false;
   });
 
   it('요약 카드에 노출/시작/완료 수와 분자/분모 캡션을 표시한다(NFR-SVA3)', async () => {
@@ -220,6 +226,42 @@ describe('SurveyResultsPage', () => {
     expect(screen.getByRole('columnheader', { name: '더 하고 싶은 말씀' })).toBeInTheDocument();
     expect(screen.getByText('4점')).toBeInTheDocument();
     expect(screen.getByText('건너뜀')).toBeInTheDocument();
+  });
+
+  /** [신규 No.45] G5 — purged:true인 답은 "보존기간 경과로 파기됨"으로 표시된다(data-governance-ui-spec.md §3.7). */
+  it('응답 목록의 답이 purged:true면 "보존기간 경과로 파기됨"으로 표시된다', async () => {
+    mockFindOne.mockResolvedValue(
+      makeSurveyDetail({ questions: [{ key: 'q1', type: 'TEXT', prompt: '더 하고 싶은 말씀', required: false, maxLength: 300 }] }),
+    );
+    mockSummary.mockResolvedValue(makeSummary());
+    mockQuestions.mockResolvedValue(makeQuestionStats());
+    const responseItem: SurveyResponseListItem = {
+      responseNo: 'A1B2C3D4',
+      exposedAt: new Date('2026-09-24T01:02:13.000Z'),
+      displayStatus: 'COMPLETED',
+      started: true,
+      duplicate: false,
+      channelType: 'WEB',
+      completedAt: new Date('2026-09-24T01:03:40.000Z'),
+      missingRequiredCount: 0,
+      answers: [{ questionKey: 'q1', kind: 'ANSWERED', display: '', purged: true }],
+    };
+    mockResponses.mockResolvedValue({ items: [responseItem], total: 1, page: 1, pageSize: 20 });
+    renderPage();
+
+    expect(await screen.findByText('보존기간 경과로 파기됨')).toBeInTheDocument();
+  });
+
+  /** [신규 No.45] G7 — 설문 응답 목록(V-4)·자유 텍스트 목록(V-5) 공용 배너. */
+  it('governanceModeOn=true면 상단에 G7 배너를 보여준다', async () => {
+    mockGovernanceModeOn = true;
+    mockFindOne.mockResolvedValue(makeSurveyDetail());
+    mockSummary.mockResolvedValue(makeSummary());
+    mockQuestions.mockResolvedValue(makeQuestionStats());
+    mockResponses.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
+    renderPage();
+
+    expect(await screen.findByText('이 화면 열람은 감사로그에 기록됩니다.')).toBeInTheDocument();
   });
 
   // [No.27 코드 리뷰 1회차 M2] 문항별 로더에도 요청 순번 가드가 적용되어야 한다.

@@ -41,6 +41,7 @@ import { SurveysModule } from './surveys/surveys.module';
 import { TopicsModule } from './topics/topics.module';
 import { AssetTransferModule } from './asset-transfer/asset-transfer.module';
 import { EnvironmentModule } from './environment/environment.module';
+import { GovernanceModule } from './governance/governance.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -90,6 +91,8 @@ import { validate } from './config/env.validation';
     AssetTransferModule,
     TopicsModule,
     EnvironmentModule,
+    // [신규 No.45] imports 맨 끝 — onModuleInit 순서상 Prisma 연결 뒤에 기동 검증이 돈다(§2.2).
+    GovernanceModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

@@ -15,6 +15,8 @@ vi.mock('../../api/auditLogs', () => ({
     list: (...args: unknown[]) => mockAuditLogsList(...args),
     findOne: vi.fn(),
     exportUrl: () => '/api/v1/audit-logs/export',
+    // [신규 No.45] 무결성 검증 패널이 호출한다(data-governance-ui-spec.md §3.5). 접힘 기본 상태라 스캔 중 호출되지 않는다.
+    verify: vi.fn(),
   },
 }));
 
@@ -30,6 +32,10 @@ vi.mock('../../api/dialogue', () => ({
   keywordsApi: { list: vi.fn(), findOne: vi.fn() },
   contextsApi: { list: vi.fn(), findOne: vi.fn() },
   dialogNodesApi: { list: vi.fn(), findOne: vi.fn() },
+}));
+// [신규 No.45] G7 배너가 `useAuth().user.governanceModeOn`을 읽는다(data-governance-ui-spec.md §3.10).
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { name: '박관리', role: 'ADMIN', governanceModeOn: false }, can: () => true }),
 }));
 
 /** A1 이력 관리 화면 axe 접근성 스캔 — AC-U-11. */

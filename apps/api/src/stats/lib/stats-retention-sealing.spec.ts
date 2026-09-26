@@ -176,10 +176,12 @@ describe('통합 통계(No.29) 원천 보존 봉인 정적 검사 — ADR-0033 �
     expect(owners[0].endsWith('conversation/conversation-log.service.ts')).toBe(true);
   });
 
-  it('R-10) apps/api/src에 conversationLog.update|updateMany|upsert 호출이 0건이다(적재 후 groupId 불변, ADR-0033 §4)', () => {
+  it('R-10) conversationLog.update|updateMany|upsert 호출 파일은 governance/writer/governance-data.writer.ts(텍스트 소거 1파일)뿐이다(적재 후 groupId 등은 불변, ADR-0033 §4 — No.45 갱신)', () => {
     const pattern = /conversationLog\s*\.\s*(update|updateMany|upsert)\b/;
-    const offenders = fileContents.filter(({ content }) => pattern.test(content)).map(({ f }) => f);
-    expect(offenders).toEqual([]);
+    const offenders = fileContents.filter(({ content }) => pattern.test(content)).map(({ f }) => f.replace(/\\/g, '/'));
+    const allowlist = ['apps/api/src/governance/writer/governance-data.writer.ts'];
+    expect(offenders.every((f) => allowlist.some((a) => f.endsWith(a)))).toBe(true);
+    expect(new Set(offenders).size).toBeGreaterThan(0);
   });
 
   it('AC-I1-3 역검증 — 픽스처 문자열에 conversationLog.deleteMany가 있으면 R-1 검사 로직이 실제로 잡아낸다', () => {

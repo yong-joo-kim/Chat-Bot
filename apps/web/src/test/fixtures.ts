@@ -98,6 +98,8 @@ export function makeCurrentUser(overrides: Partial<CurrentUser> = {}): CurrentUs
   return {
     ...base,
     permissions: ['chatbot:read', 'chatbot:write', 'dialogue:read', 'dialogue:write', 'channel:read', 'channel:write', 'simulation:read'],
+    // [신규 No.45] 거버넌스 런타임 모드 — 기본값은 꺼짐(현행 동작과 동일, data-governance-ui-spec.md §3.10).
+    governanceModeOn: false,
     ...overrides,
   };
 }

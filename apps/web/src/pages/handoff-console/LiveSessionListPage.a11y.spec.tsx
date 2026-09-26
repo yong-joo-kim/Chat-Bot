@@ -12,6 +12,10 @@ vi.mock('../../api/handoff', () => ({ handoffApi: { liveSessions: vi.fn() } }));
 vi.mock('./HandoffConsoleChatbotShell', () => ({
   useHandoffConsoleChatbotContext: () => ({ chatbotId: 'bot-1', chatbotName: '쇼핑몰 도우미' }),
 }));
+// [신규 No.45] G7 배너가 `useAuth().user.governanceModeOn`을 읽는다(data-governance-ui-spec.md §3.10).
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { name: '박관리', role: 'ADMIN', governanceModeOn: false }, can: () => true }),
+}));
 
 const RESPONSE: LiveSessionListResponse = {
   items: [

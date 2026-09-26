@@ -4,6 +4,9 @@ import { UNANSWERED_STATUS_LABELS, shouldShowRecurredAfterApply } from '@chat-bo
 import { MESSAGES } from '../../constants/messages';
 import { formatDate, formatRelativeTime } from '../../lib/date';
 import { SkeletonRow } from '../../components/Skeleton';
+import { GovernedTextValue } from '../../components/DataGovernanceBadges';
+import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { useAuth } from '../../context/AuthContext';
 import { ChartFrame } from '../stats/ChartFrame';
 import { BarChartSvg, type BarDatum } from '../stats/BarChartSvg';
 import { buildTrendSummary } from '../stats/chartSummary';
@@ -23,6 +26,21 @@ function SuggestionTopicBadge({ suggestion, topicsById }: { suggestion: IntentSu
       {MESSAGES.topics.suggestedIntentTopicBadge(topic.name, topicStatusLabel(topic.enabled ? 'ACTIVE' : 'INACTIVE'))}
     </span>
   );
+}
+
+/** [신규 No.45] G7 배너 — `UnansweredDetailPanel`(V-6) 전용, `useAuth`를 여기서만 호출한다. */
+function UnansweredDetailBanner(): JSX.Element {
+  const { user } = useAuth();
+  return <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />;
+}
+
+/**
+ * [코드 리뷰 R1 L-4] 파기됐거나(purged) 텍스트가 비어 있는 행은 접근성 이름에 원문 대신 식별 가능한
+ * 라벨을 쓴다(빈 문자열 "선택" 같은 무의미한 이름을 피한다).
+ */
+function accessibleQuestionText(item: Pick<UnansweredQuestionListItem, 'questionText' | 'purged'>): string {
+  if (item.purged || item.questionText.trim().length === 0) return MESSAGES.learning.purgedQuestionLabel;
+  return item.questionText;
 }
 
 const STATUS_ICON: Record<UnansweredQuestionStatus, string> = { PENDING: '●', RESOLVED: '✓', IGNORED: '⊘' };
@@ -159,7 +177,7 @@ export function UnansweredTable({
                       type="checkbox"
                       checked={selected.has(item.id)}
                       onChange={() => onToggleSelect(item.id)}
-                      aria-label={`${item.questionText} 선택`}
+                      aria-label={MESSAGES.learning.selectQuestionLabel(accessibleQuestionText(item))}
                     />
                   </td>
                 )}
@@ -168,14 +186,18 @@ export function UnansweredTable({
                     type="button"
                     className="learning-expand-toggle"
                     aria-expanded={expanded}
-                    aria-label={expanded ? MESSAGES.learning.collapseLabel(item.questionText) : MESSAGES.learning.expandLabel(item.questionText)}
+                    aria-label={
+                      expanded
+                        ? MESSAGES.learning.collapseLabel(accessibleQuestionText(item))
+                        : MESSAGES.learning.expandLabel(accessibleQuestionText(item))
+                    }
                     onClick={() => onToggleExpand(item)}
                   >
                     <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
                   </button>
                 </td>
                 <td>
-                  {item.questionText}
+                  <GovernedTextValue text={item.questionText} purged={item.purged} />
                   <RecurredBadge recurredCount={item.recurredCount} lastOccurredAt={item.lastOccurredAt} reflection={item.prodReflection} />
                   <ProdReflectionBadge reflection={item.prodReflection} />
                   {/* [신규 No.44] 목록 단계에서도 원인을 가늠할 수 있게(FR-FB7-2). 답변 본문 자체는 없다. */}
@@ -307,6 +329,8 @@ function UnansweredDetailPanel({
 
   return (
     <div className="learning-detail-panel">
+      {/* [신규 No.45] G7 — 미응답·부정 평가 상세(V-6), 질문 본문 위(§3.10). */}
+      <UnansweredDetailBanner />
       {/* [신규 No.44] 부정 평가 전용 확장 — 당시 봇 답변(마스킹본)·매칭 대상(feedback-loop-ui-spec.md §3.3). */}
       {detail.lastFeedback && (
         <LastFeedbackAnswerPanel
@@ -314,11 +338,12 @@ function UnansweredDetailPanel({
           botResponse={detail.lastFeedback.botResponse}
           turnAt={detail.lastFeedback.turnAt}
           target={detail.lastFeedback.target}
+          purged={detail.lastFeedback.purged}
         />
       )}
       <div>
         <h4>{MESSAGES.learning.variantsTitle}</h4>
-        <p>{detail.variants.length > 0 ? detail.variants.join(' / ') : '—'}</p>
+        <p>{detail.purged ? <GovernedTextValue text="" purged /> : detail.variants.length > 0 ? detail.variants.join(' / ') : '—'}</p>
       </div>
       <div>
         <h4>{MESSAGES.learning.suggestionsTitle}</h4>

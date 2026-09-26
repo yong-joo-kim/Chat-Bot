@@ -171,6 +171,7 @@ export const ApiErrorCode = z.enum([
   'VERSION_REFERENCED_BY_ENVIRONMENT',
   // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §15.3, ADR-0040) — 2종.
   'EGRESS_HOST_NOT_ALLOWED',
+  'RETENTION_OUT_OF_RANGE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

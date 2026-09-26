@@ -17,10 +17,14 @@ import { formatDateTime, formatDate } from '../../lib/date';
 import { AuditLogFilterBar } from './audit-logs/AuditLogFilterBar';
 import { AuditLogDetailPanel } from './audit-logs/AuditLogDetailPanel';
 import { AuditLogCardList } from './audit-logs/AuditLogCard';
+import { AuditChainVerifyPanel } from './audit-logs/AuditChainVerifyPanel';
+import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { useAuth } from '../../context/AuthContext';
 
 /** A1 — 이력(감사로그) 관리(security-audit-ui-spec.md §3.9). */
 export function AuditLogsPage(): JSX.Element {
   const msg = MESSAGES.auditLogs;
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const chatbotId = searchParams.get('chatbotId') ?? undefined;
   const chatbotName = searchParams.get('chatbotName') ?? undefined;
@@ -154,6 +158,10 @@ export function AuditLogsPage(): JSX.Element {
     <div className="settings-page">
       <h1>{msg.title}</h1>
       <p className="form-banner form-banner--info">{msg.retentionNotice(formatDate(AUDIT_RETENTION_START_DATE))}</p>
+      {/* [신규 No.45] G7 — 목록 진입(V-7)에서만 노출한다. 펼침 상세(V-8)는 같은 방문의 연장이라 별도 배너 없음(§3.10). */}
+      <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />
+
+      <AuditChainVerifyPanel />
 
       {chatbotId && chatbotName && (
         <p>
@@ -187,7 +195,8 @@ export function AuditLogsPage(): JSX.Element {
         <a
           className={`btn btn-secondary${exportDisabled ? ' btn-disabled' : ''}`}
           aria-disabled={exportDisabled}
-          title={exportDisabled ? msg.exportDisabledHint : undefined}
+          // [신규 No.45] 내보내기 CSV 끝에 체인 검증 결과·체인 머리가 함께 포함됨을 버튼 툴팁으로 안내(§3.5).
+          title={exportDisabled ? msg.exportDisabledHint : msg.exportChainHint}
           href={exportDisabled ? undefined : auditLogsApi.exportUrl({ from, to, actorId: actorId || undefined, action, targetType, chatbotId, q: q || undefined })}
           onClick={(e) => {
             if (exportDisabled) e.preventDefault();

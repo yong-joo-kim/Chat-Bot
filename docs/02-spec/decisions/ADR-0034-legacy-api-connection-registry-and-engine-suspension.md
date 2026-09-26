@@ -163,3 +163,16 @@
 2. **결함 기록 — 재진입이 다음 상태를 새로 조립했다**(`resumeAfterApiCall`의 `{ version, contextSession, pendingClarify: null }`). 봉투에 필드가 늘면 API 분기 턴에서 그 필드가 **조용히 사라진다**(설문의 경우 완료 목록 소실 → 같은 탭 재노출). `ApiResumeState`에 설문 이월분(완료 목록·미리보기 여부·정지 전 이벤트·입력 소비 여부)을 싣고, 분기 노드 실행에 설문 컨텍스트를 전달하며, 다음 상태를 **키 생략 규칙**(없으면 키 부재)으로 조립한다 — 설문 필드가 없는 API 턴의 다음 상태는 기존 3키 그대로다.
 3. 미리보기 여부를 옵션이 아니라 **재진입 상태**에 싣는 이유: 실제 호출부(`LegacyApiService.completeTurn`·TC 목 완결 헬퍼)가 옵션 없이 재진입하므로, 옵션으로만 전달하면 TC의 설문 미리보기 판정이 API 분기 뒤에서 사라진다(호출부 수정 0으로 이월).
 4. 결과 L-12(봉투 키 집합 불변)의 기대값은 5키(`version·contextSession·pendingClarify·surveySession·completedSurveyIds`)로 갱신한다 — 목적("응답값의 상태 이월 금지")은 `SurveySessionStateSchema` 키 집합 고정 검사(`survey-sealing.spec.ts` S-9)로 더 정밀하게 유지된다.
+
+
+---
+
+## 갱신 (2026-09-26 — No.45: 출구 허용 목록 · `EGRESS_BLOCKED` · 시크릿 방식 1차 불변 · 호출 로그 보존)
+
+데이터 거버넌스(No.45, **ADR-0040 §2·§4**). 결정 1~11은 불변이다.
+
+1. **호스트 허용 목록은 주소 방어를 대체하지 않고 더한다**: 거버넌스 모드에서 연결 저장(생성·`baseUrl` 수정) 시 호스트가 `DATA_EGRESS_ALLOWED_HOSTS` 밖이면 `400 EGRESS_HOST_NOT_ALLOWED`. 호출 시 `LegacyApiHttpClient.send()`가 **DNS 조회 전** 판정해 목록 밖이면 `{ kind:'ERROR', outcome:'EGRESS_BLOCKED' }`(송신 0) — 이후 DNS 후 주소 검사·절대 차단 대역·사설 allowlist·리다이렉트 불추종은 그대로다. 전송 구현(`node-http.transport.ts`)도 `request` 직전 재판정(방어 이중화).
+2. **`ApiCallOutcome` 18 → 19**(`EGRESS_BLOCKED`) · 회로 분류 `NEUTRAL`(설정 문제 — 인프라 실패로 세지 않는다) · 실패 분기/고정 문구 흐름 불변 · 시뮬레이터 목 실패 재현 값에 포함.
+3. **시크릿 저장 방식은 1차 불변** — 재검토 트리거 "No.45 필드 암호화 착수"는 검토 결과 미발동(DB에 값 0이 더 강하다). No.45 키링(`KeyProvider`)이 구독형 셀프서비스 요구 시의 재사용 확장점이다.
+4. 재검토 트리거 "`ApiCallLog` 1,000만 행 · No.45 착수 → 보존 자동 정리"를 **이행**한다 — 보존기간(`CALL_LOGS` — 전역) 경과 행을 파기 잡(`PollingLoop` 재사용)이 행 삭제한다.
+5. §7(v1 평문 헤더)은 불변 — 자동 스크럽 없이 데이터 지도가 "평문 토큰 잔존 노드 수·스냅샷 수"를 점검 표시한다.

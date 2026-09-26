@@ -3,8 +3,17 @@ import { Link } from 'react-router-dom';
 import type { LiveSessionListResponse, LiveSessionRow } from '@chat-bot/shared-types';
 import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
+import { GovernedTextValue } from '../DataGovernanceBadges';
 import { AlertLevelBadge, HandoffStateBadge } from './badges';
 import { SessionRefLabel } from './SessionRefLabel';
+
+/**
+ * [신규 No.45] G5 — 진행 중 세션 목록의 마지막 사용자 발화도 보존기간 경과로 소거될 수 있다
+ * (data-governance-ui-spec.md §3.7 "진행 중 목록의 마지막 발화", `LiveSessionRow.lastUserTextPurged`).
+ */
+function isLastUserTextPurged(row: LiveSessionRow): boolean {
+  return row.lastUserTextPurged === true;
+}
 
 /** HC1 상단 요약 카운터(hybrid-cs-ui-spec.md §2.2 `SessionSummaryBar`). */
 export function SessionSummaryBar({ summary }: { summary: LiveSessionListResponse['summary'] }): JSX.Element {
@@ -92,7 +101,7 @@ export function LiveSessionTable({
                   {row.handoff?.clientMode === 'LEGACY' && <HandoffStateBadge kind="LEGACY" />}
                 </td>
                 <td>
-                  {row.lastUserText}
+                  <GovernedTextValue text={row.lastUserText} purged={isLastUserTextPurged(row)} />
                   {row.lastUnansweredReason === 'API_NOTICE' && (
                     <p className="field-hint">{msg.unansweredReasonApiNotice}</p>
                   )}
@@ -118,7 +127,9 @@ export function LiveSessionTable({
                 <SessionRefLabel value={row.sessionRef} />
                 {row.handoff?.clientMode === 'LEGACY' && <HandoffStateBadge kind="LEGACY" />}
               </div>
-              <p className="live-session-card-message">{row.lastUserText}</p>
+              <p className="live-session-card-message">
+                <GovernedTextValue text={row.lastUserText} purged={isLastUserTextPurged(row)} />
+              </p>
               <p className="field-hint">
                 {formatDateTime(row.lastAt)} · {msg.columnUnanswered} {row.consecutiveUnanswered}/{row.windowUnanswered} · {renderAssignee(row, msg)}
               </p>

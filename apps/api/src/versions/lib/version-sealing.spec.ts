@@ -230,7 +230,9 @@ describe('챗봇 복원/버전 이력관리(No.25) 정적 검사 — version-his
     // `version-payload.reader.ts`는 `ChatbotVersion.payload`(관계 필드명)로만 접근해 리터럴
     // `chatbotVersionPayload` 토큰이 존재하지 않는다 — 그래도 본문 테이블에 접근하는 4곳 중
     // 하나이므로 별도로 존재를 확인한다(파일 자체는 있는지만 단언).
-    const ALLOWED = ['versions/capture/version-capture.service.ts', 'versions/capture/version-retention.service.ts', 'chatbots/chatbots.service.ts'];
+    // [신규 No.45] governance/jobs/retention.job.ts — v1 평문 헤더 토큰 주간 점검(읽기 전용, §9.1 ⑤·§13)이
+    // 5번째 소비자로 추가된다(data-governance-설계.md).
+    const ALLOWED = ['versions/capture/version-capture.service.ts', 'versions/capture/version-retention.service.ts', 'chatbots/chatbots.service.ts', 'governance/jobs/retention.job.ts'];
 
     it('리터럴 chatbotVersionPayload 참조 파일(.spec.ts 제외 — 목은 실제 쓰기 경로가 아니다)이 allowlist의 부분집합이다', () => {
       const offenders = apiFileContents
