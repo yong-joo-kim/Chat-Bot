@@ -62,11 +62,55 @@ function applyApiVariables(output: DialogOutput, vars: Record<string, string>, t
         trace.push({ stage: 'API', code: 'API_VALUE_DROPPED', targetName: 'BUTTON.buttons' });
         return null;
       }
-      return { type: 'BUTTON', payload: { text, buttons } };
+      // [신규 No.46 — EN-3] 필드 나열 재조립 금지(ADR-0034 결함 유형 재발 방지). `...output.payload`를
+      // 먼저 펼쳐 선택 키(`display`)를 보존한 뒤 치환 필드만 덮어쓴다(RM-2 정적 검사).
+      return { type: 'BUTTON', payload: { ...output.payload, text, buttons } };
     }
     default:
       return output;
   }
+}
+
+/**
+ * [신규 No.46 — EN-4] 캐러셀 `{api.*}` 치환(FR-RM1-5 · §5.3). 대상은 안내 문구·카드 제목·설명·
+ * 버튼 라벨뿐이다 — URL·버튼 값(NODE 대상 등)은 치환하지 않는다(AC-L3-9). 치환 후 제목이 빈
+ * 문자열이 된 카드는 제거하고, 남은 카드가 0장이면 아웃풋 전체를 버린다(`null`). **1장만 남으면
+ * `CARD` 1개(+ 안내 문구 `TEXT`)로 바꾼다** — 캐러셀 스키마는 2~10장이라 1장을 그대로 내보내면
+ * 공개 응답 계약(`DialogOutputSchema`)을 어긴다(엔진 출력 불변식 · R-2).
+ */
+function applyApiVariablesToCarousel(
+  output: Extract<DialogOutput, { type: 'CAROUSEL' }>,
+  vars: Record<string, string>,
+  trace: TraceStep[],
+): DialogOutput | DialogOutput[] | null {
+  const text = output.payload.text !== undefined ? truncateCodePoints(renderApiTokens(output.payload.text, vars), 300) : undefined;
+
+  type CarouselCard = (typeof output.payload.cards)[number];
+  const cards: CarouselCard[] = [];
+  output.payload.cards.forEach((c, j) => {
+    const title = truncateCodePoints(renderApiTokens(c.title, vars), 100);
+    if (title.length === 0) {
+      trace.push({ stage: 'API', code: 'API_VALUE_DROPPED', targetName: `CAROUSEL.cards[${j}].title` });
+      return;
+    }
+    const description = c.description !== undefined ? truncateCodePoints(renderApiTokens(c.description, vars), 500) : undefined;
+    const buttons = c.buttons
+      ?.map((b) => ({ ...b, label: truncateCodePoints(renderApiTokens(b.label, vars), 40) }))
+      .filter((b) => b.label.length > 0);
+    cards.push({ ...c, title, description, buttons });
+  });
+
+  if (cards.length === 0) {
+    trace.push({ stage: 'API', code: 'API_VALUE_DROPPED', targetName: 'CAROUSEL.cards' });
+    return null;
+  }
+  if (cards.length === 1) {
+    const out: DialogOutput[] = [];
+    if (text) out.push({ type: 'TEXT', payload: { text } });
+    out.push({ type: 'CARD', payload: cards[0] });
+    return out;
+  }
+  return { type: 'CAROUSEL', payload: { version: 1, ...(text !== undefined ? { text } : {}), cards } };
 }
 
 export interface ExecuteOutputsOptions {
@@ -166,6 +210,20 @@ export function executeOutputs(
       case 'PHONE_CALL':
         out.push(o);
         break;
+
+      // [신규 No.46 — EN-1] 표시용 비종결(`IMAGE`·`LINK`와 같은 분류) — 채널·강등은 모른다.
+      case 'CAROUSEL': {
+        if (opts.apiVariables) {
+          const rendered = applyApiVariablesToCarousel(o, opts.apiVariables, trace);
+          if (rendered) {
+            if (Array.isArray(rendered)) out.push(...rendered);
+            else out.push(rendered);
+          }
+        } else {
+          out.push(o);
+        }
+        break;
+      }
 
       case 'CONTEXT_FORM': {
         const def = bundle.contexts.find((c) => c.id === o.payload.contextVariableId);
@@ -274,6 +332,14 @@ export function executeOutputs(
           targetId: o.payload.targetId,
         });
         break;
+      }
+
+      // [신규 No.46 — EN-2] 컴파일 시 망라 검출(파싱은 이미 통과했으므로 런타임 도달 0 — 동작은
+      // 기존 "default 없음"과 같다). 새 아웃풋 타입을 추가하고 이 switch에 `case`를 안 넣으면
+      // 여기서 컴파일 오류가 난다(§15 지점 2).
+      default: {
+        const unreachable: never = o;
+        void unreachable;
       }
     }
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { inspectRichUrl, RICH_URL_ERROR_MESSAGES } from './rich-url';
 
 /**
  * 여러 도메인이 공유하는 횡단 관심사(페이지네이션/오류봉투/정렬/안전 URL)만 이 파일에 둔다.
@@ -210,6 +211,18 @@ export const SafeUrlSchema = z
   .refine((v) => /^https?:\/\//i.test(v), {
     message: 'http 또는 https 주소만 사용할 수 있습니다.',
   });
+
+/**
+ * [신규 No.46] 리치 메시지(캐러셀) 전용 — https 전용 + 사용자정보(`@`) 등 피싱 형식 차단
+ * (`inspectRichUrl` — `./rich-url`, zod 무의존). 기존 `SafeUrlSchema`는 하위 호환을 위해 **불변**이다
+ * (ADR-0043 §7). 새 컴포넌트(캐러셀 카드 이미지·LINK 버튼)에만 적용한다.
+ */
+export const RichHttpsUrlSchema = z.string().superRefine((v, ctx) => {
+  const result = inspectRichUrl(v);
+  if (!result.ok) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: RICH_URL_ERROR_MESSAGES[result.error] });
+  }
+});
 
 /**
  * `?status=DRAFT,ACTIVE` 형태의 콤마 구분 단일 쿼리 파라미터를 enum 배열로 변환한다.

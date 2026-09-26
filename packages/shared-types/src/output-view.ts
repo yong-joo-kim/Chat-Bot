@@ -1,9 +1,11 @@
 import type { DialogOutput } from './dialogue';
+export { isSafeRichUrl } from './rich-url';
 
 /**
  * 아웃풋 표시/텍스트화 공유 모듈(DD-24, ADR-0012). **zod 무의존**이어야 한다 —
  * `apps/widget`이 gzip 100KB 예산 안에서 이 모듈을 값으로 import하기 때문이다.
  * `import type`만 사용해 zod를 끌어오지 않는다(타입 전용 import는 컴파일 시 지워진다).
+ * [신규 No.46] `isSafeRichUrl`을 재노출한다 — `./rich-url`은 import 0이라 zod 반입 0(RM-4).
  */
 
 /** `http`/`https` 스킴만 안전하다고 판정한다(FR-W-11, NFR-S8). */
@@ -30,10 +32,13 @@ export function resolveButtonAction(btn: { label: string; action: 'MESSAGE' | 'L
   return { kind: 'MESSAGE', label: btn.label, text: btn.value };
 }
 
-/** 채널이 렌더 가능한 7종으로 좁힌 표시 모델(FR-W-5). 12종 중 미지원 3종·CONTEXT_FORM/DIALOG_MOVE는 제외한다. */
-export type OutputView = Extract<DialogOutput, { type: 'TEXT' | 'CARD' | 'IMAGE' | 'BUTTON' | 'LINK' | 'PAUSE' | 'PHONE_CALL' }>;
+/**
+ * 채널이 렌더 가능한 8종으로 좁힌 표시 모델(FR-W-5 · [신규 No.46] `CAROUSEL` 추가 — FR-RM5-4).
+ * 12종 중 미지원 3종·CONTEXT_FORM/DIALOG_MOVE·WORKFLOW는 제외한다.
+ */
+export type OutputView = Extract<DialogOutput, { type: 'TEXT' | 'CARD' | 'IMAGE' | 'BUTTON' | 'LINK' | 'PAUSE' | 'PHONE_CALL' | 'CAROUSEL' }>;
 
-const RENDERABLE_TYPES = new Set<OutputView['type']>(['TEXT', 'CARD', 'IMAGE', 'BUTTON', 'LINK', 'PAUSE', 'PHONE_CALL']);
+const RENDERABLE_TYPES = new Set<OutputView['type']>(['TEXT', 'CARD', 'IMAGE', 'BUTTON', 'LINK', 'PAUSE', 'PHONE_CALL', 'CAROUSEL']);
 
 export function toOutputViews(outputs: DialogOutput[]): OutputView[] {
   return outputs.filter((o): o is OutputView => RENDERABLE_TYPES.has(o.type as OutputView['type']));
@@ -51,7 +56,15 @@ export function planPauseSchedule(views: OutputView[], maxTotalMs = 5000): numbe
   });
 }
 
-/** 로그/요약용 텍스트 표현(FR-11-22). TEXT는 본문, 그 외는 `[타입] 요약` 형태, PAUSE는 생략. */
+const CAROUSEL_LOG_TITLE_LIMIT = 5;
+
+/**
+ * 로그/요약용 텍스트 표현(FR-11-22). TEXT는 본문, 그 외는 `[타입] 요약` 형태, PAUSE는 생략.
+ * [신규 No.46] 전 타입 명시 + `never` 망라(RM-3) — 모르는 타입을 조용히 빈 줄로 흘려 보내지
+ * 않는다(C-4). `CAROUSEL`은 `[캐러셀] …`, 바로연결(`BUTTON.display==='QUICK_REPLY'`)은
+ * `[바로연결] …`(FR-RM7-1). 이 요약은 대화 로그 `botResponse`·RAG 대기 폴백 문구·인박스
+ * 시뮬레이션 기록에 공통으로 쓰인다 — **실제로 나간 아웃풋**(강등·마스킹 뒤)의 요약이다(R-16).
+ */
 export function outputsToPlainText(outputs: DialogOutput[], maxLength = 2000): string {
   const lines: string[] = [];
   for (const o of outputs) {
@@ -65,19 +78,44 @@ export function outputsToPlainText(outputs: DialogOutput[], maxLength = 2000): s
       case 'IMAGE':
         lines.push(`[이미지] ${o.payload.altText}`);
         break;
-      case 'BUTTON':
-        lines.push(o.payload.text ? `[버튼] ${o.payload.text}` : '[버튼]');
+      case 'BUTTON': {
+        if (o.payload.display === 'QUICK_REPLY') {
+          if (o.payload.text) {
+            lines.push(`[바로연결] ${o.payload.text}`);
+          } else {
+            lines.push(`[바로연결] ${o.payload.buttons.map((b) => b.label).join(' · ')}`);
+          }
+        } else {
+          lines.push(o.payload.text ? `[버튼] ${o.payload.text}` : '[버튼]');
+        }
         break;
+      }
       case 'LINK':
         lines.push(`[링크] ${o.payload.label}`);
         break;
       case 'PHONE_CALL':
         lines.push(`[전화] ${o.payload.label}`);
         break;
+      case 'CAROUSEL': {
+        const titles = o.payload.cards.slice(0, CAROUSEL_LOG_TITLE_LIMIT).map((c) => c.title);
+        const suffix = o.payload.cards.length > CAROUSEL_LOG_TITLE_LIMIT ? ` 외 ${o.payload.cards.length - CAROUSEL_LOG_TITLE_LIMIT}장` : '';
+        const prefix = o.payload.text ? `${o.payload.text} — ` : '';
+        lines.push(`[캐러셀] ${prefix}${titles.join(' · ')}${suffix}`);
+        break;
+      }
       case 'PAUSE':
+      case 'CONTEXT_FORM':
+      case 'DIALOG_MOVE':
+      case 'SCENARIO':
+      case 'SURVEY':
+      case 'API_CONDITION':
+      case 'WORKFLOW':
         break;
-      default:
+      default: {
+        const unreachable: never = o;
+        void unreachable;
         break;
+      }
     }
   }
   const joined = lines.join('\n');

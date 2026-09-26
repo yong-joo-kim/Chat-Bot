@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { PaginationQuerySchema, SortOrder, SafeUrlSchema, csvEnumArray, queryBoolean, TOPIC_FILTER_COMMON } from './common';
+import { PaginationQuerySchema, SortOrder, SafeUrlSchema, RichHttpsUrlSchema, csvEnumArray, queryBoolean, TOPIC_FILTER_COMMON } from './common';
 import { parseResponsePath } from './api-mapping';
+import { inspectRichUrl, RICH_URL_ERROR_MESSAGES } from './rich-url';
 
 /**
  * [신규 No.22] 목록 쿼리 `topicIds` 공통 파서 — 콤마 구분, 원소 = uuid | `'common'`, 최대 51개
@@ -477,6 +478,8 @@ export const DialogOutputType = z.enum([
   'API_CONDITION',
   // [신규 No.41] 업무 자동화 워크플로우 — "업무 요청 보내기"(비종결·사용자에게 보이지 않음).
   'WORKFLOW',
+  // [신규 No.46] 캐러셀(카드 여러 장 넘겨 보기) — 표시용 비종결(IMAGE·LINK와 같은 분류).
+  'CAROUSEL',
 ]);
 export type DialogOutputType = z.infer<typeof DialogOutputType>;
 
@@ -527,10 +530,95 @@ export const ImageOutputPayloadSchema = z.object({
   altText: z.string().min(1, '이미지 대체 텍스트는 필수입니다.').max(200),
 });
 
-export const ButtonOutputPayloadSchema = z.object({
-  text: z.string().max(500).optional(),
-  buttons: z.array(ButtonItemSchema).min(1).max(5),
+export const ButtonOutputPayloadSchema = z
+  .object({
+    text: z.string().max(500).optional(),
+    buttons: z.array(ButtonItemSchema).min(1).max(5),
+    /** [신규 No.46] 없음 = 일반 버튼(바이트 동일). ★ `.default()` 금지(ADR-0043 §1 · FR-0-195). */
+    display: z.literal('QUICK_REPLY').optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.display !== 'QUICK_REPLY') return;
+    val.buttons.forEach((b, i) => {
+      if (b.action === 'LINK') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['buttons', i, 'action'],
+          message: '바로연결은 대화 안 선택지만 가능합니다. 링크는 카드나 링크 아웃풋을 쓰세요.',
+        });
+      }
+    });
+  });
+
+/* ------------------------------------------------------------------------------------------------
+ * [신규 No.46] 캐러셀 — 카드 2~10장, 카드당 버튼 ≤3(P-7). 카드 필드는 `CARD` 규칙을 재사용한다.
+ * ---------------------------------------------------------------------------------------------- */
+
+export const CAROUSEL_LIMITS = {
+  cardsMin: 2,
+  cardsMax: 10,
+  cardButtonsMax: 3,
+  textMax: 300,
+  titleMax: 100,
+  descriptionMax: 500,
+  altTextMax: 200,
+} as const;
+
+/** 캐러셀 카드 버튼 — 기존 `ButtonItemSchema`(MESSAGE·LINK·NODE) + LINK는 https 전용·위험 형식 차단. */
+export const RichButtonItemSchema = ButtonItemSchema.superRefine((btn, ctx) => {
+  if (btn.action !== 'LINK') return;
+  const r = inspectRichUrl(btn.value);
+  if (!r.ok) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: RICH_URL_ERROR_MESSAGES[r.error], path: ['value'] });
+  }
 });
+
+export const CarouselCardSchema = z
+  .object({
+    title: z.string().trim().min(1).max(CAROUSEL_LIMITS.titleMax),
+    description: z.string().max(CAROUSEL_LIMITS.descriptionMax).optional(),
+    imageUrl: RichHttpsUrlSchema.optional(),
+    altText: z.string().max(CAROUSEL_LIMITS.altTextMax).optional(),
+    buttons: z.array(RichButtonItemSchema).max(CAROUSEL_LIMITS.cardButtonsMax).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.imageUrl && !val.altText) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: '이미지에는 대체 텍스트가 필요합니다.', path: ['altText'] });
+    }
+  });
+export type CarouselCard = z.infer<typeof CarouselCardSchema>;
+
+/** [No.46] 캐러셀 v1 — `version` 리터럴은 형태 판별(No.26·27·41 선례). ★ `.default()` 0(RM-10). */
+export const CarouselOutputPayloadV1Schema = z.object({
+  version: z.literal(1),
+  text: z.string().max(CAROUSEL_LIMITS.textMax).optional(),
+  cards: z.array(CarouselCardSchema).min(CAROUSEL_LIMITS.cardsMin).max(CAROUSEL_LIMITS.cardsMax),
+});
+export type CarouselOutputPayloadV1 = z.infer<typeof CarouselOutputPayloadV1Schema>;
+
+/** [No.46] 바로연결 배치 규칙(FR-RM2-3) — 노드 저장 서비스·콘솔 편집기가 공용(읽기 스키마에는 넣지 않는다 — R-15). */
+export const QUICK_REPLY_FOLLOWER_TYPES = ['DIALOG_MOVE', 'WORKFLOW'] as const;
+
+export function findQuickReplyPlacementIssues(outputs: readonly DialogOutput[]): Array<{ index: number; reason: 'MULTIPLE' | 'NOT_LAST' }> {
+  const issues: Array<{ index: number; reason: 'MULTIPLE' | 'NOT_LAST' }> = [];
+  const quickReplyIndexes: number[] = [];
+  outputs.forEach((o, i) => {
+    if (o.type === 'BUTTON' && o.payload.display === 'QUICK_REPLY') quickReplyIndexes.push(i);
+  });
+  quickReplyIndexes.forEach((idx, order) => {
+    if (order > 0) {
+      issues.push({ index: idx, reason: 'MULTIPLE' });
+      return;
+    }
+    for (let j = idx + 1; j < outputs.length; j += 1) {
+      if (!(QUICK_REPLY_FOLLOWER_TYPES as readonly string[]).includes(outputs[j].type)) {
+        issues.push({ index: idx, reason: 'NOT_LAST' });
+        break;
+      }
+    }
+  });
+  return issues;
+}
 
 export const LinkOutputPayloadSchema = z.object({
   label: z.string().trim().min(1).max(40),
@@ -859,6 +947,7 @@ export const DialogOutputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('SURVEY'), payload: SurveyOutputPayloadSchema }),
   z.object({ type: z.literal('API_CONDITION'), payload: ApiConditionOutputPayloadSchema }),
   z.object({ type: z.literal('WORKFLOW'), payload: WorkflowOutputPayloadV1Schema }),
+  z.object({ type: z.literal('CAROUSEL'), payload: CarouselOutputPayloadV1Schema }),
 ]);
 export type DialogOutput = z.infer<typeof DialogOutputSchema>;
 

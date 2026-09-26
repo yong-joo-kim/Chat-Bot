@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ChannelOutputProfile } from './rich-degrade';
 
 /**
  * No.11 다양한 채널 제공 — `quality-channel-설계.md` §4.3, ADR-0011 근거.
@@ -102,16 +103,77 @@ export type ChannelListItem = z.infer<typeof ChannelListItemSchema>;
  * `=== 'WEB'` 분기를 대체한다(동작 불변). 표를 읽는 것은 분기가 아니다(§5.4) — 팩토리·
  * `channel-config.ts`·어댑터 파일 밖에서 `=== 'WEB'` 리터럴 비교를 쓰지 않는다.
  */
-export const CHANNEL_CAPABILITIES: Record<ChannelType, { handoff: boolean }> = {
-  WEB: { handoff: true },
-  MOBILE: { handoff: false },
-  KAKAOTALK: { handoff: false },
-  LINE: { handoff: false },
-  FACEBOOK: { handoff: false },
-  NAVER_TALKTALK: { handoff: false },
-  APP: { handoff: false },
-  KIOSK: { handoff: false },
+/**
+ * [신규 No.46] WEB = 실측(모든 상한이 스키마 최대치 — 기존 아웃풋이 WEB에서 절대 바뀌지 않는다,
+ * ADR-0043 §4 · R-4). KAKAOTALK = 가정치(규격 미확인 보수값 — ⚠ R-5). 나머지 6채널 = 텍스트만.
+ */
+const WEB_OUTPUT_PROFILE: ChannelOutputProfile = {
+  source: 'MEASURED',
+  types: ['TEXT', 'CARD', 'IMAGE', 'BUTTON', 'LINK', 'PAUSE', 'PHONE_CALL', 'CAROUSEL'],
+  carouselMaxCards: 10,
+  carouselCardMaxButtons: 3,
+  cardMaxButtons: 5,
+  quickReply: { supported: true, max: 5 },
+  buttonActions: ['MESSAGE', 'LINK', 'NODE'],
+  image: true,
+  textLimits: { title: 100, description: 500, buttonLabel: 40 },
 };
+
+const KAKAOTALK_OUTPUT_PROFILE: ChannelOutputProfile = {
+  source: 'ASSUMED',
+  types: ['TEXT', 'CARD', 'IMAGE', 'BUTTON', 'LINK', 'CAROUSEL'],
+  carouselMaxCards: 10,
+  carouselCardMaxButtons: 3,
+  cardMaxButtons: 3,
+  quickReply: { supported: true, max: 10 },
+  buttonActions: ['MESSAGE', 'LINK', 'NODE'],
+  image: true,
+  textLimits: { title: 50, description: 230, buttonLabel: 14 },
+};
+
+const TEXT_ONLY_OUTPUT_PROFILE: ChannelOutputProfile = {
+  source: 'DEFAULT',
+  types: ['TEXT'],
+  carouselMaxCards: 0,
+  carouselCardMaxButtons: 0,
+  cardMaxButtons: 0,
+  quickReply: { supported: false, max: 0 },
+  buttonActions: [],
+  image: false,
+  textLimits: { title: 100, description: 500, buttonLabel: 40 },
+};
+
+export const CHANNEL_CAPABILITIES: Record<ChannelType, { handoff: boolean; outputs: ChannelOutputProfile }> = {
+  WEB: { handoff: true, outputs: WEB_OUTPUT_PROFILE },
+  MOBILE: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+  KAKAOTALK: { handoff: false, outputs: KAKAOTALK_OUTPUT_PROFILE },
+  LINE: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+  FACEBOOK: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+  NAVER_TALKTALK: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+  APP: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+  KIOSK: { handoff: false, outputs: TEXT_ONLY_OUTPUT_PROFILE },
+};
+
+/**
+ * [신규 No.46] 채널이 아닌 가상 프로필 — `rich-v1`을 선언하지 않은 구버전 WEB 위젯(§4.3 · R-19).
+ * `CHANNEL_CAPABILITIES` 표 **밖**의 상수다(표 = 실제 채널 8행 그대로).
+ */
+export const LEGACY_WEB_WIDGET_OUTPUT_PROFILE: ChannelOutputProfile = {
+  source: 'MEASURED',
+  types: ['TEXT', 'CARD', 'IMAGE', 'BUTTON', 'LINK', 'PAUSE', 'PHONE_CALL'],
+  carouselMaxCards: 0,
+  carouselCardMaxButtons: 0,
+  cardMaxButtons: 5,
+  quickReply: { supported: false, max: 0 },
+  buttonActions: ['MESSAGE', 'LINK', 'NODE'],
+  image: true,
+  textLimits: { title: 100, description: 500, buttonLabel: 40 },
+};
+
+/** 표 조회(분기 아님 — ADR-0043 §4). */
+export function outputProfileFor(type: ChannelType): ChannelOutputProfile {
+  return CHANNEL_CAPABILITIES[type].outputs;
+}
 
 /** 모르는 문자열은 false(안전측). */
 export function channelSupportsHandoff(type: string): boolean {

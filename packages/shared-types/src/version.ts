@@ -267,6 +267,8 @@ export const VersionDiffListItemSchema = z.object({
   name: z.string(),
   recreated: z.object({ counterpartId: z.string() }).optional(),
   changedFields: z.array(z.string()).optional(),
+  /** [신규 No.46] `NODE` 항목에 한해 `CAROUSEL` 아웃풋을 "캐러셀(카드 N장)"으로 요약(FR-RM5-6). */
+  outputSummary: z.array(z.string()).optional(),
 });
 export type VersionDiffListItem = z.infer<typeof VersionDiffListItemSchema>;
 

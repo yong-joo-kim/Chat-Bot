@@ -304,6 +304,9 @@ export type PublicHandoffState = z.infer<typeof PublicHandoffStateSchema>;
  */
 export const WIDGET_FEATURE_FEEDBACK_V1 = 'feedback-v1';
 
+/** [신규 No.46] 위젯 기능 선언 3번째 — 없으면 서버가 캐러셀을 CARD 여러 개로 강등한다(ADR-0043 §6). */
+export const WIDGET_FEATURE_RICH_V1 = 'rich-v1';
+
 /** 응답에 싣는 평가 가능 표식 — 키 자체가 없으면(§6.2) 바이트 동일(FR-FB2-2). */
 export const PublicFeedbackOfferSchema = z.object({ rateable: z.literal(true) });
 export type PublicFeedbackOffer = z.infer<typeof PublicFeedbackOfferSchema>;

@@ -69,6 +69,18 @@ export function trimSystemNodeOutputs(node: DialogNode, keepNodeIds: ReadonlySet
       outputs.push({ type: 'CARD', payload: { ...output.payload, buttons: kept.length > 0 ? kept : undefined } });
       continue;
     }
+    // [신규 No.46] 캐러셀 카드마다 keep 밖 NODE 버튼만 제거한다 — 카드 자체는 항상 남긴다
+    // (2장 이상 보존, EX-RM-16). 캐러셀 스키마 최소 2장 규약과 충돌하지 않는다.
+    if (output.type === 'CAROUSEL') {
+      const newCards = output.payload.cards.map((card) => {
+        if (!card.buttons) return card;
+        const { kept, trimmedTargets } = buttonsAfterTrim(card.buttons, keepNodeIds);
+        trimmedTargets.forEach((t) => trimmedLinks.push({ edge: 'NODE_BUTTON', targetNodeId: t }));
+        return kept.length === card.buttons.length ? card : { ...card, buttons: kept.length > 0 ? kept : undefined };
+      });
+      outputs.push({ type: 'CAROUSEL', payload: { ...output.payload, cards: newCards } });
+      continue;
+    }
     if (output.type === 'API_CONDITION') {
       // 조건분기 대상은 잘라내지 않는다 — 따라간다(분기 의미 보존).
       const targets = output.payload.conditions.map((c) => c.nextNodeId);
@@ -100,6 +112,14 @@ export function trimSystemNodeOutputs(node: DialogNode, keepNodeIds: ReadonlySet
       if (output.type === 'BUTTON') {
         for (const b of output.payload.buttons) {
           if (b.action === 'NODE') revertedFollowed.push({ edge: 'NODE_BUTTON', targetNodeId: b.value, reason: 'TRIM_WOULD_EMPTY' });
+        }
+      }
+      // [신규 No.46] 캐러셀 카드 버튼 NODE도 같은 보정에 포함(EX-RM-16).
+      if (output.type === 'CAROUSEL') {
+        for (const card of output.payload.cards) {
+          for (const b of card.buttons ?? []) {
+            if (b.action === 'NODE') revertedFollowed.push({ edge: 'NODE_BUTTON', targetNodeId: b.value, reason: 'TRIM_WOULD_EMPTY' });
+          }
         }
       }
     }

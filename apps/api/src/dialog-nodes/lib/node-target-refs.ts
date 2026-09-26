@@ -21,6 +21,14 @@ export function collectNodeTargetRefs(outputs: readonly DialogOutput[]): Array<{
         if (b.action === 'NODE') refs.push({ id: b.value, field: `outputs.${i}.payload.buttons.${k}.value` });
       });
     }
+    // [신규 No.46] 캐러셀 카드 버튼의 NODE 대상 — 엔진 `getOutgoingNodeRefs()`와 동등성 시험 대상.
+    if (o.type === 'CAROUSEL') {
+      o.payload.cards.forEach((c, j) => {
+        (c.buttons ?? []).forEach((b, k) => {
+          if (b.action === 'NODE') refs.push({ id: b.value, field: `outputs.${i}.payload.cards.${j}.buttons.${k}.value` });
+        });
+      });
+    }
     if (o.type === 'API_CONDITION') {
       o.payload.conditions.forEach((c, j) => {
         refs.push({ id: c.nextNodeId, field: `outputs.${i}.payload.conditions.${j}.nextNodeId` });

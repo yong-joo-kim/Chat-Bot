@@ -4,6 +4,7 @@ import { ChannelType } from './channel';
 import { ButtonActionSchema } from './dialogue-engine';
 import { DialogOutputSchema } from './dialogue';
 import { BundleTargetSchema } from './bundle-target';
+import { DEGRADE_CHANGE_KINDS, OUTPUT_PROFILE_SOURCES } from './rich-degrade';
 
 /**
  * 옴니채널 통합 인박스(No.42) 계약 — `docs/02-spec/omnichannel-inbox-설계.md` §4.1.
@@ -457,12 +458,28 @@ export const SimulateInboxSchema = z
   });
 export type SimulateInboxDto = z.infer<typeof SimulateInboxSchema>;
 
+/** [신규 No.46] 강등 "바뀐 점" 1건(`channel-rich-messages-설계.md` §7.4 — 닫힌 목록 11종). */
+export const DegradeChangeSchema = z.object({
+  outputIndex: z.number().int().nonnegative(),
+  kind: z.enum(DEGRADE_CHANGE_KINDS),
+  detail: z.string().max(100).optional(),
+});
+
+/** [신규 No.46] 채널별 강등 미리보기(R-18) — `NOT_DEFINED`은 하위 호환용으로 스키마에만 남긴다. */
+export const DegradePreviewSchema = z.object({
+  channelType: ChannelType,
+  source: z.enum(OUTPUT_PROFILE_SOURCES),
+  outputs: z.array(DialogOutputSchema),
+  changes: z.array(DegradeChangeSchema),
+});
+export type DegradePreview = z.infer<typeof DegradePreviewSchema>;
+
 export const SimulateInboxResponseSchema = z.object({
   outputs: z.array(DialogOutputSchema),
   state: z.unknown(),
   stateReset: z.boolean(),
   entries: z.array(TimelineEntryUnitSchema).max(2),
-  degradePreview: z.literal('NOT_DEFINED'),
+  degradePreview: z.union([z.literal('NOT_DEFINED'), DegradePreviewSchema]),
 });
 export type SimulateInboxResponse = z.infer<typeof SimulateInboxResponseSchema>;
 

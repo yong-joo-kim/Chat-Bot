@@ -86,4 +86,56 @@ describe('trimSystemNodeOutputs — topic-system-설계.md §9.3 (M-2 코드리�
       ]);
     });
   });
+
+  describe('[신규 No.46] CAROUSEL 카드 버튼 — 카드는 항상 남기고 keep 밖 NODE 버튼만 제거한다(EX-RM-16)', () => {
+    it('카드 하나의 keep 밖 NODE 버튼만 제거되고 카드 자체(2장)는 그대로 남는다', () => {
+      const node = buildNode([
+        {
+          type: 'CAROUSEL',
+          payload: {
+            version: 1,
+            cards: [
+              { title: '카드1', buttons: [{ label: '유지', action: 'NODE', value: KEEP_ID }, { label: '제거', action: 'NODE', value: TRIM_ID }] },
+              { title: '카드2' },
+            ],
+          },
+        } as unknown as DialogOutput,
+      ]);
+      const result = trimSystemNodeOutputs(node, new Set([KEEP_ID]));
+      expect(result.trimmedLinks).toEqual([{ edge: 'NODE_BUTTON', targetNodeId: TRIM_ID }]);
+      expect(result.outputs).toHaveLength(1);
+      const carousel = result.outputs[0] as unknown as { payload: { cards: Array<{ title: string; buttons?: unknown[] }> } };
+      expect(carousel.payload.cards).toHaveLength(2);
+      expect(carousel.payload.cards[0].buttons).toEqual([{ label: '유지', action: 'NODE', value: KEEP_ID }]);
+      expect(carousel.payload.cards[1].title).toBe('카드2');
+    });
+
+    it('버튼이 모두 제거돼도 카드는 남는다(캐러셀 스키마 최소 2장 규약 보존)', () => {
+      const node = buildNode([
+        {
+          type: 'CAROUSEL',
+          payload: {
+            version: 1,
+            cards: [{ title: '카드1', buttons: [{ label: '제거', action: 'NODE', value: TRIM_ID }] }, { title: '카드2' }],
+          },
+        } as unknown as DialogOutput,
+      ]);
+      const result = trimSystemNodeOutputs(node, new Set([KEEP_ID]));
+      const carousel = result.outputs[0] as unknown as { payload: { cards: Array<{ title: string; buttons?: unknown[] }> } };
+      expect(carousel.payload.cards).toHaveLength(2);
+      expect(carousel.payload.cards[0].buttons).toBeUndefined();
+    });
+
+    it('CAROUSEL 하나뿐이고 전부 트림 대상이어도(빈 결과 보정 대상 아님 — 카드가 남으므로) FOLLOW로 되돌리지 않는다', () => {
+      const node = buildNode([
+        {
+          type: 'CAROUSEL',
+          payload: { version: 1, cards: [{ title: '카드1', buttons: [{ label: '제거', action: 'NODE', value: TRIM_ID }] }, { title: '카드2' }] },
+        } as unknown as DialogOutput,
+      ]);
+      const result = trimSystemNodeOutputs(node, new Set([KEEP_ID]));
+      expect(result.outputs).toHaveLength(1); // 빈 결과가 아니므로 보정 미적용
+      expect(result.followedLinks).toEqual([]);
+    });
+  });
 });

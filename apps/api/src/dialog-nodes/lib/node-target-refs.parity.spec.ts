@@ -64,6 +64,28 @@ const ALL_OUTPUT_FIXTURES: Array<{ label: string; outputs: DialogOutput[] }> = [
     ],
   },
   {
+    // [신규 No.46] 캐러셀 카드 버튼 — 기존 CARD 버튼과 같은 참조 위치 규약(설계서 §15 지점 4·5).
+    label: 'CAROUSEL(카드 버튼 혼합)',
+    outputs: [
+      {
+        type: 'CAROUSEL',
+        payload: {
+          version: 1,
+          cards: [
+            {
+              title: '카드1',
+              buttons: [
+                { label: '이동', action: 'NODE', value: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' },
+                { label: '링크', action: 'LINK', value: 'https://example.com/rich' },
+              ],
+            },
+            { title: '카드2', buttons: [{ label: '메시지', action: 'MESSAGE', value: '안녕' }] },
+          ],
+        },
+      },
+    ],
+  },
+  {
     label: 'API_CONDITION v1',
     outputs: [
       {

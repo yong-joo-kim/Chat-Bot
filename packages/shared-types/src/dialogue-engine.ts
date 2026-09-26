@@ -288,6 +288,10 @@ export const DesignIssueCode = z.enum([
   'WORKFLOW_NO_FIELDS',
   'WORKFLOW_ONLY_OUTPUT',
   'WORKFLOW_RAW_PERSONAL_DATA',
+  // [신규 No.46] 리치 메시지 주소 정책 — API 계층 순수 함수(`rich-messages/lib/rich-url-issues.ts`)가
+  // 산출하고 엔진 결과 뒤에 합친다(엔진 코드 변경 0 · `channel-rich-messages-설계.md` §4.8·§10.2).
+  'RICH_URL_NOT_ALLOWED',
+  'RICH_URL_SUSPICIOUS',
 ]);
 export type DesignIssueCode = z.infer<typeof DesignIssueCode>;
 

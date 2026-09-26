@@ -33,3 +33,6 @@ export * from './environment';
 export * from './governance';
 export * from './workflow';
 export * from './inbox';
+export * from './rich-url';
+export * from './rich-degrade';
+export * from './rich-message';

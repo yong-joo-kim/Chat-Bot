@@ -20,6 +20,13 @@ export function getOutgoingNodeRefs(node: DialogNode): { moveTargets: string[]; 
     if (output.type === 'CARD' && output.payload.buttons) {
       for (const b of output.payload.buttons) if (b.action === 'NODE') buttonTargets.push(b.value);
     }
+    // [신규 No.46 — EN-5] 캐러셀 카드 버튼의 NODE 대상 — 새 참조 종류가 아니라 기존 "버튼 → 노드"
+    // 참조의 새 위치다(순환·고아·incomingCount·삭제 409·스냅샷 무결성이 이 함수 경유로 자동 반영).
+    if (output.type === 'CAROUSEL') {
+      for (const card of output.payload.cards) {
+        for (const b of card.buttons ?? []) if (b.action === 'NODE') buttonTargets.push(b.value);
+      }
+    }
     if (output.type === 'API_CONDITION') {
       for (const c of output.payload.conditions) apiTargets.push(c.nextNodeId);
       if (isApiConditionV2(output.payload)) {
@@ -290,6 +297,13 @@ function checkApiConditionIssues(nodes: DialogNode[], nodeMap: Map<string, Dialo
       }
       if (output.type === 'BUTTON') {
         for (const b of output.payload.buttons) if (b.action === 'LINK') urlFields.push(b.value);
+      }
+      // [신규 No.46 — EN-6] 캐러셀 카드 이미지·LINK 버튼 값도 같은 점검을 받는다.
+      if (output.type === 'CAROUSEL') {
+        for (const card of output.payload.cards) {
+          if (card.imageUrl) urlFields.push(card.imageUrl);
+          for (const b of card.buttons ?? []) if (b.action === 'LINK') urlFields.push(b.value);
+        }
       }
       if (urlFields.some((v) => API_TOKEN_IN_URL_RE.test(v))) {
         issues.push({
