@@ -67,6 +67,8 @@ function buildTxMock() {
     // [신규 No.41] 발송 이력·구독 — 20 → 22테이블.
     workflowRun: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     workflowSubscription: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // [신규 No.42] 22 → 23테이블.
+    chatbotInboxSetting: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
 }
@@ -94,6 +96,8 @@ function buildPrismaMock(tx: ReturnType<typeof buildTxMock>) {
     topic: { count: jest.fn().mockResolvedValue(0) },
     // [신규 No.44] 사전검사 14 → 15종.
     messageFeedback: { count: jest.fn().mockResolvedValue(0) },
+    // [신규 No.42] 영구삭제 사전검사 15 → 16종.
+    customerLink: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb(tx)),
   };
 }
@@ -105,7 +109,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('22개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.41 workflowRun·workflowSubscription 추가)', async () => {
+  it('23개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.42 chatbotInboxSetting 추가)', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -136,6 +140,7 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.retentionPolicy.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.workflowRun.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.workflowSubscription.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.chatbotInboxSetting.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는

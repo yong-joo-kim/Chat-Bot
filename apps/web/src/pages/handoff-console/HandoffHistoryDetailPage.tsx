@@ -10,6 +10,7 @@ import { EndReasonBadge } from '../../components/handoff/badges';
 import { SessionRefLabel } from '../../components/handoff/SessionRefLabel';
 import { TranscriptEntryList } from '../../components/handoff/TranscriptPanel';
 import { GovernanceViewAuditBanner } from '../../components/GovernanceViewAuditBanner';
+import { SessionLinkCard } from '../../components/inbox/SessionLinkCard';
 import { useAuth } from '../../context/AuthContext';
 import { formatDateTime } from '../../lib/date';
 import { MESSAGES } from '../../constants/messages';
@@ -60,6 +61,9 @@ export function HandoffHistoryDetailPage(): JSX.Element {
       <p>
         {msg.historyDetailAlertAtStart}: {ALERT_LEVEL_LABELS[handoff.alertLevelAtStart]}
       </p>
+      {/* [신규 No.42] OI-10 — 계약 보강(2026-09-26)으로 `handoff.sessionRef`가 실려 상담 이력 상세에도
+          고객 카드를 연계한다(omnichannel-inbox-ui-spec.md §3.10). */}
+      <SessionLinkCard chatbotId={chatbotId} sessionRef={handoff.sessionRef} />
       {/* [신규 No.45] G7 — 상담 이력 상세(V-3), 메시지 목록 위(§3.10). */}
       <GovernanceViewAuditBanner visible={user?.governanceModeOn ?? false} />
       <TranscriptEntryList entries={detail.entries} />

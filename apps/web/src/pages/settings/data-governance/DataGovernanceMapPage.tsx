@@ -315,6 +315,18 @@ export function DataGovernanceMapPage(): JSX.Element {
         <p>{msg.externalLlmAugmentationText(data.risks.externalLlmAugmentation)}</p>
         <p>{msg.maskingModeText(data.risks.piiMaskMode)}</p>
       </section>
+
+      {/* [신규 No.42] 통합 인박스 카드(§3.12 OI-12) — 고객 0명이면 선택 키 자체가 없어 렌더되지 않는다. */}
+      {data.inbox && (
+        <section className="settings-card">
+          <h2>{msg.inboxCardTitle}</h2>
+          <p>{msg.inboxCustomersLine(data.inbox.customers, data.inbox.identifiedCustomers, data.inbox.customers - data.inbox.identifiedCustomers)}</p>
+          <p>{msg.inboxThreadsLine(data.inbox.threads, data.inbox.entries)}</p>
+          <p>{msg.inboxIdentityLine}</p>
+          <p>{msg.inboxDisplayNameEncrypted(data.inbox.displayNameEncrypted)}</p>
+          <p>{msg.inboxRetentionLine(data.inbox.retentionDays.INBOX_TEXT, data.inbox.retentionDays.CUSTOMER_IDENTITY)}</p>
+        </section>
+      )}
     </div>
   );
 }

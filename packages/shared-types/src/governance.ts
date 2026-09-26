@@ -30,6 +30,8 @@ export const RetentionTargetKind = z.enum([
   'HANDOFF_TEXT',
   'CALL_LOGS',
   'AUDIT_LOGS',
+  'INBOX_TEXT',
+  'CUSTOMER_IDENTITY',
 ]);
 export type RetentionTargetKind = z.infer<typeof RetentionTargetKind>;
 
@@ -45,6 +47,9 @@ export const GlobalRetentionUpdateSchema = z.object({
       HANDOFF_TEXT: RetentionDays,
       CALL_LOGS: RetentionDays,
       AUDIT_LOGS: RetentionDays,
+      // [신규 No.42] 선택 키 — 기존 6키 요청은 그대로 통과한다(생략 = 현재값 유지, ADR-0042 §6 제약 ⑥⑦).
+      INBOX_TEXT: RetentionDays.optional(),
+      CUSTOMER_IDENTITY: RetentionDays.optional(),
     })
     .strict(),
   confirmText: z.string().trim().max(100).optional(),
@@ -92,6 +97,9 @@ export const RetentionPreviewRequestSchema = z.object({
       HANDOFF_TEXT: ChatbotRetentionValue.optional(),
       CALL_LOGS: RetentionDays.optional(),
       AUDIT_LOGS: RetentionDays.optional(),
+      // [신규 No.42]
+      INBOX_TEXT: RetentionDays.optional(),
+      CUSTOMER_IDENTITY: RetentionDays.optional(),
     })
     .partial(),
 });
@@ -250,5 +258,17 @@ export const GovernanceMapResponseSchema = z.object({
     /** [신규 No.41] 원문 개인정보 전송을 허용한 업무 자동화 대상 수(대상 0개면 키 자체가 없다). */
     rawPersonalDataWorkflowTargets: z.number().int().nonnegative().optional(),
   }),
+  /** [신규 No.42] 고객 0명이면 키 자체를 생략한다(§13.4 — No.41 선례). */
+  inbox: z
+    .object({
+      customers: z.number().int().nonnegative(),
+      identifiedCustomers: z.number().int().nonnegative(),
+      threads: z.number().int().nonnegative(),
+      entries: z.number().int().nonnegative(),
+      identityHashOnly: z.literal(true),
+      displayNameEncrypted: z.boolean(),
+      retentionDays: z.object({ INBOX_TEXT: z.number().int().nullable(), CUSTOMER_IDENTITY: z.number().int().nullable() }),
+    })
+    .optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

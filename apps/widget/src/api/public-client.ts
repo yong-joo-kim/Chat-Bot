@@ -9,6 +9,7 @@ import type {
 } from '@chat-bot/shared-types';
 import { HANDOFF_SESSION_HEADER, HANDOFF_TOKEN_HEADER, WIDGET_FEATURE_HANDOFF_V1 } from '../constants/handoff';
 import { WIDGET_FEATURE_FEEDBACK_V1 } from '../constants/feedback';
+import { IDENTITY_TOKEN_HEADER } from '../constants/identity';
 import type { FeedbackRating } from '../core/feedback';
 
 /**
@@ -72,15 +73,19 @@ export function createPublicClient(apiBase: string, slug: string) {
   return {
     getConfig: (): Promise<PublicChatbotConfig> => request<PublicChatbotConfig>('/config'),
     /**
-     * [No.24·No.44] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1']`)을 항상
+     * [No.24·No.44·No.42] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1']`)을 항상
      * 싣는다(ADR-0036 §5.6 — 이게 없으면 서버가 구버전으로 취급해 편승 격하한다). 상담 토큰이
-     * 있으면 헤더로 함께 보낸다.
+     * 있으면 헤더로 함께 보낸다. [신규 No.42] 식별 토큰이 있을 때만 `x-cb-identity` 헤더를
+     * 추가한다(없으면 요청 바이트 불변, `omnichannel-inbox-설계.md` §6.8).
      */
-    sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string }): Promise<PublicMessageResponse> =>
+    sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> =>
       request<PublicMessageResponse>('/messages', {
         method: 'POST',
         body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_FEEDBACK_V1] }),
-        headers: opts?.handoffToken ? { [HANDOFF_TOKEN_HEADER]: opts.handoffToken } : undefined,
+        headers: {
+          ...(opts?.handoffToken ? { [HANDOFF_TOKEN_HEADER]: opts.handoffToken } : undefined),
+          ...(opts?.identityToken ? { [IDENTITY_TOKEN_HEADER]: opts.identityToken } : undefined),
+        },
       }),
     /** 보류 답변 폴링(ADR-0023) — `messageId` 불일치/TTL 만료는 404(`NOT_FOUND`)로 온다. */
     pollMessage: (messageId: string): Promise<PendingAnswerPollResponse> =>

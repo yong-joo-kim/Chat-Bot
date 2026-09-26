@@ -50,6 +50,12 @@ import { ChatbotRetentionController } from '../../governance/chatbot-retention.c
 import { WorkflowTargetsController } from '../../workflow/targets/workflow-targets.controller';
 import { WorkflowRunsController } from '../../workflow/runs/workflow-runs.controller';
 import { ChatbotWorkflowController } from '../../workflow/chatbot-workflow.controller';
+// 옴니채널 통합 인박스(No.42) 그룹 추가 — 5개 컨트롤러, 전부 @Public() 0건.
+import { InboxThreadsController } from '../../inbox/controllers/inbox-threads.controller';
+import { InboxCustomersController } from '../../inbox/controllers/inbox-customers.controller';
+import { InboxTestCustomersController } from '../../inbox/controllers/inbox-test-customers.controller';
+import { InboxTagsController } from '../../inbox/controllers/inbox-tags.controller';
+import { ChatbotInboxSettingsController } from '../../inbox/controllers/chatbot-inbox-settings.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -101,7 +107,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 40개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다(No.41 WorkflowTargetsController·WorkflowRunsController·ChatbotWorkflowController 추가 — 37→40)', () => {
+  it('전수 스캔: 등록된 45개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다(No.42 인박스 컨트롤러 5개 추가 — 40→45 · @Public() 8 유지)', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -152,6 +158,12 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       WorkflowTargetsController,
       WorkflowRunsController,
       ChatbotWorkflowController,
+      // [신규 No.42] 5개 추가 — 40 → 45.
+      InboxThreadsController,
+      InboxCustomersController,
+      InboxTestCustomersController,
+      InboxTagsController,
+      ChatbotInboxSettingsController,
     ];
 
     const publicHandlers: string[] = [];

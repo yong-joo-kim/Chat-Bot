@@ -17,6 +17,7 @@ import { ArchivedBanner } from './ArchivedBanner';
 import { FormActions } from './FormActions';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 import { ChatbotRetentionSection } from '../settings/data-governance/ChatbotRetentionSection';
+import { ChatbotInboxSettingsSection } from './inbox-settings/ChatbotInboxSettingsSection';
 
 interface SettingsFormState {
   name: string;
@@ -67,10 +68,14 @@ export function SettingsTab(): JSX.Element {
   // §3.4 — EDITOR 등에게는 서브탭 자체가 렌더되지 않는다. App.tsx 라우트는 바꾸지 않고 쿼리스트링만 쓴다,
   // 2026-09-26 PM 확정 §13-1).
   const canSeeRetention = can('security:read');
-  const section = canSeeRetention && searchParams.get('section') === 'retention' ? 'retention' : 'basic';
-  function setSection(next: 'basic' | 'retention'): void {
+  // [신규 No.42] OI-9 — "통합 인박스" 서브탭은 `chatbot:read`만 있으면 보인다(EDITOR도 참여 여부를
+  // 알아야 하므로 조회를 넓게 연다, omnichannel-inbox-ui-spec.md §3.9).
+  const requestedSection = searchParams.get('section');
+  const section: 'basic' | 'retention' | 'inbox' =
+    requestedSection === 'retention' && canSeeRetention ? 'retention' : requestedSection === 'inbox' ? 'inbox' : 'basic';
+  function setSection(next: 'basic' | 'retention' | 'inbox'): void {
     const params = new URLSearchParams(searchParams);
-    if (next === 'retention') params.set('section', 'retention');
+    if (next !== 'basic') params.set('section', next);
     else params.delete('section');
     setSearchParams(params, { replace: false });
   }
@@ -172,17 +177,17 @@ export function SettingsTab(): JSX.Element {
 
   return (
     <div className="settings-tab">
-      {canSeeRetention && (
-        <div className="sub-tabs" role="tablist" aria-label={MESSAGES.settings.title}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={section === 'basic'}
-            className={`sub-tab-button${section === 'basic' ? ' sub-tab-button--active' : ''}`}
-            onClick={() => setSection('basic')}
-          >
-            {MESSAGES.settings.subTabBasic}
-          </button>
+      <div className="sub-tabs" role="tablist" aria-label={MESSAGES.settings.title}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'basic'}
+          className={`sub-tab-button${section === 'basic' ? ' sub-tab-button--active' : ''}`}
+          onClick={() => setSection('basic')}
+        >
+          {MESSAGES.settings.subTabBasic}
+        </button>
+        {canSeeRetention && (
           <button
             type="button"
             role="tab"
@@ -192,8 +197,18 @@ export function SettingsTab(): JSX.Element {
           >
             {MESSAGES.settings.subTabRetention}
           </button>
-        </div>
-      )}
+        )}
+        {/* [신규 No.42] OI-9 서브탭 — omnichannel-inbox-ui-spec.md §3.9 */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'inbox'}
+          className={`sub-tab-button${section === 'inbox' ? ' sub-tab-button--active' : ''}`}
+          onClick={() => setSection('inbox')}
+        >
+          {MESSAGES.inboxSettings.tabLabel}
+        </button>
+      </div>
 
       {section === 'basic' && (
         <>
@@ -294,6 +309,9 @@ export function SettingsTab(): JSX.Element {
       {section === 'retention' && canSeeRetention && (
         <ChatbotRetentionSection chatbotId={chatbot.id} chatbotName={chatbot.name} isArchived={isArchived} />
       )}
+
+      {/* [신규 No.42] OI-9 — omnichannel-inbox-ui-spec.md §3.9 */}
+      {section === 'inbox' && <ChatbotInboxSettingsSection chatbotId={chatbot.id} isArchived={isArchived} />}
     </div>
   );
 }

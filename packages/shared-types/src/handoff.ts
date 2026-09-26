@@ -342,6 +342,8 @@ export type HandoffHistoryQuery = z.infer<typeof HandoffHistoryQuerySchema>;
 export const HandoffHistoryItemSchema = z.object({
   id: z.string().uuid(),
   alias: z.string(),
+  /** [코드리뷰 R1 반영 — No.42 연계] computeSessionRef 결과(16 hex) — sessionId 자체는 아니다(H-17 불변). */
+  sessionRef: z.string(),
   startedAt: z.coerce.date(),
   connectedAt: z.coerce.date().nullable(),
   endedAt: z.coerce.date().nullable(),

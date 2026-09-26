@@ -289,7 +289,7 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
       }
     });
 
-    it('openField( 호출 파일 = 개봉 6파일(handoff-{transcript,history,public-poll,gate,hints}.service.ts·survey-results.service.ts) + writer + workflow-run.store.ts(No.41 +1)', () => {
+    it('openField( 호출 파일 = 개봉 6파일(handoff-{transcript,history,public-poll,gate,hints}.service.ts·survey-results.service.ts) + writer + workflow-run.store.ts(No.41 +1) + inbox-text.reader.ts(No.42 +1)', () => {
       const allowed = [
         'apps/api/src/handoff/handoff-transcript.service.ts',
         'apps/api/src/handoff/handoff-history.service.ts',
@@ -299,6 +299,7 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
         'apps/api/src/stats/surveys/survey-results.service.ts',
         'apps/api/src/governance/writer/governance-data.writer.ts',
         'apps/api/src/workflow/core/workflow-run.store.ts',
+        'apps/api/src/inbox/read/inbox-text.reader.ts',
       ];
       const offenders = apiFileContents.filter(({ f, content }) => nonCommentOccurrences(content, /\bopenField\(/) > 0 && !allowed.includes(f) && !f.endsWith('common/crypto/field-crypto.ts')).map(({ f }) => f);
       expect(offenders).toEqual([]);
@@ -588,14 +589,14 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
       expect(offenders).toEqual([]);
     });
 
-    it('@AuditView( 부착 위치(컨트롤러#핸들러) 집합이 view-audit-targets.ts의 VIEW_AUDIT_TARGETS 8개와 정확히 같다', () => {
+    it('@AuditView( 부착 위치(컨트롤러#핸들러) 집합이 view-audit-targets.ts의 VIEW_AUDIT_TARGETS 11개와 정확히 같다(No.42 +3)', () => {
       const targetsEntry = apiFileContents.find(({ f }) => f.endsWith('audit-logs/access/view-audit-targets.ts'));
       expect(targetsEntry).toBeDefined();
       const declared = Array.from(targetsEntry!.content.matchAll(/controller:\s*'([^']+)'/g)).length;
-      expect(declared).toBe(8);
+      expect(declared).toBe(11);
 
       const auditViewCallsites = apiFileContents.reduce((sum, { content }) => sum + nonCommentOccurrences(content, /@AuditView\(/), 0);
-      expect(auditViewCallsites).toBe(8);
+      expect(auditViewCallsites).toBe(11);
     });
   });
 

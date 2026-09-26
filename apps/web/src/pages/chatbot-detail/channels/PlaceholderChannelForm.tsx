@@ -25,7 +25,8 @@ export function PlaceholderChannelForm({
 
   return (
     <form className="channel-config-form" onSubmit={handleSubmit}>
-      <SeverityBadge severity="INFO" label={msg.configOnlyNotice} />
+      {/* [신규 No.42] OI-11 — 통합 인박스 시뮬레이션 안내 한 문장 추가(새 UI 요소 없음, §3.11). */}
+      <SeverityBadge severity="INFO" label={`${msg.configOnlyNotice}${msg.configOnlyNoticeSimulationAddendum}`} />
       <div className="form-field">
         <label htmlFor="placeholder-channel-note">{msg.noteLabel}</label>
         <textarea id="placeholder-channel-note" rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />

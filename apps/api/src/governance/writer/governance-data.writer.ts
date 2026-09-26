@@ -208,6 +208,29 @@ export class GovernanceDataWriter {
     return count;
   }
 
+  /** [신규 No.42] `INBOX_TEXT` 보존 소거 — 항목 본문 소거(스레드 상태와 무관, AC-OC6-2). */
+  async purgeInboxEntries(ids: readonly string[], now: Date): Promise<number> {
+    if (ids.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      await enableSecureDelete(tx);
+      const result = await tx.inboxEntry.updateMany({ where: { id: { in: [...ids] }, textPurgedAt: null }, data: { text: '', textPurgedAt: now } });
+      return result.count;
+    });
+  }
+
+  /** [신규 No.42] `CUSTOMER_IDENTITY` 보존 소거 — 해시·표시 이름·지문 → null(행·연결·스레드·수치 유지). */
+  async purgeCustomerIdentities(ids: readonly string[], now: Date): Promise<number> {
+    if (ids.length === 0) return 0;
+    return this.prisma.$transaction(async (tx) => {
+      await enableSecureDelete(tx);
+      const result = await tx.customer.updateMany({
+        where: { id: { in: [...ids] }, identityPurgedAt: null },
+        data: { customerKeyHash: null, displayName: null, keyFingerprint: null, identityPurgedAt: now },
+      });
+      return result.count;
+    });
+  }
+
   async createRetentionRun(data: {
     runId: string;
     kind: RetentionRunKind;

@@ -131,6 +131,8 @@ export class RetentionPolicyService {
 
     for (const kind of ALL_KINDS) {
       const newDays = dto.days[kind];
+      // [신규 No.42 · 제약 ⑥⑦] 새 보존 종류는 선택 키다 — `undefined` = 현재값 유지(기존 6키 요청 불변).
+      if (newDays === undefined) continue;
       const rangeError = validateRange(kind, newDays, bounds);
       if (rangeError) throw new ApiException('RETENTION_OUT_OF_RANGE', 400, rangeError, [{ field: kind, message: rangeError }]);
 
@@ -188,6 +190,9 @@ export class RetentionPolicyService {
       handoffTextDays: days.HANDOFF_TEXT ?? null,
       callLogsDays: days.CALL_LOGS ?? null,
       auditLogsDays: days.AUDIT_LOGS ?? null,
+      // [신규 No.42] 값이 있을 때만 싣는다(제약 ⑥).
+      ...(days.INBOX_TEXT !== undefined ? { inboxTextDays: days.INBOX_TEXT } : {}),
+      ...(days.CUSTOMER_IDENTITY !== undefined ? { customerIdentityDays: days.CUSTOMER_IDENTITY } : {}),
       pendingKinds: Object.keys(pending),
       pendingEffectiveAt: Object.values(pending)[0]?.effectiveAt ?? null,
     };
@@ -257,6 +262,15 @@ export class RetentionPolicyService {
         }),
       ]);
       return rag + api + workflow;
+    }
+    // [신규 No.42]
+    if (kind === 'INBOX_TEXT') {
+      return this.prisma.inboxEntry.count({ where: { textPurgedAt: null, kind: { not: 'SYSTEM' }, createdAt: { lt: cutoff } } });
+    }
+    if (kind === 'CUSTOMER_IDENTITY') {
+      return this.prisma.customer.count({
+        where: { identityPurgedAt: null, OR: [{ customerKeyHash: { not: null } }, { displayName: { not: null } }], lastActivityAt: { lt: cutoff } },
+      });
     }
     // AUDIT_LOGS
     return this.prisma.auditLog.count({ where: { createdAt: { lt: cutoff } } });

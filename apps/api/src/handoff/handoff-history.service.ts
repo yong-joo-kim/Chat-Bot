@@ -46,6 +46,7 @@ export class HandoffHistoryService {
       return {
         id: r.id,
         alias: aliasOf.get(ref) ?? ref.slice(0, 6),
+        sessionRef: ref,
         startedAt: r.startedAt,
         connectedAt: r.connectedAt,
         endedAt: r.endedAt,
@@ -123,6 +124,7 @@ export class HandoffHistoryService {
       handoff: {
         id: s.id,
         alias,
+        sessionRef: ref,
         startedAt: s.startedAt,
         connectedAt: s.connectedAt,
         endedAt: s.endedAt,

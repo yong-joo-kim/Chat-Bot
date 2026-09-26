@@ -12,6 +12,7 @@ import { HandoffActionBar } from '../../components/handoff/HandoffActionBar';
 import { AgentMessageComposer } from '../../components/handoff/AgentMessageComposer';
 import { SessionRefLabel } from '../../components/handoff/SessionRefLabel';
 import { AlertLevelBadge, UnverifiedAttemptBadge } from '../../components/handoff/badges';
+import { SessionLinkCard } from '../../components/inbox/SessionLinkCard';
 import { MESSAGES } from '../../constants/messages';
 import { useHandoffConsoleChatbotContext } from './HandoffConsoleChatbotShell';
 
@@ -115,6 +116,9 @@ export function LiveSessionDetailPage(): JSX.Element {
           <SessionRefLabel value={sessionRef} /> {currentRow && <AlertLevelBadge level={currentRow.alertLevel} consecutive={currentRow.consecutiveUnanswered} />}
           {handoff && <UnverifiedAttemptBadge count={handoff.unverifiedAttemptCount} />}
         </h2>
+
+        {/* [신규 No.42] OI-10 — <h2> 바로 아래, TranscriptPanel 위(omnichannel-inbox-ui-spec.md §3.10). */}
+        <SessionLinkCard chatbotId={chatbotId} sessionRef={sessionRef} />
 
         {banner && (
           <p className="error-state-title" role="alert">

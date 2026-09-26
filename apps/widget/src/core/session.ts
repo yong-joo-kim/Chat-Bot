@@ -53,6 +53,18 @@ export function getOrCreateSessionId(slug: string): string {
   return id;
 }
 
+/**
+ * [신규 No.42] 식별 `sub` 변경(로그인 전환·로그아웃) 시 새 대화를 강제한다(`omnichannel-inbox-설계.md`
+ * §6.8). 기존 `cb.sid.{slug}`를 새 값으로 덮어쓰고 `cb.state.{slug}`를 비운다 — 상담 토큰(`cb.handoff`)·
+ * 식별 토큰(`cb.idt`) 저장소는 이 함수가 건드리지 않는다(호출부가 각자 정리한다).
+ */
+export function resetSession(slug: string): string {
+  const id = generateUuid();
+  setItem(`cb.sid.${slug}`, id);
+  saveConversationState(slug, undefined);
+  return id;
+}
+
 export function loadConversationState(slug: string): ConversationState | undefined {
   const raw = getItem(`cb.state.${slug}`);
   if (!raw) return undefined;

@@ -46,6 +46,7 @@ export class GovernanceMapService {
     const retention = await this.buildRetention();
     const auditChain = await this.buildAuditChain();
     const risks = await this.buildRisks();
+    const inbox = await this.buildInbox();
 
     return {
       mode: runtime.mode,
@@ -56,6 +57,29 @@ export class GovernanceMapService {
       retention,
       auditChain,
       risks,
+      ...(inbox ? { inbox } : {}),
+    };
+  }
+
+  /** [신규 No.42] 고객 0명이면 키 자체를 생략한다(§13.4 — No.41 선례). */
+  private async buildInbox(): Promise<GovernanceMapResponse['inbox']> {
+    const customers = await this.prisma.customer.count();
+    if (customers === 0) return undefined;
+    const identifiedCustomers = await this.prisma.customer.count({ where: { kind: 'IDENTIFIED' } });
+    const threads = await this.prisma.inboxThread.count();
+    const entries = await this.prisma.inboxEntry.count();
+    const displayNameEncrypted = governanceRuntime().encryptionEnabled;
+    const global = await this.retentionPolicy.getGlobal();
+    const inboxTextDays = global.kinds.find((k) => k.kind === 'INBOX_TEXT')?.days ?? null;
+    const customerIdentityDays = global.kinds.find((k) => k.kind === 'CUSTOMER_IDENTITY')?.days ?? null;
+    return {
+      customers,
+      identifiedCustomers,
+      threads,
+      entries,
+      identityHashOnly: true,
+      displayNameEncrypted,
+      retentionDays: { INBOX_TEXT: inboxTextDays, CUSTOMER_IDENTITY: customerIdentityDays },
     };
   }
 

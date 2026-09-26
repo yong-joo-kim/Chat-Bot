@@ -13,6 +13,8 @@ export const MESSAGES = {
   errorUnknown: '문제가 발생했어요. 잠시 후 다시 시도해 주세요.',
   emptyOutputsFallback: '잠시 후 다시 시도해 주세요.',
   stateResetNotice: '대화가 만료되어 새로 시작합니다.',
+  /** [신규 No.42] 식별 `sub` 변경(로그인 전환·로그아웃) 시 새 대화 안내(`omnichannel-inbox-설계.md` §6.8). */
+  identityChangedNotice: '새 대화를 시작했어요.',
   buttonGroupLabel: '선택지',
   sourcesLabel: '출처',
   sourcesCaption: '참고용 표시이며 정확한 위치가 아닐 수 있습니다.',

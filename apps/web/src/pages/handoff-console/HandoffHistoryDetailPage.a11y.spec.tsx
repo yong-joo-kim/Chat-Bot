@@ -9,6 +9,8 @@ import { handoffApi } from '../../api/handoff';
 expect.extend(toHaveNoViolations);
 
 vi.mock('../../api/handoff', () => ({ handoffApi: { historyDetail: vi.fn() } }));
+// [신규 No.42] OI-10 — 상담 이력 상세도 `SessionLinkCard`를 렌더한다(2026-09-26 계약 보강, `handoff.sessionRef`).
+vi.mock('../../api/inbox', () => ({ inboxApi: { sessionLink: vi.fn().mockResolvedValue({ participating: false }) } }));
 vi.mock('./HandoffConsoleChatbotShell', () => ({
   useHandoffConsoleChatbotContext: () => ({ chatbotId: 'bot-1', chatbotName: '쇼핑몰 도우미' }),
 }));
@@ -21,6 +23,7 @@ const DETAIL: HandoffHistoryDetailResponse = {
   handoff: {
     id: 'h1',
     alias: 'a1b2c3',
+    sessionRef: 'a'.repeat(16),
     startedAt: new Date('2026-09-24T01:00:00.000Z'),
     connectedAt: new Date('2026-09-24T01:00:05.000Z'),
     endedAt: new Date('2026-09-24T01:10:00.000Z'),

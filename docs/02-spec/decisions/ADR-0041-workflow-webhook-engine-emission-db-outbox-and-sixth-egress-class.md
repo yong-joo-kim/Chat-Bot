@@ -142,3 +142,15 @@
 - **비밀 셀프서비스 요구** → No.45 `KeyProvider`로 DB 암호화 저장(결정 7 대체).
 - **세 번째 출구가 같은 전송 부품을 공유** → `legacy-api/transport/*`·`lib/ip-policy.ts`를 `common/outbound/`로 이동(L-2 경로 갱신).
 - **No.39 착수** → 커넥터 허브의 "액션" 템플릿이 이 발송 엔진 위에 올라간다(데이터 연동 = No.26 위, 액션 = No.41 위).
+
+
+---
+
+## 갱신 (2026-09-26 — No.42: 봉투 `channel` 불변 · 원천 파일의 두 번째 포트 공존)
+
+통합 인박스(No.42, **ADR-0042 §5**). 결정 1~9는 **불변**이다.
+
+1. **봉투 `channel: z.enum(['WEB'])`·이벤트 7종 불변**: 인박스는 `WORKFLOW_EVENT_SINK`를 주입·발행하지 않는다. 수동 기록·시뮬레이션은 공개 파이프라인을 타지 않아 `TURN_LOGGED`·상담 이벤트를 만들지 않고, 식별 연결(고객 키·이름)은 봉투에 싣지 않는다(새 외부 전송 목적 — 2차 판단). 봉투 `channel`은 "대화가 들어온 배포 채널"의 의미를 유지한다.
+2. **원천 파일 공존**: `handoff-thread.service.ts`·`conversation-log.service.ts`는 No.41 `emit(`과 No.42 `signal(`(순수 포트 `INBOX_SIGNAL_SINK`)을 각 1줄씩 갖는다 — 순서 emit → signal · 둘 다 await 0 · W-16의 `kind:` 리터럴 개수 불변(인박스 포트의 판별 키는 `signal:`).
+3. **이 포트를 재사용하지 않은 이유**: 상담 이벤트에 `sessionId`가 없고(`sessionRef`만), 단일 제공자 토큰을 팬아웃으로 바꾸면 W-15 모듈 exports·배선이 바뀌며 인박스 처리 실패가 발송 적재 경로와 묶인다.
+4. **2차 스레드 이벤트**(열림·배정·종료 알림) 착수 시: `WorkflowEventType` +3 · 봉투 `source.threadId`만(고객 키·표시 이름 0) · 기록 채널은 `channel`이 아니라 `data.recordChannel` — 봉투 v1 확장 규칙(선택 키) 안에서.

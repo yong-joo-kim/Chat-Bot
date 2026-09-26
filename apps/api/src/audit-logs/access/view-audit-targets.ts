@@ -19,4 +19,8 @@ export const VIEW_AUDIT_TARGETS: readonly ViewAuditTargetDef[] = [
   { controller: 'UnansweredQuestionsController', handler: 'detail', targetType: 'UnansweredQuestion' },
   { controller: 'AuditLogsController', handler: 'list', targetType: 'AuditLog' },
   { controller: 'AuditLogsController', handler: 'findOne', targetType: 'AuditLog' },
+  // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §12.2) — 8 → 11.
+  { controller: 'InboxThreadsController', handler: 'list', targetType: 'InboxThread' },
+  { controller: 'InboxThreadsController', handler: 'getDetail', targetType: 'InboxThread' },
+  { controller: 'InboxCustomersController', handler: 'search', targetType: 'Customer' },
 ];

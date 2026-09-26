@@ -3,7 +3,9 @@ import { evaluateHeaderContrast } from '@chat-bot/shared-types/contrast';
 import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, PublicChatbotConfig } from '@chat-bot/shared-types';
 import { MESSAGES } from '../constants/messages';
 import { createPublicClient, PublicApiError, type PublicApiErrorKind } from '../api/public-client';
-import { getOrCreateSessionId, loadConversationState, saveConversationState } from '../core/session';
+import { getOrCreateSessionId, loadConversationState, resetSession, saveConversationState } from '../core/session';
+import { clearIdentityToken, loadIdentityToken, saveIdentityToken } from '../core/identity-storage';
+import { decodeIdentitySub } from '../core/identity-token';
 import { createInitialState, reducer, type WidgetAction, type WidgetErrorKind } from '../core/store';
 import { createPendingPollConfig, decideNextPollAction, nextPollDelayMs, type PendingPollResultKind } from '../core/pending-poll';
 import {
@@ -37,6 +39,13 @@ export interface WidgetAppOptions {
   /** `data-fullscreen="true"` 또는 `/c/:slug` — 런처 없이 바로 `OPEN` 상태로 시작한다. */
   autoOpen: boolean;
   /** `/c/:slug` 정적 위치(왼쪽 하단 런처 대응은 이 옵션과 무관, config 응답의 `launcherPosition` 반영). */
+  /** [신규 No.42] `data-identity-token` 임베드 속성 — 부팅 시 1회만 읽는다(§6.8). */
+  identityToken?: string;
+}
+
+export interface WidgetAppApi {
+  /** [신규 No.42] 호스트 페이지의 로그인/로그아웃 시점 호출(`window.__ChatBotWidget.identify`, §6.8). */
+  identify: (token: string | null) => void;
 }
 
 function errorKindToMessage(kind: PublicApiErrorKind | WidgetErrorKind): string {
@@ -53,10 +62,17 @@ function errorKindToMessage(kind: PublicApiErrorKind | WidgetErrorKind): string 
 }
 
 /** 위젯 전체 조립 — `core/`(store·session·button-action·pause-schedule)와 `ui/`를 연결한다(§5.2~5.6). */
-export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): void {
+export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): WidgetAppApi {
   const client = createPublicClient(options.apiBase, options.slug);
   let state = createInitialState();
   let disabledPermanently = false;
+
+  // [신규 No.42] 식별 토큰 — `sub` 변경 감지(로그인 전환·로그아웃 시 새 대화)용으로만 디코드한다
+  // (서명 검증은 서버만 한다, §6.8). 비교·반영은 `applyIdentity()` 한 곳에서만 한다(코드 리뷰 R1
+  // H-1). 여기서는 **비교 없이** 이전 저장값을 기준선으로만 채운다 — 기준선을 읽는 것 자체는
+  // "변경"이 아니므로 새 대화로 취급하면 안 된다(그러면 매 부팅마다 리셋된다).
+  let identityToken: string | undefined = loadIdentityToken(options.slug);
+  let identitySub: string | undefined = identityToken ? decodeIdentitySub(identityToken) : undefined;
   // PENDING 폴링 세대 카운터(EX-N2-11) — 도중 새 질문을 보내면 증가시켜 이전 폴링 루프를 폐기한다.
   let pollGeneration = 0;
 
@@ -252,6 +268,44 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   if (options.autoOpen) {
     launcher.root.hidden = true;
   }
+
+  /**
+   * [신규 No.42] 식별 상태를 갱신하는 **유일한** 경로(코드 리뷰 R1 H-1) — 부팅 시(`data-identity-token`
+   * 속성, 멀티페이지 호스트에서 페이지마다 다시 실행됨)와 SPA의 `window.__ChatBotWidget.identify()`
+   * 호출이 전부 이 함수를 거친다. 이전 `sub`(부팅 시에는 `sessionStorage`에 남아 있던 이전 토큰의
+   * `sub`, 이후에는 마지막으로 반영한 `sub`)가 있었는데 새 값이 다르거나 `null`(로그아웃·속성 없음)
+   * 이면 **새 대화**로 전환한다 — `cb.sid`·`cb.state`·상담 토큰 저장소를 지우고 새 `sessionId`를
+   * 만든 뒤 1회 안내한다. 이전 `sub`가 없었고 새 토큰이 오면(로그인) 세션은 그대로 유지한다(서버가
+   * 익명→식별 승격을 처리, R-8).
+   */
+  function applyIdentity(token: string | null): void {
+    const newSub = token ? decodeIdentitySub(token) : undefined;
+    if (identitySub !== undefined && newSub !== identitySub) {
+      resetSession(options.slug);
+      clearHandoffToken(options.slug);
+      handoffPollState = createHandoffPollState();
+      stopHandoffPolling();
+      panel.messages.addSystemText(MESSAGES.identityChangedNotice);
+    }
+    identitySub = newSub;
+    identityToken = token ?? undefined;
+    if (identityToken) {
+      saveIdentityToken(options.slug, identityToken);
+    } else {
+      clearIdentityToken(options.slug);
+    }
+  }
+
+  /** 호스트 페이지의 로그인/로그아웃 시점 호출(`window.__ChatBotWidget.identify`, §6.8). */
+  function identify(token: string | null): void {
+    applyIdentity(token);
+  }
+
+  // 부팅 시 1회 — 위에서 채운 기준선(`sessionStorage`의 이전 토큰 sub)과 이번 임베드 속성 값을
+  // `applyIdentity()`로 비교한다(코드 리뷰 R1 H-1). 속성이 없는 페이지는 `null`로 취급해
+  // `identify(null)`(로그아웃)과 같은 경로를 탄다 — 멀티페이지 호스트에서 로그아웃 뒤 속성을
+  // 더 이상 내려주지 않는 페이지로 이동해도 이전 회원 세션이 이어지지 않는다.
+  applyIdentity(options.identityToken ?? null);
 
   /**
    * [No.44/N2] `delayMs` 뒤, 그 사이 다른 문구로 바뀌지 않았을 때만(자기 문구일 때만) `#cb-status`를
@@ -493,7 +547,7 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     try {
       const res = await client.sendMessage(
         { sessionId, message: input.message, buttonAction: input.buttonAction, state: savedState },
-        { handoffToken: handoffPollState.token },
+        { handoffToken: handoffPollState.token, identityToken },
       );
       saveConversationState(options.slug, res.state);
       if (res.stateReset) {
@@ -567,4 +621,6 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   if (options.autoOpen) {
     void handleOpen();
   }
+
+  return { identify };
 }

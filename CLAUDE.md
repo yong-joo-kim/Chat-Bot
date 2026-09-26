@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RoCHA.AI(페르소나AI) 벤치마킹 기반 챗봇 시스템. git 저장소(`origin` = github.com/yong-joo-kim/Chat-Bot, `main`)이며 기능그룹 단위로 구현·커밋이 진행 중이다.
 
-**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 22(토픽 시스템), 23, 24(하이브리드 CS), 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖), 44(피드백 기반 개선 루프). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
+**구현 완료 기능**(2026-09-24 기준, 그룹별 요약은 `docs/changelog/CHANGELOG.md`): No.1~16, 18(임베딩 ml-worker), 19, 20, 22(토픽 시스템), 23, 24(하이브리드 CS), 25, 26(레거시 API 연동), 27(설문관리), 28, 29, 30(외부 RAG 연동 — 문서 적재는 범위 밖), 44(피드백 기반 개선 루프), 40(환경분리), 45(데이터 거버넌스), 41(업무 자동화). 그 외 번호는 미착수. 기능 상태는 `docs/01-requirements/기능요구사항.md`의 비고 열이 기준이다.
 
 ### 코드 구조
 pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘솔, React+Vite), `apps/widget`(임베드 위젯), `apps/ml-worker`(Python FastAPI — 임베딩/증강), `packages/shared-types`(zod 스키마·API 계약), `packages/dialogue-engine`, `packages/pii-mask`.
@@ -37,7 +37,7 @@ pnpm 모노레포: `apps/api`(NestJS + Prisma/SQLite), `apps/web`(관리자 콘�
 
 **원칙**: 코드는 항상 `docs/01-requirements`/`docs/02-spec`/`docs/03-design` 문서에 근거해 구현하며, 설계 변경은 반드시 `system-architect`를 통해 문서에 먼저 반영한다. 커밋은 사용자가 명시적으로 요청했을 때만 `git-manager`가 수행하고, CI 연동(3단계)·실 배포(4단계)는 사용자가 플랫폼/자격증명을 명시하기 전에는 착수하지 않는다(`docs/05-ops/자동배포.md` §1).
 
-**다음 단계**(2026-09-25 사용자 지시): Stage B(No.26·27·24·22·44) 완료. 타사 벤치마킹 보완 7종을 **No.40 → No.45 → No.41 → No.42 → No.46 → No.43 → No.47** 순으로 `/new-feature` 진행한다(그룹별 PM 결정은 요구사항 단계에서 확인). GPU 고사양 기능(No.17·21·31~38)은 인프라 결정 후 착수한다.
+**다음 단계**(2026-09-25 사용자 지시): Stage B(No.26·27·24·22·44) 완료. 타사 벤치마킹 보완 7종을 **No.40 → No.45 → No.41 → No.42 → No.46 → No.43 → No.47** 순으로 `/new-feature` 진행한다(그룹별 PM 결정은 요구사항 단계에서 확인). GPU 고사양 기능(No.17·21·31~38)은 **인프라 확정(2026-09-26): 운영은 L40S급 GPU 서버, 개발·시연은 RTX 3050(4GB) — 3050에서도 동작하는 경량/양자화 모델 경로 필수, 외부 LLM API는 가능하나 우선순위 낮음(로컬 모델 우선, `llm-provider` 추상화 유지)**. Stage C 이후 착수한다.
 
 It sits alongside sibling projects in `D:\2. Team Source\`:
 - `Auto QA` — pnpm monorepo (apps/api, apps/web, packages/*) — 이 프로젝트가 컨벤션을 재사용하는 대상

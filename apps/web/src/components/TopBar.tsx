@@ -4,10 +4,13 @@ import { MESSAGES } from '../constants/messages';
 import { useUnsavedGuard } from '../context/UnsavedGuardContext';
 import { useAuth } from '../context/AuthContext';
 import { handoffApi } from '../api/handoff';
+import { inboxApi } from '../api/inbox';
+import { ApiError } from '../api/client';
 import { SystemSettingsMenu } from './security/SystemSettingsMenu';
 import { UserMenu } from './security/UserMenu';
 
 const MY_ACTIVE_COUNT_POLL_MS = 60000;
+const INBOX_SUMMARY_POLL_MS = 60000;
 
 /** F-1: 로그인 화면(L1)/부팅 게이트에서는 `AuthContext.user`가 없으므로 이 컴포넌트 자체가 렌더되지 않는다. */
 export function TopBar(): JSX.Element | null {
@@ -44,6 +47,38 @@ export function TopBar(): JSX.Element | null {
     };
   }, [canSeeMonitoring]);
 
+  // [신규 No.42] OI-13 — "통합 인박스" 진입점(`cs:read` 게이트 + `GET /inbox/threads/summary`가 404이면
+  // 기능 꺼짐으로 보고 링크 자체를 숨긴다, omnichannel-inbox-ui-spec.md §3.13).
+  const canSeeInboxPermission = can('cs:read');
+  const [inboxEnabled, setInboxEnabled] = useState(false);
+  const [inboxMine, setInboxMine] = useState(0);
+  useEffect(() => {
+    if (!canSeeInboxPermission) return undefined;
+    let cancelled = false;
+    function fetchSummary(): void {
+      inboxApi
+        .summary()
+        .then((res) => {
+          if (cancelled) return;
+          setInboxEnabled(true);
+          setInboxMine(res.mine);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          if (e instanceof ApiError && e.status === 404) setInboxEnabled(false);
+        });
+    }
+    fetchSummary();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchSummary();
+    }, INBOX_SUMMARY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [canSeeInboxPermission]);
+  const canSeeInbox = canSeeInboxPermission && inboxEnabled;
+
   if (!user) return null;
 
   return (
@@ -65,6 +100,13 @@ export function TopBar(): JSX.Element | null {
             <Link to="/handoff-console">
               {MESSAGES.common.monitoringNav}
               {myActiveCount > 0 && ` (${MESSAGES.handoffConsole.myActiveCount(myActiveCount)})`}
+            </Link>
+          )}
+          {/* [신규 No.42] OI-13 */}
+          {canSeeInbox && (
+            <Link to="/inbox">
+              {MESSAGES.common.inboxNav}
+              {inboxMine > 0 && ` (${MESSAGES.inbox.myAssignedCount(inboxMine)})`}
             </Link>
           )}
         </nav>

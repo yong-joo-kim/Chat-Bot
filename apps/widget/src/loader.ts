@@ -8,7 +8,8 @@ import { createWidgetApp } from './ui/app';
  */
 declare global {
   interface Window {
-    __ChatBotWidget?: { version: string };
+    /** [신규 No.42] `identify` — 호스트 페이지의 로그인/로그아웃 시점 호출(§6.8). */
+    __ChatBotWidget?: { version: string; identify?: (token: string | null) => void };
   }
 }
 
@@ -33,12 +34,16 @@ function boot(): void {
   }
   const mode = scriptEl?.dataset.mode === 'mobile' ? 'mobile' : 'desktop';
   const fullscreen = scriptEl?.dataset.fullscreen === 'true';
+  // [신규 No.42] `data-identity-token` — 서버 렌더 페이지에서 부팅 시 1회 읽는다(§6.8). SPA는
+  // `window.__ChatBotWidget.identify()`를 대신 쓴다(둘 다 있으면 이후의 `identify()` 호출이 이긴다).
+  const identityToken = scriptEl?.dataset.identityToken;
 
   window.__ChatBotWidget = { version: '0.1.0' };
   console.info(`[ChatBotWidget] widget.js v${window.__ChatBotWidget.version} 로드됨`);
 
   const mount = mountWidgetRoot();
-  createWidgetApp(mount, { slug, apiBase, mode, autoOpen: fullscreen });
+  const app = createWidgetApp(mount, { slug, apiBase, mode, autoOpen: fullscreen, identityToken });
+  window.__ChatBotWidget.identify = (token) => app.identify(token);
 }
 
 if (document.readyState === 'loading') {

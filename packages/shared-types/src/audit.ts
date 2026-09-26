@@ -102,6 +102,11 @@ export const AuditTargetType = z.enum([
   'WorkflowTarget',
   'WorkflowSubscription',
   'WorkflowRun',
+  // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §12, ADR-0042) — 고객·스레드·
+  // 태그 목록 CRUD 감사 대상. 30 → 33종.
+  'Customer',
+  'InboxThread',
+  'InboxTag',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -136,6 +141,9 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   WorkflowTarget: '발송 대상',
   WorkflowSubscription: '이벤트 구독',
   WorkflowRun: '업무 요청 실행',
+  Customer: '고객',
+  InboxThread: '고객 스레드',
+  InboxTag: '인박스 태그',
 };
 
 /**

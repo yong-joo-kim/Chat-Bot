@@ -156,6 +156,44 @@ export class RetentionJob implements OnApplicationBootstrap, OnModuleDestroy {
         }
       }
 
+      // [신규 No.42] INBOX_TEXT(전역만) — 항목 본문 소거(스레드 상태와 무관).
+      if (!signal?.stopping() && rowsBudget.remaining > 0) {
+        const days = resolveEffectiveDays('INBOX_TEXT', globalDays, globalPending, null, null, now, bounds);
+        if (days !== null) {
+          const cutoff = computeCutoff(days, now);
+          const affected = await this.purgeBatchLoop(rowsBudget, signal, async () => {
+            const rows = await this.prisma.inboxEntry.findMany({
+              where: { textPurgedAt: null, kind: { not: 'SYSTEM' }, createdAt: { lt: cutoff } },
+              select: { id: true },
+              take: this.batchSize(),
+            });
+            if (rows.length === 0) return 0;
+            return this.writer.purgeInboxEntries(rows.map((r) => r.id), new Date());
+          });
+          affectedByKind.INBOX_TEXT = affected;
+          totalAffected += affected;
+        }
+      }
+
+      // [신규 No.42] CUSTOMER_IDENTITY(전역만) — 마지막 활동 기준, 해시·표시 이름·지문 → null.
+      if (!signal?.stopping() && rowsBudget.remaining > 0) {
+        const days = resolveEffectiveDays('CUSTOMER_IDENTITY', globalDays, globalPending, null, null, now, bounds);
+        if (days !== null) {
+          const cutoff = computeCutoff(days, now);
+          const affected = await this.purgeBatchLoop(rowsBudget, signal, async () => {
+            const rows = await this.prisma.customer.findMany({
+              where: { identityPurgedAt: null, OR: [{ customerKeyHash: { not: null } }, { displayName: { not: null } }], lastActivityAt: { lt: cutoff } },
+              select: { id: true },
+              take: this.batchSize(),
+            });
+            if (rows.length === 0) return 0;
+            return this.writer.purgeCustomerIdentities(rows.map((r) => r.id), new Date());
+          });
+          affectedByKind.CUSTOMER_IDENTITY = affected;
+          totalAffected += affected;
+        }
+      }
+
       // AUDIT_LOGS(전역만) — 행 삭제 + 앵커
       let headSeqAfter: number | null = null;
       let anchorSeqAfter: number | null = null;

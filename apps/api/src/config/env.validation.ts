@@ -194,6 +194,15 @@ const EnvSchema = z.object({
   WORKFLOW_FAILED_PAYLOAD_RETENTION_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   WORKFLOW_PRIVATE_ALLOWLIST: z.string().default(''),
   WORKFLOW_ALLOW_HTTP: envBoolean(false),
+  // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §3.4) — 선택 6종 · 전부 기본값 ·
+  // 기동 조건 아님. 비밀 2규약(`OMNI_IDENTITY_SECRET__*`·`OMNI_CUSTOMER_KEY_SECRET`)은 스키마 밖
+  // (리졸버 1파일이 `process.env`를 직접 읽는다 — O-1).
+  OMNI_INBOX_ENABLED: envBoolean(true),
+  OMNI_IDENTITY_MAX_TTL_HOURS: z.coerce.number().int().min(1).max(24).default(24),
+  OMNI_IDENTITY_CLOCK_SKEW_SEC: z.coerce.number().int().min(0).max(600).default(300),
+  OMNI_INBOX_POLL_MS: z.coerce.number().int().min(3000).max(60000).default(10000),
+  OMNI_NAME_SEARCH_SCAN_LIMIT: z.coerce.number().int().min(100).max(20000).default(2000),
+  OMNI_MERGE_REVERT_HOURS: z.coerce.number().int().min(1).max(168).default(24),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

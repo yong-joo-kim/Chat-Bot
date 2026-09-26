@@ -23,6 +23,8 @@ export function RetentionKindEditor({ kind, currentDays, value, unlimited, minDa
   const msg = MESSAGES.dataGovernance.retention;
   const label = msg.kindLabels[kind];
   const currentText = currentDays === null ? msg.unlimitedDaysLabel : `${currentDays}${msg.daysUnit}`;
+  // [신규 No.42] INBOX_TEXT·CUSTOMER_IDENTITY는 챗봇별 재정의가 없다(omnichannel-inbox-ui-spec.md §3.12).
+  const isGlobalOnly = kind === 'INBOX_TEXT' || kind === 'CUSTOMER_IDENTITY';
   const inputId = `retention-kind-${kind}`;
   const unlimitedId = `${inputId}-unlimited`;
 
@@ -30,6 +32,7 @@ export function RetentionKindEditor({ kind, currentDays, value, unlimited, minDa
     <div className="retention-kind-editor form-field">
       <span className="field-label-static">{label}</span>
       <p className="field-hint">{msg.followGlobalLabel(currentText)}</p>
+      {isGlobalOnly && <p className="field-hint">{msg.kindGlobalOnlyHint}</p>}
       <div className="form-field--inline">
         <label htmlFor={inputId}>{msg.columnNew}</label>
         <input

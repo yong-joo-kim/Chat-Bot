@@ -96,6 +96,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'handoffTextDays',
     'callLogsDays',
     'auditLogsDays',
+    // [신규 No.42]
+    'inboxTextDays',
+    'customerIdentityDays',
     'pendingKinds',
     'pendingEffectiveAt',
   ],
@@ -120,6 +123,11 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   WorkflowSubscription: ['eventType', 'targetId', 'enabled', 'conditions'],
   // 발송 1건 1건은 감사가 아니다(요약 전용) — before/after 없음.
   WorkflowRun: [],
+  // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §12.1) — `displayName`·
+  // `customerKeyHash`·`sessionId`·`text` 0건(O-6·G-18 형식). 요약은 별칭만.
+  Customer: ['kind', 'status', 'ref'],
+  InboxThread: ['status', 'snoozeUntil', 'assigneeUserId', 'assigneeUserName', 'version'],
+  InboxTag: ['name', 'color'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

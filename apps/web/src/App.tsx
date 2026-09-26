@@ -66,6 +66,9 @@ import { LiveSessionListPage } from './pages/handoff-console/LiveSessionListPage
 import { LiveSessionDetailPage } from './pages/handoff-console/LiveSessionDetailPage';
 import { HandoffHistoryListPage } from './pages/handoff-console/HandoffHistoryListPage';
 import { HandoffHistoryDetailPage } from './pages/handoff-console/HandoffHistoryDetailPage';
+import { InboxListPage } from './pages/inbox/InboxListPage';
+import { InboxThreadDetailPage } from './pages/inbox/InboxThreadDetailPage';
+import { InboxTagsPage } from './pages/inbox/InboxTagsPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -194,6 +197,31 @@ export function App(): JSX.Element {
             <Route path="history" element={<HandoffHistoryListPage />} />
             <Route path="history/:handoffId" element={<HandoffHistoryDetailPage />} />
           </Route>
+          {/* [신규 No.42] 옴니채널 통합 인박스 — OI-1·OI-2·OI-8(omnichannel-inbox-ui-spec.md §1). */}
+          <Route
+            path="/inbox"
+            element={
+              <RequirePermission permission="cs:read" menuName={MESSAGES.common.inboxNav}>
+                <InboxListPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/inbox/tags"
+            element={
+              <RequirePermission permission="cs:read" menuName={MESSAGES.common.inboxNav}>
+                <InboxTagsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/inbox/:threadId"
+            element={
+              <RequirePermission permission="cs:read" menuName={MESSAGES.common.inboxNav}>
+                <InboxThreadDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route
             path="/settings/users"
             element={

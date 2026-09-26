@@ -51,6 +51,9 @@ const CHILD_COUNT_LABELS: Record<string, string> = {
   // [신규 No.44] 영구삭제 사전검사 14 → 15종(feedback-loop-설계.md §9.5·ADR-0002 갱신) — 평가
   // 원장은 원천 기록 성격이라 동반 삭제 대상이 아니라 사전검사(409) 대상이다(원장 삭제 코드 0건, F-1).
   messageFeedbacks: '답변 평가',
+  // [신규 No.42] 영구삭제 사전검사 15 → 16종(omnichannel-inbox-설계.md §16·ADR-0002 갱신) — 대화-고객
+  // 연결은 식별 사실·상담원 판단의 원천 기록이라 동반 삭제 대상이 아니라 사전검사(409) 대상이다.
+  customerLinks: '인박스 연결',
 };
 
 const NOT_FOUND_MESSAGE = '요청하신 대상을 찾을 수 없습니다.';
@@ -310,6 +313,7 @@ export class ChatbotsService {
       cannedResponses,
       topics,
       messageFeedbacks,
+      customerLinks,
     ] = await Promise.all([
       this.prisma.intent.count({ where: { chatbotId: id } }),
       this.prisma.keyword.count({ where: { chatbotId: id } }),
@@ -331,6 +335,8 @@ export class ChatbotsService {
       this.prisma.topic.count({ where: { chatbotId: id } }),
       // [신규 No.44] 영구삭제 사전검사 14 → 15종.
       this.prisma.messageFeedback.count({ where: { chatbotId: id } }),
+      // [신규 No.42] 영구삭제 사전검사 15 → 16종.
+      this.prisma.customerLink.count({ where: { chatbotId: id } }),
     ]);
 
     const counts: Record<string, number> = {
@@ -349,6 +355,7 @@ export class ChatbotsService {
       cannedResponses,
       topics,
       messageFeedbacks,
+      customerLinks,
     };
     const nonZero = Object.entries(counts).filter(([, count]) => count > 0);
     if (nonZero.length > 0) {
@@ -410,6 +417,9 @@ export class ChatbotsService {
       // `WorkflowTarget`은 전역이라 무관). 20 → 22테이블. `chatbot.delete` 직전.
       await tx.workflowRun.deleteMany({ where: { chatbotId: id } });
       await tx.workflowSubscription.deleteMany({ where: { chatbotId: id } });
+      // 옴니채널 통합 인박스(No.42) 그룹 추가(omnichannel-inbox-설계.md §16) — 참여 설정은 설정
+      // 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 22 → 23테이블. `chatbot.delete` 직전.
+      await tx.chatbotInboxSetting.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

@@ -38,7 +38,9 @@ vi.mock('../../../context/AuthContext', () => ({
 }));
 
 const BOUNDS = { minConversationDays: 7, minAuditDays: 365, maxDays: 3650, shortenGraceDays: 7 };
-const KINDS: RetentionTargetKind[] = ['CONVERSATION_TEXT', 'UNANSWERED_CLOSED', 'SURVEY_FREE_TEXT', 'HANDOFF_TEXT', 'CALL_LOGS', 'AUDIT_LOGS'];
+// [코드 리뷰 R1 Low] No.42가 늘린 8종 전부를 채운다 — `RetentionTargetKindEnum.options` 기반 순회는
+// `policy.kinds`가 8종을 전부 내려준다는 전제로 컴파일이 강제된다(No.45 관례).
+const KINDS: RetentionTargetKind[] = ['CONVERSATION_TEXT', 'UNANSWERED_CLOSED', 'SURVEY_FREE_TEXT', 'HANDOFF_TEXT', 'CALL_LOGS', 'AUDIT_LOGS', 'INBOX_TEXT', 'CUSTOMER_IDENTITY'];
 
 function makePolicy(overrides: Partial<RetentionPolicyResponse> = {}): RetentionPolicyResponse {
   return {
@@ -73,7 +75,7 @@ describe('DataGovernanceRetentionPage', () => {
     mockCanWrite = true;
   });
 
-  it('조회 성공 시 6종의 현재 유효값을 보여준다', async () => {
+  it('조회 성공 시 8종의 현재 유효값을 보여준다', async () => {
     mockGet.mockResolvedValue(makePolicy());
     renderPage();
 
@@ -165,6 +167,8 @@ describe('DataGovernanceRetentionPage', () => {
         { kind: 'HANDOFF_TEXT', days: 60, source: 'GLOBAL', pending: { days: 60, effectiveAt: new Date('2026-10-03T09:00:00.000Z') } },
         { kind: 'CALL_LOGS', days: 90, source: 'GLOBAL' },
         { kind: 'AUDIT_LOGS', days: 1825, source: 'GLOBAL' },
+        { kind: 'INBOX_TEXT', days: 180, source: 'GLOBAL' },
+        { kind: 'CUSTOMER_IDENTITY', days: 365, source: 'GLOBAL' },
       ],
     });
     mockGet.mockResolvedValue(pendingPolicy);
