@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import type { ChannelType } from '@chat-bot/shared-types';
 import { toKstDayBucket, toKstHourOfDay } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { BannedWordFilterService } from '../banned-words/banned-word-filter.serv
 import { UnansweredCollectorService } from '../learning/unanswered-collector.service';
 import type { InputKind } from '../learning/lib/collect-decision';
 import { maskPii } from '@chat-bot/pii-mask';
+import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
+import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
 
 export interface RecordConversationLogParams {
   /** 공개 대화 API의 `messageId`를 그대로 쓴다(§8.3) — 향후 피드백(No.44)이 이 값을 앵커로 쓸 수 있다. */
@@ -60,6 +62,7 @@ export class ConversationLogService {
     private readonly prisma: PrismaService,
     private readonly bannedWordFilter: BannedWordFilterService,
     private readonly collector: UnansweredCollectorService,
+    @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
   ) {}
 
   async record(params: RecordConversationLogParams): Promise<void> {
@@ -76,7 +79,7 @@ export class ConversationLogService {
       const dayBucket = toKstDayBucket(now);
       const hourBucket = toKstHourOfDay(now);
 
-      await this.prisma.conversationLog.create({
+      const created = await this.prisma.conversationLog.create({
         data: {
           ...(params.id ? { id: params.id } : {}),
           chatbotId: params.chatbotId,
@@ -119,6 +122,21 @@ export class ConversationLogService {
         apiNotice: params.apiNotice ?? false,
         surveyTurn: params.surveyTurn ?? false,
         handoffTurn: params.handoffTurn ?? false,
+      });
+
+      // [신규 No.41] 적재 성공 뒤(§6.2) — 연속 미응답 판정은 구독 캐시에 없으면 즉시 반환한다(DB 0).
+      this.workflowEvents?.emit({
+        kind: 'TURN_LOGGED',
+        chatbotId: params.chatbotId,
+        sessionId: params.sessionId,
+        channelType: params.channelType,
+        messageId: created.id,
+        isAnswered: params.isAnswered,
+        blockedByFilter: params.blockedByFilter ?? false,
+        surveyTurn: params.surveyTurn ?? false,
+        handoffTurn: params.handoffTurn ?? false,
+        apiNotice: params.apiNotice ?? false,
+        occurredAt: now,
       });
     } catch (e) {
       // 경고 로그에도 메시지 본문을 넣지 않는다(chatbotId/sessionId/오류코드만, NFR-S4).

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { maskPii } from '@chat-bot/pii-mask';
 import { toKstDayBucket } from '@chat-bot/shared-types';
@@ -9,6 +9,8 @@ import { BannedWordFilterService } from '../banned-words/banned-word-filter.serv
 import { buildAnsweredRows, buildSkippedRow } from './lib/answer-rows';
 import { guardAbandonedEvent, guardCompletedEvent, guardQuestionEvent } from './lib/write-guard';
 import type { ResponseRowSnapshot } from './lib/write-guard';
+import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
+import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
 
 export interface SurveyResponseApplyContext {
   chatbotId: string;
@@ -34,6 +36,7 @@ export class SurveyResponseService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bannedWordFilter: BannedWordFilterService,
+    @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
   ) {}
 
   async apply(events: readonly SurveyEvent[], ctx: SurveyResponseApplyContext): Promise<void> {
@@ -174,6 +177,19 @@ export class SurveyResponseService {
         if (isDuplicate && !row.isDuplicate) {
           await tx.surveyAnswer.updateMany({ where: { responseId: row.id }, data: { isDuplicate: true } });
         }
+      });
+      // [신규 No.41] 트랜잭션 성공 뒤(§6.2) — S-2·S-11 쓰기 불변.
+      this.workflowEvents?.emit({
+        kind: 'SURVEY_COMPLETED',
+        chatbotId: ctx.chatbotId,
+        sessionId: ctx.sessionId,
+        channelType: ctx.channelType,
+        surveyId: survey.id,
+        surveyName: survey.name,
+        responseId: row.id,
+        isDuplicate,
+        missingRequiredCount,
+        occurredAt: ctx.now,
       });
       return;
     }

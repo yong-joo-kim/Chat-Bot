@@ -40,6 +40,7 @@ import { HandoffGateService } from '../handoff/handoff-gate.service';
 import { bundleSourceOf } from '../environment/serving/lib/bundle-source';
 import { VersionBundleService, ServingVersionUnavailableError } from '../environment/serving/version-bundle.service';
 import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
+import { WorkflowTriggerService } from '../workflow/triggers/workflow-trigger.service';
 
 /** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
  * 않는다 — packages/dialogue-engine 변경 0). */
@@ -83,6 +84,9 @@ export class PublicConversationService {
     // [신규 No.40 — 16번째 인자(끝), 선택] 초안 경로 호출 불변 — 이 서비스가 버전 경로 유일 진입점이다
     // (E-9). 선택 인자라 기존 15인자 생성자 호출(단위 시험)은 무수정 통과한다(§24.2 회귀 감시).
     private readonly versionBundles?: VersionBundleService,
+    // [신규 No.41 — 17번째 인자(끝), 선택] `WORKFLOW` 노드 방출 적재(§6.1). 선택 인자라 기존 16인자
+    // 생성자 호출(단위 시험)은 무수정 통과한다.
+    private readonly workflowTriggers?: WorkflowTriggerService,
   ) {}
 
   /**
@@ -291,6 +295,19 @@ export class PublicConversationService {
         conversationLogId: messageId,
         now,
         bundle,
+      });
+    }
+
+    // ④.7 [신규 No.41] 업무 자동화 워크플로우 — `WORKFLOW` 방출이 있을 때만(키 부재 = 분기 1개 ·
+    // 추가 조회 0). 예외를 던지지 않는다(내부 try/catch — 경고 로그만, §6.1). 봇 응답은 바뀌지 않는다.
+    if (result.workflowEvents && result.workflowEvents.length > 0) {
+      await this.workflowTriggers?.enqueueNodeEmissions(result.workflowEvents, {
+        chatbot: { id: chatbot.id, name: chatbot.name },
+        sessionId: dto.sessionId,
+        messageId,
+        channel: 'WEB',
+        servedVersionId: serving.versionId ?? null,
+        now,
       });
     }
 

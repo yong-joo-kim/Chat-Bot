@@ -10,6 +10,7 @@ import { SurveyResponsesModule } from '../survey-responses/survey-responses.modu
 import { HandoffModule } from '../handoff/handoff.module';
 import { FeedbackModule } from '../feedback/feedback.module';
 import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
+import { WorkflowTriggersModule } from '../workflow/triggers/workflow-triggers.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -43,6 +44,7 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     HandoffModule,
     FeedbackModule,
     EnvironmentServingModule,
+    WorkflowTriggersModule,
   ],
   controllers: [PublicConversationController],
   providers: [

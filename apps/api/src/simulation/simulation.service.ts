@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { buildDialogueIndex, judgeBand, mergeOverlay, resolveTurn } from '@chat-bot/dialogue-engine';
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
-import type { ApiCallSuspension, DialogueTurnResult } from '@chat-bot/dialogue-engine';
+import type { ApiCallSuspension, DialogueTurnResult, WorkflowEmission } from '@chat-bot/dialogue-engine';
 import { maskPii } from '@chat-bot/pii-mask';
 import {
   hasPermission,
@@ -21,6 +21,7 @@ import {
   type SimulateApiMode,
   type SimulateRequestDto,
   type SimulateResponse,
+  type WorkflowStepView,
 } from '@chat-bot/shared-types';
 import { ApiException } from '../common/api.exception';
 import type { SessionUser } from '../common/auth/session-context';
@@ -47,6 +48,8 @@ import { computeAssetCounts, enrichNames } from './lib/resolution-enrich';
 import { buildSurveyStepView } from './lib/survey-step';
 import { EnvironmentReadService } from '../environment/core/environment-read.service';
 import { VersionBundleService } from '../environment/serving/version-bundle.service';
+import { WorkflowCatalogService } from '../workflow/catalog/workflow-catalog.service';
+import { processFieldValue } from '../workflow/triggers/lib/field-values';
 
 /**
  * No.10 응답 테스트/시뮬레이션(FR-10-1~31). **읽기 전용** — `ConversationLogService`를 주입하지
@@ -75,6 +78,8 @@ export class SimulationService {
     // 조회(VersionBundleService) 2개를 추가한다(설계서는 1개만 언급했으나 STAGING/PROD 포인터
     // 해석에 둘 다 필요하다 — §27 I-6 참고).
     private readonly environmentRead: EnvironmentReadService,
+    // [신규 No.41] 모의 표시 전용 — 발송·적재는 하지 않는다(W-9 — `WorkflowTriggerService` 미주입).
+    private readonly workflowCatalog: WorkflowCatalogService,
     private readonly versionBundles: VersionBundleService,
   ) {}
 
@@ -192,6 +197,7 @@ export class SimulationService {
     const matchedTopicId = resolveAnsweredTopicId(bundle, result, true);
     const topicsMap = matchedTopicId ? await this.loadTopicsIfAny(chatbotId) : new Map<string, { id: string; name: string; enabled: boolean }>();
     const answeredTopic = this.answeredTopicFromMap(topicsMap, matchedTopicId);
+    const workflowSteps = result.workflowEvents && result.workflowEvents.length > 0 ? await this.buildWorkflowSteps(result.workflowEvents) : undefined;
 
     return {
       input: result.input,
@@ -219,7 +225,43 @@ export class SimulationService {
       surveyStep: buildSurveyStepView(result.trace, result.surveyEvents, bundle, dto.surveyPreview),
       answeredTopic,
       ...(source.resolvedTarget ? { target: source.resolvedTarget } : {}),
+      ...(workflowSteps ? { workflowSteps } : {}),
     };
+  }
+
+  /** [신규 No.41] §13.6 — 모의 표시(발송·적재 0). 대상 카탈로그 1회 조회. */
+  private async buildWorkflowSteps(emissions: readonly WorkflowEmission[]): Promise<WorkflowStepView[]> {
+    const targets = await this.workflowCatalog.findForEnqueue(emissions.map((e) => e.targetId));
+    return emissions.map((emission) => {
+      const target = targets.get(emission.targetId);
+      const targetState: WorkflowStepView['targetState'] = !target
+        ? 'MISSING'
+        : !target.enabled
+          ? 'DISABLED'
+          : target.paused
+            ? 'PAUSED'
+            : !target.secretsOk
+              ? 'SECRET_MISSING'
+              : 'READY';
+      const processed = emission.fields.map((f) => processFieldValue(f.name, f.value, f.source, target?.allowRawPersonalData ?? false));
+      return {
+        nodeId: emission.nodeId,
+        targetId: emission.targetId,
+        targetName: target?.name ?? null,
+        targetState,
+        actionKey: emission.actionKey,
+        fields: processed.map((p, i) => ({
+          name: p.name,
+          value: p.value,
+          source: emission.fields[i].source,
+          ...(p.masked ? { masked: true as const } : {}),
+        })),
+        bindingMissing: !!emission.bindingMissing,
+        rawPersonalData: target?.allowRawPersonalData ?? false,
+        personalDataMasked: processed.some((p) => p.masked),
+        mock: true as const,
+      };
+    });
   }
 
   /**

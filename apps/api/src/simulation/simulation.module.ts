@@ -9,6 +9,7 @@ import { ApiConnectionCatalogModule } from '../api-connections/catalog/api-conne
 import { TopicsModule } from '../topics/topics.module';
 import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
 import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
+import { WorkflowCatalogModule } from '../workflow/catalog/workflow-catalog.module';
 import { SimulationController } from './simulation.controller';
 import { SimulationService } from './simulation.service';
 
@@ -31,6 +32,7 @@ import { SimulationService } from './simulation.service';
     TopicsModule,
     EnvironmentCoreModule,
     EnvironmentServingModule,
+    WorkflowCatalogModule,
   ],
   controllers: [SimulationController],
   providers: [SimulationService],

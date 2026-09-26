@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { maskPii } from '@chat-bot/pii-mask';
@@ -10,6 +10,8 @@ import { BannedWordFilterService } from '../banned-words/banned-word-filter.serv
 import { generateHandoffToken, hashHandoffToken } from './lib/handoff-token';
 import { resolveEndSystemMessage } from './lib/handoff-notices';
 import { enableSecureDelete } from './handoff-secure-delete.query';
+import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
+import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
 
 function isUniqueConstraintViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
@@ -85,12 +87,13 @@ export class HandoffThreadService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bannedWordFilter: BannedWordFilterService,
+    @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
   ) {}
 
   /** 개입 생성(관리자 ④) — 부분 유니크 위반 시 현재 담당자 이름을 담아 409로 변환한다(P-8). */
   async createHandoff(input: CreateHandoffInput): Promise<{ id: string }> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const session = await tx.handoffSession.create({
           data: {
             chatbotId: input.chatbotId,
@@ -126,6 +129,18 @@ export class HandoffThreadService {
         await tx.handoffSession.update({ where: { id: session.id }, data: { lastSeq: 1 } });
         return { id: session.id };
       });
+      // [신규 No.41] 트랜잭션 성공 뒤에만 발행한다(§6.2 — 부분 유니크 + 트랜잭션 성공 1회가 1회 근거).
+      this.workflowEvents?.emit({
+        kind: 'HANDOFF_STARTED',
+        chatbotId: input.chatbotId,
+        handoffId: result.id,
+        sessionRef: input.sessionRef,
+        channelType: input.channelType,
+        alertLevelAtStart: input.alertLevelAtStart,
+        consecutiveUnansweredAtStart: input.consecutiveUnansweredAtStart,
+        occurredAt: input.now,
+      });
+      return result;
     } catch (e) {
       if (isUniqueConstraintViolation(e)) {
         const active = await this.prisma.handoffSession.findFirst({
@@ -262,7 +277,7 @@ export class HandoffThreadService {
    */
   async endHandoff(input: EndHandoffInput): Promise<{ ended: boolean }> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         await enableSecureDelete(tx);
 
         const updated = await tx.handoffSession.updateMany({
@@ -304,6 +319,17 @@ export class HandoffThreadService {
 
         return { ended: updated.count === 1 };
       });
+      // [신규 No.41] `ended===true`일 때만 발행한다(§6.2 — 상태 CAS가 1회 근거).
+      if (result.ended) {
+        this.workflowEvents?.emit({
+          kind: 'HANDOFF_ENDED',
+          chatbotId: input.chatbotId,
+          handoffId: input.handoffSessionId,
+          reason: input.reason,
+          occurredAt: input.now,
+        });
+      }
+      return result;
     } catch (e) {
       this.logger.warn(`endHandoff 실패: code=${prismaErrorCode(e)}`);
       throw new ApiException('HANDOFF_UNAVAILABLE', 503, '상담 종료 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.');

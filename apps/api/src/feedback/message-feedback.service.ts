@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { MessageFeedback as PrismaMessageFeedback } from '@prisma/client';
 import { FEEDBACK_LIMITS, classifyFeedbackTarget } from '@chat-bot/shared-types';
@@ -9,6 +9,8 @@ import { UnansweredCollectorService } from '../learning/unanswered-collector.ser
 import { isUuid } from '../conversation/lib/is-uuid';
 import { decideFeedbackWrite } from './lib/feedback-write-decision';
 import { verifyFeedbackTarget } from './lib/feedback-verify';
+import { WORKFLOW_EVENT_SINK } from '../common/workflow/workflow-event.port';
+import type { WorkflowEventSink } from '../common/workflow/workflow-event.port';
 
 const NOT_FOUND_MESSAGE = '지금은 의견을 받을 수 없어요.';
 const CLOSED_MESSAGE = '더 이상 바꿀 수 없어요.';
@@ -48,6 +50,7 @@ export class MessageFeedbackService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly collector: UnansweredCollectorService,
+    @Optional() @Inject(WORKFLOW_EVENT_SINK) private readonly workflowEvents?: WorkflowEventSink,
   ) {}
 
   async submit(input: { chatbotId: string; messageId: string; sessionId: string; rating: FeedbackRating }): Promise<{ rating: FeedbackRating }> {
@@ -178,6 +181,20 @@ export class MessageFeedbackService {
       data: { queueOutcome: 'CLAIMED' },
     });
     if (claim.count === 0) return; // 다른 요청이 이미 선점했다.
+
+    // [신규 No.41] 큐 선점 CAS 성공 직후·수집기 호출 전(수집 실패와 무관, §6.2) — F-2·F-15 쓰기 불변.
+    this.workflowEvents?.emit({
+      kind: 'FEEDBACK_NEGATIVE',
+      chatbotId: log.chatbotId,
+      sessionId: log.sessionId ?? '',
+      channelType: log.channelType,
+      feedbackId,
+      messageId: log.id,
+      targetKind: classifyFeedbackTarget(log).kind,
+      targetId: classifyFeedbackTarget(log).id,
+      answeredByRag: log.answeredByRag,
+      occurredAt: new Date(),
+    });
 
     try {
       const result = await this.collector.collectNegativeFeedback({
