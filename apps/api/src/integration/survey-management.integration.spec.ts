@@ -14,6 +14,15 @@ import { toKstDayBucket } from '@chat-bot/shared-types';
 
 const API_ROOT = join(__dirname, '..', '..');
 
+async function safeCleanupTmpDir(dir: string): Promise<void> {
+  await new Promise((r) => setTimeout(r, 300));
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch {
+    // 정리 실패는 판정에 영향 없음(Windows 파일 핸들 지연 해제 — 기존 그룹들과 동일한 완화책, No.41 시험 회차에서 발견·적용).
+  }
+}
+
 interface ApiResponse<T = unknown> {
   status: number;
   body: T;
@@ -114,8 +123,8 @@ describe('설문관리(No.27) 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
+    await safeCleanupTmpDir(tmpDir);
+  }, 15_000);
 
   function admin<T = unknown>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
     return jsonRequest(method, `${baseUrl}${path}`, body);

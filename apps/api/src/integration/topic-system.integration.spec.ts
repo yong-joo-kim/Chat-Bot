@@ -624,7 +624,7 @@ describe('토픽 시스템(No.22) 통합 시험', () => {
       await pollUntil(
         () => prisma.embeddingVector.count({ where: { chatbotId, ownerId: activeIntentId, status: 'READY' } }),
         (n) => n > 0,
-        { maxWaitMs: 10_000, label: '활성 의도 임베딩 색인 완료' },
+        { maxWaitMs: 18_000, label: '활성 의도 임베딩 색인 완료' }, // [test-automation 2026-09-26 — No.41 3회 회귀 확인 중 재현] 전체 스위트 부하에서 배경 재색인이 10초를 넘겨 시간 초과한 사례가 있었다(단독 실행은 항상 통과) — 바깥 it() 타임아웃(20_000ms) 안에서 여유를 넉넉히 뒀다.
       );
 
       // (참고) 색인 자체는 토픽과 무관하게(textHash 기준) 이루어질 수 있다 — 제외는 매칭 시점의
