@@ -29,6 +29,7 @@ import { ReferenceCheckService } from '../dialogue-common/reference-check.servic
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { collectAssetRefs } from '../dialogue-common/lib/asset-ref-graph';
 import { ApiConnectionCatalogService } from '../api-connections/catalog/api-connection-catalog.service';
+import { WorkflowCatalogService } from '../workflow/catalog/workflow-catalog.service';
 import { NodeRowWithLinks, parseOutputs, toDialogNodeEntity, toDialogNodeResponse } from './dialog-node.mapper';
 import { dedupeIds } from './lib/node-links';
 import { buildConditionSummary, extractOutputTypes } from './lib/node-condition-summary';
@@ -56,7 +57,16 @@ export class DialogNodesService {
     private readonly auditLogService: AuditLogService,
     private readonly apiConnectionCatalog: ApiConnectionCatalogService,
     private readonly topicLookup: TopicLookupService,
+    private readonly workflowCatalog: WorkflowCatalogService,
   ) {}
+
+  /** [신규 No.41] 노드당 `WORKFLOW` 아웃풋 ≤3(§4.1 · FR-WF2-8). */
+  private assertWorkflowOutputLimit(outputs: DialogOutput[]): void {
+    const count = outputs.filter((o) => o.type === 'WORKFLOW').length;
+    if (count > 3) {
+      throw new ApiException('OUTPUT_PAYLOAD_INVALID', 400, '노드 하나에 업무 요청 보내기 아웃풋은 최대 3개까지 등록할 수 있습니다.');
+    }
+  }
 
   /** [신규 No.22] START/FALLBACK 노드는 항상 공통이다 — 생성·수정·유형 변경 전부(§5.2). */
   private assertNotSystemNodeWithTopic(nodeType: DialogNodeType, topicId: string | null | undefined): void {
@@ -167,6 +177,17 @@ export class DialogNodesService {
       surveyRefs.filter((r) => !foundSet.has(r.id)).forEach((r) => details.push({ field: r.field, message: r.id }));
     }
 
+    // [신규 No.41] `WORKFLOW`의 `targetId`(전역 자원 — 챗봇 스코프 아님, §12.5).
+    const workflowRefs: Array<{ id: string; field: string }> = [];
+    input.outputs.forEach((o, i) => {
+      if (o.type === 'WORKFLOW') workflowRefs.push({ id: o.payload.targetId, field: `outputs.${i}.payload.targetId` });
+    });
+    if (workflowRefs.length > 0) {
+      const targetIds = new Set(workflowRefs.map((r) => r.id));
+      const found = await this.workflowCatalog.findForEnqueue([...targetIds]);
+      workflowRefs.filter((r) => !found.has(r.id)).forEach((r) => details.push({ field: r.field, message: r.id }));
+    }
+
     if (details.length > 0) {
       throw new ApiException('INVALID_REFERENCE', 404, '선택한 항목 중 존재하지 않는 참조가 있습니다.', details);
     }
@@ -178,6 +199,7 @@ export class DialogNodesService {
     const nameNormalized = normalizeText(name);
     this.assertNoLegacyApiOutputs(dto.outputs);
     this.assertNoLegacySurveyOutputs(dto.outputs);
+    this.assertWorkflowOutputLimit(dto.outputs);
     await this.assertNameFree(chatbotId, nameNormalized);
     await this.assertNodeTypeSingleton(chatbotId, dto.nodeType);
     await this.validateReferences(chatbotId, dto);
@@ -329,6 +351,7 @@ export class DialogNodesService {
     if (dto.outputs !== undefined) {
       this.assertNoLegacyApiOutputs(dto.outputs);
       this.assertNoLegacySurveyOutputs(dto.outputs);
+      this.assertWorkflowOutputLimit(dto.outputs);
     }
 
     let name = current.name;
@@ -511,7 +534,16 @@ export class DialogNodesService {
     }
     const apiConnections = await this.apiConnectionCatalog.designInfo([...connectionIds]);
 
-    const engineReport = validateDialogueDesign(bundle, new Date(), { apiConnections });
+    // [신규 No.41] `WORKFLOW`가 있을 때만 카탈로그 1회 조회(엔진 순수성 · 추가 조회 0 — §5.7).
+    const workflowTargetIds = new Set<string>();
+    for (const node of bundle.dialogNodes) {
+      for (const output of node.outputs) {
+        if (output.type === 'WORKFLOW') workflowTargetIds.add(output.payload.targetId);
+      }
+    }
+    const workflowTargets = workflowTargetIds.size > 0 ? await this.workflowCatalog.designInfo([...workflowTargetIds]) : undefined;
+
+    const engineReport = validateDialogueDesign(bundle, new Date(), { apiConnections, ...(workflowTargets ? { workflowTargets } : {}) });
 
     // [신규 No.22 — §7.3] 토픽 규칙 4종을 엔진 결과 뒤에 합친다(엔진 코드 변경 0). 토픽이 없는
     // 챗봇은 +1 조회만 하고 결과는 바이트 동일이다(AC-TP4-4).

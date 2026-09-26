@@ -13,6 +13,8 @@ import { promptOutputsForSlot, startContextSession } from './context-session';
 import { startSurveySession } from './survey-session';
 import { bindRequest } from './api-call';
 import type { ApiSuspensionRequest, CompletedFormInfo } from './api-call';
+import { bindWorkflowOutput } from './workflow-output';
+import type { WorkflowEmission } from './workflow-output';
 
 function textOutput(text: string): DialogOutput {
   return { type: 'TEXT', payload: { text } };
@@ -98,6 +100,8 @@ export interface ExecuteOutputsResult {
   surveyStarted?: { session: SurveySessionState; event: SurveyEvent };
   /** [No.27] 이번 실행에서 건너뛴 설문 사유 목록(0건 폴백 문구 선택용). */
   surveySkips?: SurveySkipReason[];
+  /** [No.41] 1건 이상일 때만 키가 있다(§5.4). */
+  workflowEmissions?: WorkflowEmission[];
 }
 
 interface QueueItem {
@@ -129,6 +133,7 @@ export function executeOutputs(
   let suspended: ApiSuspensionRequest | undefined;
   let surveyStarted: { session: SurveySessionState; event: SurveyEvent } | undefined;
   const surveySkips: SurveySkipReason[] = [];
+  const workflowEmissions: WorkflowEmission[] = [];
   const sourceNodeId = opts.sourceNodeId ?? '';
   let queue: QueueItem[] = startOutputs.map((output, index) => ({ output, nodeId: sourceNodeId, index }));
 
@@ -258,6 +263,18 @@ export function executeOutputs(
         out.push(textOutput(API_FAILURE_NOTICE));
         break outer;
       }
+
+      case 'WORKFLOW': {
+        // [No.41] §5.4 — 정지하지 않는다 · 사용자 출력에 추가하지 않는다 · 뒤 아웃풋은 계속 실행한다.
+        const emission = bindWorkflowOutput(o.payload, item.nodeId, item.index, opts.completedForm);
+        workflowEmissions.push(emission);
+        trace.push({
+          stage: 'OUTPUT',
+          code: emission.bindingMissing ? 'WORKFLOW_BINDING_MISSING' : 'WORKFLOW_EMITTED',
+          targetId: o.payload.targetId,
+        });
+        break;
+      }
     }
   }
 
@@ -283,5 +300,6 @@ export function executeOutputs(
     hops,
     ...(surveyStarted ? { surveyStarted } : {}),
     ...(surveySkips.length > 0 ? { surveySkips } : {}),
+    ...(workflowEmissions.length > 0 ? { workflowEmissions } : {}),
   };
 }

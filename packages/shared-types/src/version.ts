@@ -407,6 +407,9 @@ export const RestoreWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('TOPIC_EXPOSURE_CHANGE'), exposed: z.number().int().nonnegative(), hidden: z.number().int().nonnegative() }),
   // [No.40 신설] 환경 분리 — 모드 켜짐일 때만. 복원은 초안에만 적용된다(운영·스테이징 불변, §13.1).
   z.object({ code: z.literal('ENV_DRAFT_ONLY'), prodVersionNo: z.number().int().positive(), stagingVersionNo: z.number().int().positive().nullable() }),
+  // [No.41 신설] 업무 자동화 워크플로우 — 전부 blocker 아님(대상은 전역·스냅샷 밖, ADR-0041 §8).
+  z.object({ code: z.literal('WORKFLOW_TARGET_MISSING'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('WORKFLOW_TARGET_DISABLED'), count: z.number().int().nonnegative() }),
 ]);
 export type RestoreWarning = z.infer<typeof RestoreWarningSchema>;
 

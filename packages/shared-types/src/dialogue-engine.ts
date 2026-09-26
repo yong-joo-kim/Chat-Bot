@@ -192,6 +192,9 @@ export const TraceCodeEnum = z.enum([
   'SURVEY_COMPLETED',
   'SURVEY_ABANDONED',
   'SURVEY_SKIPPED',
+  // 업무 자동화 워크플로우(No.41) 추가 코드 — §5.4. trace에 필드 값·대상 주소를 넣지 않는다(targetId만).
+  'WORKFLOW_EMITTED',
+  'WORKFLOW_BINDING_MISSING',
 ]);
 export type TraceCode = z.infer<typeof TraceCodeEnum>;
 
@@ -279,6 +282,12 @@ export const DesignIssueCode = z.enum([
   'CROSS_TOPIC_REFERENCE',
   'CROSS_TOPIC_DUPLICATE_EXAMPLE',
   'NO_LIVE_ENTRY_POINT',
+  // [신규 No.41] 업무 자동화 워크플로우 설계 점검 5종 — §5.7(⑧ BROKEN_REFERENCE는 기존 코드 재사용).
+  'WORKFLOW_SLOT_BINDING_UNREACHABLE',
+  'WORKFLOW_TARGET_UNAVAILABLE',
+  'WORKFLOW_NO_FIELDS',
+  'WORKFLOW_ONLY_OUTPUT',
+  'WORKFLOW_RAW_PERSONAL_DATA',
 ]);
 export type DesignIssueCode = z.infer<typeof DesignIssueCode>;
 
@@ -332,6 +341,9 @@ export interface FlowNode {
   via: 'ROOT' | 'DIALOG_MOVE' | 'BUTTON_NODE' | 'API_BRANCH' | 'SURVEY_COMPLETE';
   repeated: boolean;
   children: FlowNode[];
+  /** [신규 No.41 — 프런트엔드 계약 보강] WORKFLOW 아웃풋을 가진 노드에만 존재한다(흐름 미리보기 🔗
+   * 아이콘, WF5). 없으면 키 자체를 생략한다 — 워크플로 노드가 0개인 챗봇은 flow 응답 바이트가 그대로다. */
+  hasWorkflowOutput?: true;
 }
 
 export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
@@ -342,6 +354,7 @@ export const FlowNodeSchema: z.ZodType<FlowNode> = z.lazy(() =>
     via: z.enum(['ROOT', 'DIALOG_MOVE', 'BUTTON_NODE', 'API_BRANCH', 'SURVEY_COMPLETE']),
     repeated: z.boolean(),
     children: z.array(FlowNodeSchema),
+    hasWorkflowOutput: z.literal(true).optional(),
   }),
 );
 

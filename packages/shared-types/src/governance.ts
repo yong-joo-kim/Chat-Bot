@@ -7,16 +7,18 @@ export type GovernanceMode = z.infer<typeof GovernanceMode>;
 export const PiiMaskModeSchema = z.enum(['PARTIAL', 'FULL']);
 export type PiiMaskMode = z.infer<typeof PiiMaskModeSchema>;
 
-export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API']);
+// [신규 No.41] 6번째 클래스 `WORKFLOW_WEBHOOK`(업무 자동화 웹훅) — ADR-0041 §6.
+export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API', 'WORKFLOW_WEBHOOK']);
 export type EgressExitId = z.infer<typeof EgressExitId>;
 
-export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT']);
+export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT', 'WORKFLOW_PAYLOAD']);
 export type EgressDataKind = z.infer<typeof EgressDataKind>;
 
 export const EgressDecision = z.enum(['ALLOWED', 'BLOCKED', 'NOT_CONFIGURED', 'NOT_ENFORCED']);
 export type EgressDecision = z.infer<typeof EgressDecision>;
 
-export const EncryptedFieldId = z.enum(['HANDOFF_RAW_TEXT', 'HANDOFF_TEXT', 'SURVEY_TEXT_VALUE']);
+// [신규 No.41] 발송함 본문(재시도용 일시 보관) — 4번째 암호화 대상(ADR-0041 §7). 백필·재암호화 잡 제외 대상.
+export const EncryptedFieldId = z.enum(['HANDOFF_RAW_TEXT', 'HANDOFF_TEXT', 'SURVEY_TEXT_VALUE', 'WORKFLOW_PAYLOAD']);
 export type EncryptedFieldId = z.infer<typeof EncryptedFieldId>;
 
 export const RetentionTargetKind = z.enum([
@@ -170,7 +172,10 @@ export const GovernanceMapResponseSchema = z.object({
         configured: z.boolean(),
         host: z.string().nullable(),
         dataKind: EgressDataKind,
-        masked: z.enum(['YES', 'NO', 'PER_CONNECTION']),
+        // [신규 No.41 — 프런트엔드 계약 보강] 'PER_TARGET' — 워크플로 웹훅 행 전용(대상별 원문 허용
+        // 토글, §9.1). 'PER_CONNECTION'(레거시 연동)과 의미는 같되 이름을 구분해 화면이 "대상"·"연동"
+        // 문구를 갈라 쓸 수 있게 한다.
+        masked: z.enum(['YES', 'NO', 'PER_CONNECTION', 'PER_TARGET']),
         decision: EgressDecision,
         rawTextOffHost: z.literal(true).optional(),
       }),
@@ -186,6 +191,22 @@ export const GovernanceMapResponseSchema = z.object({
         blockedLast24h: z.number().int(),
       }),
     ),
+    /** [신규 No.41] 발송 대상이 1개 이상일 때만 채워진다(대상 0개 설치는 바이트 동일, FR-0-172). */
+    workflowTargets: z
+      .array(
+        z.object({
+          targetId: z.string().uuid(),
+          name: z.string(),
+          host: z.string(),
+          enabled: z.boolean(),
+          paused: z.boolean(),
+          decision: EgressDecision,
+          allowRawPersonalData: z.boolean(),
+          failedLast24h: z.number().int().nonnegative(),
+          payloadRetained: z.number().int().nonnegative(),
+        }),
+      )
+      .optional(),
   }),
   encryption: z.object({
     enabled: z.boolean(),
@@ -224,6 +245,8 @@ export const GovernanceMapResponseSchema = z.object({
     rawPersonalDataConnections: z.number().int(),
     externalLlmAugmentation: z.boolean(),
     piiMaskMode: PiiMaskModeSchema,
+    /** [신규 No.41] 원문 개인정보 전송을 허용한 업무 자동화 대상 수(대상 0개면 키 자체가 없다). */
+    rawPersonalDataWorkflowTargets: z.number().int().nonnegative().optional(),
   }),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

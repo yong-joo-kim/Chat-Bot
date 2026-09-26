@@ -172,6 +172,9 @@ export const ApiErrorCode = z.enum([
   // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §15.3, ADR-0040) — 2종.
   'EGRESS_HOST_NOT_ALLOWED',
   'RETENTION_OUT_OF_RANGE',
+  // 업무 자동화 워크플로우(No.41) 그룹 추가(workflow-automation-설계.md §12.4, ADR-0041) — 2종.
+  'WORKFLOW_TARGET_IN_USE',
+  'WORKFLOW_RUN_NOT_RETRYABLE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

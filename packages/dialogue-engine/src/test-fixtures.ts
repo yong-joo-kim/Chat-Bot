@@ -119,6 +119,23 @@ export function apiConditionOutputV2(overrides: {
   } as unknown as DialogOutput;
 }
 
+/** [No.41] "업무 요청 보내기" 아웃풋 fixture. */
+export function workflowOutput(overrides: {
+  targetId?: string;
+  actionKey?: string;
+  fields?: Array<{ name: string; value: { kind: 'CONST'; value: string } | { kind: 'SLOT'; contextVariableId: string; slotName: string } }>;
+} = {}): DialogOutput {
+  return {
+    type: 'WORKFLOW',
+    payload: {
+      version: 1,
+      targetId: overrides.targetId ?? uuid('target'),
+      actionKey: overrides.actionKey ?? 'test.action',
+      fields: overrides.fields ?? [],
+    },
+  } as unknown as DialogOutput;
+}
+
 export function makeNode(overrides: Partial<DialogNode> = {}): DialogNode {
   return {
     id: uuid('node'),

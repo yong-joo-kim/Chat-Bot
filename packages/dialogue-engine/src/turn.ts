@@ -14,6 +14,7 @@ import { resolveByNodeId } from './resolver';
 import { sanitizeConversationState } from './conversation-state';
 import { resumeAfterApiCall } from './api-call';
 import type { ApiCallSuspension, ApiStepResult } from './api-call';
+import type { WorkflowEmission } from './workflow-output';
 
 export interface DialogueTurnInput {
   message?: string;
@@ -36,6 +37,9 @@ export interface DialogueTurnResult extends DialogueResolution {
   surveyEvents?: SurveyEvent[];
   /** [No.27] 이번 턴 입력을 설문 세션이 소비했는가 — `ConversationLog.surveyTurn`·RAG 판정 근거. */
   surveyTurn?: boolean;
+  /** [No.41] 이번 턴에 `WORKFLOW` 아웃풋이 실행됐을 때만. 없으면 키 생략(surveyEvents 규약).
+   * 사용자 출력·trace 값·위젯 응답에 싣지 않는다. */
+  workflowEvents?: WorkflowEmission[];
 }
 
 /**

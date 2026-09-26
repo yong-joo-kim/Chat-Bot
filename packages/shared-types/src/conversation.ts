@@ -15,6 +15,7 @@ import { SimulateApiMode, SimulateMockResponseSchema, ApiStepViewSchema } from '
 import { queryBoolean } from './common';
 import { FeedbackRating } from './feedback';
 import { BundleTargetSchema, ResolvedBundleTargetSchema } from './bundle-target';
+import { WorkflowStepViewSchema } from './workflow';
 
 /** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
 export const SimulatedAnsweredTopicSchema = z.object({
@@ -179,6 +180,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   answeredTopic: SimulatedAnsweredTopicSchema.optional(),
   /** [신규 No.40] 비초안 대상일 때만 채워진다(§12.1). */
   target: ResolvedBundleTargetSchema.optional(),
+  /** [신규 No.41] 이번 턴에 `WORKFLOW` 방출이 있었을 때만 존재한다 — 모의 표시(발송·적재 0). */
+  workflowSteps: z.array(WorkflowStepViewSchema).optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 

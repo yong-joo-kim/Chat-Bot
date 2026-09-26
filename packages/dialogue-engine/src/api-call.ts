@@ -20,6 +20,7 @@ import { executeOutputs } from './outputs';
 import { API_FAILURE_NOTICE, API_NO_MATCH_NOTICE, HOP_LIMIT } from './constants';
 import type { DialogueTurnResult } from './turn';
 import type { ResolveOptions } from './resolver';
+import type { WorkflowEmission } from './workflow-output';
 
 /**
  * [No.26] 정지점 → 엔진 밖 실행 → 순수 재진입 계약(ADR-0034 결정 1). 엔진 수정 닫힌 목록의 신규 파일.
@@ -73,6 +74,8 @@ export interface ApiResumeState {
     consumedInput: boolean;
     sessionFallback: SurveySessionState | null;
   };
+  /** [No.41] 정지 전 방출분 + 같은 턴 완료 폼(분기 노드 SLOT 바인딩용). §5.6 조건을 만족할 때만 키가 있다. */
+  workflow?: { eventsSoFar: WorkflowEmission[]; completedForm?: CompletedFormInfo };
 }
 
 /** `executeOutputs`가 정지 시 채우는 최소 정보(§5.2) — `resumeState`는 `resolver.ts`가 뒤이어 붙인다. */
@@ -103,7 +106,8 @@ export interface ApiStepResult {
 /** 폴백 동봉본(§5.7) 전용 내부 신호 — `ApiCallOutcome`에 없고 trace message로만 드러난다. */
 export type ApiCallResumeInput = ApiCallResult | { kind: 'NOT_EXECUTED' };
 
-function resolveBinding(binding: ApiBinding, completedForm?: CompletedFormInfo): ApiBoundValue | null {
+/** [No.41] export 추가(시그니처·동작 불변) — `workflow-output.ts`가 재사용한다(E-3). */
+export function resolveBinding(binding: ApiBinding, completedForm?: CompletedFormInfo): ApiBoundValue | null {
   if (binding.kind === 'CONST') return { value: binding.value, source: 'CONST' };
   if (!completedForm || completedForm.contextVariableId !== binding.contextVariableId) return null;
   const raw = completedForm.values[binding.slotName];
@@ -206,6 +210,8 @@ export function resumeAfterApiCall(
   let execUnsupported: DialogOutputType[] = [];
   let nextSessionFromExec: ContextSessionState | null | undefined;
   let surveyStarted: { session: SurveySessionState; event: SurveyEvent } | undefined;
+  let execWorkflowEmissions: WorkflowEmission[] | undefined;
+  const wf = resumeState.workflow;
 
   const noticeText = branch === 'FAILURE' ? API_FAILURE_NOTICE : API_NO_MATCH_NOTICE;
   const noticeMessage = branch === 'FAILURE' ? 'FAILURE' : 'NO_MATCH';
@@ -236,12 +242,15 @@ export function resumeAfterApiCall(
           existingSession: resumeState.existingSession,
           // [No.27] §5.6 — `preview`는 `options`가 아니라 `resumeState`에서 읽는다(호출부가 옵션 없이 부른다).
           survey: resumeState.survey ? { completedSurveyIds: resumeState.survey.completedSurveyIds, preview: resumeState.survey.preview } : undefined,
+          // [No.41] §5.6 — 정지 전 완료 폼을 분기 노드의 SLOT 바인딩에도 이월한다(`WORKFLOW` 있는 번들만).
+          ...(wf?.completedForm ? { completedForm: wf.completedForm } : {}),
         });
         trace.push(...exec.trace);
         execOutputs = exec.outputs;
         execUnsupported = exec.unsupportedOutputs;
         nextSessionFromExec = exec.nextSession;
         surveyStarted = exec.surveyStarted;
+        execWorkflowEmissions = exec.workflowEmissions;
       }
     }
   }
@@ -249,6 +258,8 @@ export function resumeAfterApiCall(
   const outputs = [...resumeState.carry, ...(execOutputs ?? [])];
   const unsupportedOutputs = [...resumeState.unsupported, ...execUnsupported];
   const nextSession = nextSessionFromExec ?? resumeState.sessionFallback;
+  // [No.41] §5.6 — 정지 전 방출분 + 분기 노드 방출분을 이어 붙인다. `wf` 없으면 undefined(키 부재 규칙).
+  const workflowEvents = wf ? [...wf.eventsSoFar, ...(execWorkflowEmissions ?? [])] : undefined;
 
   // [No.27] §5.6 — 설문 필드 이월(숨은 결함 ②). 없으면 키 자체를 생략한다(§5.4와 같은 규칙).
   const survey = resumeState.survey;
@@ -290,5 +301,6 @@ export function resumeAfterApiCall(
     nextState,
     stateDiscarded: turn.stateDiscarded,
     apiStep,
+    ...(workflowEvents !== undefined ? { workflowEvents } : {}),
   };
 }

@@ -28,6 +28,22 @@ import type { DialogueIndex } from './dialogue-index';
 import { judgeBand } from './semantic';
 import { CLARIFY_TTL_MS, DEFAULT_FALLBACK_RESPONSE, EMPTY_INPUT_RESPONSE, HOP_LIMIT, MAX_INPUT_LENGTH, intentOnlyResponse } from './constants';
 import type { ApiCallSuspension, ApiResumeState, ApiSuspensionRequest, CompletedFormInfo } from './api-call';
+import { hasWorkflowOutputs } from './workflow-output';
+import type { WorkflowEmission } from './workflow-output';
+
+/**
+ * [No.41] §5.6 — 정지 전 방출분을 재진입까지 이월할지 결정한다. 방출이 있거나(누락 포함), 폼이
+ * 완료됐고 번들에 `WORKFLOW` 아웃풋이 1개 이상 있을 때만 키를 만든다 — 그 외에는 `undefined`
+ * (`resumeState`에 `workflow` 키 자체가 없다 · `WORKFLOW` 없는 번들 바이트 동일 보장).
+ */
+function workflowCarry(
+  emissions: WorkflowEmission[] | undefined,
+  completedForm: CompletedFormInfo | undefined,
+  bundle: DialogueBundle,
+): ApiResumeState['workflow'] {
+  if (!(emissions && emissions.length > 0) && !(completedForm && hasWorkflowOutputs(bundle))) return undefined;
+  return { eventsSoFar: emissions ?? [], ...(completedForm ? { completedForm } : {}) };
+}
 
 export interface ResolveOptions {
   /** 사전 구축한 인덱스 재사용(FR-E-10). 미지정 시 내부적으로 원본 배열을 그대로 사용한다. */
@@ -54,7 +70,7 @@ export interface ResolveOptions {
 
 /** [No.26] `resolveResponse`/`resolveByNodeId`의 확장 반환 타입 — 정지 시 `apiCall`이 채워진다.
  * [No.27] `survey`(@internal) — `resolveTurn`이 `DialogueTurnResult`로 풀어 쓴 뒤 제거한다. */
-export type EngineResolution = DialogueResolution & { apiCall?: ApiCallSuspension; survey?: SurveyTurnOutcome };
+export type EngineResolution = DialogueResolution & { apiCall?: ApiCallSuspension; survey?: SurveyTurnOutcome; workflowEvents?: WorkflowEmission[] };
 
 function textOutput(text: string): DialogOutput {
   return { type: 'TEXT', payload: { text } };
@@ -123,6 +139,8 @@ function buildSuspendedResolution(params: {
   existingSession: ContextSessionState | null;
   /** [No.27] 정지 전까지의 설문 이월분(§5.6). */
   survey?: ApiResumeState['survey'];
+  /** [No.41] 정지 전 방출분 + 같은 턴 완료 폼(§5.6) — `workflowCarry()`가 조건을 만족할 때만 넘긴다. */
+  workflow?: ApiResumeState['workflow'];
 }): EngineResolution {
   const resumeState: ApiResumeState = {
     input: params.input,
@@ -138,6 +156,7 @@ function buildSuspendedResolution(params: {
     sessionFallback: params.sessionFallback,
     existingSession: params.existingSession,
     survey: params.survey,
+    workflow: params.workflow,
   };
   return {
     input: params.input,
@@ -189,6 +208,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
         sessionFallback: nextSessionOverride ?? null,
         existingSession: session,
         survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
+        workflow: workflowCarry(execResult.workflowEmissions, fc.completedForm, bundle),
       });
     }
 
@@ -201,6 +221,7 @@ function resolveFallback(fc: FallbackContext, bundle: DialogueBundle, now: Date,
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
       survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
+      ...(execResult.workflowEmissions ? { workflowEvents: execResult.workflowEmissions } : {}),
     };
   }
 
@@ -287,6 +308,7 @@ function resolveSurveyCompletion(
       sessionFallback: null,
       existingSession: null,
       survey: { completedSurveyIds, preview: options.surveyPreview ?? false, eventsSoFar: advance.events, consumedInput: true, sessionFallback: null },
+      workflow: workflowCarry(execResult.workflowEmissions, undefined, bundle),
     });
   }
 
@@ -299,6 +321,7 @@ function resolveSurveyCompletion(
     nextSession: execResult.nextSession ?? null,
     unsupportedOutputs: execResult.unsupportedOutputs,
     trace,
+    ...(execResult.workflowEmissions ? { workflowEvents: execResult.workflowEmissions } : {}),
     survey: { nextSession: execResult.surveyStarted?.session ?? null, completedSurveyIds, events: combinedEvents, consumedInput: true },
   };
 }
@@ -580,6 +603,7 @@ export function resolveResponse(
         sessionFallback: nextSessionOverride ?? null,
         existingSession: session,
         survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
+        workflow: workflowCarry(execResult.workflowEmissions, completedForm, bundle),
       });
     }
 
@@ -594,6 +618,7 @@ export function resolveResponse(
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
       survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
+      ...(execResult.workflowEmissions ? { workflowEvents: execResult.workflowEmissions } : {}),
     };
   }
 
@@ -815,6 +840,8 @@ export function resolveByNodeId(
         sessionFallback: cancelledSession ?? null,
         existingSession: session,
         survey: { completedSurveyIds: surveyCtx.completedSurveyIds, preview: surveyCtx.preview, eventsSoFar: surveyEventsSoFar, consumedInput: false, sessionFallback: null },
+        // [No.41] 버튼 진입에는 완료 폼이 없다(FR-WF2-8 ①④ — 항상 누락으로 설계 점검이 경고한다).
+        workflow: workflowCarry(execResult.workflowEmissions, undefined, bundle),
       });
     }
 
@@ -827,6 +854,7 @@ export function resolveByNodeId(
       unsupportedOutputs: execResult.unsupportedOutputs,
       trace,
       survey: mergeSurveyOutcome(surveyEventsSoFar, surveyCtx, execResult.surveyStarted, false),
+      ...(execResult.workflowEmissions ? { workflowEvents: execResult.workflowEmissions } : {}),
     };
   }
 

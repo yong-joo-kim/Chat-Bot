@@ -186,6 +186,9 @@ export const ProdSwitchWarningSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('API_CONNECTION_DISABLED'), count: z.number().int().nonnegative() }),
   z.object({ code: z.literal('PROFILE_WILL_CHANGE'), fields: z.array(z.string()) }),
   z.object({ code: z.literal('OLDER_THAN_DRAFT') }),
+  // [No.41 신설] 업무 자동화 워크플로우 — 전부 blocker 아님(ADR-0041 §8).
+  z.object({ code: z.literal('WORKFLOW_TARGET_MISSING'), count: z.number().int().nonnegative() }),
+  z.object({ code: z.literal('WORKFLOW_TARGET_DISABLED'), count: z.number().int().nonnegative() }),
 ]);
 export type ProdSwitchWarning = z.infer<typeof ProdSwitchWarningSchema>;
 

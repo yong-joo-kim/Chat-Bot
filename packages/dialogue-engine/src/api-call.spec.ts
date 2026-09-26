@@ -2,7 +2,7 @@ import { resolveTurn } from './turn';
 import { resumeAfterApiCall } from './api-call';
 import type { ApiCallSuspension } from './api-call';
 import { getOutgoingNodeRefs } from './design-validator';
-import { apiConditionOutputV2, makeBundle, makeNode, makeSurvey, randomId, surveyOutputV2, textOutput } from './test-fixtures';
+import { apiConditionOutputV2, makeBundle, makeNode, makeSurvey, randomId, surveyOutputV2, textOutput, workflowOutput } from './test-fixtures';
 
 describe('No.26 레거시 API 연동 — executeOutputs 정지/재진입', () => {
   it('v2 API_CONDITION을 만나면 정지하고, resolveTurn은 실패(NOT_EXECUTED) 가정의 폴백 결과를 동봉한다', () => {
@@ -214,5 +214,108 @@ describe('No.26 참조 무결성 편입(J-17)', () => {
     });
     const { apiTargets } = getOutgoingNodeRefs(node);
     expect(new Set(apiTargets)).toEqual(new Set([a, b, c]));
+  });
+});
+
+describe('No.41 업무 자동화 — 재조립 경로 보존(AC-WF2-6)', () => {
+  const NOW = new Date('2026-01-01T00:00:00Z');
+  const contextVariableId = randomId();
+  const completedForm = { contextVariableId, values: { name: '홍길동' } };
+
+  function buildSuspensionWithWorkflowCarry(eventsSoFar: Array<Record<string, unknown>>) {
+    const branchNode = makeNode({
+      id: randomId(),
+      name: '분기B',
+      outputs: [workflowOutput({ fields: [{ name: 'name', value: { kind: 'SLOT', contextVariableId, slotName: 'name' } }] }), textOutput('B 응답')],
+    });
+    const bundle = makeBundle({ dialogNodes: [branchNode] });
+
+    const suspension: ApiCallSuspension = {
+      nodeId: 'node-a',
+      outputIndex: 1,
+      payload: {
+        version: 2,
+        connectionId: randomId(),
+        method: 'GET',
+        path: '/x',
+        pathParams: [],
+        query: [],
+        body: [],
+        responseMappings: [],
+        conditions: [{ path: 'status', operator: 'EQ', value: 'OK', nextNodeId: branchNode.id }],
+        failureNodeId: undefined,
+      } as never,
+      request: null,
+      resumeState: {
+        input: '입력',
+        normalizedInput: '입력',
+        trace: [],
+        carry: [],
+        unsupported: [],
+        hops: 0,
+        hopLimit: 10,
+        sessionFallback: null,
+        existingSession: null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        workflow: { eventsSoFar: eventsSoFar as any, completedForm },
+      },
+    };
+
+    const stub = {
+      input: '입력',
+      normalizedInput: '입력',
+      outputs: [],
+      nextSession: null,
+      unsupportedOutputs: [],
+      trace: [],
+      nextState: { version: 1 as const, contextSession: null, pendingClarify: null },
+      stateDiscarded: [],
+      apiCall: suspension,
+    };
+
+    return { bundle, stub };
+  }
+
+  const emission1 = { nodeId: 'node-a', outputIndex: 0, targetId: randomId(), actionKey: 'a.action', fields: [{ name: 'x', value: '1', source: 'CONST' as const }] };
+
+  it('SUCCESS 분기 — 정지 전(#1) + 분기 노드(#2, SLOT이 A 턴 폼 값으로 채워짐) 방출이 이어 붙는다', () => {
+    const { bundle, stub } = buildSuspensionWithWorkflowCarry([emission1]);
+    const resumed = resumeAfterApiCall(stub, { kind: 'SUCCESS', httpStatus: 200, json: { status: 'OK' } }, bundle, NOW);
+
+    expect(resumed.workflowEvents).toHaveLength(2);
+    expect(resumed.workflowEvents?.[0]).toEqual(emission1);
+    expect(resumed.workflowEvents?.[1]).toMatchObject({ fields: [{ name: 'name', value: '홍길동', source: 'SLOT' }] });
+  });
+
+  it('FAILURE 분기(고정 문구) — 정지 전(#1) 방출은 유지되고 분기 노드는 실행되지 않는다', () => {
+    const { bundle, stub } = buildSuspensionWithWorkflowCarry([emission1]);
+    const resumed = resumeAfterApiCall(stub, { kind: 'FAILURE', outcome: 'NETWORK_ERROR' }, bundle, NOW);
+    expect(resumed.workflowEvents).toEqual([emission1]);
+  });
+
+  it('NOT_EXECUTED 폴리필(정지 동봉본) — 정지 전(#1) 방출이 유지된다', () => {
+    const { bundle, stub } = buildSuspensionWithWorkflowCarry([emission1]);
+    const resumed = resumeAfterApiCall(stub, { kind: 'NOT_EXECUTED' }, bundle, NOW);
+    expect(resumed.workflowEvents).toEqual([emission1]);
+  });
+
+  it('MAPPING_MISSING(실패 분기) — 정지 전(#1) 방출이 유지된다', () => {
+    const { bundle, stub } = buildSuspensionWithWorkflowCarry([emission1]);
+    const resumed = resumeAfterApiCall(stub, { kind: 'SUCCESS', httpStatus: 200, json: {} }, bundle, NOW);
+    expect(resumed.workflowEvents).toEqual([emission1]);
+  });
+
+  it('WORKFLOW 없는 번들의 apiCall — resumeState에 workflow 키가 없고 결과에 workflowEvents 키가 없다(바이트 동일)', () => {
+    const targetNode = makeNode({ id: randomId(), name: '성공', outputs: [textOutput('성공')] });
+    const bundle = makeBundle({ dialogNodes: [targetNode] });
+    const startOutputs = [apiConditionOutputV2({ conditions: [{ path: 'status', operator: 'EQ', value: 'OK', nextNodeId: targetNode.id }] })];
+    const startNode = makeNode({ id: randomId(), name: '시작', nodeType: 'START', outputs: startOutputs });
+    const fullBundle = makeBundle({ dialogNodes: [startNode, targetNode] });
+
+    const suspended = resolveTurn({ buttonAction: { kind: 'NODE', nodeId: startNode.id } }, null, fullBundle, NOW);
+    expect(suspended.apiCall?.resumeState.workflow).toBeUndefined();
+
+    const resumed = resumeAfterApiCall({ ...suspended, apiCall: suspended.apiCall! }, { kind: 'SUCCESS', httpStatus: 200, json: { status: 'OK' } }, fullBundle, NOW);
+    expect('workflowEvents' in resumed).toBe(false);
   });
 });

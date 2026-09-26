@@ -107,8 +107,18 @@ export interface DesignValidationApiConnectionInfo {
   allowRawPersonalData: boolean;
   allowedMethods: readonly string[];
 }
+/** [No.41] 업무 자동화 발송 대상 조회 결과(엔진 순수성 유지 — `DialogNodesService.validate()`가
+ * `WORKFLOW`가 있을 때만 카탈로그 1회 조회로 주입, §5.7). */
+export interface DesignValidationWorkflowTargetInfo {
+  name: string;
+  enabled: boolean;
+  paused: boolean;
+  secretsOk: boolean;
+  allowRawPersonalData: boolean;
+}
 export interface DesignValidationContext {
   apiConnections?: ReadonlyMap<string, DesignValidationApiConnectionInfo>;
+  workflowTargets?: ReadonlyMap<string, DesignValidationWorkflowTargetInfo>;
 }
 
 const API_TOKEN_IN_URL_RE = /\{api\./;
@@ -399,6 +409,98 @@ function checkSurveyIssues(nodes: DialogNode[], surveys: readonly Survey[], now:
   return issues;
 }
 
+/** [No.41] 업무 자동화 워크플로우 설계 점검 5종(§5.7) — 저장을 막지 않는다. */
+function checkWorkflowIssues(nodes: DialogNode[], context: DesignValidationContext | undefined): DesignIssue[] {
+  const issues: DesignIssue[] = [];
+
+  for (const node of nodes) {
+    const workflowOutputs = node.outputs.map((o, index) => ({ o, index })).filter((x) => x.o.type === 'WORKFLOW');
+    if (workflowOutputs.length === 0) continue;
+
+    // ④ 노드 출력이 전부 WORKFLOW뿐(기본 폴백 문구 + EMPTY_OUTPUT — 제약 ⑥).
+    if (workflowOutputs.length === node.outputs.length) {
+      issues.push({
+        code: 'WORKFLOW_ONLY_OUTPUT',
+        severity: 'WARNING',
+        resourceType: 'NODE',
+        resourceId: node.id,
+        resourceName: node.name,
+        message: `노드 "${node.name}"의 아웃풋이 업무 요청뿐이라 사용자에게 기본 안내 문구가 나갑니다.`,
+      });
+    }
+
+    for (const { o } of workflowOutputs) {
+      if (o.type !== 'WORKFLOW') continue;
+      const payload = o.payload;
+
+      // ⑤ 필드 0개
+      if (payload.fields.length === 0) {
+        issues.push({
+          code: 'WORKFLOW_NO_FIELDS',
+          severity: 'INFO',
+          resourceType: 'NODE',
+          resourceId: node.id,
+          resourceName: node.name,
+          message: `노드 "${node.name}"의 업무 요청에 전달할 필드가 없습니다.`,
+        });
+      }
+
+      // ③ SLOT 바인딩 도달 불가
+      for (const f of payload.fields) {
+        if (f.value.kind === 'SLOT' && f.value.contextVariableId !== node.contextVariableId) {
+          issues.push({
+            code: 'WORKFLOW_SLOT_BINDING_UNREACHABLE',
+            severity: 'WARNING',
+            resourceType: 'NODE',
+            resourceId: node.id,
+            resourceName: node.name,
+            message: `노드 "${node.name}"의 업무 요청이 이 노드의 조건이 아닌 폼 슬롯을 참조합니다. 값이 비어 전달되지 않을 수 있습니다.`,
+          });
+          break;
+        }
+      }
+
+      // ⑧ 대상 의존 항목(컨텍스트 있을 때만)
+      if (context?.workflowTargets) {
+        const target = context.workflowTargets.get(payload.targetId);
+        if (!target) {
+          issues.push({
+            code: 'BROKEN_REFERENCE',
+            severity: 'ERROR',
+            resourceType: 'NODE',
+            resourceId: node.id,
+            resourceName: node.name,
+            message: `노드 "${node.name}"이(가) 존재하지 않는 발송 대상(${payload.targetId})을 참조합니다.`,
+          });
+        } else {
+          if (!target.enabled || target.paused || !target.secretsOk) {
+            issues.push({
+              code: 'WORKFLOW_TARGET_UNAVAILABLE',
+              severity: 'WARNING',
+              resourceType: 'NODE',
+              resourceId: node.id,
+              resourceName: node.name,
+              message: `노드 "${node.name}"이(가) 참조하는 발송 대상 "${target.name}"을(를) 지금은 보낼 수 없습니다(사용 중지/일시 정지/시크릿 미설정).`,
+            });
+          }
+          if (target.allowRawPersonalData) {
+            issues.push({
+              code: 'WORKFLOW_RAW_PERSONAL_DATA',
+              severity: 'INFO',
+              resourceType: 'NODE',
+              resourceId: node.id,
+              resourceName: node.name,
+              message: `노드 "${node.name}"이(가) 참조하는 발송 대상 "${target.name}"은(는) 개인정보를 원문으로 송신합니다.`,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
 /**
  * 대화그래프 설계 점검(FR-5-16~18, DD-17). `ERROR`가 있어도 저장/상태전환을 막지 않는다(FR-5-17).
  * [No.26] `context`(선택)로 API 연결 의존 항목(§5.9 ⑧~⑪)을 함께 점검한다. 엔진 자체는 여전히
@@ -589,6 +691,8 @@ export function validateDialogueDesign(
   issues.push(...checkApiConditionIssues(nodes, nodeMap, context));
   // [No.27] 설문 설계 점검 6종(§5.9)
   issues.push(...checkSurveyIssues(nodes, bundle.surveys ?? [], now));
+  // [No.41] 업무 자동화 워크플로우 설계 점검 5종(§5.7)
+  issues.push(...checkWorkflowIssues(nodes, context));
 
   const summary = {
     error: issues.filter((i) => i.severity === 'ERROR').length,

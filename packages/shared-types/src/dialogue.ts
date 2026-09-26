@@ -475,6 +475,8 @@ export const DialogOutputType = z.enum([
   'SCENARIO',
   'SURVEY',
   'API_CONDITION',
+  // [신규 No.41] 업무 자동화 워크플로우 — "업무 요청 보내기"(비종결·사용자에게 보이지 않음).
+  'WORKFLOW',
 ]);
 export type DialogOutputType = z.infer<typeof DialogOutputType>;
 
@@ -801,6 +803,48 @@ export function findLegacySurveyOutputIndexes(outputs: readonly DialogOutput[]):
     .map((r) => r.index);
 }
 
+/* ------------------------------------------------------------------------------------------------
+ * [신규 No.41] 업무 자동화 워크플로우 — "업무 요청 보내기" 아웃풋. 바인딩은 No.26 `ApiBindingSchema`
+ * (`kind: CONST｜SLOT`)를 그대로 재사용한다(요구사항 초안의 `source` 키 대신 — R-1).
+ * ---------------------------------------------------------------------------------------------- */
+
+export const WORKFLOW_OUTPUT_LIMITS = {
+  perNode: 3,
+  fieldsMax: 20,
+  fieldNameMax: 40,
+  constValueMax: 500,
+  actionKeyPattern: /^[a-z0-9._-]{1,60}$/,
+} as const;
+
+/** [No.41] "업무 요청 보내기" — 사용자에게 보이지 않는 비종결 아웃풋. 바인딩은 No.26 `ApiBindingSchema` 그대로. */
+export const WorkflowOutputPayloadV1Schema = z
+  .object({
+    version: z.literal(1),
+    targetId: z.string().uuid(),
+    actionKey: z
+      .string()
+      .regex(WORKFLOW_OUTPUT_LIMITS.actionKeyPattern, '동작 키는 영문 소문자·숫자·.·_·- 60자 이내입니다.'),
+    fields: z
+      .array(
+        z.object({
+          name: z.string().regex(/^[A-Za-z0-9_]{1,40}$/),
+          value: ApiBindingSchema,
+        }),
+      )
+      .max(WORKFLOW_OUTPUT_LIMITS.fieldsMax)
+      .default([]),
+  })
+  .superRefine((val, ctx) => {
+    const seen = new Set<string>();
+    val.fields.forEach((f, i) => {
+      if (seen.has(f.name)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `필드 이름 "${f.name}"이(가) 중복됩니다.`, path: ['fields', i, 'name'] });
+      }
+      seen.add(f.name);
+    });
+  });
+export type WorkflowOutputPayloadV1 = z.infer<typeof WorkflowOutputPayloadV1Schema>;
+
 export const DialogOutputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('TEXT'), payload: TextOutputPayloadSchema }),
   z.object({ type: z.literal('CARD'), payload: CardOutputPayloadSchema }),
@@ -814,6 +858,7 @@ export const DialogOutputSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('SCENARIO'), payload: ScenarioOutputPayloadSchema }),
   z.object({ type: z.literal('SURVEY'), payload: SurveyOutputPayloadSchema }),
   z.object({ type: z.literal('API_CONDITION'), payload: ApiConditionOutputPayloadSchema }),
+  z.object({ type: z.literal('WORKFLOW'), payload: WorkflowOutputPayloadV1Schema }),
 ]);
 export type DialogOutput = z.infer<typeof DialogOutputSchema>;
 

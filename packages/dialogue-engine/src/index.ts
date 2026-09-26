@@ -31,7 +31,7 @@ export type { ExecuteOutputsOptions, ExecuteOutputsResult } from './outputs';
 export { advanceSurveySession, startSurveySession, willSurveyConsumeInput } from './survey-session';
 export type { SurveyAdvance, SurveyTurnContext, SurveyTurnOutcome } from './survey-session';
 
-export { bindRequest, resumeAfterApiCall } from './api-call';
+export { bindRequest, resolveBinding, resumeAfterApiCall } from './api-call';
 export type {
   ApiBoundValue,
   ApiCallRequestSpec,
@@ -43,11 +43,14 @@ export type {
   CompletedFormInfo,
 } from './api-call';
 
+export { bindWorkflowOutput, hasWorkflowOutputs } from './workflow-output';
+export type { WorkflowEmission } from './workflow-output';
+
 export { evaluateNode, rankNodes } from './node-matcher';
 export type { EngineContext, NodeEvaluation, BrokenReference } from './node-matcher';
 
 export { validateDialogueDesign, computeIncomingCounts, getOutgoingNodeRefs } from './design-validator';
-export type { DesignValidationApiConnectionInfo, DesignValidationContext } from './design-validator';
+export type { DesignValidationApiConnectionInfo, DesignValidationContext, DesignValidationWorkflowTargetInfo } from './design-validator';
 
 export { buildFlowTree } from './flow-tree';
 

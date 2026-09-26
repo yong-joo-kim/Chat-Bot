@@ -96,6 +96,8 @@ model Chatbot {
   embeddingTextVectors    EmbeddingTextVector[]
   /// [신규 No.45] 보존기간 재정의(없으면 전역 따름). 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제 동반 삭제.
   retentionPolicy         RetentionPolicy?
+  /// [신규 No.41] 이벤트 구독(환경 밖 — 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제 동반 삭제). 컬럼 추가 0.
+  workflowSubscriptions   WorkflowSubscription[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -1655,4 +1657,137 @@ model GovernanceJobState {
   updatedAt        DateTime  @updatedAt
 
   @@map("governance_job_states")
+}
+
+/// [신규 2026-09-26 No.41] 업무 자동화 발송 대상(전역 — 챗봇 스코프 아님, ADR-0041 §1).
+/// ★ 비밀 값 컬럼이 없다 — `secretRef`·`signingSecretRef`·`urlSecretRef`(이름)만 두고 값은
+/// `WORKFLOW_SECRET__<REF>` 환경변수에서 `WorkflowSecretResolver` 1파일만 읽는다.
+/// 노드 → 대상 참조는 `DialogNode.outputs` JSON 안이라 FK가 없다(앱 레벨 409 — 초안 노드만).
+model WorkflowTarget {
+  id                   String    @id @default(uuid())
+  name                 String
+  /// normalizeText(name) — 전역 유일(ApiConnection 선례)
+  nameNormalized       String    @unique
+  description          String?
+  /// https(+ WORKFLOW_ALLOW_HTTP일 때 http) 스킴·호스트·포트·경로. 사용자정보·쿼리·프래그먼트 금지
+  baseUrl              String
+  /// NONE | API_KEY_HEADER | BEARER | BASIC (ApiConnectionAuthType 재사용)
+  authType             String    @default("NONE")
+  authHeaderName       String?
+  secretRef            String?
+  signingEnabled       Boolean   @default(true)
+  signingSecretRef     String?
+  /// 있으면 발송 주소 = 환경변수의 전체 주소(호스트·포트는 baseUrl과 같아야 한다)
+  urlSecretRef         String?
+  timeoutMs            Int       @default(5000)
+  maxAttempts          Int       @default(5)
+  allowRawPersonalData Boolean   @default(false)
+  enabled              Boolean   @default(true)
+  /// 일시 정지 — 값 있음 = 새 요청 HELD · 대기 요청 HELD
+  pausedAt             DateTime?
+  /// 발송 결과 카운터(쓰기 = workflow-run.store.ts 1파일 · 이 3키만)
+  consecutiveFailures  Int       @default(0)
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  subscriptions        WorkflowSubscription[]
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([updatedAt])
+  @@map("workflow_targets")
+}
+
+/// [신규 No.41] 챗봇 × 이벤트 × 대상 구독(환경 밖 — 저장 즉시 운영 반영).
+model WorkflowSubscription {
+  id         String         @id @default(uuid())
+  chatbotId  String
+  chatbot    Chatbot        @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// HANDOFF_STARTED | HANDOFF_ENDED | SURVEY_COMPLETED | FEEDBACK_NEGATIVE | UNANSWERED_STREAK
+  eventType  String
+  targetId   String
+  target     WorkflowTarget @relation(fields: [targetId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  enabled    Boolean        @default(true)
+  pausedAt   DateTime?
+  /// JSON { threshold?: 2~10, includeStructuredAnswers?: boolean } — 이벤트별 zod
+  conditions String         @default("{}")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([chatbotId, eventType, targetId])
+  @@index([targetId])
+  @@map("workflow_subscriptions")
+}
+
+/// [신규 No.41] 발송함 겸 실행 이력(ADR-0041 §4). id = deliveryId(앱 선발급 uuid — 봉투·AAD·멱등키).
+/// FK 없음(로그 규약 — 대상·노드·구독이 지워져도 기록은 남는다). ★ 텍스트 본문·sessionId·필드 값 컬럼이 없다
+/// — 유일한 예외는 재시도용 일시 보관 `payload`(종단 전이 시 소거 · 실패 7일 뒤 소거 · 거버넌스 암호화 대상).
+model WorkflowRun {
+  id                 String    @id
+  targetId           String
+  /// 적재 시점 대상 이름 스냅샷(AuditLog.targetName 선례)
+  targetName         String
+  /// TEST는 null
+  chatbotId          String?
+  /// NODE | EVENT | TEST
+  triggerKind        String
+  /// WorkflowEventType 7종
+  eventType          String
+  actionKey          String?
+  nodeId             String?
+  outputIndex        Int?
+  subscriptionId     String?
+  /// 공개 대화 messageId(= ConversationLog.id) — NODE·UNANSWERED_STREAK·FEEDBACK_NEGATIVE
+  messageId          String?
+  /// handoffId | surveyResponseId | messageFeedbackId
+  sourceRefId        String?
+  /// NODE: N:<messageId>:<nodeId>:<outputIndex> · EVENT: E:<subscriptionId>:<sourceKey> · TEST: null
+  dedupeKey          String?   @unique
+  /// computeSessionRef(chatbotId, sessionId) — sessionId 원값 컬럼은 없다
+  sessionRef         String?
+  servedVersionId    String?
+  /// PENDING | HELD | SENDING | SUCCEEDED | FAILED | SKIPPED | CANCELLED | EXPIRED
+  status             String
+  /// WorkflowStatusReason(SKIPPED·CANCELLED·FAILED·EXPIRED의 사유)
+  statusReason       String?
+  /// TARGET | SUBSCRIPTION (HELD일 때만)
+  holdReason         String?
+  heldAt             DateTime?
+  attemptCount       Int       @default(0)
+  nextAttemptAt      DateTime?
+  claimToken         String?
+  claimedAt          DateTime?
+  lastAttemptAt      DateTime?
+  /// WorkflowOutcome
+  lastOutcome        String?
+  lastHttpStatus     Int?
+  lastLatencyMs      Int?
+  /// SLOT 값이 마스킹으로 바뀌었는가 — 원문도 마스킹본도 이 테이블 메타데이터에는 없다
+  personalDataMasked Boolean   @default(false)
+  /// JSON string[] — 필드 **이름**만
+  fieldNames         String    @default("[]")
+  /// 봉투 JSON 바이트(UTF-8 문자열) 또는 enc:v1 봉투 — 일시 보관
+  payload            String?
+  /// 본문을 만든 행만 값이 있다(SKIPPED 적재·TEST = null)
+  payloadBytes       Int?
+  payloadPurgedAt    DateTime?
+  manualRetryCount   Int       @default(0)
+  lastManualRetryAt  DateTime?
+  firstSentAt        DateTime?
+  completedAt        DateTime?
+  /// 성공 시 completedAt - createdAt(ms) — 요약 P95용
+  deliveryLatencyMs  Int?
+  /// KST 일 버킷(ADR-0017 — 발생 시각 기준)
+  dayBucket          String
+  /// = 이벤트 발생 시각(앱이 명시 — 봉투 occurredAt과 같다)
+  createdAt          DateTime
+
+  @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
+  @@index([status, completedAt])
+  @@index([targetId, status])
+  @@index([targetId, sessionRef, createdAt])
+  @@index([subscriptionId, status])
+  @@index([chatbotId, createdAt])
+  @@index([createdAt])
+  @@map("workflow_runs")
 }
