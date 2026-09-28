@@ -2025,3 +2025,212 @@ model ChatbotRichUrlPolicy {
 
   @@map("chatbot_rich_url_policies")
 }
+
+/// [신규 No.43] 지식베이스 수집 소스(전역 — 챗봇 소속 아님, ADR-0044 §1).
+/// ★ 쓰기 = kb-sync/kb-sources.service.ts 1파일(KB-9) · 헤더 값 컬럼 없음(authSecretRef = 이름만).
+model KbSource {
+  id                    String       @id @default(uuid())
+  name                  String
+  nameNormalized        String       @unique
+  seedUrls              String       @default("[]")
+  sitemapUrls           String       @default("[]")
+  allowedHosts          String       @default("[]")
+  pathPrefixes          String       @default("[]")
+  excludePatterns       String       @default("[]")
+  noisePatterns         String       @default("[]")
+  allowQueryUrls        Boolean      @default(false)
+  maxDepth              Int          @default(3)
+  maxPages              Int          @default(500)
+  fileTypes             String       @default("[]")
+  maxFileBytes          Int          @default(20971520)
+  minIntervalMs         Int          @default(1000)
+  scopeCompany          String
+  scopeCategory         String
+  scopeSubcategory      String
+  /// MANUAL | DAILY | WEEKLY (KST)
+  scheduleKind          String       @default("MANUAL")
+  scheduleTime          String?
+  scheduleWeekday       Int?
+  /// NONE | STATIC_HEADER
+  authKind              String       @default("NONE")
+  authHeaderName        String?
+  authSecretRef         String?
+  piiMask               Boolean      @default(true)
+  allowRawFileIngest    Boolean      @default(false)
+  rightsConfirmedById   String
+  rightsConfirmedAt     DateTime
+  configVersion         Int          @default(1)
+  approvedConfigVersion Int?
+  approvedAt            DateTime?
+  approvedById          String?
+  /// NEW_RATIO | AUTH_WALL
+  reviewRequiredReason  String?
+  enabled               Boolean      @default(true)
+  /// ★ 소스당 동시 실행 1 — CAS(activeRunId = null 조건부 갱신). FK 없음
+  activeRunId           String?
+  nextRunAt             DateTime?
+  lastRunId             String?
+  lastRunStatus         String?
+  lastRunFinishedAt     DateTime?
+  createdById           String?
+  updatedById           String?
+  documents             KbDocument[]
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@index([enabled, nextRunAt])
+  @@index([updatedAt])
+  @@map("kb_sources")
+}
+
+/// [신규 No.43] 소스의 URL 단위 상태 + 크롤 프런티어(ADR-0044 §3).
+/// ★ 본문·파일 바이트 컬럼 없음(KB-10) · 쓰기 = kb-sync/core/kb-run.store.ts 1파일.
+model KbDocument {
+  id                        String    @id @default(uuid())
+  sourceId                  String
+  source                    KbSource  @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  url                       String
+  urlHash                   String
+  /// HTML | PDF | DOCX | XLSX | PPTX
+  kind                      String
+  externalFileName          String
+  /// ACTIVE | GONE | EXCLUDED
+  state                     String    @default("ACTIVE")
+  excludeReason             String?
+  cleanupReason             String?
+  missingStreak             Int       @default(0)
+  title                     String?
+  etag                      String?
+  lastModified              String?
+  contentHash               String?
+  ingestFingerprint         String?
+  textLength                Int?
+  byteSize                  Int?
+  lastIngestedAt            DateTime?
+  lastIngestJobId           String?
+  /// ★ 문서당 진행 중 적재 1건 — CAS(activeIngestJobId = null 조건부). FK 없음
+  activeIngestJobId         String?
+  consecutiveIngestFailures Int       @default(0)
+  seenRunId                 String?
+  /// QUEUED | VISITED (seenRunId 실행 기준)
+  visitState                String?
+  depth                     Int       @default(0)
+  discoveredSeq             Int       @default(0)
+  /// [pass 6 · H-2] 이 문서를 (가장 최근 실행에서) 링크로 처음 발견시킨 부모 문서 id — FK 없음. 부모가 304·오류·차단으로 링크를 다시 확인하지 못한
+  /// 실행에서 이 값으로 자식들을 이어 방문해(`findChildDocuments`) "다시 발견되지 않음"이 삭제로 잘못 세어지지 않게 한다. 시작 주소·사이트맵 URL은 null
+  discoveredFromId          String?
+  /// NEW | CHANGED | UNCHANGED (seenRunId 실행의 관측 — 미리보기 목록 원천)
+  observedChange            String?
+  observedPiiMasked         Int?
+  /// [pass 8 · RG-21 · pass 11 · M-B] 이 실행이 이 행에서 관측한 "어디로 수렴했는가" 지문(구현: kb-sync/lib/observed-hash.ts) — 값은 해시뿐(원문 비저장). 종류(접두):
+  ///  · (접두 없음) HTML 본문을 추출했으면 정규화 본문의 sha256(본문이 비면 남기지 않음) — 분자·분모에 센다.
+  ///  · `RL:` 리다이렉트 원래 행이고 최종 목적지가 로그인 신호(경로·호스트의 login·sso·auth 등)를 가진다 — 목적지 호스트+경로 해시(쿼리 제거 — 페이지별 return 파라미터 무시). 분자·분모에 센다.
+  ///  · `R:` 리다이렉트 원래 행(목적지에 로그인 신호 없음, 정상 통합·개편) + 최종 URL 해시 — 분자에서 빼고 분모에는 들어간다(FULL_RESEND 대상에서 원본 행을 빼는 표식으로도 쓴다).
+  ///  · `RD:` 로그인 신호가 있는 목적지로 리다이렉트되어 그 자리에서 기록된 목적지 행 + 최종 URL 해시 — 분자·분모 모두에서 뺀다(원래 행 `RL:`이 이미 센다). 본문 해시는 남기지 않는다.
+  ///  · `X:` 범위 밖으로 넘어간 리다이렉트 행이고 대상이 로그인 신호를 가진다(SSO) — 대상 호스트+경로 해시(쿼리 제거). 분자·분모에 센다.
+  /// 종결 때 분자(`R:`·`RD:` 제외 지문)의 최빈 값이 분모(방문 HTML 행 − `RD:` 행)의 80% 이상이면 인증 벽(로그인 화면으로 수렴)으로 본다.
+  observedHash              String?
+  firstSeenAt               DateTime  @default(now())
+  lastSeenAt                DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  @@unique([sourceId, urlHash])
+  @@index([sourceId, seenRunId, visitState, depth, discoveredSeq])
+  @@index([sourceId, state])
+  @@index([sourceId, cleanupReason])
+  @@index([sourceId, discoveredFromId])
+  @@map("kb_documents")
+}
+
+/// [신규 No.43] 동기화 실행 이력(로그 규약 — FK 없음 · 소스 이름 스냅샷 · CALL_LOGS 보존).
+/// ★ 본문·URL 쿼리 컬럼 없음 · 쓰기 = kb-run.store.ts 1파일 + 파기 writer(deleteMany).
+model KbSyncRun {
+  id                String    @id @default(uuid())
+  sourceId          String
+  sourceName        String
+  /// PREVIEW | SYNC | FULL_RESEND
+  kind              String
+  /// SCHEDULED | MANUAL | APPROVAL
+  trigger           String
+  /// QUEUED | CRAWLING | INGESTING | SUCCEEDED | PARTIAL | FAILED | CANCELLED (INTERRUPTED는 조회 시점 판정)
+  status            String
+  configVersion     Int
+  claimToken        String?
+  claimedAt         DateTime?
+  resumedCount      Int       @default(0)
+  /// JSON KbRunCrawlCounts — 적재 수치는 KbIngestJob groupBy로 파생
+  counts            String    @default("{}")
+  maxPagesReached   Boolean   @default(false)
+  abortedHosts      String    @default("[]")
+  /// NEW_RATIO | AUTH_WALL
+  demotedReason     String?
+  failureCode       String?
+  cancelRequestedAt DateTime?
+  createdById       String?
+  cancelledById     String?
+  startedAt         DateTime?
+  crawlFinishedAt   DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([sourceId, createdAt])
+  @@index([status, claimedAt])
+  @@index([createdAt])
+  @@map("kb_sync_runs")
+}
+
+/// [신규 No.43] 문서별 적재 작업(대기열 겸 기록 — FK 없음 · CALL_LOGS 보존).
+/// ★ 본문 컬럼 없음 · RagCallLog에 쓰지 않는다(FR-KB4-11) · 쓰기 = kb-run.store.ts 1파일 + 파기 writer.
+model KbIngestJob {
+  id                  String    @id @default(uuid())
+  runId               String
+  sourceId            String
+  documentId          String
+  /// INCREMENTAL | BULK
+  lane                String
+  /// NEW | CHANGED | FULL_RESEND
+  reason              String
+  /// PENDING | SUBMITTING | SUBMITTED | SUCCEEDED | FAILED | UNKNOWN | TIMEOUT | CANCELLED | SKIPPED
+  status              String    @default("PENDING")
+  attemptCount        Int       @default(0)
+  nextAttemptAt       DateTime?
+  notFoundResubmitted Boolean   @default(false)
+  slotToken           String?
+  /// UUID 검증을 통과한 값만(KB-5)
+  taskId              String?
+  submittedAt         DateTime?
+  lastPolledAt        DateTime?
+  completedAt         DateTime?
+  fileKind            String?
+  externalFileName    String?
+  contentHash         String?
+  ingestFingerprint   String?
+  textLength          Int?
+  byteSize            Int?
+  piiMaskedCount      Int?
+  /// KbIngestResultCode(코드만 — 외부 오류 원문 저장 금지)
+  resultCode          String?
+  httpStatus          Int?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status, lane, nextAttemptAt, createdAt])
+  @@index([runId, status])
+  @@index([documentId, status])
+  @@index([createdAt])
+  @@map("kb_ingest_jobs")
+}
+
+/// [신규 No.43] 지식베이스 잡 임대 행 — INGEST_SLOT_0..2 · INGEST_STATUS(GovernanceJobState와 같은 형식, 별도 테이블 — G-10).
+model KbJobLease {
+  name        String    @id
+  claimToken  String?
+  claimedAt   DateTime?
+  holderJobId String?
+  /// JSON — INGEST_STATUS: { checkedAt, vllmReady } (본문 0)
+  state       String    @default("{}")
+  updatedAt   DateTime  @updatedAt
+
+  @@map("kb_job_leases")
+}

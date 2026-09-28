@@ -90,6 +90,27 @@ export class GovernanceDataWriter {
       const r = await this.prisma.workflowRun.deleteMany({ where: { id: { in: workflowIds.map((x) => x.id) } } });
       count += r.count;
     }
+    // [신규 No.43] 지식베이스 적재 작업 — 종단 상태만 파기 대상이다(작업 먼저 — 실행보다 앞서 지운다,
+    // 제약 ⑩ · ADR-0044 §3.4).
+    const kbIngestJobIds = await this.prisma.kbIngestJob.findMany({
+      where: { createdAt: { lt: cutoff }, status: { in: ['SUCCEEDED', 'FAILED', 'UNKNOWN', 'TIMEOUT', 'CANCELLED', 'SKIPPED'] } },
+      select: { id: true },
+      take: batchSize,
+    });
+    if (kbIngestJobIds.length > 0) {
+      const r = await this.prisma.kbIngestJob.deleteMany({ where: { id: { in: kbIngestJobIds.map((x) => x.id) } } });
+      count += r.count;
+    }
+    // [신규 No.43] 지식베이스 동기화 실행 이력 — 종단 상태만(§3.4).
+    const kbSyncRunIds = await this.prisma.kbSyncRun.findMany({
+      where: { createdAt: { lt: cutoff }, status: { in: ['SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED'] } },
+      select: { id: true },
+      take: batchSize,
+    });
+    if (kbSyncRunIds.length > 0) {
+      const r = await this.prisma.kbSyncRun.deleteMany({ where: { id: { in: kbSyncRunIds.map((x) => x.id) } } });
+      count += r.count;
+    }
     return count;
   }
 

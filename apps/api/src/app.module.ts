@@ -45,6 +45,7 @@ import { GovernanceModule } from './governance/governance.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { InboxModule } from './inbox/inbox.module';
 import { RichMessagesModule } from './rich-messages/rich-messages.module';
+import { KbSyncModule } from './kb-sync/kb-sync.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -102,6 +103,9 @@ import { validate } from './config/env.validation';
     InboxModule,
     // [신규 No.46] imports 맨 끝 — 루프·타이머가 없어 순서 의존은 없다(§2.2).
     RichMessagesModule,
+    // [신규 No.43] imports 맨 끝 — 루프(`KbSyncJob`) onApplicationBootstrap이 거버넌스 런타임 설치
+    // 뒤에 시작한다(§2.2, ADR-0044).
+    KbSyncModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

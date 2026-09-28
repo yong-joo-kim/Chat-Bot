@@ -81,3 +81,38 @@ describe('env.validation — boolean 환경변수 명시 파싱(z.coerce.boolean
     expect(() => validate(baseEnv({ [name]: 'yes' }))).toThrow(/환경변수 검증 실패/);
   });
 });
+
+describe('env.validation — pass 6 Low-3 · KB_SYNC_LEASE_MS 최소값', () => {
+  it('★ 제출 경로 최대 구간(재수집 60초 + 해석 30초 + 외부 전송 120초)보다 짧은 임대(60초)는 거부한다 — 최소 300초', () => {
+    expect(() => validate(baseEnv({ KB_SYNC_LEASE_MS: '60000' }))).toThrow();
+    expect(() => validate(baseEnv({ KB_SYNC_LEASE_MS: '299999' }))).toThrow();
+  });
+  it('300초 이상은 받아들이고 기본값은 600초다', () => {
+    expect(validate(baseEnv({ KB_SYNC_LEASE_MS: '300000' })).KB_SYNC_LEASE_MS).toBe(300_000);
+    expect(validate(baseEnv()).KB_SYNC_LEASE_MS).toBe(600_000);
+  });
+});
+
+describe('env.validation — pass 7 N-10 · KB_SYNC_LEASE_MS 는 크롤 타임아웃 기준 최악 처리 구간보다 길어야 한다', () => {
+  let errorSpy: jest.SpyInstance;
+  beforeEach(() => {
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+  afterEach(() => errorSpy.mockRestore());
+
+  it('★ 타임아웃 60초 · 임대 300초(최소값) → 파일 1요청(60초×4=240초)과 해석·전송 여유가 임대를 넘으므로 기동 실패', () => {
+    expect(() => validate(baseEnv({ KB_CRAWL_TIMEOUT_MS: '60000', KB_SYNC_LEASE_MS: '300000' }))).toThrow(/KB_SYNC_LEASE_MS/);
+  });
+  it('임대 = 타임아웃×4 + 120초 이상이면 통과한다(60초 → 360초)', () => {
+    expect(validate(baseEnv({ KB_CRAWL_TIMEOUT_MS: '60000', KB_SYNC_LEASE_MS: '360000' })).KB_SYNC_LEASE_MS).toBe(360_000);
+    expect(() => validate(baseEnv({ KB_CRAWL_TIMEOUT_MS: '60000', KB_SYNC_LEASE_MS: '359999' }))).toThrow(/KB_SYNC_LEASE_MS/);
+  });
+  it('기본값(타임아웃 15초 · 임대 600초)과 타임아웃 15초 · 임대 300초는 그대로 통과한다(기본값 설정 변경 없음)', () => {
+    expect(validate(baseEnv()).KB_SYNC_LEASE_MS).toBe(600_000);
+    expect(validate(baseEnv({ KB_SYNC_LEASE_MS: '300000' })).KB_CRAWL_TIMEOUT_MS).toBe(15_000);
+    expect(validate(baseEnv({ KB_CRAWL_TIMEOUT_MS: '60000' })).KB_SYNC_LEASE_MS).toBe(600_000); // 기본 임대 600초는 60초 타임아웃에도 충분
+  });
+  it('타임아웃 45초 · 임대 300초는 경계(45×4+120=300)라 통과한다', () => {
+    expect(validate(baseEnv({ KB_CRAWL_TIMEOUT_MS: '45000', KB_SYNC_LEASE_MS: '300000' })).KB_SYNC_LEASE_MS).toBe(300_000);
+  });
+});

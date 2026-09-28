@@ -69,3 +69,8 @@ process.env.DATA_REENCRYPT_JOB_ENABLED = 'false';
 // 업무 자동화 워크플로우(No.41) 발송 루프도 같은 이유로 기본값을 끈다(CLAUDE.md 규약). 루프 동작
 // 검증은 `WorkflowDispatchJob.tick()` 직접 호출로 한다.
 process.env.WORKFLOW_DISPATCH_ENABLED = 'false';
+
+// 지식베이스 자동 크롤링/동기화(No.43) 루프도 같은 이유로 기본값을 끈다(FR-0-205). 선택 기능을
+// 켜야 하는 spec은 `KB_SYNC_ENABLED='true'`를 먼저 설정한 뒤 동적 import로 AppModule을 로드한다
+// (CLAUDE.md 규약). 루프 동작 검증은 `KbSyncJob.tick()` 직접 호출로 한다.
+process.env.KB_SYNC_ENABLED = 'false';

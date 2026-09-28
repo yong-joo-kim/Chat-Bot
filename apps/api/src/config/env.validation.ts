@@ -203,6 +203,30 @@ const EnvSchema = z.object({
   OMNI_INBOX_POLL_MS: z.coerce.number().int().min(3000).max(60000).default(10000),
   OMNI_NAME_SEARCH_SCAN_LIMIT: z.coerce.number().int().min(100).max(20000).default(2000),
   OMNI_MERGE_REVERT_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  // 지식베이스 자동 크롤링/동기화(No.43) 그룹 추가(kb-crawling-설계.md §3.5, ADR-0044) — 전부 선택
+  // (기본값 있음). 하나도 설정하지 않으면 기능 전체가 꺼진 채(관리 API 404 · 루프 미시작) 정상
+  // 기동한다(FR-0-205). 소스 고정 헤더 비밀은 접두 규약(리졸버 파일 참고)이라 이 스키마에 넣지 않는다(리졸버 1파일만
+  // `process.env`를 직접 읽는다 — KB-11, 레거시·업무 자동화 시크릿 선례).
+  KB_SYNC_ENABLED: envBoolean(false),
+  KB_SYNC_INTERVAL_MS: z.coerce.number().int().min(5000).max(60000).default(10000),
+  // [pass 6 · Low-3] 최소 300초 — 제출 경로의 가장 긴 구간(재수집 60초 + 해석 30초 + 외부 전송 120초)과 크롤 URL 1개(파일 60초 × 리다이렉트 홉)가 임대 안에 든다. 제출 중에는 슬롯 임대도 구간마다 갱신한다.
+  KB_SYNC_LEASE_MS: z.coerce.number().int().min(300000).default(600000),
+  KB_SYNC_MAX_PARALLEL_SOURCES: z.coerce.number().int().min(1).max(5).default(2),
+  KB_CRAWL_PRIVATE_ALLOWLIST: z.string().default(''),
+  KB_CRAWL_MAX_PAGES_CAP: z.coerce.number().int().min(1).max(20000).default(5000),
+  KB_CRAWL_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(104_857_600).default(20_971_520),
+  KB_CRAWL_USER_AGENT: z.string().min(1).max(200).default('ChatBotKBCrawler/1.0'),
+  KB_CRAWL_TIMEOUT_MS: z.coerce.number().int().min(3000).max(60000).default(15000),
+  KB_INGEST_TRANSPORT_ACK: z.enum(['INTERNAL_NETWORK', 'AUTHENTICATED', 'TLS']).optional(),
+  KB_ALLOW_RAW_FILE_INGEST: envBoolean(false),
+  KB_INGEST_CONCURRENCY: z.coerce.number().int().min(1).max(3).default(1),
+  KB_INGEST_POLL_MS: z.coerce.number().int().min(10000).default(10000),
+  KB_RAG_CALLS_PER_MIN: z.coerce.number().int().min(1).max(100).default(30),
+  KB_HTML_INGEST_FORMAT: z.enum(['DOCX', 'TXT', 'HTML']).default('DOCX'),
+  KB_INGEST_BULK_WINDOW: z
+    .string()
+    .regex(/^$|^\d{2}:\d{2}-\d{2}:\d{2}$/, 'KB_INGEST_BULK_WINDOW는 "HH:MM-HH:MM" 형식이거나 빈 값이어야 합니다.')
+    .default(''),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -284,6 +308,29 @@ export function validate(config: Record<string, unknown>): EnvConfig {
     // eslint-disable-next-line no-console
     console.error(issue);
     throw new Error(issue);
+  }
+
+  // 지식베이스 자동 크롤링/동기화(No.43) §3.5·§5.7 — `KB_INGEST_TRANSPORT_ACK=TLS`인데
+  // `RAG_BASE_URL`이 https가 아니면 기동 실패(FR-KB6-1). `KB_SYNC_ENABLED=true`인데 `RAG_BASE_URL`
+  // 미설정이면 경고만(미리보기는 가능 — 적재만 불가).
+  if (result.data.KB_INGEST_TRANSPORT_ACK === 'TLS' && !(result.data.RAG_BASE_URL ?? '').startsWith('https:')) {
+    const issue = '지식베이스 동기화: KB_INGEST_TRANSPORT_ACK=TLS이려면 RAG_BASE_URL이 https여야 합니다.';
+    // eslint-disable-next-line no-console
+    console.error(issue);
+    throw new Error(issue);
+  }
+  // [pass 7 · N-10] 임대는 "갱신 없이 지나갈 수 있는 가장 긴 구간"보다 길어야 한다 — 크롤은 요청 직전·홉 사이·호스트 간격 대기 중에, 적재는 재수집 홉·해석·전송 앞마다 임대를 갱신하므로
+  // 그 구간은 요청 1개(문서 파일 = 타임아웃 × 4)에 해석·전송 여유(120초)를 더한 값이다. 기본값(타임아웃 15초 · 임대 600초)은 영향이 없고, 타임아웃을 크게 올린 설치만 임대도 함께 올려야 한다.
+  const leaseNeededMs = result.data.KB_CRAWL_TIMEOUT_MS * 4 + 120_000;
+  if (result.data.KB_SYNC_LEASE_MS < leaseNeededMs) {
+    const issue = `지식베이스 동기화: KB_SYNC_LEASE_MS(${result.data.KB_SYNC_LEASE_MS}ms)는 KB_CRAWL_TIMEOUT_MS(${result.data.KB_CRAWL_TIMEOUT_MS}ms) × 4 + 120,000ms = ${leaseNeededMs}ms 이상이어야 합니다 — 임대를 갱신하지 못하는 가장 긴 구간(파일 요청 1개 + 해석·전송)이 임대보다 길면 다른 인스턴스가 처리 중인 실행을 가로챌 수 있습니다.`;
+    // eslint-disable-next-line no-console
+    console.error(issue);
+    throw new Error(issue);
+  }
+  if (result.data.KB_SYNC_ENABLED && !result.data.RAG_BASE_URL) {
+    // eslint-disable-next-line no-console
+    console.warn('KB_SYNC_ENABLED=true인데 RAG_BASE_URL이 없습니다 — 소스 등록·미리보기만 가능하고 적재는 되지 않습니다.');
   }
 
   return result.data;

@@ -58,6 +58,9 @@ import { InboxTagsController } from '../../inbox/controllers/inbox-tags.controll
 import { ChatbotInboxSettingsController } from '../../inbox/controllers/chatbot-inbox-settings.controller';
 // [신규 No.46] 채널별 리치 메시지 컨트롤러 1개 — @Public() 0건.
 import { RichUrlPolicyController } from '../../rich-messages/rich-url-policy.controller';
+// [신규 No.43] 지식베이스 자동 크롤링/동기화 컨트롤러 2개 — 둘 다 @Public() 0건(kb-crawling-설계.md §11).
+import { KbSourcesController } from '../../kb-sync/kb-sources.controller';
+import { ChatbotKbStatusController } from '../../kb-sync/chatbot-kb-status.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -109,7 +112,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 46개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다(No.46 리치 메시지 컨트롤러 1개 추가 — 45→46 · @Public() 8 유지)', () => {
+  it('전수 스캔: 등록된 48개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다(No.43 지식베이스 동기화 컨트롤러 2개 추가 — 46→48 · @Public() 8 유지)', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -168,6 +171,9 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       ChatbotInboxSettingsController,
       // [신규 No.46] 1개 추가 — 45 → 46.
       RichUrlPolicyController,
+      // [신규 No.43] 2개 추가 — 46 → 48.
+      KbSourcesController,
+      ChatbotKbStatusController,
     ];
 
     const publicHandlers: string[] = [];

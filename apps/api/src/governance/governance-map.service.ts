@@ -47,6 +47,7 @@ export class GovernanceMapService {
     const auditChain = await this.buildAuditChain();
     const risks = await this.buildRisks();
     const inbox = await this.buildInbox();
+    const kbSources = await this.buildKbSources();
 
     return {
       mode: runtime.mode,
@@ -58,7 +59,45 @@ export class GovernanceMapService {
       auditChain,
       risks,
       ...(inbox ? { inbox } : {}),
+      ...(kbSources ? { kbSources } : {}),
     };
+  }
+
+  /** [신규 No.43] 소스 0개면 키 자체를 생략한다(§3.4 — No.41·No.42 선례). 소스 단위로 마스킹·원본 파일
+   * 전달·전송 전제(ACK)를 표시한다(적재는 RAG 출구 그대로라 exits[]에는 별도 행이 생기지 않는다). */
+  private async buildKbSources(): Promise<GovernanceMapResponse['kbSources']> {
+    const rows = await this.prisma.kbSource.findMany({
+      select: { id: true, name: true, allowedHosts: true, enabled: true, piiMask: true, allowRawFileIngest: true, scopeCompany: true },
+    });
+    if (rows.length === 0) return undefined;
+    const ack = this.config.get<string>('KB_INGEST_TRANSPORT_ACK');
+    const ingestAck = ack === 'INTERNAL_NETWORK' || ack === 'AUTHENTICATED' || ack === 'TLS' ? ack : null;
+    return rows.map((r) => {
+      let hosts: string[] = [];
+      try {
+        const parsed = JSON.parse(r.allowedHosts);
+        if (Array.isArray(parsed)) hosts = parsed;
+      } catch {
+        hosts = [];
+      }
+      const decision: EgressDecision = !governanceRuntime().egress.enforce
+        ? 'NOT_ENFORCED'
+        : hosts.length > 0 && hosts.every((h) => checkEgress('KB_CRAWL', `https://${h}/`) === 'ALLOWED')
+          ? 'ALLOWED'
+          : 'BLOCKED';
+      return {
+        sourceId: r.id,
+        name: r.name,
+        hosts,
+        enabled: r.enabled,
+        decision,
+        piiMask: r.piiMask,
+        allowRawFileIngest: r.allowRawFileIngest,
+        ingestDataKind: 'DOCUMENT_BODY' as const,
+        scopeCompany: r.scopeCompany,
+        ingestAck,
+      };
+    });
   }
 
   /** [신규 No.42] 고객 0명이면 키 자체를 생략한다(§13.4 — No.41 선례). */
@@ -143,7 +182,8 @@ export class GovernanceMapService {
     };
 
     // [신규 No.41] `WORKFLOW_WEBHOOK`도 레거시와 같이 DB 결정 출구라 exits[]에서 제외한다(§9.6).
-    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API' && e.exitId !== 'WORKFLOW_WEBHOOK').map((def) => {
+    // [신규 No.43] `KB_CRAWL`도 같은 이유로 제외한다(소스 단위 정보는 `egress.kbSources` 절 — KB-21).
+    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API' && e.exitId !== 'WORKFLOW_WEBHOOK' && e.exitId !== 'KB_CRAWL').map((def) => {
       const url = urlByExit[def.exitId];
       const configured = !!url;
       const host = url ? this.safeHost(url) || null : null;
