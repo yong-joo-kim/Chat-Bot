@@ -76,7 +76,26 @@ export class NodeHttpTransport implements LegacyTransport {
 
       clientReq = transport.request(options, (res) => {
         const status = res.statusCode ?? 0;
+
+        // [신규 No.43] 헤더 캡처 — 요청된 헤더만 소문자 키로 반환한다(닫힌 목록, 기본 = 키 없음).
+        const captured: Record<string, string> | undefined = req.captureHeaders
+          ? req.captureHeaders.reduce<Record<string, string>>((acc, name) => {
+              const v = res.headers[name];
+              // 같은 이름의 헤더가 여러 줄이면(`X-Robots-Tag` 등) 쉼표로 합친다 — 첫 줄만 읽으면 뒤의 지시를 놓친다.
+              const first = Array.isArray(v) ? v.join(', ') : v;
+              if (first !== undefined) acc[name] = first;
+              return acc;
+            }, {})
+          : undefined;
+
         if (status >= 300 && status < 400) {
+          // [신규 No.43] `redirectMode: 'REPORT'` — 3xx를 오류가 아니라 RESPONSE(본문 비움)로 돌려준다.
+          // 기본(`'FAIL'`, 미지정 포함)은 현행 동작(레거시·웹훅 무수정).
+          if (req.redirectMode === 'REPORT') {
+            res.resume();
+            finish({ kind: 'RESPONSE', status, bytes: 0, body: Buffer.alloc(0), ...(captured ? { headers: captured } : {}) });
+            return;
+          }
           res.resume();
           finish({ kind: 'ERROR', outcome: 'REDIRECT_NOT_ALLOWED' });
           return;
@@ -94,10 +113,10 @@ export class NodeHttpTransport implements LegacyTransport {
             if (consumed >= req.maxBytes) res.destroy();
           });
           res.on('close', () => {
-            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}) });
+            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}), ...(captured ? { headers: captured } : {}) });
           });
           res.on('error', () => {
-            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}) });
+            finish({ kind: 'RESPONSE', status, contentType, bytes: 0, body: Buffer.alloc(0), ...(retryAfter ? { retryAfter } : {}), ...(captured ? { headers: captured } : {}) });
           });
           return;
         }
@@ -121,7 +140,7 @@ export class NodeHttpTransport implements LegacyTransport {
           chunks.push(chunk);
         });
         res.on('end', () => {
-          finish({ kind: 'RESPONSE', status, contentType, bytes: total, body: Buffer.concat(chunks) });
+          finish({ kind: 'RESPONSE', status, contentType, bytes: total, body: Buffer.concat(chunks), ...(captured ? { headers: captured } : {}) });
         });
         res.on('error', () => {
           finish({ kind: 'ERROR', outcome: 'NETWORK_ERROR' });

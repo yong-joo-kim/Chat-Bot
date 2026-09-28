@@ -9,6 +9,10 @@ export const RAG_PATHS = Object.freeze({
   QUERY: '/api/rag/query',
   STATUS: '/api/status',
   DOCUMENT_METADATA: '/api/documents/metadata',
+  // [신규 No.43] 적재 — 파일 업로드(multipart)만. 호출부는 `kb-sync/engine/kb-ingest.runner.ts` 1파일뿐이다.
+  INGEST: '/api/documents/ingest',
+  // [신규 No.43] 작업 개별 조회 — 뒤에는 `RagTaskId`(UUID 브랜드 값)만 붙는다. 목록·취소 경로는 금지어(KB-2).
+  TASK_STATUS: '/api/async_task_status/',
 } as const);
 
 export type RagPathKey = keyof typeof RAG_PATHS;

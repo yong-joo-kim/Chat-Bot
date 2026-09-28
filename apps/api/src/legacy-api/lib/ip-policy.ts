@@ -156,8 +156,13 @@ function isAbsoluteBlockedCidr(address: string, family: 'ipv4' | 'ipv6'): boolea
   return family === 'ipv6' ? absoluteV6.check(address, 'ipv6') : absoluteV4.check(address, 'ipv4');
 }
 
-/** 기동 시 1회 파싱 — 잘못된 항목·절대 차단 대역과 겹치는 항목은 무시 + 경고(기동 실패 아님). */
-export function parseAllowlist(raw: string): ParsedAllowlist {
+/**
+ * 기동 시 1회 파싱 — 잘못된 항목·절대 차단 대역과 겹치는 항목은 무시 + 경고(기동 실패 아님).
+ * [신규 No.43] `label` 선택 인자 — 경고 문구에 찍히는 환경변수 이름(기본값 = 현행 문구
+ * `LEGACY_API_PRIVATE_ALLOWLIST`). 업무 자동화·지식베이스 크롤러가 각자의 변수 이름으로
+ * 호출한다(제약 ④ · ADR-0044).
+ */
+export function parseAllowlist(raw: string, label: string = 'LEGACY_API_PRIVATE_ALLOWLIST'): ParsedAllowlist {
   const cidrs: ParsedAllowlist['cidrs'] = [];
   const hostnames: string[] = [];
   const warnings: string[] = [];
@@ -174,12 +179,12 @@ export function parseAllowlist(raw: string): ParsedAllowlist {
       const prefix = Number(item.slice(slashIdx + 1));
       const family = isIP(address);
       if (family === 0 || !Number.isInteger(prefix) || prefix < 0 || prefix > (family === 6 ? 128 : 32)) {
-        warnings.push(`LEGACY_API_PRIVATE_ALLOWLIST 항목을 해석할 수 없어 무시합니다: ${item}`);
+        warnings.push(`${label} 항목을 해석할 수 없어 무시합니다: ${item}`);
         continue;
       }
       const familyStr: 'ipv4' | 'ipv6' = family === 6 ? 'ipv6' : 'ipv4';
       if (isAbsoluteBlockedCidr(address, familyStr) || (familyStr === 'ipv4' && (prefix < 8 && address !== '0.0.0.0'))) {
-        warnings.push(`LEGACY_API_PRIVATE_ALLOWLIST 항목이 절대 차단 대역과 겹치거나 지나치게 넓어 무시합니다: ${item}`);
+        warnings.push(`${label} 항목이 절대 차단 대역과 겹치거나 지나치게 넓어 무시합니다: ${item}`);
         continue;
       }
       cidrs.push({ address, prefix, family: familyStr });
@@ -190,7 +195,7 @@ export function parseAllowlist(raw: string): ParsedAllowlist {
     if (family !== 0) {
       const familyStr: 'ipv4' | 'ipv6' = family === 6 ? 'ipv6' : 'ipv4';
       if (isAbsoluteBlockedCidr(item, familyStr)) {
-        warnings.push(`LEGACY_API_PRIVATE_ALLOWLIST 항목이 절대 차단 주소라 무시합니다: ${item}`);
+        warnings.push(`${label} 항목이 절대 차단 주소라 무시합니다: ${item}`);
         continue;
       }
       cidrs.push({ address: item, prefix: familyStr === 'ipv6' ? 128 : 32, family: familyStr });

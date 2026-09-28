@@ -111,7 +111,7 @@ describe('RagHttpClient', () => {
     const client = new RagHttpClient(makeConfig({ RAG_BASE_URL: 'http://rag.example.test' }));
 
     const result = await client.query({ question: '질문', company: '회사' }, 120_000);
-    expect(result).toEqual({ networkError: false, httpStatus: 503, body: { code: 'SERVER_OVERLOAD' } });
+    expect(result).toEqual({ networkError: false, httpStatus: 503, body: { code: 'SERVER_OVERLOAD' }, retryAfterMs: null });
   });
 
   it('본문이 JSON으로 파싱되지 않으면(HTML/평문 응답) body가 undefined다(SCHEMA_INVALID 판정은 상위 계층 책임)', async () => {
@@ -119,7 +119,15 @@ describe('RagHttpClient', () => {
     const client = new RagHttpClient(makeConfig({ RAG_BASE_URL: 'http://rag.example.test' }));
 
     const result = await client.query({ question: '질문', company: '회사' }, 120_000);
-    expect(result).toEqual({ networkError: false, httpStatus: 200, body: undefined });
+    expect(result).toEqual({ networkError: false, httpStatus: 200, body: undefined, retryAfterMs: null });
+  });
+
+  it('★ 503 응답에 Retry-After 헤더가 있으면 파싱한 값을 함께 돌려준다(항목⑤)', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, headers: { get: (name: string) => (name === 'retry-after' ? '7' : null) }, text: async () => '{}' } as unknown as Response);
+    const client = new RagHttpClient(makeConfig({ RAG_BASE_URL: 'http://rag.example.test' }));
+
+    const result = await client.query({ question: '질문', company: '회사' }, 120_000);
+    expect(result).toEqual({ networkError: false, httpStatus: 503, body: {}, retryAfterMs: 7000 });
   });
 });
 
@@ -198,7 +206,7 @@ describe('RagHttpClient — 리다이렉트로 출구 게이트 우회 차단(M-
 
       const result = await client.query({ question: '질문', company: '회사' }, 120_000);
 
-      expect(result).toEqual({ networkError: false, httpStatus: 200, body: { result: '답변', keywords: [], source_info: null, retrieval_success: 1 } });
+      expect(result).toEqual({ networkError: false, httpStatus: 200, body: { result: '답변', keywords: [], source_info: null, retrieval_success: 1 }, retryAfterMs: null });
       expect(target.hitCount()).toBe(1);
     } finally {
       await redirector.close();

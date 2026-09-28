@@ -24,12 +24,18 @@ export interface LegacyTransportRequest {
   /** [신규 No.41] `STATUS_ONLY`면 헤더 수신 시 상태 확정 → 본문은 `maxBytes`까지만 소비 후 폐기
    * (큰 본문이 상태 코드를 삼키는 것을 막는다, §9.4 제약①). 미지정 시 `BODY`(현행 동작). */
   responseMode?: 'BODY' | 'STATUS_ONLY';
+  /** [신규 No.43] `'REPORT'`면 3xx를 오류가 아니라 `RESPONSE`(본문 비움 + `headers.location`)로
+   * 돌려준다 — 크롤러가 한 단계씩 재검증하며 수동 추종한다(ADR-0044 §6). 기본 `'FAIL'`(현행 동작). */
+  redirectMode?: 'FAIL' | 'REPORT';
+  /** [신규 No.43] 결과 `headers`에 담을 응답 헤더(소문자 · 닫힌 목록). 미지정 = `headers` 키 없음
+   * (현행 동작 — 레거시·웹훅 호출부 무수정). */
+  captureHeaders?: ReadonlyArray<'etag' | 'last-modified' | 'location' | 'x-robots-tag' | 'content-encoding' | 'content-length' | 'retry-after'>;
 }
 
 export type LegacyTransportOutcome = 'TIMEOUT' | 'NETWORK_ERROR' | 'REDIRECT_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE';
 
 export type LegacyTransportResult =
-  | { kind: 'RESPONSE'; status: number; contentType?: string; bytes: number; body: Buffer; retryAfter?: string }
+  | { kind: 'RESPONSE'; status: number; contentType?: string; bytes: number; body: Buffer; retryAfter?: string; headers?: Record<string, string> }
   | { kind: 'ERROR'; outcome: LegacyTransportOutcome; errorCode?: string };
 
 export interface LegacyTransport {

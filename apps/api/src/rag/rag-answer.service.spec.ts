@@ -14,10 +14,10 @@ import type { ConversationLogPort } from './conversation-log.port';
  * 절반을 검증한다(위젯 DOM 레벨 절반은 `apps/widget/src/ui/app.pending.spec.ts`).
  */
 function ok200(body: unknown): RagSendResult {
-  return { networkError: false, httpStatus: 200, body };
+  return { networkError: false, httpStatus: 200, body, retryAfterMs: null };
 }
 function status(httpStatus: number, body: unknown = {}): RagSendResult {
-  return { networkError: false, httpStatus, body };
+  return { networkError: false, httpStatus, body, retryAfterMs: null };
 }
 function networkError(): RagSendResult {
   return { networkError: true };
