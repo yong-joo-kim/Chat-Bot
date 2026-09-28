@@ -16,10 +16,25 @@ export interface ButtonItemEditorProps {
    * 막을 때 쓴다. 컴포넌트 자체는 그 밖의 동작을 바꾸지 않는다(기존 소비자는 무수정).
    */
   disabledAction?: { action: ButtonItem['action']; reason: string };
+  /**
+   * [신규 No.35] 라벨 상한을 바꿀 수 있는 선택 prop(기본 40 — 기존 소비자는 무변경). 선제 안내
+   * 버튼 라벨 상한(20자, FR-PA1-5)에 맞추기 위해 이 그룹만 `20`을 전달한다
+   * (`proactive-messaging-ui-spec.md` §0).
+   */
+  labelMaxLength?: number;
 }
 
 /** 버튼 아이템 공용 서브컴포넌트(ui-spec §4.2.1 표 하단) — `action`에 따라 `value` 입력 UI가 바뀐다. */
-export function ButtonItemEditor({ value, onChange, chatbotId, idPrefix, labelError, valueError, disabledAction }: ButtonItemEditorProps): JSX.Element {
+export function ButtonItemEditor({
+  value,
+  onChange,
+  chatbotId,
+  idPrefix,
+  labelError,
+  valueError,
+  disabledAction,
+  labelMaxLength = 40,
+}: ButtonItemEditorProps): JSX.Element {
   const msg = MESSAGES.dialogue.outputFields;
 
   function handleActionChange(action: ButtonItem['action']): void {
@@ -33,7 +48,7 @@ export function ButtonItemEditor({ value, onChange, chatbotId, idPrefix, labelEr
         <input
           id={`${idPrefix}-label`}
           type="text"
-          maxLength={40}
+          maxLength={labelMaxLength}
           value={value.label}
           onChange={(e) => onChange({ ...value, label: e.target.value })}
           aria-invalid={Boolean(labelError)}

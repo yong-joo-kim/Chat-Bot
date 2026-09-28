@@ -16,6 +16,7 @@ import { ConditionSummaryChips, NodeTypeBadge, OutputTypeIconList } from './badg
 import { FlowPreviewPanel } from './components/FlowPreviewPanel';
 import { DesignValidationPanel } from './components/DesignValidationPanel';
 import { DeleteBlockedBanner } from './components/DeleteBlockedBanner';
+import { ProactiveRuleRefWarning } from '../chatbot-detail/proactive/ProactiveRuleRefWarning';
 import { ScheduleConflictBanner } from '../../components/ScheduleConflictBanner';
 import { TopicFilterDropdown } from './components/TopicFilterDropdown';
 import { BulkTopicAssignModal } from './components/BulkTopicAssignModal';
@@ -435,6 +436,8 @@ export function NodesListPage(): JSX.Element {
           setDeleteBlocked(null);
         }}
       >
+        {/* [신규 No.35] PA-C8 — 비차단 경고(확인 창 본문, 스크린 리더가 여는 즉시 읽는 위치). */}
+        {deleteTarget && <ProactiveRuleRefWarning chatbotId={chatbot.id} nodeId={deleteTarget.id} />}
         {deleteBlocked && (
           <DeleteBlockedBanner
             chatbotId={chatbot.id}

@@ -79,6 +79,7 @@ export function ChannelsTab(): JSX.Element {
                 onChanged={handleChanged}
                 onRemoved={handleRemoved}
                 canScheduleWrite={can('channel:write')}
+                primaryColor={chatbot.skin.primaryColor}
               />
             ))}
       </div>

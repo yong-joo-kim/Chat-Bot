@@ -10,6 +10,7 @@ import { WebChannelForm } from './WebChannelForm';
 import { PlaceholderChannelForm } from './PlaceholderChannelForm';
 import { ChannelDeleteConfirmDialog } from './ChannelDeleteConfirmDialog';
 import { ScheduleDeployDialog } from '../deploy-schedules/ScheduleDeployDialog';
+import { ProactiveSection } from '../proactive/ProactiveSection';
 
 /** 8종 카드 중 1개(FR-11-2~13). `implementation`/`enabled`/`configured`는 항상 응답값을 렌더한다(DD-29). */
 export function ChannelCard({
@@ -21,6 +22,8 @@ export function ChannelCard({
   /** No.28 E3 — `channel:write` 판정은 상위(`ChannelsTab`)에서 내려받는다(`VersionRow`의 `canRestore`
    * prop 패턴과 동일 — 재사용 leaf 컴포넌트가 `useAuth()`를 직접 호출하지 않는다, 기존 테스트 유지). */
   canScheduleWrite = false,
+  /** [신규 No.35] 말풍선 미리보기 색상 — 챗봇 스킨의 주 색상(`chatbot.skin.primaryColor`)을 그대로 쓴다. */
+  primaryColor,
 }: {
   chatbotId: string;
   item: ChannelListItem;
@@ -28,6 +31,7 @@ export function ChannelCard({
   onChanged: (updated: ChannelListItem) => void;
   onRemoved: (type: ChannelListItem['type']) => void;
   canScheduleWrite?: boolean;
+  primaryColor?: string;
 }): JSX.Element {
   const msg = MESSAGES.channels;
   const { showToast } = useToast();
@@ -35,6 +39,9 @@ export function ChannelCard({
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // [신규 No.35] "선제 안내" 펼침 — 기존 "설정 열기/닫기"(expanded)와 독립적으로 동시에 펼 수 있다
+  // (`proactive-messaging-ui-spec.md` §3.1).
+  const [proactiveExpanded, setProactiveExpanded] = useState(false);
 
   const locked = isArchived || item.implementation !== 'IMPLEMENTED';
   const reason = isArchived ? msg.toggleReasonArchived : item.implementation !== 'IMPLEMENTED' ? msg.toggleReasonConfigOnly : undefined;
@@ -140,6 +147,12 @@ export function ChannelCard({
             {msg.deleteAction}
           </button>
         )}
+        {/* [신규 No.35] PA-C1 — 기존 "설정 열기/닫기"와 독립적으로 펼칠 수 있다(§3.1). */}
+        {item.type === 'WEB' && (
+          <button type="button" className="btn btn-secondary" aria-expanded={proactiveExpanded} onClick={() => setProactiveExpanded((v) => !v)}>
+            {proactiveExpanded ? MESSAGES.proactive.sectionClose : MESSAGES.proactive.sectionOpen}
+          </button>
+        )}
       </div>
       {expanded &&
         (item.type === 'WEB' ? (
@@ -157,6 +170,9 @@ export function ChannelCard({
             onCancel={() => setExpanded(false)}
           />
         ))}
+      {item.type === 'WEB' && proactiveExpanded && (
+        <ProactiveSection chatbotId={chatbotId} isArchived={isArchived} primaryColor={primaryColor ?? '#4F46E5'} />
+      )}
       <ChannelDeleteConfirmDialog isOpen={deleteOpen} onConfirm={() => void handleDelete()} onCancel={() => setDeleteOpen(false)} />
       {deployMeta && (
         <ScheduleDeployDialog
