@@ -34,6 +34,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     // [신규 No.46] 리치 메시지 허용 도메인 목록 변경 감사(호스트 문자열 배열 — 비개인정보,
     // channel-rich-messages-설계.md §13 · NFR-RMS4).
     'richUrlHosts',
+    // [신규 No.35] 선제 안내 스위치·상한·간격 변경 감사 — `{ proactive: {...} }` 형태로만 채워진다
+    // (proactive-messaging-설계.md §12.1 · ADR-0045 §10).
+    'proactive',
   ],
   // [신규 No.22] 자산 6종에 'topicId' 추가 — 서비스가 값이 있을 때만 스냅샷 입력에 넣는다(토픽 없는
   // 챗봇의 감사 본문 불변, topic-system-설계.md §15).
@@ -160,6 +163,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'enabled',
     'configVersion',
   ],
+  // 선제적(Proactive) 메시징(No.35) 그룹 추가(proactive-messaging-설계.md §12.1, ADR-0045) — 문구·
+  // 버튼 원문은 화이트리스트에 없다(FR-PA7-5). 경로 패턴(`trigger`)은 관리자 설정이라 포함한다.
+  ProactiveRule: ['name', 'enabled', 'position', 'triggerKind', 'trigger', 'devices', 'startsAt', 'endsAt', 'schedule', 'purposeConfirmedAt'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

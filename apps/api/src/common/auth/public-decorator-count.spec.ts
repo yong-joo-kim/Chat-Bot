@@ -61,6 +61,9 @@ import { RichUrlPolicyController } from '../../rich-messages/rich-url-policy.con
 // [신규 No.43] 지식베이스 자동 크롤링/동기화 컨트롤러 2개 — 둘 다 @Public() 0건(kb-crawling-설계.md §11).
 import { KbSourcesController } from '../../kb-sync/kb-sources.controller';
 import { ChatbotKbStatusController } from '../../kb-sync/chatbot-kb-status.controller';
+// [신규 No.35] 선제적(Proactive) 메시징 컨트롤러 1개 — @Public() 0건(관리 API는 channel:read|write,
+// 공개 수집은 PublicConversationController#recordProactiveEvent로 이미 포함 — proactive-messaging-설계.md §16.3).
+import { ProactiveController } from '../../proactive/proactive.controller';
 
 function isPublic(target: object, methodName: string): boolean {
   const handler = (target as Record<string, unknown>)[methodName];
@@ -78,20 +81,24 @@ function routeHandlerNames(prototype: object): string[] {
 }
 
 /**
- * `@Public()`은 정확히 8곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 7→8, 근거는
+ * `@Public()`은 정확히 9곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 7→8→9, 근거는
  * `docs/02-spec/decisions/ADR-0038-answer-feedback-message-capability-ledger-and-queue-source-split.md`
- * §2 및 `feedback-loop-설계.md` §7.1). 8번째는 답변 평가(`PublicConversationController#submitFeedback`)다.
+ * §2, `feedback-loop-설계.md` §7.1, `docs/02-spec/decisions/ADR-0045-proactive-messaging-widget-local-dwell-trigger-config-extension-and-counter-only-telemetry.md`
+ * §2). 8번째는 답변 평가(`PublicConversationController#submitFeedback`), 9번째는 선제 안내 수집
+ * (`PublicConversationController#recordProactiveEvent`, No.35)이다. 규칙 조회는 새 핸들러가 아니라
+ * 기존 `getConfig`의 `?proactive=1` 선택 확장이라 개수에 영향이 없다(FR-0-243).
  * 인가 우회는 "추가된 코드"가 아니라 "추가된 예외"로 발생하므로, 예외의 개수를 자동 검증해 리뷰가
  * 놓쳐도 CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
  */
 describe('@Public() 부착 개수 — AC-C-4', () => {
-  it('정확히 8곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 답변 평가, 로그인, 로그아웃)에만 부착되어 있다', () => {
+  it('정확히 9곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 답변 평가, 선제 안내 수집, 로그인, 로그아웃)에만 부착되어 있다', () => {
     expect(isPublic(HealthController.prototype, 'check')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'getConfig')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'sendMessage')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'pollMessage')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'pollHandoff')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'submitFeedback')).toBe(true);
+    expect(isPublic(PublicConversationController.prototype, 'recordProactiveEvent')).toBe(true);
     expect(isPublic(AuthController.prototype, 'login')).toBe(true);
     expect(isPublic(AuthController.prototype, 'logout')).toBe(true);
   });
@@ -112,7 +119,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 48개 컨트롤러 전체에서 @Public() 총개수가 정확히 8건이다(No.43 지식베이스 동기화 컨트롤러 2개 추가 — 46→48 · @Public() 8 유지)', () => {
+  it('전수 스캔: 등록된 49개 컨트롤러 전체에서 @Public() 총개수가 정확히 9건이다(No.35 선제 안내 컨트롤러 1개 추가 — 48→49 · @Public() 8→9)', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -174,6 +181,8 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       // [신규 No.43] 2개 추가 — 46 → 48.
       KbSourcesController,
       ChatbotKbStatusController,
+      // [신규 No.35] 1개 추가 — 48 → 49.
+      ProactiveController,
     ];
 
     const publicHandlers: string[] = [];
@@ -196,6 +205,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
         'PublicConversationController#pollMessage',
         'PublicConversationController#pollHandoff',
         'PublicConversationController#submitFeedback',
+        'PublicConversationController#recordProactiveEvent',
       ].sort(),
     );
   });

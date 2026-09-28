@@ -227,6 +227,12 @@ const EnvSchema = z.object({
     .string()
     .regex(/^$|^\d{2}:\d{2}-\d{2}:\d{2}$/, 'KB_INGEST_BULK_WINDOW는 "HH:MM-HH:MM" 형식이거나 빈 값이어야 합니다.')
     .default(''),
+  // 선제적(Proactive) 메시징(No.35) 그룹 추가(proactive-messaging-설계.md §3.5, ADR-0045) — 전부
+  // 선택(기본값 있음). 새 백그라운드 루프 0 — `jest.isolate-env.js` 변경 불필요.
+  PROACTIVE_ENABLED: envBoolean(true),
+  PUBLIC_PROACTIVE_RULES_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(300),
+  PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(300),
+  PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(20),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

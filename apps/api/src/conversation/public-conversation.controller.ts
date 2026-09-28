@@ -7,13 +7,15 @@ import {
   HandoffPollQuerySchema,
   HandoffPollResponse,
   PendingAnswerPollResponse,
-  PublicChatbotConfig,
+  PublicChatbotConfigWithProactive,
   PublicFeedbackRequestDto,
   PublicFeedbackRequestSchema,
   PublicFeedbackResponse,
   PublicMessageRequestDto,
   PublicMessageRequestSchema,
   PublicMessageResponse,
+  PublicProactiveEventDto,
+  PublicProactiveEventSchema,
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { Public } from '../common/auth/public.decorator';
@@ -29,8 +31,9 @@ import { isUuid } from './lib/is-uuid';
 /**
  * 공개 대화 API(No.11, 인증 없음). 관리자 API와 컨트롤러·DTO·오류 메시지를 공유하지 않는다(FR-0-17).
  * 가드 순서는 레이트리밋 → Origin이다 — Origin 판정의 DB 조회 전에 폭주 트래픽을 자른다(§8.3).
- * `@Public()`은 핸들러 단위로 **8곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
- * DD-45. 답변 평가(No.44)가 8번째로 추가됐다 — ADR-0038 §2, `@Public()` 전체 개수는 7→8).
+ * `@Public()`은 핸들러 단위로 **9곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
+ * DD-45. 답변 평가(No.44)가 8번째로 추가됐다 — ADR-0038 §2. 선제 안내 수집(No.35)이 **맨 끝**에
+ * 9번째로 추가됐다 — ADR-0045 §2, `@Public()` 전체 개수는 8→9).
  */
 @UseGuards(PublicRateLimitGuard, PublicOriginGuard)
 @Controller('public/chatbots/:slug')
@@ -41,11 +44,17 @@ export class PublicConversationController {
     private readonly publicFeedbackService: PublicFeedbackService,
   ) {}
 
+  /**
+   * [신규 No.35] `?proactive=1`일 때만 응답 끝에 선택 키 `proactive`가 붙는다(§5.1) — 그 외에는
+   * 도입 전과 바이트 동일(서비스가 `getConfig(slug)`를 기존과 같은 인자로 호출한다). 선제 조회만
+   * 전용 버킷(`pa-rules-ip`)을 쓰고, `proactive` 쿼리가 없는 조회는 현행대로 기본 `ip` 버킷을 쓴다.
+   */
   @Get('config')
   @Public()
   @Header('Cache-Control', 'no-store')
-  getConfig(@Param('slug') slug: string): Promise<PublicChatbotConfig> {
-    return this.publicConversationService.getConfig(slug);
+  @PublicRateBucket({ kind: 'PROACTIVE_RULES', when: { query: 'proactive', equals: '1' } })
+  getConfig(@Param('slug') slug: string, @Query('proactive') proactive?: string): Promise<PublicChatbotConfigWithProactive> {
+    return proactive === '1' ? this.publicConversationService.getConfig(slug, { proactive: true }) : this.publicConversationService.getConfig(slug);
   }
 
   @Post('messages')
@@ -128,5 +137,27 @@ export class PublicConversationController {
     @Body(new ZodValidationPipe(PublicFeedbackRequestSchema)) dto: PublicFeedbackRequestDto,
   ): Promise<PublicFeedbackResponse> {
     return this.publicFeedbackService.submitFeedback(slug, messageId, dto);
+  }
+
+  /**
+   * [신규 No.35] 선제 안내 수집(`@Public()` 9번째, ADR-0045 §2) — 표시·클릭·닫기·끄기를 규칙·일별
+   * 숫자로만 받는다(strict 본문 3키). 결합 검증 불일치·중복·서버 스위치 꺼짐도 전부 같은 `204`
+   * (존재 탐지 불가, FR-PA5-4). 전용 버킷(`pa-ev-ip` + `pa-ev-key:session:{sessionId}`)만 소비한다
+   * (대화 `ip`·`session` 버킷 비소비).
+   */
+  @Post('proactive-events')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
+  @PublicRateBucket({
+    kind: 'PROACTIVE_EVENT',
+    key: { from: 'body', name: 'sessionId', ns: 'session' },
+    perKeyLimit: { env: 'PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_SESSION_PER_MIN', fallback: 20 },
+  })
+  recordProactiveEvent(
+    @Param('slug') slug: string,
+    @Body(new ZodValidationPipe(PublicProactiveEventSchema)) dto: PublicProactiveEventDto,
+  ): Promise<void> {
+    return this.publicConversationService.recordProactiveEvent(slug, dto);
   }
 }

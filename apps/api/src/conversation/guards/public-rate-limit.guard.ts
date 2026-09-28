@@ -10,10 +10,14 @@ import type { PublicRateBucketSpec } from '../../common/rate-limit/public-rate-b
 
 const WINDOW_MS = 60_000;
 
-/** kind별 전용 버킷 접두·IP 한도 표(No.44 §8) — `POLL`은 기존 값 그대로(바이트 단위 불변). */
+/** kind별 전용 버킷 접두·IP 한도 표(No.44 §8 · No.35 §5.4) — `POLL`·`FEEDBACK`은 기존 값 그대로
+ * (바이트 단위 불변). `PROACTIVE_RULES`·`PROACTIVE_EVENT`는 `ip:`·`session:`·`poll-`·`fb-`와 겹치지
+ * 않는 접두를 쓴다(PA-17). */
 const BUCKET_SPEC_BY_KIND: Record<PublicRateBucketSpec['kind'], { ipPrefix: string; keyPrefix: string; ipLimitEnv: string; ipLimitFallback: number }> = {
   POLL: { ipPrefix: 'poll-ip', keyPrefix: 'poll-key', ipLimitEnv: 'PUBLIC_POLL_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 600 },
   FEEDBACK: { ipPrefix: 'fb-ip', keyPrefix: 'fb-key', ipLimitEnv: 'PUBLIC_FEEDBACK_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 120 },
+  PROACTIVE_RULES: { ipPrefix: 'pa-rules-ip', keyPrefix: 'pa-rules-key', ipLimitEnv: 'PUBLIC_PROACTIVE_RULES_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 300 },
+  PROACTIVE_EVENT: { ipPrefix: 'pa-ev-ip', keyPrefix: 'pa-ev-key', ipLimitEnv: 'PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 300 },
 };
 
 /**
@@ -44,7 +48,9 @@ export class PublicRateLimitGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (bucketSpec) {
+    // [신규 No.35] `when` 불일치 = 데코레이터가 없는 것과 동일 — 아래 기존 `ip`·`session` 버킷으로
+    // 떨어진다(`getConfig`가 `?proactive=1`이 아닐 때 현행 그대로 동작하는 근거, ADR-0045 §3).
+    if (bucketSpec && matchesWhen(req, bucketSpec)) {
       this.consumeDedicatedBuckets(req, res, now, bucketSpec);
       return true;
     }
@@ -73,7 +79,8 @@ export class PublicRateLimitGuard implements CanActivate {
     return true;
   }
 
-  /** kind별 전용 IP축(1축, 공용) + 경로·헤더 키(2축) — 기존 `ip`/`session` 버킷은 전혀 건드리지 않는다. */
+  /** kind별 전용 IP축(1축, 공용) + (선택) 경로·헤더·본문 키(2축) — 기존 `ip`/`session` 버킷은 전혀
+   * 건드리지 않는다. [신규 No.35] `key`가 없으면(`PROACTIVE_RULES`) IP축만 소비하고 끝난다. */
   private consumeDedicatedBuckets(req: Request, res: Response, now: number, spec: PublicRateBucketSpec): void {
     const trustProxy = this.config.get<boolean>('TRUST_PROXY') ?? false;
     const bucketSpec = BUCKET_SPEC_BY_KIND[spec.kind];
@@ -86,7 +93,9 @@ export class PublicRateLimitGuard implements CanActivate {
       throw new ApiException('RATE_LIMITED', 429, '요청이 많습니다. 잠시 후 다시 시도해 주세요.');
     }
 
-    const keyValue = spec.key.from === 'param' ? req.params?.[spec.key.name] : req.headers[spec.key.name.toLowerCase()];
+    if (!spec.key || !spec.perKeyLimit) return;
+
+    const keyValue = resolveBucketKeyValue(req, spec.key);
     const resolvedKey = typeof keyValue === 'string' && keyValue.length > 0 ? keyValue : undefined;
     if (!resolvedKey) return; // 형식 오류는 핸들러가 400으로 판정한다(가드는 여기서 막지 않는다).
 
@@ -97,4 +106,20 @@ export class PublicRateLimitGuard implements CanActivate {
       throw new ApiException('RATE_LIMITED', 429, '요청이 많습니다. 잠시 후 다시 시도해 주세요.');
     }
   }
+}
+
+/** [신규 No.35] `when` 불일치 = 데코레이터 없음과 동일(§5.4). */
+function matchesWhen(req: Request, spec: PublicRateBucketSpec): boolean {
+  if (!spec.when) return true;
+  const value = (req.query as Record<string, unknown> | undefined)?.[spec.when.query];
+  return value === spec.when.equals;
+}
+
+/** [신규 No.35] 키 출처 +`'body'` — 가드는 파이프보다 먼저 돌지만 본문은 이미 파싱돼 있다(기존
+ * `session` 버킷이 같은 방식으로 `req.body.sessionId`를 읽는 선례). */
+function resolveBucketKeyValue(req: Request, key: NonNullable<PublicRateBucketSpec['key']>): unknown {
+  if (key.from === 'param') return req.params?.[key.name];
+  if (key.from === 'header') return req.headers[key.name.toLowerCase()];
+  const body = req.body as Record<string, unknown> | undefined;
+  return body?.[key.name];
 }

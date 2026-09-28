@@ -423,6 +423,12 @@ export class ChatbotsService {
       // 채널별 리치 메시지(No.46) 그룹 추가(channel-rich-messages-설계.md §14) — 허용 도메인 목록은
       // 설정 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 23 → 24테이블. `chatbot.delete` 직전.
       await tx.chatbotRichUrlPolicy.deleteMany({ where: { chatbotId: id } });
+      // 선제적(Proactive) 메시징(No.35) 그룹 추가(proactive-messaging-설계.md §3.3, ADR-0045 §1) —
+      // 설정·규칙·집계는 전부 설정/파생 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다).
+      // 24 → 27테이블. `chatbot.delete` 직전.
+      await tx.proactiveDailyStat.deleteMany({ where: { chatbotId: id } });
+      await tx.proactiveRule.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotProactiveSetting.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

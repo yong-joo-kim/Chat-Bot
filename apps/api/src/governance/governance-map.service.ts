@@ -48,6 +48,7 @@ export class GovernanceMapService {
     const risks = await this.buildRisks();
     const inbox = await this.buildInbox();
     const kbSources = await this.buildKbSources();
+    const proactive = await this.buildProactive();
 
     return {
       mode: runtime.mode,
@@ -60,6 +61,23 @@ export class GovernanceMapService {
       risks,
       ...(inbox ? { inbox } : {}),
       ...(kbSources ? { kbSources } : {}),
+      ...(proactive ? { proactive } : {}),
+    };
+  }
+
+  /** [신규 No.35] 규칙 0 ∧ 켜진 스위치 0이면 키 자체를 생략한다(§12.3 — No.41·No.42·No.43 선례). */
+  private async buildProactive(): Promise<GovernanceMapResponse['proactive']> {
+    const rules = await this.prisma.proactiveRule.count();
+    const chatbotsEnabled = await this.prisma.chatbotProactiveSetting.count({ where: { enabled: true } });
+    if (rules === 0 && chatbotsEnabled === 0) return undefined;
+    const enabledRules = await this.prisma.proactiveRule.count({ where: { enabled: true } });
+    return {
+      chatbotsEnabled,
+      rules,
+      enabledRules,
+      counters: 'RULE_DAILY_COUNTS_ONLY',
+      browserStorage: 'SESSION_STORAGE',
+      serverEnabled: this.config.get<boolean>('PROACTIVE_ENABLED') ?? true,
     };
   }
 

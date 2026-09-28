@@ -42,6 +42,8 @@ import { VersionBundleService, ServingVersionUnavailableError } from '../environ
 import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
 import { WorkflowTriggerService } from '../workflow/triggers/workflow-trigger.service';
 import { InboxIdentityService } from '../inbox/identity/inbox-identity.service';
+import { ProactivePublicService } from '../proactive/public/proactive-public.service';
+import type { PublicChatbotConfigWithProactive, PublicProactiveEventDto } from '@chat-bot/shared-types';
 
 /** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
  * 않는다 — packages/dialogue-engine 변경 0). */
@@ -91,6 +93,9 @@ export class PublicConversationService {
     // [신규 No.42 — 18번째 인자(끝), 선택] 고객 식별 요청(§2.3 ①.5). 선택 인자라 기존 17인자
     // 생성자 호출(단위 시험)은 무수정 통과한다.
     private readonly inboxIdentity?: InboxIdentityService,
+    // [신규 No.35 — 19번째 인자(끝), 선택] `getConfig`의 `?proactive=1` 선택 확장 + 수집 처리
+    // (§5.1·§5.3). 선택 인자라 기존 18인자 생성자 호출(단위 시험)은 무수정 통과한다.
+    private readonly proactivePublic?: ProactivePublicService,
   ) {}
 
   /**
@@ -116,7 +121,7 @@ export class PublicConversationService {
     return { bundle: s.bundle, index: s.index, settings: s.settings, versionId: source.versionId, semanticSource: s.semanticSource };
   }
 
-  async getConfig(slug: string): Promise<PublicChatbotConfig> {
+  async getConfig(slug: string, opts?: { proactive?: boolean }): Promise<PublicChatbotConfigWithProactive> {
     const { chatbot, channel } = await this.access.resolve(slug);
     const config = parseChannelConfig('WEB', channel.config) as WebChannelConfig;
 
@@ -136,7 +141,7 @@ export class PublicConversationService {
       }
     }
 
-    return {
+    const config8Keys: PublicChatbotConfig = {
       slug: chatbot.slug,
       name,
       avatarUrl,
@@ -146,6 +151,25 @@ export class PublicConversationService {
       launcherPosition: config.launcherPosition,
       showLauncher: config.showLauncher,
     };
+
+    // [신규 No.35] §5.1 — 쿼리가 없거나(또는 `?proactive=1`이 아니거나) 선제 모듈이 없으면 이 줄
+    // **앞**의 객체를 그대로 반환한다(바이트 동일 · 추가 쿼리 0). 선제 코드는 이 줄 뒤에만 있다.
+    if (!opts?.proactive || !this.proactivePublic) return config8Keys;
+
+    const proactive = await this.proactivePublic.buildPayload({ id: chatbot.id }, new Date(), () => this.loadServing(chatbot).then((s) => ({ index: s.index })));
+    return { ...config8Keys, proactive };
+  }
+
+  /** `POST /public/chatbots/:slug/proactive-events`(`@Public()` 9번째, §5.3) — 결합 검증 불일치·
+   * 중복·서버 스위치 꺼짐 모두 같은 `204`(존재 탐지 불가). 중복 억제 조회는 슬러그 판정(DB 조회 2회)
+   * **전에** 한다(스팸에 대한 비용 최소화). */
+  async recordProactiveEvent(slug: string, dto: PublicProactiveEventDto): Promise<void> {
+    if (!this.proactivePublic) return;
+    const now = new Date();
+    if (this.proactivePublic.isDuplicateEvent(dto, now)) return;
+
+    const { chatbot } = await this.access.resolve(slug);
+    await this.proactivePublic.recordEvent({ chatbot: { id: chatbot.id }, dto, now });
   }
 
   async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> {

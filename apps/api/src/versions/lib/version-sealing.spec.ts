@@ -263,14 +263,14 @@ describe('챗봇 복원/버전 이력관리(No.25) 정적 검사 — version-his
       return files;
     }
 
-    it('*.controller.ts 전체에서 @Public() 총개수가 8개다(versions.controller.ts는 0건, No.44 답변 평가 7→8)', () => {
+    it('*.controller.ts 전체에서 @Public() 총개수가 9개다(versions.controller.ts는 0건, No.44 답변 평가 7→8 · No.35 선제 안내 수집 8→9)', () => {
       const controllerFiles = collectAllApiControllerFiles();
       expect(controllerFiles.length).toBeGreaterThan(10);
       let total = 0;
       for (const file of controllerFiles) {
         total += nonCommentOccurrences(readFileSync(file, 'utf8'), /@Public\(\)/g);
       }
-      expect(total).toBe(8);
+      expect(total).toBe(9);
     });
 
     it('versions.controller.ts에는 @Public()이 없다', () => {

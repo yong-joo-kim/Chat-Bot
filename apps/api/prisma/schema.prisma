@@ -104,6 +104,11 @@ model Chatbot {
   customerLinks           CustomerLink[]
   /// [신규 No.46] 역참조만 — DB 컬럼 변화 0.
   richUrlPolicy           ChatbotRichUrlPolicy?
+  /// [신규 No.35] 선제 안내 설정·규칙·집계(환경 밖 · 스냅샷·복사·토픽 분리 대상 아님 · 영구삭제
+  /// 동반 삭제). 역참조만 — DB 컬럼 변화 0(ADR-0045 §1).
+  proactiveSetting        ChatbotProactiveSetting?
+  proactiveRules          ProactiveRule[]
+  proactiveDailyStats     ProactiveDailyStat[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -2233,4 +2238,88 @@ model KbJobLease {
   updatedAt   DateTime  @updatedAt
 
   @@map("kb_job_leases")
+}
+
+/// [신규 No.35] 챗봇별 선제 안내 설정(1:1 · 행 없음 = 꺼짐 — ADR-0045 §1). 환경 밖(저장 즉시 반영 ·
+/// 캐시 없음). ★ 쓰기 = proactive/proactive-settings.service.ts 1파일(+ chatbots.service.ts 동반
+/// 삭제 deleteMany) — PA-2.
+model ChatbotProactiveSetting {
+  chatbotId                String   @id
+  chatbot                  Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  enabled                  Boolean  @default(false)
+  /// 세션(탭)당 최대 표시 수 1~3
+  maxPerSession            Int      @default(1)
+  /// 안내 사이 최소 간격(초) 30~600
+  minIntervalSec           Int      @default(60)
+  /// 사용자가 메시지를 보낸 뒤 조용히 있는 시간(초) 60~1800 — FR-PA4-5
+  quietAfterUserMessageSec Int      @default(300)
+  /// 마지막 변경자(FK 없음 — 사실 기록)
+  updatedById              String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("chatbot_proactive_settings")
+}
+
+/// [신규 No.35] 선제 안내 규칙(챗봇 소속). ★ 쓰기 = proactive/proactive-rules.service.ts 1파일
+/// (+ 동반 삭제) — PA-2. 문구·버튼은 관리자 작성 텍스트(방문자 개인정보 0). 노드 참조는 buttons
+/// JSON 안(FK 없음 — 조회 시점 판정).
+model ProactiveRule {
+  id                   String    @id @default(uuid())
+  chatbotId            String
+  chatbot              Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name                 String
+  /// normalizeText(name) — ADR-0006
+  nameNormalized       String
+  enabled              Boolean   @default(false)
+  /// 작을수록 우선(위/아래 이동 · 동점은 createdAt, id)
+  position             Int
+  /// 'PAGE_DWELL'(1차 유일) — 판별 유니온 kind 사본(인덱스·필터용)
+  triggerKind          String
+  /// JSON ProactiveTrigger(kind 포함)
+  trigger              String
+  text                 String
+  /// JSON ProactiveButton[](0~3 · { label, action: NODE|MESSAGE|LINK, value })
+  buttons              String    @default("[]")
+  /// JSON ('DESKTOP'|'MOBILE')[]
+  devices              String    @default("[\"DESKTOP\"]")
+  startsAt             DateTime?
+  endsAt               DateTime?
+  /// JSON { days: number[](0=월~6=일 — toKstWeekday), from: 'HH:mm', to: 'HH:mm' } | null (KST)
+  schedule             String?
+  /// "광고·판촉 목적 아님" 확인(저장마다 갱신 — 필수)
+  purposeConfirmedAt   DateTime
+  purposeConfirmedById String?
+  createdById          String?
+  updatedById          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([chatbotId, nameNormalized])
+  @@index([chatbotId, enabled, position])
+  @@map("proactive_rules")
+}
+
+/// [신규 No.35] 규칙 × KST 일 집계(ADR-0045 §1). ★ 세션·IP·주소·리퍼러·UA·시각 원본 컬럼 없음(PA-3).
+/// ruleId는 FK 없음 — 규칙 삭제 후에도 이름 스냅샷과 함께 남는다(FR-PA6-5). ★ 쓰기 =
+/// core/proactive-stat.writer.ts 1파일(+ 동반 삭제).
+model ProactiveDailyStat {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  ruleId    String
+  /// 마지막 증가 시점의 규칙 이름
+  ruleName  String
+  /// KST 'YYYY-MM-DD'(toKstDayBucket)
+  dayBucket String
+  shown     Int      @default(0)
+  clicked   Int      @default(0)
+  dismissed Int      @default(0)
+  optedOut  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ruleId, dayBucket])
+  @@index([chatbotId, dayBucket])
+  @@map("proactive_daily_stats")
 }

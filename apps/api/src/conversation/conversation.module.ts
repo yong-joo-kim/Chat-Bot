@@ -13,6 +13,7 @@ import { EnvironmentServingModule } from '../environment/serving/environment-ser
 import { WorkflowTriggersModule } from '../workflow/triggers/workflow-triggers.module';
 import { InboxIdentityModule } from '../inbox/identity/inbox-identity.module';
 import { InboxCoreModule } from '../inbox/core/inbox-core.module';
+import { ProactiveModule } from '../proactive/proactive.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -49,6 +50,9 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     WorkflowTriggersModule,
     InboxIdentityModule,
     InboxCoreModule,
+    // [신규 No.35] 설정 조회 `?proactive=1` 선택 확장 + 수집 핸들러가 `ProactivePublicService`를
+    // 주입받는다(export 유일 — ADR-0045 §2).
+    ProactiveModule,
   ],
   controllers: [PublicConversationController],
   providers: [
