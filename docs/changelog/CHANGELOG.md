@@ -456,3 +456,47 @@ P-1(a) 우리가 크롤·변경 감지하고 바뀐 페이지만 외부 적재 A
 ### 시험 인프라 변경 공지
 
 이 그룹의 자동시험 회차에서 전체 스위트를 돌릴 때만 흔들리던 이전 그룹 통합 시험 다수의 원인을 지연 주입으로 재현해 확정하고 시험 코드를 고쳤다(별도 `test:` 커밋 63603e4, 제품 코드 변경 0): 대화 로그·API 호출 로그가 "발사 후 망각"이라 응답 직후 조회가 비던 경합(헬퍼 `waitFor`·`waitForLiveSessionRef`), 고정 지연·벽시계 가정(`polling-loop`), 임시 폴더 삭제 EPERM(`safeCleanupTmpDir`), 웹 비동기 단언(`HandoffHistoryDetailPage` 등). 방침·재현법·수정 전후 비교는 `docs/04-test/자동시험_전략.md` §20에 있다. 원인이 끝내 확정되지 않은 것은 `learning-augmentation` ①의 자연 발생(메커니즘만 주입으로 확인)이다. 전체 실행은 머신 메모리가 빠듯하면 `--maxWorkers=4`를 권장한다.
+
+## 2026-09-29 — e345f07 (선행 분리 커밋 742ac31·138a31b·0271361)
+
+feat: 선제적(Proactive) 메시징(No.35) 기능그룹 구현
+
+- 웹 위젯에 삽입 속성 `data-proactive="on"`이 있을 때만, 브라우저 안 페이지 머묾 시간(1차 트리거 1종 `PAGE_DWELL`)을 기준으로 규칙에 맞는 안내를 **런처 옆 말풍선**으로 띄운다. 자동으로 대화창을 열지 않고 포커스를 옮기지 않는다. 문구 1개 + 버튼 0~3개(기존 `NODE`/`MESSAGE`/`LINK` 버튼 형식 재사용)이며, 버튼 클릭은 위젯의 기존 `handleButtonAction`이 처리하는 평범한 턴이라 대화 로그·엔진 경로가 그대로다.
+- 중복 억제(세션당 최대 노출 수 1~3 · 최소 간격 30~600초 · 사용자 메시지 뒤 조용한 시간 60~1800초)는 **브라우저 `sessionStorage`에만** 저장한다. 서버는 세션·IP·주소·리퍼러·UA·시각 원본을 저장하지 않고 규칙별 KST 일 집계(표시/클릭/닫기/끄기 횟수)만 남긴다(`ProactiveDailyStat`).
+- 관리자는 챗봇 상세 > 선제 안내 화면에서 규칙을 만들고(문구·버튼·기기·게시 기간·표시 시간대·경로 포함/제외 패턴), 저장할 때마다 "광고·판촉 목적 아님"을 확인해야 한다. 순서 변경·켜기/끄기·말풍선 미리보기·규칙별 통계(최근 7~90일)를 제공하며, 버튼이 가리키는 노드가 서비스 중 번들에서 사라지면 경고를 보여준다.
+- 공개 API는 기존 `GET …/config`에 `?proactive=1`을 붙였을 때만 `proactive` 절(중복 억제 한도 + 서비스 가능한 규칙만)을 추가로 내려주는 선택적 확장이고, 수집은 새 공개 엔드포인트 `POST …/proactive-events`(`@Public()` 8→9번째)로 표시/클릭/닫기/끄기 4종 사건만 받는다.
+- 서버 기본 켜짐(`PROACTIVE_ENABLED` 기본 `true`)이지만 챗봇별 설정 행이 없으면 꺼짐과 같다(행 없음 = 꺼짐). 선택 환경변수 4개(서버 스위치 1 + 전용 rate-limit 버킷 3)뿐이고 새 백그라운드 루프는 0개다.
+- 불변식: `packages/dialogue-engine`·`apps/ml-worker`·채널 어댑터·공개 메시지 요청/응답 스키마·`sendMessage` 경로 변경 0(엔진 불가침, FR-0-239). 새 권한·역할 0. `@Public()` 총수 8 → 9.
+
+### PM 결정 요점(P-1~P-6 확정 + P-7~P-11 추천안)
+
+**P-1(A)** 웹 위젯 안에서만 · 규칙 기반(서버 이벤트·식별 고객·예약이나 외부 채널 발송으로 확장하는 B/C는 이번 범위 밖) · **P-2** 트리거는 페이지 머묾 1종만(사이트 신호·대화 중 연속 미응답 트리거는 설계에 확장 여지만 두고 구현하지 않음) · **P-3(a)** 닫음 기억은 탭 세션 동안(`sessionStorage`, 영구 저장 아님) · **P-4(a)** 측정은 표시·클릭·닫기(+끄기) 숫자만(체류 시간·이동 경로 등은 수집하지 않음) · **P-5(a)** 표시 방식은 말풍선만(자동 열기 없음, 모바일은 규칙별 선택이며 기본 꺼짐) · **P-6(a)** 용도는 이용 도움 안내로 한정하고 저장마다 "광고 아님" 확인을 감사 기록한다.
+
+### 수용 편차(요구사항 대비 해석)
+
+- 범위에서 뺀 항목(P-2 축소의 결과): 사이트 신호 트리거(FR-PA2-4), 연속 미응답 트리거(FR-PA2-5~7), 스크롤·이탈 트리거(FR-PA2-8), 대화 창 안 제안 표식(FR-PA3-8), 서버 측 억제(위젯 측만 구현), 시뮬레이터 제안(FR-PA9-5) 등. 상세는 `docs/02-spec/proactive-messaging-설계.md` §1.1.
+- 보류 초안 `docs/requirements/plugin-marketplace.md`(No.47)·`docs/requirements/connector-hub.md`(No.39)가 먼저 가번호로 쓰던 ADR-0045는 이 그룹이 사용하고, 두 보류 초안은 커밋하지 않고 보관한다(재개 시 다음 빈 번호로 조정).
+
+### 마이그레이션
+
+1개 — `20260929120000_proactive_messaging`(신규 테이블 3개: `chatbot_proactive_settings`·`proactive_rules`·`proactive_daily_stats`). 기존 테이블 재정의·백필·삭제 0건. 미배포 기능이라 이전 형태의 데이터는 없으며, 개발·시연 DB는 `prisma migrate deploy`를 다시 적용하면 된다.
+
+### 배포 절차
+
+① `prisma migrate deploy`(테이블 신설뿐 — API 중지 불필요) → ② API 배포(커밋 ①·②) → ③ 위젯 배포(커밋 ③, 삽입 스니펫에 `data-proactive="on"` 추가해야 노출 시작) → ④ 콘솔 배포(커밋 ④). `PROACTIVE_ENABLED`는 기본 켜짐이지만 챗봇마다 규칙을 만들고 켜기 전까지는 노출되지 않는다.
+
+### 호환성
+
+- 기존 `PublicChatbotConfigSchema`는 수정하지 않고, `proactive` 절이 있는 확장 스키마(`PublicChatbotConfigWithProactiveSchema`)를 `?proactive=1`일 때만 추가로 얹는다 — 기존 호출부(위젯 구버전 포함)는 바이트 동일.
+- `shared-types`에 `proactive.ts`가 신설되고 서브패스 `./proactive-eval`(zod 무의존 순수 함수, 위젯·콘솔 공용)이 추가됐다. `AuditTargetType`에 `ProactiveRule`(34→35종), 데이터 지도 응답에 선택 절 `proactive`가 추가됐다(규칙 ≥1 또는 켜진 스위치 ≥1일 때만 채워짐 — 없으면 키 생략).
+- `@Public()` 총수가 8 → 9로 올라 봉인 spec 5건(`deploy-schedule-sealing`·`feedback-sealing`·`handoff-sealing`·`validation-sealing`·`version-sealing`)과 `public-decorator-count.spec.ts`의 기대값을 기계적으로 갱신했다(관측 동작 변화 없음).
+
+### 알려진 한계
+
+- 사이트 신호·대화 중 연속 미응답 기반 트리거, 서버 측 노출 상한 억제, 외부 메시지 채널로의 선제 발송은 이번 범위 밖이다(§1.1 목록 참고, 확장 여지는 설계에 남겨둠).
+- 모바일 노출은 규칙별로 켤 수 있으나 기본은 꺼짐이다.
+- 통계는 브라우저가 보고한 사건 집계만 기준(`basis: 'BROWSER_REPORTED'`)이라 광고 차단기 등으로 수집 요청이 막히면 실제 노출보다 낮게 집계될 수 있다.
+
+### 검증
+
+분할 전후 최종 트리 기준 shared-types 빌드 오류 0, api tsc 오류 0 · jest 361 suites / 5,347 tests(1 skip, 2회 연속 확인), web tsc 오류 0 · vitest 204 files / 1,095 tests, widget tsc 오류 0 · vitest 34 files / 253 tests · 빌드 성공 · 번들 gzip 19.30KB(100KB 예산 이내). 이 그룹의 개별 커밋 단독 게이트는 따로 실행하지 않았다.
