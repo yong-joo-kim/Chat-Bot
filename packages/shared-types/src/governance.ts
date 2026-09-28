@@ -290,5 +290,17 @@ export const GovernanceMapResponseSchema = z.object({
       }),
     )
     .optional(),
+  /** [신규 No.35] 규칙 ≥1 또는 켜진 스위치 ≥1일 때만 채워진다(없으면 키 생략 = 바이트 동일,
+   * §12.3 — No.41·No.42·No.43 선례). */
+  proactive: z
+    .object({
+      chatbotsEnabled: z.number().int().nonnegative(),
+      rules: z.number().int().nonnegative(),
+      enabledRules: z.number().int().nonnegative(),
+      counters: z.literal('RULE_DAILY_COUNTS_ONLY'),
+      browserStorage: z.literal('SESSION_STORAGE'),
+      serverEnabled: z.boolean(),
+    })
+    .optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

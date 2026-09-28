@@ -7,7 +7,8 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./output-view": { "types": "./dist/output-view.d.ts", "default": "./dist/output-view.js" },
-    "./contrast": { "types": "./dist/contrast.d.ts", "default": "./dist/contrast.js" }
+    "./contrast": { "types": "./dist/contrast.d.ts", "default": "./dist/contrast.js" },
+    "./proactive-eval": { "types": "./dist/proactive-eval.d.ts", "default": "./dist/proactive-eval.js" }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

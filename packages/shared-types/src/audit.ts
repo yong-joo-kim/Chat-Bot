@@ -110,6 +110,10 @@ export const AuditTargetType = z.enum([
   // 지식베이스 자동 크롤링/동기화(No.43) 그룹 추가(kb-crawling-설계.md §13, ADR-0044) — 소스 CRUD·
   // 실행 제어 감사 대상. 액션 추가 0(기존 12종 재사용). 33 → 34종.
   'KbSource',
+  // 선제적(Proactive) 메시징(No.35) 그룹 추가(proactive-messaging-설계.md §12, ADR-0045) — 규칙
+  // 생성/수정/삭제/켜기·끄기/순서 변경 감사 대상. 스위치 변경은 targetType Chatbot으로 기록한다
+  // (AUDIT_FIELDS.Chatbot에 'proactive' 추가). 34 → 35종.
+  'ProactiveRule',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -148,6 +152,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   InboxThread: '고객 스레드',
   InboxTag: '인박스 태그',
   KbSource: '지식베이스 소스',
+  ProactiveRule: '선제 안내',
 };
 
 /**
