@@ -181,6 +181,10 @@ export const ApiErrorCode = z.enum([
   'CUSTOMER_LINK_LOCKED',
   'CUSTOMER_MERGE_FORBIDDEN',
   'CUSTOMER_MERGE_NOT_REVERTIBLE',
+  // 지식베이스 자동 크롤링/동기화(No.43) 그룹 추가(kb-crawling-설계.md §4, ADR-0044) — 3종.
+  'KB_SOURCE_BUSY',
+  'KB_INGEST_NOT_ALLOWED',
+  'KB_HOST_NOT_ALLOWED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

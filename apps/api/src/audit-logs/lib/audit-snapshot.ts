@@ -131,6 +131,35 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   Customer: ['kind', 'status', 'ref'],
   InboxThread: ['status', 'snoozeUntil', 'assigneeUserId', 'assigneeUserName', 'version'],
   InboxTag: ['name', 'color'],
+  // 지식베이스 자동 크롤링/동기화(No.43) 그룹 추가(kb-crawling-설계.md §13, ADR-0044) — 헤더 값
+  // 컬럼 자체가 없다(`authSecretRef`는 참조 **이름**만). 원문·URL 쿼리·개인정보는 0건.
+  KbSource: [
+    'name',
+    'seedUrls',
+    'sitemapUrls',
+    'pathPrefixes',
+    'excludePatterns',
+    'noisePatterns',
+    'allowQueryUrls',
+    'maxDepth',
+    'maxPages',
+    'fileTypes',
+    'maxFileBytes',
+    'minIntervalMs',
+    'scopeCompany',
+    'scopeCategory',
+    'scopeSubcategory',
+    'scheduleKind',
+    'scheduleTime',
+    'scheduleWeekday',
+    'authKind',
+    'authHeaderName',
+    'authSecretRef',
+    'piiMask',
+    'allowRawFileIngest',
+    'enabled',
+    'configVersion',
+  ],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

@@ -107,6 +107,9 @@ export const AuditTargetType = z.enum([
   'Customer',
   'InboxThread',
   'InboxTag',
+  // 지식베이스 자동 크롤링/동기화(No.43) 그룹 추가(kb-crawling-설계.md §13, ADR-0044) — 소스 CRUD·
+  // 실행 제어 감사 대상. 액션 추가 0(기존 12종 재사용). 33 → 34종.
+  'KbSource',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -144,6 +147,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   Customer: '고객',
   InboxThread: '고객 스레드',
   InboxTag: '인박스 태그',
+  KbSource: '지식베이스 소스',
 };
 
 /**

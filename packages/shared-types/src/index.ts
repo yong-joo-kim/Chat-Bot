@@ -36,3 +36,4 @@ export * from './inbox';
 export * from './rich-url';
 export * from './rich-degrade';
 export * from './rich-message';
+export * from './kb-sync';

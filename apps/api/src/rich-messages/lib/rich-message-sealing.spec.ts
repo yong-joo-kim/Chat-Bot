@@ -193,8 +193,8 @@ describe('채널별 리치 메시지(No.46) 정적 검사 — 스캔 기반 확�
       expect(offenders).toEqual([]);
     });
 
-    it('EgressExitId는 6종 그대로다(서버 출구 추가 0)', () => {
-      expect(EgressExitId.options.length).toBe(6);
+    it('EgressExitId는 7종이다(No.43 KB_CRAWL 추가 — 리치 메시지 서버 출구는 여전히 0)', () => {
+      expect(EgressExitId.options.length).toBe(7);
     });
   });
 

@@ -7,11 +7,13 @@ export type GovernanceMode = z.infer<typeof GovernanceMode>;
 export const PiiMaskModeSchema = z.enum(['PARTIAL', 'FULL']);
 export type PiiMaskMode = z.infer<typeof PiiMaskModeSchema>;
 
-// [신규 No.41] 6번째 클래스 `WORKFLOW_WEBHOOK`(업무 자동화 웹훅) — ADR-0041 §6.
-export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API', 'WORKFLOW_WEBHOOK']);
+// [신규 No.43] 7번째 클래스 `KB_CRAWL`(지식베이스 크롤러) — ADR-0044 §6.
+export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API', 'WORKFLOW_WEBHOOK', 'KB_CRAWL']);
 export type EgressExitId = z.infer<typeof EgressExitId>;
 
-export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT', 'WORKFLOW_PAYLOAD']);
+// [신규 No.43] `CRAWL_REQUEST`(크롤러 요청 줄) · `DOCUMENT_BODY`(지식베이스 적재 문서 본문 — 데이터 지도
+// `egress.kbSources` 절에서만 쓰인다. RAG 출구 자체의 exits[] 행은 `QUESTION_MASKED` 그대로다).
+export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT', 'WORKFLOW_PAYLOAD', 'CRAWL_REQUEST', 'DOCUMENT_BODY']);
 export type EgressDataKind = z.infer<typeof EgressDataKind>;
 
 export const EgressDecision = z.enum(['ALLOWED', 'BLOCKED', 'NOT_CONFIGURED', 'NOT_ENFORCED']);
@@ -269,6 +271,24 @@ export const GovernanceMapResponseSchema = z.object({
       displayNameEncrypted: z.boolean(),
       retentionDays: z.object({ INBOX_TEXT: z.number().int().nullable(), CUSTOMER_IDENTITY: z.number().int().nullable() }),
     })
+    .optional(),
+  /** [신규 No.43] 소스 0개면 키 자체를 생략한다(§3.4 — No.41·No.42 선례). 소스 단위로 마스킹·원본 파일
+   * 전달·전송 전제(ACK)를 표시한다(적재는 RAG 출구 그대로라 exits[]에는 별도 행이 생기지 않는다). */
+  kbSources: z
+    .array(
+      z.object({
+        sourceId: z.string().uuid(),
+        name: z.string(),
+        hosts: z.array(z.string()),
+        enabled: z.boolean(),
+        decision: EgressDecision,
+        piiMask: z.boolean(),
+        allowRawFileIngest: z.boolean(),
+        ingestDataKind: z.literal('DOCUMENT_BODY'),
+        scopeCompany: z.string(),
+        ingestAck: z.enum(['INTERNAL_NETWORK', 'AUTHENTICATED', 'TLS']).nullable(),
+      }),
+    )
     .optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;
