@@ -14,6 +14,7 @@ import { HandoffSweeperService } from '../handoff/handoff-sweeper.service';
 import { HandoffHintsService } from '../handoff/handoff-hints.service';
 import { hashPassword } from '../common/auth/lib/password-hash';
 import { loginAs, seedTestUsers, TEST_PASSWORD } from './helpers/auth.helper';
+import { waitFor } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 const HANDOFF_SESSION_HEADER = 'x-cb-session-id';
@@ -235,9 +236,9 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 1~3·5~12절', () =
       features: ['handoff-v1'],
     });
     const token = firstContact.body.handoff?.token as string;
-    // 상담 구간 첫 접촉 턴의 ConversationLog 적재는 fire-and-forget이다(§1.2.6) — 짧게 대기한다
-    // (stats-learning.integration.spec.ts·survey-management.integration.spec.ts 선례와 동일).
-    await new Promise((r) => setTimeout(r, 200));
+    // 상담 구간 첫 접촉 턴의 ConversationLog 적재는 fire-and-forget이다(§1.2.6) — 고정 지연(200ms)은 부하 시 모자라
+    // 간헐 실패했다(지연 주입 재현으로 확정). handoffTurn=true 행이 보일 때까지 조건 폴링한다.
+    await waitFor(() => prisma.conversationLog.findFirst({ where: { chatbotId, sessionId, handoffTurn: true } }), { label: '상담 구간 첫 접촉 턴 로그' });
     return { sessionId, sessionRef, handoffId, token };
   }
 

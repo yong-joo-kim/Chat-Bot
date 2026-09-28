@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { VersioningType } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { waitFor } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -129,7 +131,7 @@ describe('품질/채널(No.10~11) 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   async function createGroup(name = '품질채널 테스트 그룹'): Promise<string> {
@@ -476,9 +478,14 @@ describe('품질/채널(No.10~11) 통합 테스트', () => {
       expect(typeof res.body.messageId).toBe('string');
       PublicMessageResponseSchema.parse(res.body); // AC-C-1
 
-      // best-effort 적재이므로 약간의 지연 여유를 둔다.
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const stats = await jsonRequest<{ totalLogCount: number }>('GET', `${baseUrl}/stats/dashboard?chatbotId=${chatbotId}`);
+      // best-effort(발사 후 망각) 적재 — 고정 지연(sleep) 대신 첫 행이 보일 때까지 폴링한 뒤 정확히 1행인지 단언한다.
+      const stats = await waitFor(
+        async () => {
+          const r = await jsonRequest<{ totalLogCount: number }>('GET', `${baseUrl}/stats/dashboard?chatbotId=${chatbotId}`);
+          return r.status === 200 && r.body.totalLogCount >= 1 ? r : null;
+        },
+        { label: 'ConversationLog 1행 적재' },
+      );
       expect(stats.status).toBe(200);
       expect(stats.body.totalLogCount).toBe(1);
     });

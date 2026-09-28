@@ -4,6 +4,19 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * 조건이 참이 될 때까지 기다린다(고정 지연 대신). "N ms 동안 tick이 최소 M회 돈다"는 벽시계 가정은 CPU 경합에서 깨진다 —
+ * 타이머가 한꺼번에 늦게 발화하면 창이 끝날 때까지 tick이 1회뿐일 수 있다(부하 재현으로 확정, 자동시험_전략.md "간헐 실패 방침").
+ * 여기서 검증하려는 것은 횟수·순서·겹침이지 경과 시간이 아니므로 횟수 조건으로 기다린다.
+ */
+async function until(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`until 시간 초과(${timeoutMs}ms)`);
+    await wait(2);
+  }
+}
+
 const silentLogger = { warn: () => undefined };
 
 describe('PollingLoop(§7.1, §18)', () => {
@@ -25,7 +38,7 @@ describe('PollingLoop(§7.1, §18)', () => {
     });
 
     loop.start();
-    await wait(140);
+    await until(() => calls >= 3); // 겹침이 있었다면 2번째 tick 시작(첫 tick 진행 중) 시점에 concurrent=2가 관측된다.
     await loop.stop();
 
     expect(maxConcurrent).toBe(1);
@@ -45,7 +58,7 @@ describe('PollingLoop(§7.1, §18)', () => {
     });
 
     loop.start();
-    await wait(60);
+    await until(() => calls >= 2);
     await loop.stop();
 
     expect(calls).toBeGreaterThanOrEqual(2);
@@ -82,12 +95,11 @@ describe('PollingLoop(§7.1, §18)', () => {
     });
 
     void loop.runOnce();
-    const startedAt = Date.now();
     await loop.stop(20);
-    const elapsed = Date.now() - startedAt;
 
+    // 핵심은 tick(200ms)이 끝나기 전에 stop()이 반환했다는 것이다(finished=false). 벽시계 상한(예: elapsed<150ms)은
+    // CPU 경합에서 깨지므로 시간 단언은 쓰지 않는다 — stop()이 tick 완료를 기다렸다면 finished가 true였을 것이다.
     expect(finished).toBe(false);
-    expect(elapsed).toBeLessThan(150);
   });
 
   it('runOnce() 중복 호출은 1회만 실행한다(중복 실행 없음)', async () => {
@@ -142,7 +154,7 @@ describe('PollingLoop(§7.1, §18)', () => {
     });
 
     loop.start();
-    await wait(50); // 최소 1회 이상 tick이 돌 시간을 준다
+    await until(() => calls > 0); // 최소 1회 이상 tick이 돌 때까지 기다린다(고정 지연 아님)
     expect(calls).toBeGreaterThan(0);
 
     await loop.stop();
@@ -166,7 +178,7 @@ describe('PollingLoop(§7.1, §18)', () => {
     });
 
     loop.start();
-    await wait(10); // 첫 tick이 진행 중(러닝 프라미스 존재)이 되도록 기다린다
+    await until(() => calls >= 1); // 첫 tick이 진행 중(러닝 프라미스 존재)이 되도록 기다린다
     await loop.stop(200);
 
     expect(calls).toBe(1); // stop() 대기 중 interval이 여러 번 지나갔어도 새 tick은 시작되지 않는다

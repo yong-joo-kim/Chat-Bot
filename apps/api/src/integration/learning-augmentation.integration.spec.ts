@@ -11,8 +11,11 @@ import { normalizeText } from '@chat-bot/shared-types';
 import { AppModule } from '../app.module';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReindexQueueService } from '../embedding/index/reindex-queue.service';
+import { textHashOf } from '../embedding/lib/text-hash';
 import { encodeVector } from '../embedding/lib/vector-codec';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { waitFor } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -134,6 +137,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
   let baseUrl: string;
   let tmpDir: string;
   let prisma: PrismaService;
+  let reindexQueue: ReindexQueueService;
   let embeddingServer: { url: string; close: () => Promise<void> };
   let adminCookie = '';
   let viewerCookie = '';
@@ -144,7 +148,10 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
   beforeAll(async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'chatbot-learning-augmentation-test-'));
     const dbPath = join(tmpDir, 'test.db').replace(/\\/g, '/');
-    const testDatabaseUrl = `file:${dbPath}`;
+    // 배경 재색인의 upsert 배치가 Prisma "Operations timed out"(SQLite 다중 연결 락 경합으로 추정 — version-history-reindex 시험에서 자연 재현)으로
+    // 실패하면 그 행들이 FAILED로 남는다 — 이 시험에서는 시딩한 READY 행을 덮어써 422의 유력한 원인이다(메커니즘은 주입으로 재현). 시험 DB에만
+    // `connection_limit=1`로 쓰기를 직렬화한다.
+    const testDatabaseUrl = `file:${dbPath}?connection_limit=1&socket_timeout=60`;
 
     embeddingServer = await startMockEmbeddingServer(MODEL_ID, DIMENSION);
 
@@ -174,6 +181,7 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalFilters(new AllExceptionsFilter());
     prisma = moduleRef.get(PrismaService);
+    reindexQueue = moduleRef.get(ReindexQueueService);
 
     await app.listen(0);
     const server = app.getHttpServer() as http.Server;
@@ -267,6 +275,47 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
     }
   }
 
+  /**
+   * [간헐 실패 방어 — 원인 미확정] 의도 생성이 트리거한 배경 재색인이 아직 돌고 있는 동안 직접 시딩하면, 재색인이 시딩 행을
+   * 나중에 덮어쓸 수 있다(재색인은 텍스트 해시가 다른 행을 다시 임베딩하고, 임베딩 배치가 한 번이라도 실패하면 그 배치를 FAILED로
+   * 덮어쓴다 — `IndexerService`). 학습(`collectSamples`)은 READY 벡터만 읽으므로 그러면 422 CLASSIFIER_INSUFFICIENT_DATA가 된다.
+   * 시딩 **전에** 재색인이 (1) 이 의도들의 예문을 실제 텍스트 해시로 READY까지 색인했고 (2) 큐가 연속 idle임을 DB·큐 상태로 확인한다.
+   * 이 방어가 실제 실패를 막는지는 재현하지 못해 확인하지 못했다(자동시험_전략.md "간헐 실패 방침" 참고).
+   */
+  async function waitForBackgroundReindexSettled(chatbotId: string, intents: Array<{ id: string; examples: string[] }>): Promise<void> {
+    try {
+      await waitFor(
+        async () => {
+          for (const intent of intents) {
+            const rows = await prisma.embeddingVector.findMany({
+              where: { chatbotId, ownerType: 'INTENT_EXAMPLE', ownerId: intent.id, modelId: MODEL_ID },
+              select: { slotIndex: true, textHash: true, status: true },
+            });
+            const bySlot = new Map(rows.map((r) => [r.slotIndex, r]));
+            const indexed = intent.examples.every((text, i) => {
+              const row = bySlot.get(i);
+              return row?.status === 'READY' && row.textHash === textHashOf(text);
+            });
+            if (!indexed) return false;
+          }
+          return true;
+        },
+        { timeoutMs: 20_000, label: '배경 재색인의 의도 예문 색인 완료' },
+      );
+      // 큐가 연속으로 idle이어야 재실행(rerun) 예약분까지 끝난 것이다.
+      let idleStreak = 0;
+      await waitFor(
+        async () => {
+          idleStreak = reindexQueue.isRunning(chatbotId) ? 0 : idleStreak + 1;
+          return idleStreak >= 5;
+        },
+        { timeoutMs: 20_000, intervalMs: 20, label: '재색인 큐 idle' },
+      );
+    } catch {
+      // 재색인이 비활성이거나 끝나지 않는 환경이면 예전과 같이 그대로 시딩한다(이 방어는 결정론 보조일 뿐 시험 대상이 아니다).
+    }
+  }
+
   async function pollClassifierStatus(chatbotId: string, maxWaitMs = 30_000): Promise<{ state: string }> {
     const start = Date.now();
     for (;;) {
@@ -294,10 +343,21 @@ describe('학습 고도화(No.16/23) 통합 테스트', () => {
       });
       expect(nodeRes.status).toBe(201);
 
+      // 배경 재색인이 잠잠해진 뒤에 시딩한다(재색인이 시딩 행을 덮어쓰는 경합 방지 — 위 헬퍼 주석).
+      await waitForBackgroundReindexSettled(chatbotId, [
+        { id: shippingIntentId, examples: shippingExamples },
+        { id: refundIntentId, examples: refundExamples },
+      ]);
+
       // 학습 최소 조건(의도 2개·의도당 3건 이상·총 20건 이상)을 만족하는 임베딩 벡터를 직접 시딩한다
       // (재임베딩 없이 이미 저장된 벡터로 학습한다는 FR-L2-14 전제를 그대로 재현).
       await seedEmbeddingVectorsForIntent(chatbotId, shippingIntentId, shippingExamples.length, [1, 0, 0, 0]);
       await seedEmbeddingVectorsForIntent(chatbotId, refundIntentId, refundExamples.length, [0, 1, 0, 0]);
+      // 시딩 직후 READY 벡터가 학습 최소 조건(총 20건)을 충족하는지 직접 확인한다 — 실패하면 422가 아니라 여기서 원인이 드러난다.
+      const readySeeded = await prisma.embeddingVector.count({
+        where: { chatbotId, modelId: MODEL_ID, status: 'READY', ownerType: 'INTENT_EXAMPLE' },
+      });
+      expect(readySeeded).toBeGreaterThanOrEqual(shippingExamples.length + refundExamples.length);
 
       const before = await sendPublicMessage(slug, randomUUID(), fixedMessage);
       expect(before.status).toBe(200);

@@ -150,7 +150,13 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
   beforeAll(async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'chatbot-version-reindex-test-'));
     const dbPath = join(tmpDir, 'test.db').replace(/\\/g, '/');
-    const testDatabaseUrl = `file:${dbPath}`;
+    // ★ 간헐 실패의 확정된 직접 원인 — 배경 재색인의 upsert 배치(`IndexerService`가 31건을 `Promise.all`로 동시에 발행)가 Prisma
+    // "Operations timed out"(SQLite 응답 없음)으로 실패해 그 행들이 FAILED로 남는다(재시도 없음). 그러면 이 시험은 재색인 완료를 영원히 기다리거나
+    // 다음 재색인에 FAILED 행이 섞여 "기대 5, 실제 8"로 실패했다(단독 실행 약 5회 중 1회). `socket_timeout`을 60초로 늘려도 68초 동안 멈춘 채
+    // 실패했으므로 느린 디스크보다는 **SQLite 다중 연결(Prisma 기본 풀 = CPU 수×2+1)의 락 경합**으로 추정한다(31건 upsert만의 단독 재현 실험은 실패 —
+    // 시험의 폴링 읽기와 겹칠 때만 나타나는 것으로 보이며 확정하지 못했다). 시험 DB에만 `connection_limit=1`로 직렬화한다 — 30회 연속 통과(수정 전 21회 중 4회
+    // 실패). 운영 코드는 그대로 둔다(자동시험_전략.md §20.5-b "운영 코드 결함 의심 사항").
+    const testDatabaseUrl = `file:${dbPath}?connection_limit=1&socket_timeout=60`;
 
     embeddingServer = startMockEmbeddingServer(MODEL_ID, DIMENSION);
     const embeddingUrl = await embeddingServer.url;
@@ -252,7 +258,26 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
       const bySlot = new Map(rows.map((r) => [r.slotIndex, r]));
       const ready = rows.length === expected.length && expected.every((h, i) => bySlot.get(i)?.status === 'READY' && bySlot.get(i)?.textHash === h);
       if (ready) return;
-      if (Date.now() - start > timeoutMs) return; // 시간 초과 -- 이후 단언이 실제 값으로 실패해 드러난다.
+      // 시간 초과는 조용히 넘기지 않는다 — 조용히 반환하면 다음 `reset()` 뒤로 이 단계의 재색인이 새어 들어와 "기대 5, 실제 8"처럼
+      // 원인과 무관한 숫자로 실패한다(전체 실행에서 1회 관찰, 원인 미확정). 여기서 원인이 드러나게 한다.
+      if (Date.now() - start > timeoutMs) throw new Error(`재색인 완료 대기 시간 초과(${timeoutMs}ms): intentId=${intentId} — 예문 ${examples.length}건이 READY·최신 해시가 되지 않았다`);
+      await new Promise((r) => setTimeout(r, 30));
+    }
+  }
+
+  /**
+   * 계측 구간(`embeddingServer.reset()`) 앞에서 호출한다 — 이 챗봇의 모든 색인 행(의도 이름 포함)이 `READY`이고 큐가 연속 idle임을 확인해,
+   * 앞 단계(생성·수정)가 유발한 재색인이 측정 구간으로 새어 들어오지 않게 한다. `waitForIntentExamplesIndexed`는 한 의도의 **예문 행**만
+   * 보므로, 이름 행이나 다른 의도의 뒤늦은 재실행은 못 잡는다(방어적 보강 — 자연 발생 실패의 원인은 확정하지 못했다).
+   */
+  async function waitForChatbotIndexSettled(chatbotId: string, timeoutMs = 30_000): Promise<void> {
+    const start = Date.now();
+    let idleStreak = 0;
+    for (;;) {
+      const notReady = await prisma.embeddingVector.count({ where: { chatbotId, modelId: MODEL_ID, status: { not: 'READY' } } });
+      idleStreak = notReady === 0 && !reindexQueue.isRunning(chatbotId) ? idleStreak + 1 : 0;
+      if (idleStreak >= 5) return;
+      if (Date.now() - start > timeoutMs) throw new Error(`재색인 안정화 대기 시간 초과(${timeoutMs}ms): chatbotId=${chatbotId} notReady=${notReady}`);
       await new Promise((r) => setTimeout(r, 30));
     }
   }
@@ -274,6 +299,7 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
 
     // 초기 색인(이름 1 + 예문 30 = 31건)이 끝날 때까지 대기 — 측정 대상이 아니므로 카운터를 리셋한다.
     await waitForIntentExamplesIndexed(chatbotId, intentId, baseline);
+    await waitForChatbotIndexSettled(chatbotId);
     embeddingServer.reset();
 
     // 예문 중 앞 5건만 텍스트를 바꾼다(같은 슬롯 수 유지 — ID 보존 시나리오의 "예문 배열 전체 교체"와 동일 모양).
@@ -283,6 +309,7 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     await waitForIntentExamplesIndexed(chatbotId, intentId, edited);
     // 편집 직후 재색인은 바뀐 5건만 임베딩해야 한다(IndexerService의 textHash 재사용 규칙 자체의 사전 확인).
     expect(embeddingServer.totalTextsSinceReset()).toBe(CHANGED_COUNT);
+    await waitForChatbotIndexSettled(chatbotId);
 
     // 이 상태(수정본)를 "현재"로 두고, 예문이 원본이었던 시점의 버전을 수동으로 재현한다 —
     // 수정 전(baseline)으로 복원하면 5건이 다시 바뀌므로 재색인 대상은 정확히 5건이어야 한다.
@@ -313,6 +340,7 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     expect(currentHash).not.toBe(baseHash);
 
     // 측정 구간 시작 — 이제부터의 임베딩 호출만 복원이 유발한 것이다.
+    await waitForChatbotIndexSettled(chatbotId);
     embeddingServer.reset();
 
     const preview = await editor<{ currentContentHash: string; restorable: boolean }>(
@@ -336,5 +364,5 @@ describe('챗봇 복원/버전 이력관리(No.25) — AC-H3-7 증분 재색인 
     // 문장·intentId2의 나머지 25개 예문·이름 2건은 textHash가 저장된 값과 동일해 재임베딩되지 않는다.
     expect(embeddingServer.totalTextsSinceReset()).toBe(CHANGED_COUNT);
     expect(embeddingServer.totalTextsSinceReset()).toBeLessThan(TOTAL_EXAMPLES); // 전체 재임베딩이 아님을 함께 못박는다(NFR-HP6)
-  }, 60_000);
+  }, 120_000); // 느린 디스크에서 재색인 1회가 10초 넘게 걸리는 것이 관찰됐다(자동시험_전략.md §20.5) — 대기 상한(20~30초)보다 여유 있게.
 });

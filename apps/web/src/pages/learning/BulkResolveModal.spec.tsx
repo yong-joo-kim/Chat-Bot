@@ -81,6 +81,9 @@ describe('BulkResolveModal — 디바운스 서버 검색', () => {
   beforeEach(() => {
     mockBulkResolve.mockReset();
     mockIntentsList.mockReset();
+    // 기본 응답을 채워 둔다 — `mockReset()` 뒤 반환값이 undefined면, 의도 이름을 입력한 시험이 끝난 뒤 디바운스 타이머(300ms)가 늦게 발화할 때
+    // `intentsApi.list(...).then`이 TypeError(Unhandled Error)가 된다(CPU 부하에서 6/6회 재현). 개별 시험이 필요한 응답은 뒤에서 덮어쓴다.
+    mockIntentsList.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 });
     mockNotice.mockReset();
     mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
     mockMeta.mockReset();
@@ -223,6 +226,9 @@ describe('BulkResolveModal — 제출/오류 처리', () => {
   beforeEach(() => {
     mockBulkResolve.mockReset();
     mockIntentsList.mockReset();
+    // 기본 응답을 채워 둔다 — `mockReset()` 뒤 반환값이 undefined면, 의도 이름을 입력한 시험이 끝난 뒤 디바운스 타이머(300ms)가 늦게 발화할 때
+    // `intentsApi.list(...).then`이 TypeError(Unhandled Error)가 된다(CPU 부하에서 6/6회 재현). 개별 시험이 필요한 응답은 뒤에서 덮어쓴다.
+    mockIntentsList.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 });
     mockNotice.mockReset();
     mockNotice.mockResolvedValue({ upcomingRestore: null, activeCount: 0 });
     mockMeta.mockReset();

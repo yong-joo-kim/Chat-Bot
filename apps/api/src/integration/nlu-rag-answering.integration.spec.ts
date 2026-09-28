@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { VersioningType } from '@nestjs/common';
@@ -115,7 +116,7 @@ describe('FAQ/의도 매칭 고도화 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   async function createGroup(): Promise<string> {

@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { VersioningType } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
 import { createConversationLog } from './helpers/conversation-log.helper';
+import { waitFor } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -127,7 +129,7 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   async function createGroup(name = '통계학습 테스트 그룹'): Promise<string> {
@@ -167,8 +169,18 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
     return jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message });
   }
 
+  /**
+   * 고정 지연(200ms)은 "아무것도 적재되지 않았다"는 **부정 단언** 전용이다(늦게 와도 통과만 할 뿐 실패로 뒤집히지 않는다).
+   * 무언가 적재되었음을 기대하는 단언은 반드시 아래 `waitForLogRow`/`waitFor` 조건 폴링을 쓴다 — `record()`가 발사 후 망각이라
+   * 부하 시 200ms를 넘길 수 있어 간헐 실패했다(지연 주입 재현으로 확정).
+   */
   async function waitForFireAndForget(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  /** 이 챗봇의 대화 로그 행이 (최소 n개) 적재될 때까지 조건 폴링한다. */
+  async function waitForLogRow(chatbotId: string, minCount = 1): Promise<void> {
+    await waitFor(async () => (await prisma.conversationLog.count({ where: { chatbotId } })) >= minCount, { label: `conversationLog ${minCount}행(chatbotId=${chatbotId})` });
   }
 
   async function seedNode(chatbotId: string): Promise<{ intentId: string; nodeId: string }> {
@@ -407,7 +419,7 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
     it('공개 대화 API로 적재된 로그는 record() 시점에 dayBucket/hourBucket이 즉시 채워진다(센티넬 아님)', async () => {
       const { chatbotId, slug } = await setupPublicChatbot();
       await sendPublicMessage(slug, randomUUID(), '버킷적재확인질문');
-      await waitForFireAndForget();
+      await waitForLogRow(chatbotId);
       const row = await prisma.conversationLog.findFirst({ where: { chatbotId }, orderBy: { createdAt: 'desc' } });
       expect(row?.dayBucket).not.toBe('');
       expect(row?.hourBucket ?? -1).toBeGreaterThanOrEqual(0);
@@ -458,11 +470,14 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
       await sendPublicMessage(slug, sessionId, '해외배송 되나요');
       await sendPublicMessage(slug, sessionId, ' 해외배송  되나요 ');
       await sendPublicMessage(slug, sessionId, '해외배송 되나요');
-      await waitForFireAndForget();
 
-      const res = await jsonRequest<{ items: Array<{ occurredCount: number; questionText: string }> }>(
-        'GET',
-        `${base(chatbotId)}/unanswered-questions`,
+      // 미응답 큐 적재(`collect()`)는 로그 INSERT 뒤 발사 후 망각이라, 3회 병합(occurredCount=3)이 보일 때까지 조건 폴링한다.
+      const res = await waitFor(
+        async () => {
+          const r = await jsonRequest<{ items: Array<{ occurredCount: number; questionText: string }> }>('GET', `${base(chatbotId)}/unanswered-questions`);
+          return r.status === 200 && (r.body.items[0]?.occurredCount ?? 0) >= 3 ? r : null;
+        },
+        { label: '미응답 큐 occurredCount=3' },
       );
       expect(res.status).toBe(200);
       expect(res.body.items).toHaveLength(1);
@@ -482,6 +497,7 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
       expect(createRes.status).toBe(201);
 
       await sendPublicMessage(slug, randomUUID(), `${word} 문의드립니다`);
+      await waitForLogRow(chatbotId); // 차단 턴도 로그는 남는다 — 적재 완료를 확인한 뒤 큐가 비어 있는지 본다.
       await waitForFireAndForget();
 
       const res = await jsonRequest<{ items: unknown[] }>('GET', `${base(chatbotId)}/unanswered-questions`);
@@ -510,6 +526,7 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
       const { chatbotId, slug } = await setupPublicChatbot();
       await seedNode(chatbotId);
       await sendPublicMessage(slug, randomUUID(), '배송 조회');
+      await waitForLogRow(chatbotId);
       await waitForFireAndForget();
       const res = await jsonRequest<{ items: unknown[] }>('GET', `${base(chatbotId)}/unanswered-questions`);
       expect(res.body.items).toHaveLength(0);
@@ -518,8 +535,13 @@ describe('통계/분석(No.14~15) 통합 테스트', () => {
     it('AC-15A-9: 큐에 저장된 문장은 PII가 마스킹된 값이다', async () => {
       const { chatbotId, slug } = await setupPublicChatbot();
       await sendPublicMessage(slug, randomUUID(), '010-1234-5678 로 연락 주세요');
-      await waitForFireAndForget();
-      const res = await jsonRequest<{ items: Array<{ questionText: string }> }>('GET', `${base(chatbotId)}/unanswered-questions`);
+      const res = await waitFor(
+        async () => {
+          const r = await jsonRequest<{ items: Array<{ questionText: string }> }>('GET', `${base(chatbotId)}/unanswered-questions`);
+          return r.body.items.length >= 1 ? r : null;
+        },
+        { label: '미응답 큐 1행 적재' },
+      );
       expect(res.body.items).toHaveLength(1);
       expect(res.body.items[0].questionText).not.toContain('010-1234-5678');
     });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { HandoffHistoryDetailResponse } from '@chat-bot/shared-types';
 import { HandoffHistoryDetailPage } from './HandoffHistoryDetailPage';
@@ -61,7 +61,10 @@ describe('HandoffHistoryDetailPage — OI-10 고객 카드 연계', () => {
     renderPage();
 
     await screen.findByText('네, 확인했습니다');
-    expect(inboxApi.sessionLink).toHaveBeenCalledWith('bot-1', SESSION_REF);
+    // 고객 카드(`SessionLinkCard`)의 `sessionLink` 호출은 자식 컴포넌트의 useEffect(마운트 후 passive effect)에서 일어난다 —
+    // 대화 항목이 보이는 시점과 같은 틱이 아니다. 부하 시 `findByText` 직후 즉시 단언하면 아직 호출 전이라 간헐 실패했다.
+    // 호출이 일어날 때까지 조건 기반으로 기다린다.
+    await waitFor(() => expect(inboxApi.sessionLink).toHaveBeenCalledWith('bot-1', SESSION_REF));
     expect(await screen.findByText('홍길동')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '스레드 열기' })).toHaveAttribute('href', '/inbox/thread-9');
   });

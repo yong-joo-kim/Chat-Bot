@@ -170,6 +170,17 @@ describe('옴니채널 통합 인박스(No.42) 통합 테스트', () => {
     }
   }
 
+  /**
+   * 대화 로그 적재(`record()`)가 발사 후 망각(void)이라 공개 메시지 응답 직후에는 진행 중 목록(live-sessions)에 아직 세션이 없을 수 있다 — 전체 시험을 병렬로 돌릴 때 간헐 실패했다(pass 7 N-13 검증 중 발견).
+   * 목록에 첫 세션이 나타날 때까지 짧게 폴링한다.
+   */
+  async function waitForSessionRef(chatbotId: string): Promise<string> {
+    return waitFor(async () => {
+      const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
+      return listRes.body.items?.[0]?.sessionRef;
+    });
+  }
+
   async function createGroup(): Promise<string> {
     const res = await jsonRequest<Record<string, unknown>>('POST', `${baseUrl}/chatbot-groups`, { name: `인박스 테스트 그룹 ${Math.random().toString(36).slice(2, 8)}` });
     return res.body.id as string;
@@ -283,8 +294,7 @@ describe('옴니채널 통합 인박스(No.42) 통합 테스트', () => {
 
     const sessionId = randomSessionId();
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${bot.slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(bot.chatbotId);
 
     const intervened = await jsonRequest('POST', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     expect(intervened.status).toBe(201);
@@ -408,8 +418,7 @@ describe('옴니채널 통합 인박스(No.42) 통합 테스트', () => {
 
     const sessionId = randomSessionId();
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${bot.slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(bot.chatbotId);
 
     const intervened = await jsonRequest<{ id: string }>('POST', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     expect(intervened.status).toBe(201);
@@ -467,8 +476,7 @@ describe('옴니채널 통합 인박스(No.42) 통합 테스트', () => {
 
     const sessionId = randomSessionId();
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${bot.slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(bot.chatbotId);
 
     const intervened = await jsonRequest<{ id: string }>('POST', `${baseUrl}/chatbots/${bot.chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     expect(intervened.status).toBe(201);
@@ -521,6 +529,8 @@ describe('옴니채널 통합 인박스(No.42) 통합 테스트', () => {
 
     const sessionId = randomSessionId();
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${bot.slug}/messages`, { sessionId, message: '안녕하세요' });
+    // openFromSession은 대화 로그에 세션이 있어야 404가 아니다 — 로그 적재가 발사 후 망각이라 먼저 기다린다.
+    await waitFor(() => prisma.conversationLog.findFirst({ where: { chatbotId: bot.chatbotId, sessionId } }));
     const sessionRef = computeSessionRef(bot.chatbotId, sessionId);
 
     const openRes = await jsonRequest<{ threadId: string }>('POST', `${baseUrl}/inbox/threads/open`, { chatbotId: bot.chatbotId, sessionRef }, { cookie: authCookie });

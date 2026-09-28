@@ -11,6 +11,7 @@ import { Test } from '@nestjs/testing';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { waitFor, waitForLiveSessionRef } from './helpers/eventual.helper';
 import type { LegacyDnsResolver, LegacyTransport, LegacyTransportRequest, LegacyTransportResult } from '../legacy-api/transport/legacy-transport.port';
 import { WORKFLOW_TRANSPORT, WORKFLOW_DNS_RESOLVER } from '../workflow/dispatch/workflow-http.sender';
 import { CLOCK } from '../common/polling/clock';
@@ -516,9 +517,7 @@ describe('업무 자동화 워크플로우(No.41) 통합 시험', () => {
 
       const sessionId = randomUUID();
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-      const listRes = await admin<{ items: Array<{ sessionRef: string }> }>('GET', `/chatbots/${chatbotId}/live-sessions`);
-      expect(listRes.body.items.length).toBeGreaterThan(0);
-      const sessionRef = listRes.body.items[0].sessionRef;
+      const sessionRef = await waitForLiveSessionRef(() => admin<{ items: Array<{ sessionRef: string }> }>('GET', `/chatbots/${chatbotId}/live-sessions`));
       const intervened = await agent<{ id: string }>('POST', `/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {});
       expect(intervened.status).toBe(201);
       const handoffId = intervened.body.id;
@@ -560,8 +559,7 @@ describe('업무 자동화 워크플로우(No.41) 통합 시험', () => {
 
       const sessionId = randomUUID();
       await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-      const listRes = await admin<{ items: Array<{ sessionRef: string }> }>('GET', `/chatbots/${chatbotId}/live-sessions`);
-      const sessionRef = listRes.body.items[0].sessionRef;
+      const sessionRef = await waitForLiveSessionRef(() => admin<{ items: Array<{ sessionRef: string }> }>('GET', `/chatbots/${chatbotId}/live-sessions`));
       const intervened = await agent<{ id: string }>('POST', `/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {});
       const handoffId = intervened.body.id;
 
@@ -666,8 +664,12 @@ describe('업무 자동화 워크플로우(No.41) 통합 시험', () => {
       const second = await jsonRequest<{ messageId: string }>('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '또다른아무말456' });
       await waitForLogRow(second.body.messageId);
 
-      await triggerService.drainForTest();
-      let runs = await prisma.workflowRun.findMany({ where: { chatbotId, eventType: 'UNANSWERED_STREAK' } });
+      // 로그 행이 보이는 시점과 TURN_LOGGED 방출(미응답 수집 `collect()` 뒤)은 다르다 — 적재 행이 나타날 때까지 drain을 반복한다.
+      let runs = await waitFor(async () => {
+        await triggerService.drainForTest();
+        const found = await prisma.workflowRun.findMany({ where: { chatbotId, eventType: 'UNANSWERED_STREAK' } });
+        return found.length > 0 ? found : null;
+      });
       expect(runs).toHaveLength(1); // 2회째(threshold 도달)에 적재.
 
       // 세 번째 미응답 — 세션당 1회 유일 키(dedupeKey)라 추가 적재가 없다(S-4).
@@ -687,6 +689,9 @@ describe('업무 자동화 워크플로우(No.41) 통합 시험', () => {
 
   describe('벌크 재발송·취소 — 교차 챗봇 스코프 404(코드 리뷰 R1 시험 공백 (c))', () => {
     it('다른 챗봇 소속 runId를 섞으면 재발송·취소 모두 404다(존재 노출 없이 전체 거부)', async () => {
+      // 앞선 시험의 늦은 TURN_LOGGED 등으로 남은 PENDING 행이 있으면 아래 404 스크립트를 먼저 소비해 버린다 — 스크립트를 넣기 전에 비운다.
+      await triggerService.drainForTest();
+      await dispatchJob.tick();
       receiverScript.length = 0;
       receiverScript.push({ status: 404 });
       const targetId = await createTarget();

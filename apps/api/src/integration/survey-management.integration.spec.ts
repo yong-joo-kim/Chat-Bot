@@ -333,7 +333,9 @@ describe('설문관리(No.27) 통합 테스트', () => {
       expect(textAnswer?.textValue).toBe('아주 좋았어요');
 
       const chatbotIdOfSession = chatbotId;
-      await waitForConversationLogCount(prisma, { chatbotId: chatbotIdOfSession, sessionId }, 3);
+      // 세션의 로그는 4행(t0 일반 턴 1 + 설문 응답 턴 3)이다 — "전체 3행"이 아니라 **surveyTurn=true 3행**이 될 때까지 기다려야 한다
+      // (전체 3행만 기다리면 아직 4번째 행이 없을 때 surveyTurn이 2행뿐이라 간헐 실패한다 — 지연 주입 재현으로 확정).
+      await waitForConversationLogCount(prisma, { chatbotId: chatbotIdOfSession, sessionId, surveyTurn: true }, 3);
       const logs = await prisma.conversationLog.findMany({ where: { chatbotId: chatbotIdOfSession, sessionId }, orderBy: { createdAt: 'asc' } });
       const surveyTurns = logs.filter((l) => l.surveyTurn);
       expect(surveyTurns.length).toBeGreaterThanOrEqual(3); // 응답 3턴(완료 포함)은 설문이 소비했다.
@@ -613,6 +615,8 @@ describe('설문관리(No.27) 통합 테스트', () => {
       const sessionId = randomUUID();
       const t0 = await anon<{ state: unknown }>('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '격리설문시작' });
       await anon('POST', `/public/chatbots/${slug}/messages`, { sessionId, message: '설문선택지가', state: t0.body.state });
+      // 대화 로그 적재는 발사 후 망각이라 두 턴(일반 1 + 설문 응답 1)이 모두 적재된 뒤에야 "미응답 큐가 늘지 않았다"와 질문 순위 검증이 의미가 있다.
+      await waitForConversationLogCount(prisma, { chatbotId, sessionId }, 2);
       const afterUnanswered = await prisma.unansweredQuestion.count({ where: { chatbotId } });
       expect(afterUnanswered).toBe(beforeUnanswered);
 

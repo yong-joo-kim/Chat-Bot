@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -116,7 +117,7 @@ describe('챗봇 운영관리 통합 테스트 (No.1~4)', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   async function createGroup(name = '테스트 그룹'): Promise<string> {

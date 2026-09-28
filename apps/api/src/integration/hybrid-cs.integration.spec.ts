@@ -10,6 +10,7 @@ import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandoffSweeperService } from '../handoff/handoff-sweeper.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { waitForLiveSessionRef } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 const HANDOFF_SESSION_HEADER = 'x-cb-session-id';
@@ -156,6 +157,14 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
     return { chatbotId, slug };
   }
 
+  /**
+   * 대화 로그 적재(`ConversationLogService.record()`)는 발사 후 망각(void)이라 공개 메시지 응답 직후에는 진행 중 목록(live-sessions)에
+   * 세션이 아직 없을 수 있다(부하 시 간헐 실패 — G-8 등). 첫 세션이 나타날 때까지 폴링한다(`omnichannel-inbox` 시험과 같은 방식).
+   */
+  function waitForSessionRef(chatbotId: string): Promise<string> {
+    return waitForLiveSessionRef(() => jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`));
+  }
+
   it('AC-CS1-1: 상담이 꺼진 챗봇(설정 행 없음) + 토큰 헤더 없음은 handoff 필드가 없는 응답을 반환한다(바이트 동일 계약)', async () => {
     const { slug } = await setupPublicChatbot();
     const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -187,10 +196,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
     const sessionId = '22222222-2222-4222-8222-222222222222';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '주문 조회가 안돼요' });
 
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    expect(listRes.status).toBe(200);
-    expect(listRes.body.items.length).toBeGreaterThan(0);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
 
     const forbidden = await jsonRequest('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: editorCookie });
     expect(forbidden.status).toBe(403);
@@ -218,8 +224,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
     const sessionId = '33333333-3333-4333-8333-333333333333';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
 
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
 
     const intervened = await jsonRequest<{ id: string; isMine: boolean; endButtonLabel: string | null; watchWindowMissed: boolean }>(
       'POST',
@@ -333,8 +338,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
     const sendRes = await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '안녕' });
     expect(sendRes.status).toBe(200);
 
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
 
     const intervened = await jsonRequest<{ watchWindowMissed: boolean }>('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     expect(intervened.status).toBe(201);
@@ -367,8 +371,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
 
     const sessionId = '66666666-6666-4666-8666-666666666666';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
 
     const intervened = await jsonRequest<{ id: string; endButtonLabel: string | null }>('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     expect(intervened.status).toBe(201);
@@ -405,8 +408,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
     expect(settingsRes.status).toBe(200);
     const sessionId = '44444444-4444-4444-8444-444444444444';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '질문' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
     await jsonRequest('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
 
     await jsonRequest('PATCH', `${baseUrl}/chatbots/${chatbotId}/status`, { status: 'ARCHIVED' });
@@ -432,8 +434,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
 
     const sessionId = '77777777-7777-4777-8777-777777777777';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
     const intervened = await jsonRequest<{ id: string }>('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     const handoffId = intervened.body.id;
 
@@ -496,8 +497,7 @@ describe('하이브리드 CS(No.24) 통합 테스트', () => {
 
     const sessionId = '88888888-8888-4888-8888-888888888888';
     await jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl}/chatbots/${chatbotId}/live-sessions`);
-    const sessionRef = listRes.body.items[0].sessionRef;
+    const sessionRef = await waitForSessionRef(chatbotId);
     const intervened = await jsonRequest<{ id: string }>('POST', `${baseUrl}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie });
     const handoffId = intervened.body.id;
 

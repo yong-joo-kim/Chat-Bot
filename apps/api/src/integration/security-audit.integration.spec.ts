@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -124,7 +125,7 @@ describe('보안/이력(No.12~13) 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   /** `ConversationLogService.record()`는 await 하지 않는 fire-and-forget이다(FR-11-24) — 짧게 폴링한다. */

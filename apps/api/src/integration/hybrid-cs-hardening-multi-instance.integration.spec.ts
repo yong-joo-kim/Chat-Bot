@@ -11,6 +11,7 @@ import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../common/auth/lib/password-hash';
 import { loginAs, seedTestUsers, TEST_PASSWORD } from './helpers/auth.helper';
+import { waitForLiveSessionRef } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -176,8 +177,10 @@ describe('하이브리드 CS(No.24) 보강 통합 시험 — 3-b절: 다중 인�
 
     const sessionId = randomUUID();
     await jsonRequest('POST', `${baseUrl1}/public/chatbots/${slug}/messages`, { sessionId, message: '이해할 수 없는 질문입니다' });
-    const listRes = await jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl1}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie1 });
-    const sessionRef = listRes.body.items[0].sessionRef;
+    // 대화 로그 적재가 발사 후 망각이라 응답 직후엔 목록이 비어 있을 수 있다 — 첫 세션이 보일 때까지 폴링한다.
+    const sessionRef = await waitForLiveSessionRef(() =>
+      jsonRequest<{ items: Array<{ sessionRef: string }> }>('GET', `${baseUrl1}/chatbots/${chatbotId}/live-sessions`, undefined, { cookie: adminCookie1 }),
+    );
 
     const [resFromApp1, resFromApp2] = await Promise.all([
       jsonRequest('POST', `${baseUrl1}/chatbots/${chatbotId}/live-sessions/${sessionRef}/handoff`, {}, { cookie: agentCookie1 }),

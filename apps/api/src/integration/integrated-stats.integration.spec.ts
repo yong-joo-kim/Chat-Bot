@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import * as http from 'node:http';
+import { safeCleanupTmpDir } from './helpers/tmp-dir.helper';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { VersioningType } from '@nestjs/common';
@@ -22,6 +23,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IntegratedSessionQuery } from '../stats/integrated/integrated-session.query';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
 import { createConversationLog } from './helpers/conversation-log.helper';
+import { waitFor } from './helpers/eventual.helper';
 
 const API_ROOT = join(__dirname, '..', '..');
 
@@ -154,7 +156,7 @@ describe('통합 통계(No.29) 통합 테스트', () => {
 
   afterAll(async () => {
     await app?.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+    await safeCleanupTmpDir(tmpDir);
   });
 
   async function createGroup(name: string): Promise<string> {
@@ -197,8 +199,12 @@ describe('통합 통계(No.29) 통합 테스트', () => {
     return jsonRequest('POST', `${baseUrl}/public/chatbots/${slug}/messages`, { sessionId, message });
   }
 
-  async function waitForFireAndForget(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+  /**
+   * 공개 대화의 `record()`는 발사 후 망각이라 응답 직후엔 로그 행이 없을 수 있다 — 예전의 고정 지연(200ms)은
+   * 부하 시 모자라 간헐 실패했다(지연 주입 재현으로 확정). 적재를 기대하는 단언은 이 조건 폴링을 쓴다.
+   */
+  async function waitForLogRows(chatbotId: string, minCount: number): Promise<void> {
+    await waitFor(async () => (await prisma.conversationLog.count({ where: { chatbotId } })) >= minCount, { label: `conversationLog ${minCount}행(chatbotId=${chatbotId})` });
   }
 
   // ================================================================================================
@@ -297,14 +303,14 @@ describe('통합 통계(No.29) 통합 테스트', () => {
 
     const beforeRes = await sendPublicMessage(slug, randomUUID(), '이동 전 공개 대화 질문');
     expect(beforeRes.status).toBe(200);
-    await waitForFireAndForget();
+    await waitForLogRows(chatbotId, 1); // 이동 전 로그가 확실히 적재된 뒤에 그룹을 옮겨야 귀속 검증이 성립한다.
 
     const moveRes = await jsonRequest('PATCH', `${baseUrl}/chatbots/${chatbotId}/group`, { groupId: newGroupId });
     expect(moveRes.status).toBe(200);
 
     const afterRes = await sendPublicMessage(slug, randomUUID(), '이동 후 공개 대화 질문');
     expect(afterRes.status).toBe(200);
-    await waitForFireAndForget();
+    await waitForLogRows(chatbotId, 2);
 
     const rows = await prisma.conversationLog.findMany({ where: { chatbotId }, orderBy: { createdAt: 'asc' } });
     expect(rows).toHaveLength(2);
@@ -334,7 +340,7 @@ describe('통합 통계(No.29) 통합 테스트', () => {
     try {
       const res = await sendPublicMessage(slug, randomUUID(), 'AC-I3-2 질문');
       expect(res.status).toBe(200);
-      await waitForFireAndForget();
+      await waitForLogRows(chatbotId, 1); // record()가 끝난 뒤에야 "ChatbotGroup 조회 0건" 단언이 의미가 있다.
 
       expect(findUniqueSpy).not.toHaveBeenCalled();
       expect(findFirstSpy).not.toHaveBeenCalled();
@@ -684,7 +690,7 @@ describe('통합 통계(No.29) 통합 테스트', () => {
     const groupRow = await prisma.chatbot.findUniqueOrThrow({ where: { id: chatbotId }, select: { groupId: true } });
     const res0 = await sendPublicMessage(slug, randomUUID(), '010-1234-5678 로 연락 주세요');
     expect(res0.status).toBe(200);
-    await waitForFireAndForget();
+    await waitForLogRows(chatbotId, 1);
 
     const res = await jsonRequest('GET', `${baseUrl}/stats/integrated/questions?scope=GROUP&groupId=${groupRow.groupId}`);
     expect(res.status).toBe(200);

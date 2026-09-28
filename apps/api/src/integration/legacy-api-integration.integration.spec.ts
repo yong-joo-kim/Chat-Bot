@@ -12,6 +12,7 @@ import { normalizeText } from '@chat-bot/shared-types';
 import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loginAs, seedTestUsers } from './helpers/auth.helper';
+import { waitFor } from './helpers/eventual.helper';
 import { LEGACY_DNS_RESOLVER, LEGACY_TRANSPORT } from '../legacy-api/transport/legacy-transport.port';
 import type { LegacyDnsResolver, LegacyTransport, LegacyTransportRequest, LegacyTransportResult } from '../legacy-api/transport/legacy-transport.port';
 
@@ -344,6 +345,20 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
   }
   function viewer<T = unknown>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
     return jsonRequest(method, `${baseUrl}${path}`, body, { Cookie: viewerCookie });
+  }
+  /**
+   * `ApiCallLog` 적재(`ApiCallLogService.record()`)는 발사 후 망각(void)이라 공개 대화 응답 직후에는 목록에 행이 아직 없을 수 있다 —
+   * CPU 부하에서 `items.length`가 0으로 실패했다(재현 확정, 지연 주입으로도 결정적 재현). 기대 건수 이상이 보일 때까지 폴링한다.
+   */
+  async function apiCallLogsOf(chatbotId: string, opts: { minCount?: number; query?: string } = {}): Promise<ApiResponse<{ items: Array<Record<string, unknown>> }>> {
+    const path = `/chatbots/${chatbotId}/api-call-logs${opts.query ?? ''}`;
+    return waitFor(
+      async () => {
+        const r = await editor<{ items: Array<Record<string, unknown>> }>('GET', path);
+        return r.status === 200 && (r.body.items?.length ?? 0) >= (opts.minCount ?? 1) ? r : null;
+      },
+      { label: `api-call-logs ${opts.minCount ?? 1}건 이상` },
+    );
   }
   function anon<T = unknown>(method: string, path: string, body?: unknown): Promise<ApiResponse<T>> {
     return jsonRequest(method, `${baseUrl}${path}`, body);
@@ -733,7 +748,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       expect(sent.pathname).toBe('/orders/SHIP1');
 
       // ApiCallLog는 메타데이터만 — 질문 원문·응답값·경로 치환값이 어디에도 없다.
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId);
       expect(logsRes.status).toBe(200);
       expect(logsRes.body.items.length).toBe(1);
       const logItem = logsRes.body.items[0];
@@ -851,7 +866,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       // 신호로 남기고, CI 지연(GC·스케줄링·러너 경합)에 견디도록 넉넉한 10초로 완화한다(시험 타임아웃
       // 15_000ms보다 작게 — 실패 시 실제 원인이 뚜렷이 구분되도록).
       expect(elapsed).toBeLessThan(10_000);
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId);
       expect(logsRes.body.items[0].outcome).toBe('TIMEOUT');
     }, 15_000);
 
@@ -1056,7 +1071,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
 
       const detailRes = await admin('GET', `/api-connections/${conn.id}`);
       const listRes = await admin('GET', '/api-connections');
-      const logsRes = await editor('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId); // 로그 행이 적재된 뒤에 시크릿 누출을 검사해야 의미가 있다
       const pickerRes = await editor('GET', '/api-connections/picker');
 
       for (const r of [t3, detailRes, listRes, logsRes, pickerRes]) {
@@ -1074,7 +1089,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       const { t3 } = await runForm(flow.slug, flow.startIntentExample, 'SHIP1', '010-1111-2222');
       expect(outputTexts(t3.body)).toEqual(['조회해 볼게요.', '지금은 주문 정보를 확인할 수 없어요. 잠시 후 다시 시도해 주세요.']);
       expect(legacyRequests.length).toBe(before);
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId);
       expect(logsRes.body.items[0].outcome).toBe('SECRET_MISSING');
     });
   });
@@ -1094,7 +1109,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       expect(receivedPhone).not.toBe('010-1234-5678');
       expect(receivedPhone.includes('1234')).toBe(false); // 가운데 자리가 마스킹된다
 
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId);
       expect(logsRes.body.items[0].personalDataMasked).toBe(true);
       expect(JSON.stringify(logsRes.body)).not.toContain('010-1234-5678');
     });
@@ -1108,7 +1123,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       const query = new URLSearchParams(sent.search);
       expect(query.get('phone')).toBe('010-1234-5678');
 
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId);
       expect(logsRes.body.items[0].personalDataMasked).toBe(false);
     });
   });
@@ -1270,7 +1285,7 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       expect(res.body.apiStep?.mode).toBe('LIVE');
       expect(legacyRequests.length).toBe(before); // 바인딩 누락은 애초에 외부 호출을 만들지 않는다(호출 시도 자체가 없음)
 
-      const logsRes = await editor<{ items: Array<Record<string, unknown>> }>('GET', `/chatbots/${flow.chatbotId}/api-call-logs?source=SIMULATION_LIVE`);
+      const logsRes = await apiCallLogsOf(flow.chatbotId, { query: '?source=SIMULATION_LIVE' });
       expect(logsRes.body.items.length).toBe(1);
       expect(logsRes.body.items[0].source).toBe('SIMULATION_LIVE');
     });
