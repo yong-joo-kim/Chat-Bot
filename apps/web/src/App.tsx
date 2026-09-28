@@ -58,6 +58,11 @@ import { DataGovernanceMapPage } from './pages/settings/data-governance/DataGove
 import { DataGovernanceRetentionPage } from './pages/settings/data-governance/DataGovernanceRetentionPage';
 import { PurgeHistoryPage } from './pages/settings/data-governance/PurgeHistoryPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
+import { KbSourcesPage } from './pages/settings/kb-crawling/KbSourcesPage';
+import { KbSourceShell } from './pages/settings/kb-crawling/KbSourceShell';
+import { KbSourceOverviewPage } from './pages/settings/kb-crawling/KbSourceOverviewPage';
+import { KbRunHistoryPage } from './pages/settings/kb-crawling/KbRunHistoryPage';
+import { KbDocumentListPage } from './pages/settings/kb-crawling/KbDocumentListPage';
 import { CannedResponsesPage } from './pages/dialogue/CannedResponsesPage';
 import { TopicsPage } from './pages/dialogue/TopicsPage';
 import { HandoffChatbotPickerPage } from './pages/handoff-console/HandoffChatbotPickerPage';
@@ -262,6 +267,29 @@ export function App(): JSX.Element {
               </RequirePermission>
             }
           />
+          {/* [신규 No.43] KB1~KB9 — 새 서브라우트 트리 1그룹(`KbSourcesPage`+`KbSourceShell`,
+              kb-crawling-ui-spec.md §1). 소스 상세는 개별 자원 스코프(`:sourceId`) 3탭. */}
+          <Route
+            path="/settings/kb-crawling"
+            element={
+              <RequirePermission permission="security:read" menuName={MESSAGES.systemSettings.kbCrawling}>
+                <KbSourcesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/settings/kb-crawling/:sourceId"
+            element={
+              <RequirePermission permission="security:read" menuName={MESSAGES.systemSettings.kbCrawling}>
+                <KbSourceShell />
+              </RequirePermission>
+            }
+          >
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<KbSourceOverviewPage />} />
+            <Route path="runs" element={<KbRunHistoryPage />} />
+            <Route path="documents" element={<KbDocumentListPage />} />
+          </Route>
           {/* [신규 No.41] WF1~WF1-c — 새 서브라우트 트리(`WorkflowAutomationShell`, ui-spec §1). */}
           <Route
             path="/settings/workflow-automation"

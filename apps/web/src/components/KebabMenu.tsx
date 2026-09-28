@@ -4,6 +4,10 @@ export interface KebabMenuItem {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
+  /** [신규 No.43] 비활성 사유 등 부가 설명(`title` 속성으로만 노출 — 기존 소비자는 생략해 영향 없음). */
+  title?: string;
+  /** [신규 No.43] 비활성 사유를 보이는 텍스트로 따로 두었을 때 그 요소의 id(`aria-describedby`로 연결). */
+  describedBy?: string;
 }
 
 /**
@@ -58,6 +62,8 @@ export function KebabMenu({ label, items }: { label: string; items: KebabMenuIte
               role="menuitem"
               className="kebab-menu-item"
               disabled={item.disabled}
+              title={item.title}
+              aria-describedby={item.describedBy}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();

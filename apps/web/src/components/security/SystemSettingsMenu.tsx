@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { MESSAGES } from '../../constants/messages';
 import { deploySchedulesApi } from '../../api/deploySchedules';
 import { workflowRunsApi } from '../../api/workflowRuns';
+import { kbSourcesApi } from '../../api/kbSources';
 import { AttentionCountBadge } from '../AttentionCountBadge';
 
 interface MenuItem {
@@ -13,6 +14,8 @@ interface MenuItem {
   permission: Permission;
   /** [신규 No.41] 업무 자동화 항목에만 붙는 경량 점 배지(§3.12 확정 — 숫자 배지는 예약 배포 전용 유지). */
   workflowAttentionDot?: boolean;
+  /** [신규 No.43] `GET /kb-sources/meta`가 404면(`KB_SYNC_ENABLED=false`) 항목 자체를 숨긴다(KB1). */
+  requiresKbSyncEnabled?: boolean;
 }
 
 const ITEMS: MenuItem[] = [
@@ -20,6 +23,8 @@ const ITEMS: MenuItem[] = [
   { label: MESSAGES.systemSettings.bannedWords, href: '/settings/banned-words', permission: 'security:read' },
   // [No.26] 레거시 API 연동 — 보안 설정 항목(회원·금지어·API 연결)을 앞쪽에 모은다(ui-spec §5).
   { label: MESSAGES.systemSettings.apiConnections, href: '/settings/api-connections', permission: 'security:read' },
+  // [신규 No.43] 지식베이스 동기화 — "API 연결" 옆(kb-crawling-ui-spec.md KB1).
+  { label: MESSAGES.systemSettings.kbCrawling, href: '/settings/kb-crawling', permission: 'security:read', requiresKbSyncEnabled: true },
   // [신규 No.41] 업무 자동화 — "API 연결" 다음, "데이터 거버넌스" 앞(§3.12 확정 순서).
   { label: MESSAGES.systemSettings.workflowAutomation, href: '/settings/workflow-automation', permission: 'security:read', workflowAttentionDot: true },
   // [신규 No.45] 데이터 거버넌스 — "API 연결" 다음, "이력 관리" 앞(같은 security:read 그룹, ui-spec §3.9).
@@ -35,7 +40,6 @@ const ITEMS: MenuItem[] = [
  */
 export function SystemSettingsMenu(): JSX.Element | null {
   const { can } = useAuth();
-  const visibleItems = ITEMS.filter((item) => can(item.permission));
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -79,6 +83,19 @@ export function SystemSettingsMenu(): JSX.Element | null {
       })
       .catch(() => undefined);
   }, [canSeeWorkflow]);
+
+  // [신규 No.43] KB1 — `security:read`가 있을 때만 `meta`를 확인해 기능 꺼짐(404)이면 항목을 숨긴다.
+  const canSeeKb = can('security:read');
+  const [kbSyncEnabled, setKbSyncEnabled] = useState(false);
+  useEffect(() => {
+    if (!canSeeKb) return;
+    kbSourcesApi
+      .meta()
+      .then(() => setKbSyncEnabled(true))
+      .catch(() => setKbSyncEnabled(false));
+  }, [canSeeKb]);
+
+  const visibleItems = ITEMS.filter((item) => can(item.permission) && (!item.requiresKbSyncEnabled || kbSyncEnabled));
 
   useEffect(() => {
     if (!open) return undefined;

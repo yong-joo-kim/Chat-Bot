@@ -22,6 +22,7 @@ import { ThresholdBandVisualizer } from './ThresholdBandVisualizer';
 import { IndexStatusBadge } from './IndexStatusBadge';
 import { ReindexButton } from './ReindexButton';
 import { RagScopeFields } from './RagScopeFields';
+import { KbSyncStatusCard } from './KbSyncStatusCard';
 import { ProviderLockedField } from './ProviderLockedField';
 import { FallbackPolicyRadioGroup } from './FallbackPolicyRadioGroup';
 import { SimilarityThresholdField } from './SimilarityThresholdField';
@@ -439,6 +440,9 @@ export function AnswerSettingsPage({
               subcategoryError={fieldErrors.ragSubcategory}
               scopeWarning={fieldErrors.ragScopeWarning}
             />
+
+            {/* [신규 No.43] KB10 — 지식베이스 동기화 상태 카드(kb-crawling-ui-spec.md §3.7). */}
+            <KbSyncStatusCard chatbotId={chatbotId} />
 
             <ProviderLockedField />
 

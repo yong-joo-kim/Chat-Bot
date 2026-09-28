@@ -200,3 +200,15 @@
 1. `{api.*}` 치환의 `BUTTON` 분기가 페이로드를 `{ text, buttons }`로 **필드 나열 재조립**하던 코드는 새 선택 키 `display`(바로연결)를 **치환이 있는 턴에서만** 조용히 잃는다 — 요구사항이 선례로 든 재조립 경로 결함(이 ADR 계열 · No.41 C-4)과 같은 유형이다. `{ ...output.payload, text, buttons }` **스프레드**로 바꾸고 정적 검사(RM-2 — 필드 나열 재조립 0)와 v2 `API_CONDITION` 성공 분기 뒤 실제 공개 대화 통합 시험(`resumeAfterApiCall` 경로)으로 고정한다.
 2. 캐러셀 치환 대상은 `CARD`와 같은 텍스트 필드(안내 문구·카드 제목·설명·버튼 라벨)뿐이고 URL·버튼 값은 치환하지 않는다(AC-L3-9 규약). 제목이 빈 카드는 제거하고 0장이면 아웃풋 제거, **1장이면 `CARD`로 바꾼다**(엔진 출력은 항상 스키마를 통과 — 캐러셀은 2~10장) — 모두 `API_VALUE_DROPPED` trace.
 3. 새 재검토 트리거: 아웃풋 페이로드에 선택 키를 더할 때는 엔진·금지어·자산 이전 트림의 재조립 지점이 스프레드인지 먼저 확인한다(`channel-rich-messages-설계.md` §15 체크리스트).
+
+
+---
+
+## 갱신 (2026-09-27 — No.43: 전송·DNS·주소 판정 부품의 세 번째 소비자 · 전송 포트 선택 필드 +2)
+
+지식베이스 동기화(No.43, **ADR-0044 §6**). 결정 1~11은 불변이다.
+
+1. **세 번째 소비자**: 지식베이스 크롤러가 결정 4의 방어 층(DNS 1회·모든 주소 검사·절대 차단 대역·사설 allowlist·검증 주소 고정·단일 데드라인·응답 크기 상한)을 그대로 쓴다. `LegacyApiHttpClient`·`ValidatedLegacyRequest`·시크릿 리졸버는 공유하지 않는다 — L-2·L-4 **불변**.
+2. **전송 포트 선택 필드 +2**(기본값 = 현행 — 레거시·웹훅 호출부·spec 무수정): `redirectMode?: 'FAIL'｜'REPORT'`(`REPORT`면 3xx를 오류가 아니라 `RESPONSE`(본문 폐기 + `Location`)로 돌려준다 — 크롤러가 **단계마다 허용 호스트·출구 게이트·주소 판정을 다시 하고 최대 3회** 따라가기 위함. 전송 계층은 여전히 스스로 따라가지 않는다) · `captureHeaders?`(닫힌 목록 `etag`·`last-modified`·`location`·`x-robots-tag`·`content-encoding`·`content-length` — 결과 `headers?`). **[갱신 각주 — 2026-09-28 · No.43 pass 5]** 닫힌 목록에 `retry-after`를 더했다(크롤러 429·503 재시도 지연 — 결과 최상위 `retryAfter`는 기존대로 유지). 캡처 값이 배열이면 `', '`로 합친다(Node `http`는 이 목록의 헤더를 배열로 주지 않으므로 방어 코드 — 동작 변화 없음). `captureHeaders` 미지정 기본 동작은 그대로라 레거시·웹훅 호출부와 L-2·L-4·그 spec은 무수정(No.43 설계서 §25 I-59). (pass 6 — 실제 `NodeHttpTransport`를 로컬 HTTP 서버에 연결해 헤더 캡처·`redirectMode: 'REPORT'`를 확인하는 시험 `node-http.transport.spec.ts`를 더했다 · 전송 코드 무수정 · 설계서 §25 I-74.)
+3. `ip-policy.parseAllowlist(raw, label?)` — 경고 문구의 변수 이름을 호출부가 넘긴다(기본값 = `LEGACY_API_PRIVATE_ALLOWLIST` 현행 문구).
+4. 사설 대역 허용 목록은 출구별 분리 원칙 그대로 — `KB_CRAWL_PRIVATE_ALLOWLIST`(조회 연동·웹훅을 위해 연 대역이 크롤러에 자동으로 열리지 않는다).

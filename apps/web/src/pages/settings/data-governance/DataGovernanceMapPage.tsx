@@ -234,6 +234,78 @@ export function DataGovernanceMapPage(): JSX.Element {
           </>
         )}
 
+        {/* [신규 No.43] 지식베이스 동기화 절(KB11, kb-crawling-ui-spec.md §3.8) — 소스별 호스트·판정·
+            마스킹·원본 파일 전달·전송 전제. 선택 키(응답 최상위 `kbSources`) 자체가 없으면(소스 0개)
+            렌더되지 않는다(No.41 `egress.workflowTargets` 선례와 같은 하위 호환 패턴 — 다만 실제 계약은
+            `egress` 밖 최상위 필드다, `governance.ts` 확인). */}
+        {data.kbSources && data.kbSources.length > 0 && (
+          <>
+            <h3>{msg.kbSourcesSectionTitle}</h3>
+            <div className="dialogue-table-wrap">
+              <table className="dialogue-table desktop-only">
+                <thead>
+                  <tr>
+                    <th scope="col">{msg.kbSourcesColumnName}</th>
+                    <th scope="col">{msg.kbSourcesColumnHost}</th>
+                    <th scope="col">{msg.kbSourcesColumnDecision}</th>
+                    <th scope="col">{msg.kbSourcesColumnPiiMask}</th>
+                    <th scope="col">{msg.kbSourcesColumnRawFile}</th>
+                    <th scope="col">{msg.kbSourcesColumnScopeCompany}</th>
+                    <th scope="col">{msg.kbSourcesColumnTransportAck}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.kbSources.map((s) => (
+                    <tr key={s.sourceId}>
+                      <td>{s.name}</td>
+                      <td>{s.hosts.length > 0 ? s.hosts.join(', ') : msg.kbSourcesHostPlaceholder}</td>
+                      <td>
+                        <EgressJudgementBadge decision={s.decision} />
+                      </td>
+                      <td>{s.piiMask ? msg.onLabel : msg.offLabel}</td>
+                      <td>{s.allowRawFileIngest ? msg.onLabel : msg.offLabel}</td>
+                      <td>{s.scopeCompany}</td>
+                      <td>{MESSAGES.kbSources.transportAckLabel[s.ingestAck ?? 'UNCONFIGURED']}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="settings-card-list mobile-only">
+                {data.kbSources.map((s) => (
+                  <li key={s.sourceId} className="settings-card">
+                    <div className="settings-card-header">
+                      <span className="settings-card-title">{s.name}</span>
+                      <EgressJudgementBadge decision={s.decision} />
+                    </div>
+                    <dl className="settings-card-fields">
+                      <div>
+                        <dt>{msg.kbSourcesColumnHost}</dt>
+                        <dd>{s.hosts.length > 0 ? s.hosts.join(', ') : msg.kbSourcesHostPlaceholder}</dd>
+                      </div>
+                      <div>
+                        <dt>{msg.kbSourcesColumnPiiMask}</dt>
+                        <dd>{s.piiMask ? msg.onLabel : msg.offLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>{msg.kbSourcesColumnRawFile}</dt>
+                        <dd>{s.allowRawFileIngest ? msg.onLabel : msg.offLabel}</dd>
+                      </div>
+                      <div>
+                        <dt>{msg.kbSourcesColumnScopeCompany}</dt>
+                        <dd>{s.scopeCompany}</dd>
+                      </div>
+                      <div>
+                        <dt>{msg.kbSourcesColumnTransportAck}</dt>
+                        <dd>{MESSAGES.kbSources.transportAckLabel[s.ingestAck ?? 'UNCONFIGURED']}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
         {data.egress.exits.some((e) => e.rawTextOffHost) &&
           data.egress.exits
             .filter((e) => e.rawTextOffHost && e.host)
