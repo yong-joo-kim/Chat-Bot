@@ -1,9 +1,11 @@
-import { toOutputViews, isSafeHttpUrl, type ButtonActionView } from '@chat-bot/shared-types/output-view';
+import { toOutputViews, isSafeHttpUrl, resolveButtonAction, type ButtonActionView } from '@chat-bot/shared-types/output-view';
 import { evaluateHeaderContrast } from '@chat-bot/shared-types/contrast';
-import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, PublicChatbotConfig } from '@chat-bot/shared-types';
+import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, ProactiveButton, PublicChatbotConfig } from '@chat-bot/shared-types';
 import { MESSAGES } from '../constants/messages';
 import { createPublicClient, PublicApiError, type PublicApiErrorKind } from '../api/public-client';
 import { getOrCreateSessionId, loadConversationState, resetSession, saveConversationState } from '../core/session';
+import { createProactiveController, type ProactiveControllerApi } from '../core/proactive-controller';
+import { createProactiveBubble } from '../ui/proactive-bubble';
 import { clearIdentityToken, loadIdentityToken, saveIdentityToken } from '../core/identity-storage';
 import { decodeIdentitySub } from '../core/identity-token';
 import { createInitialState, reducer, type WidgetAction, type WidgetErrorKind } from '../core/store';
@@ -41,6 +43,8 @@ export interface WidgetAppOptions {
   /** `/c/:slug` 정적 위치(왼쪽 하단 런처 대응은 이 옵션과 무관, config 응답의 `launcherPosition` 반영). */
   /** [신규 No.42] `data-identity-token` 임베드 속성 — 부팅 시 1회만 읽는다(§6.8). */
   identityToken?: string;
+  /** [신규 No.35] `data-proactive="on"` — 있을 때만 선제 안내 코드가 초기화된다(FR-0-246). */
+  proactive?: boolean;
 }
 
 export interface WidgetAppApi {
@@ -66,6 +70,8 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   const client = createPublicClient(options.apiBase, options.slug);
   let state = createInitialState();
   let disabledPermanently = false;
+  // [신규 No.35] 삽입 속성이 없으면(비선제 사이트) 끝까지 `undefined` — 타이머·리스너·요청 0(FR-0-246).
+  let proactiveController: ProactiveControllerApi | undefined;
 
   // [신규 No.42] 식별 토큰 — `sub` 변경 감지(로그인 전환·로그아웃 시 새 대화)용으로만 디코드한다
   // (서명 검증은 서버만 한다, §6.8). 비교·반영은 `applyIdentity()` 한 곳에서만 한다(코드 리뷰 R1
@@ -542,6 +548,8 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
 
   async function handleSend(input: { message?: string; buttonAction?: ButtonAction }): Promise<void> {
     if (state.status === 'SENDING' || disabledPermanently) return;
+    // [신규 No.35] 선제 컨트롤러가 없으면(비선제 사이트) no-op — 저장소 쓰기 0(FR-PA4-5 위젯 측).
+    proactiveController?.noteUserSend(Date.now());
     // [신규 No.46] RM-10 — 다음 입력을 보내는 순간 남아 있는 바로연결 칩을 전부 숨긴다(§3.10).
     // 숨긴 칩에 포커스가 있었으면 입력창으로 옮긴다(포커스 유실 방지, NFR-RMA4).
     if (panel.messages.hideQuickReplies()) {
@@ -639,8 +647,57 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     }
   }
 
+  /**
+   * [신규 No.35] 말풍선 버튼(또는 0버튼 규칙의 본문) 클릭 처리 — §6.5의 "엔진 변경 0" 원칙을 위젯
+   * 쪽에서 지킨다. `LINK`는 말풍선의 `<a target="_blank" rel="noopener noreferrer">`가 이미 새 탭을
+   * 열었으므로 여기서는 아무것도 하지 않는다(패널을 열지 않는다). 그 외에는 **기존 `handleOpen()`**
+   * (설정 조회·인사말 1회)을 부른 뒤, 버튼이 있으면 **기존 `handleButtonAction`**으로 넘긴다 — 새
+   * 대화 처리 경로를 만들지 않는다.
+   */
+  async function handleProactiveActivate(button?: ProactiveButton): Promise<void> {
+    if (button?.action === 'LINK') return;
+    await handleOpen();
+    if (button && state.status === 'OPEN') {
+      handleButtonAction(resolveButtonAction(button));
+    }
+  }
+
+  /**
+   * [신규 No.35] 삽입 속성(`data-proactive="on"`)이 있고 전체 화면 모드가 아닐 때만 호출된다
+   * (`loader.ts`가 읽은 값을 그대로 전달 — 이 조건이 거짓이면 이 함수의 어떤 내부 코드도 실행되지
+   * 않는다, AC-PA1-6). 규칙 조회 실패·빈 규칙·런처 숨김은 모두 **조용히** 종료한다(EX-PA-1·EX-PA-7).
+   */
+  async function startProactive(): Promise<void> {
+    try {
+      const config = await client.getConfigForProactive();
+      if (!config.proactive || config.proactive.rules.length === 0) return;
+      // ADR-0045 §0 ⑧ — 런처 위치·숨김이 첫 열기 전에는 반영되지 않으므로 앞당겨 호출한다.
+      applySkin(config);
+      if (!config.showLauncher) return; // EX-PA-7
+      const bubble = createProactiveBubble(() => launcher.focus());
+      cbRoot.insertBefore(bubble.root, launcher.root);
+      cbRoot.insertBefore(bubble.statusRegion, launcher.root);
+      proactiveController = createProactiveController({
+        slug: options.slug,
+        device: options.mode === 'mobile' ? 'MOBILE' : 'DESKTOP',
+        payload: config.proactive,
+        bubble,
+        getPanelOpen: () => state.status !== 'CLOSED',
+        getHandoffConnected: () => handoffPollState.mode === 'CONNECTED' || loadHandoffToken(options.slug) !== undefined,
+        getLauncherVisible: () => !launcher.root.hidden,
+        sendEvent: (ruleId, kind) => client.sendProactiveEvent({ sessionId: getOrCreateSessionId(options.slug), ruleId, kind }),
+        onActivate: (button) => void handleProactiveActivate(button),
+      });
+      proactiveController.start();
+    } catch {
+      // EX-PA-1 — 네트워크·404·403 등 어떤 실패도 조용히 무시한다(런처·대화는 영향 없음).
+    }
+  }
+
   if (options.autoOpen) {
     void handleOpen();
+  } else if (options.proactive) {
+    void startProactive();
   }
 
   return { identify };

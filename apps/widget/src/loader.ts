@@ -37,12 +37,15 @@ function boot(): void {
   // [신규 No.42] `data-identity-token` — 서버 렌더 페이지에서 부팅 시 1회 읽는다(§6.8). SPA는
   // `window.__ChatBotWidget.identify()`를 대신 쓴다(둘 다 있으면 이후의 `identify()` 호출이 이긴다).
   const identityToken = scriptEl?.dataset.identityToken;
+  // [신규 No.35] `data-proactive="on"`일 때만 선제 안내 코드가 초기화된다(다른 값·속성 없음 = false —
+  // 요청·타이머·리스너 0, FR-0-246). 신호 함수는 이번 범위에 없다(P-2 축소).
+  const proactive = scriptEl?.dataset.proactive === 'on';
 
   window.__ChatBotWidget = { version: '0.1.0' };
   console.info(`[ChatBotWidget] widget.js v${window.__ChatBotWidget.version} 로드됨`);
 
   const mount = mountWidgetRoot();
-  const app = createWidgetApp(mount, { slug, apiBase, mode, autoOpen: fullscreen, identityToken });
+  const app = createWidgetApp(mount, { slug, apiBase, mode, autoOpen: fullscreen, identityToken, proactive });
   window.__ChatBotWidget.identify = (token) => app.identify(token);
 }
 

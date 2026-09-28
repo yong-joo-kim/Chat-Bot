@@ -3,15 +3,29 @@ import type {
   ConversationState,
   HandoffPollResponse,
   PendingAnswerPollResponse,
+  ProactiveEventKind,
   PublicChatbotConfig,
+  PublicChatbotConfigWithProactive,
   PublicFeedbackResponse,
   PublicMessageResponse,
+  PublicProactivePayload,
+  PublicProactiveRule,
 } from '@chat-bot/shared-types';
 import { HANDOFF_SESSION_HEADER, HANDOFF_TOKEN_HEADER, WIDGET_FEATURE_HANDOFF_V1 } from '../constants/handoff';
 import { WIDGET_FEATURE_FEEDBACK_V1 } from '../constants/feedback';
 import { WIDGET_FEATURE_RICH_V1 } from '../constants/rich';
 import { IDENTITY_TOKEN_HEADER } from '../constants/identity';
 import type { FeedbackRating } from '../core/feedback';
+
+/**
+ * [신규 No.35] 위젯은 zod로 응답을 재검증하지 않는다(`response.json()` 결과를 그대로 캐스팅 — 기존
+ * `getConfig`/`sendMessage`와 동일한 관례). `PublicProactiveRuleSchema`의 `showUntil`은 서버·콘솔
+ * 쪽에서는 `z.coerce.date()`(Date)로 추론되지만, 위젯이 실제로 손에 쥐는 값은 **JSON 문자열**이다 —
+ * 이 파일만 "실제로 온 대로"의 타입으로 다시 선언한다(런타임 변화 없음, 타입 전용 수정).
+ */
+export type WireProactiveRule = Omit<PublicProactiveRule, 'showUntil'> & { showUntil?: string };
+export type WireProactivePayload = Omit<PublicProactivePayload, 'rules'> & { rules: WireProactiveRule[] };
+export type WireChatbotConfigWithProactive = Omit<PublicChatbotConfigWithProactive, 'proactive'> & { proactive?: WireProactivePayload };
 
 /**
  * 공개 API(No.24 상담 폴링·No.44 답변 평가 포함)를 호출하는 fetch 래퍼(FR-W-13). `credentials:'omit'`
@@ -112,6 +126,27 @@ export function createPublicClient(apiBase: string, slug: string) {
       const headers: Record<string, string> = { [HANDOFF_SESSION_HEADER]: opts.sessionId };
       if (opts.token) headers[HANDOFF_TOKEN_HEADER] = opts.token;
       return request<HandoffPollResponse>(`/handoff?${qs.toString()}`, { headers });
+    },
+    /**
+     * [신규 No.35] 선제 안내 규칙 조회 — 기존 `getConfig`의 **선택 확장**(새 경로 0, FR-0-243).
+     * `referrerPolicy:'no-referrer'`(같은 출처 배포에서 페이지 전체 주소가 리퍼러로 새는 것을 막는다,
+     * ADR-0045 §0 ⑥) — 실패는 호출부가 조용히 무시한다(EX-PA-1).
+     */
+    getConfigForProactive: (): Promise<WireChatbotConfigWithProactive> =>
+      request<WireChatbotConfigWithProactive>('/config?proactive=1', { referrerPolicy: 'no-referrer' }),
+    /**
+     * [신규 No.35] 표시·클릭·닫기·끄기 수집(§6.7) — 보내고 잊는다(결과·오류 무시, FR-PA5-7).
+     * 본문 키는 정확히 3개(`sessionId, ruleId, kind` — PA-12)뿐이다.
+     */
+    sendProactiveEvent(payload: { sessionId: string; ruleId: string; kind: ProactiveEventKind }): void {
+      void fetch(`${base}/proactive-events`, {
+        method: 'POST',
+        credentials: 'omit',
+        keepalive: true,
+        referrerPolicy: 'no-referrer',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: payload.sessionId, ruleId: payload.ruleId, kind: payload.kind }),
+      }).catch(() => undefined);
     },
   };
 }

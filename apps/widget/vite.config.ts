@@ -21,7 +21,8 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@chat-bot/shared-types/output-view', '@chat-bot/shared-types/contrast'],
+    // [신규 No.35] proactive-eval — 위젯·콘솔 공용 zod 무의존 판정 함수 서브패스(ADR-0045 §12).
+    include: ['@chat-bot/shared-types/output-view', '@chat-bot/shared-types/contrast', '@chat-bot/shared-types/proactive-eval'],
   },
   test: {
     environment: 'node',

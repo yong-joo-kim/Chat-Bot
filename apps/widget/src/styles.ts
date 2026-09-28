@@ -351,4 +351,81 @@ export const WIDGET_STYLES = `
 @media (max-width: 420px) {
   .cb-panel { bottom: 0; right: 0; left: 0; width: 100vw; max-width: 100vw; }
 }
+
+/* [신규 No.35] 선제 안내 말풍선(PA-W1, proactive-messaging-ui-spec.md 4장) — 패널과 무관하게
+   런처의 형제 요소. 자동 사라짐 없음, 자동 포커스 이동 없음(구현은 ui/proactive-bubble.ts). */
+.cb-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+
+.cb-pa-bubble {
+  position: fixed;
+  bottom: 88px;
+  right: 20px;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  padding: 14px;
+  animation: cb-pa-fade-in 160ms ease-out;
+}
+.cb-pa-bubble[hidden] { display: none; }
+.cb-root[data-position="left"] .cb-pa-bubble { right: auto; left: 20px; }
+
+.cb-pa-label { display: block; font-size: 12px; font-weight: 700; color: var(--cb-primary, #4f46e5); margin-bottom: 6px; }
+.cb-pa-text { margin: 0 0 10px; font-size: 14px; color: #1f2937; white-space: pre-line; }
+
+.cb-pa-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cb-pa-btn {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--cb-primary, #4f46e5);
+  background: #fff;
+  color: var(--cb-primary, #4f46e5);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.cb-pa-btn:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+
+/* FR-PA1-7 — 버튼 0개 규칙은 문구 영역 전체가 버튼이다. */
+.cb-pa-body-button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #1f2937;
+  font-size: 14px;
+  text-align: left;
+  white-space: pre-line;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.cb-pa-body-button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+
+/* FR-0-247 ④ — 닫기·끄기는 서로 동등한 크기·대비로 둔다(하나를 흐리게·작게 하지 않는다). */
+.cb-pa-footer { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+.cb-pa-footer .cb-pa-btn { flex: 1 1 auto; justify-content: center; font-size: 13px; }
+
+@keyframes cb-pa-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .cb-pa-bubble { animation: none; }
+}
+
+@media (max-width: 420px) {
+  .cb-root[data-mode="mobile"] .cb-pa-bubble {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+}
 `;
