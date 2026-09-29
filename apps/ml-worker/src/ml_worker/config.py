@@ -39,6 +39,27 @@ class Settings(BaseSettings):
     generation_target_count_max: int = 60
     generation_seeds_max: int = 20
 
+    # ── No.17 파이프라인 검증 전용 백엔드 선택(`docs/requirements/nlg-bot-to-bot.md` FR-NG2,
+    # dev-pipeline-validation, 2026-09-29) ──────────────────────────────────────────────
+    # "transformers"(기본값 — 위 GENERATION_* 그대로, HFCausalLMGenerator 경로. 동작 무변화)
+    # | "ollama" — 별도 Ollama 서버(HTTP API)에 위탁한다. ⚠ Ollama 경로는 개발·시연용 소형
+    # 양자화 모델(3050 4GB에서도 도는) 파이프라인 흐름 검증 전용이다. G3 후보 3종(8B~32B급,
+    # L40S 실측 대상 — `eval/report/generation-model-comparison.md`)의 대체가 아니다.
+    generation_backend: str = "transformers"  # transformers | ollama
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen3:4b-instruct-2507-q4_K_M"
+    # ml-worker 자신의 HTTP 클라이언트 타임아웃. apps/api 쪽 AUGMENTATION_TIMEOUT_MS(기본
+    # 30초)와는 별개 값이다 — 실측 결과(§ eval/report/ollama-dev-pipeline-validation.md)
+    # 운영 조건(후보 60건)에서 30~44초가 걸려 API 쪽 30초 예산을 넘기는 경우가 관찰됐다.
+    # ml-worker 자신은 더 오래 기다려 완주를 시도하고, API는 그 사이 자체적으로 G1로
+    # 폴백한다(NFR-NGR1 — 이 값이 API 타임아웃보다 길어도 안전하다).
+    ollama_request_timeout_s: float = 90.0
+    ollama_connect_timeout_s: float = 5.0
+
+    @property
+    def is_ollama_backend(self) -> bool:
+        return self.generation_backend.strip().lower() == "ollama"
+
     @property
     def is_mock(self) -> bool:
         return self.embedding_model_id.strip().lower() == "mock"

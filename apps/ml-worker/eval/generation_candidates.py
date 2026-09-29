@@ -34,7 +34,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ml_worker.embedder import Embedder, MockEmbedder, SentenceTransformerEmbedder  # noqa: E402
-from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator  # noqa: E402
+from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator, OllamaGenerator  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 REPORT_DIR = ROOT / "report" / "generation"
@@ -99,9 +99,29 @@ def build_embedder(model: str, device: str) -> Embedder:
     return embedder
 
 
-def build_generator(model: str, device: str, max_new_tokens: int) -> Generator:
+def build_generator(
+    model: str,
+    device: str,
+    max_new_tokens: int,
+    backend: str = "transformers",
+    ollama_base_url: str = "http://localhost:11434",
+) -> Generator:
     if model.strip().lower() == "mock":
         return MockGenerator()
+    if backend == "ollama":
+        # ⚠ dev-pipeline-validation 전용(No.17 FR-NG2, 2026-09-29) — G3 후보 3종(8B~32B급,
+        # L40S 실측 대상)의 대체가 아니다. modelId에 이 표식을 남겨 보고서가 절대 섞이지
+        # 않게 한다(slugify가 파일명에도 반영한다).
+        generator = OllamaGenerator(
+            base_url=ollama_base_url,
+            model_name=model,
+            max_new_tokens=max_new_tokens,
+            request_timeout_s=120.0,
+            connect_timeout_s=5.0,
+            model_id=f"ollama_dev-pipeline-validation_{model}@main",
+        )
+        generator.warmup()
+        return generator
     generator = HFCausalLMGenerator(
         model_name=model, revision="main", device=device, max_new_tokens=max_new_tokens, model_id=f"{model}@main"
     )
@@ -192,13 +212,20 @@ def main() -> None:
     parser.add_argument("--embedding-device", default="cpu")
     parser.add_argument("--target-count", type=int, default=20)
     parser.add_argument("--max-new-tokens", type=int, default=768)
+    parser.add_argument(
+        "--backend",
+        default="transformers",
+        choices=["transformers", "ollama"],
+        help="ollama = dev-pipeline-validation 전용(No.17 FR-NG2) — G3 후보 3종의 대체 아님",
+    )
+    parser.add_argument("--ollama-base-url", default="http://localhost:11434")
     args = parser.parse_args()
 
     print(f"[gen-eval] 임베딩 모델 로딩(검증용): {args.embedding_model}")
     embedder = build_embedder(args.embedding_model, args.embedding_device)
 
-    print(f"[gen-eval] 생성모델 로딩: {args.model} (device={args.device})")
-    generator = build_generator(args.model, args.device, args.max_new_tokens)
+    print(f"[gen-eval] 생성모델 로딩: {args.model} (backend={args.backend} device={args.device})")
+    generator = build_generator(args.model, args.device, args.max_new_tokens, args.backend, args.ollama_base_url)
     print(f"[gen-eval] modelId={generator.model_id}")
 
     case_results = []

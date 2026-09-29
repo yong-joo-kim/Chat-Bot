@@ -134,3 +134,129 @@ class HFCausalLMGenerator(Generator):
 
     def healthy(self) -> bool:
         return self._model is not None
+
+
+class OllamaGenerator(Generator):
+    """G3 슬롯의 두 번째 백엔드 — Ollama 서버(HTTP API)에 생성을 위탁한다.
+
+    ⚠ **dev-pipeline-validation 전용**(`docs/requirements/nlg-bot-to-bot.md` FR-NG2,
+    2026-09-29). `eval/report/generation-model-comparison.md`가 정의한 G3 후보 3종
+    (한국어 특화 8B급·다국어 14B급·32B 양자화급, **L40S 실측 대상**)의 대체가 **아니다**.
+    이 클래스가 부르는 모델(`qwen3:4b-instruct-2507-q4_K_M` 등, Ollama 4bit 양자화)은
+    완전히 다른 체급이며, 이 경로로 얻은 품질 수치는 그 세 후보의 채택 여부를 판단하는
+    근거로 쓸 수 없다(FR-0-260). 이 클래스의 목적은 "요청→생성→검증→제안 표시"
+    파이프라인이 3050(4GB) 같은 소형 GPU 환경에서도 끝까지 도는지 확인하는 것뿐이다.
+
+    `HFCausalLMGenerator`와 달리 모델을 이 프로세스 메모리에 얹지 않는다 — 별도 Ollama
+    서버 프로세스(기본 `http://localhost:11434`)에 HTTP로 위탁한다. 시드→프롬프트 규약
+    (`build_prompt`)과 출력 파싱(`parse_candidate_array`)은 그대로 재사용해 `/augment`
+    계약(`{ seeds, targetCount, locale } -> { modelId, candidates }`)을 바꾸지 않는다.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model_name: str,
+        max_new_tokens: int,
+        request_timeout_s: float,
+        connect_timeout_s: float,
+        model_id: str,
+        client: object | None = None,
+    ) -> None:
+        # 지연 임포트: transformers 백엔드(기본값)에서는 httpx가 필요 없다.
+        import httpx
+
+        self._base_url = base_url.rstrip("/")
+        self._model_name = model_name
+        self._max_new_tokens = max_new_tokens
+        # `client`는 단위시험에서 `httpx.Client(transport=httpx.MockTransport(...))`를 주입해
+        # 실제 네트워크 없이 연결 성공/실패·모델 유무·타임아웃 분기를 검증하기 위한 것이다
+        # (운영 경로는 항상 이 인자를 생략해 기본 클라이언트를 쓴다).
+        self._client = client if client is not None else httpx.Client(
+            timeout=httpx.Timeout(request_timeout_s, connect=connect_timeout_s)
+        )
+        self.model_id = model_id
+        self._warmed_up = False
+
+        # 부팅 시 실제로 Ollama 서버에 연결되고 그 모델이 로컬에 있는지 확인한다
+        # (No.17 §1.4 C-8/R-5 — "mock으로 조용히 대체" 방지). 실패하면 예외를 그대로
+        # 던져 프로세스 기동을 막는다 — HFCausalLMGenerator가 모델 로드 실패 시 기동
+        # 자체가 실패하는 것과 같은 원칙이다. `app.py`의 `lifespan()`이 이 예외를 잡지
+        # 않으므로 기동이 실패로 끝난다(조용한 mock 대체 없음).
+        self._verify_server_and_model()
+
+    def _verify_server_and_model(self) -> None:
+        try:
+            res = self._client.get(f"{self._base_url}/api/tags")
+        except Exception as exc:  # noqa: BLE001 — 원인을 그대로 드러내는 것이 목적
+            raise RuntimeError(
+                f"Ollama 서버({self._base_url})에 연결할 수 없습니다: {exc}. "
+                "Ollama가 떠 있는지, OLLAMA_BASE_URL이 맞는지 확인하세요."
+            ) from exc
+        if res.status_code != 200:
+            raise RuntimeError(
+                f"Ollama 서버({self._base_url}) 응답 이상: HTTP {res.status_code} — {res.text[:200]}"
+            )
+        try:
+            body = res.json()
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Ollama /api/tags 응답을 해석할 수 없습니다: {exc}") from exc
+
+        names: set[str] = set()
+        for entry in body.get("models", []) if isinstance(body, dict) else []:
+            if not isinstance(entry, dict):
+                continue
+            for key in ("model", "name"):
+                value = entry.get(key)
+                if isinstance(value, str):
+                    names.add(value)
+
+        candidates = {self._model_name, f"{self._model_name}:latest"}
+        if not (names & candidates):
+            raise RuntimeError(
+                f"Ollama에 모델 '{self._model_name}'이 없습니다(로컬 목록: {sorted(names) or '없음'}). "
+                f"`ollama pull {self._model_name}`로 받은 뒤 다시 시작하세요."
+            )
+
+    def warmup(self) -> None:
+        self.generate(["워밍업 문장입니다."], 1)
+        self._warmed_up = True
+
+    @property
+    def warmed_up(self) -> bool:
+        return self._warmed_up
+
+    def generate(self, seeds: list[str], target_count: int) -> list[str]:
+        prompt = build_prompt(seeds, target_count)
+        try:
+            res = self._client.post(
+                f"{self._base_url}/api/generate",
+                json={
+                    "model": self._model_name,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "num_predict": self._max_new_tokens,
+                        "temperature": 0.9,
+                        "top_p": 0.95,
+                    },
+                },
+            )
+            res.raise_for_status()
+            body = res.json()
+        except Exception as exc:  # noqa: BLE001 — Generator 계약(§클래스 docstring): 실패 시 빈 배열
+            logger.warning("Ollama /api/generate 호출 실패 — 빈 후보로 수렴합니다: %s", exc)
+            return []
+
+        if body.get("done_reason") == "length":
+            logger.warning(
+                "Ollama 응답이 토큰 한도(num_predict=%s)에서 잘렸습니다(targetCount=%s) — "
+                "GENERATION_MAX_NEW_TOKENS를 늘리는 것을 검토하세요(No.17 §1.4 C-3).",
+                self._max_new_tokens,
+                target_count,
+            )
+        return parse_candidate_array(body.get("response", ""))
+
+    def healthy(self) -> bool:
+        return self._client is not None

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from ml_worker.config import settings
 from ml_worker.embedder import Embedder, MockEmbedder, SentenceTransformerEmbedder
-from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator
+from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator, OllamaGenerator
 
 logger = logging.getLogger("ml_worker")
 
@@ -65,6 +65,28 @@ def _load_model() -> Embedder:
 
 
 def _load_generator() -> Generator:
+    # No.17 파이프라인 검증 전용 백엔드(dev-pipeline-validation, 2026-09-29) — 아래
+    # `is_generation_mock`/`HFCausalLMGenerator` 분기(기존 transformers 경로)는 이 분기와
+    # 무관하게 한 줄도 바뀌지 않았다. `GENERATION_BACKEND=ollama`일 때만 여기서 갈린다.
+    if settings.is_ollama_backend:
+        logger.info(
+            "생성모델 백엔드=ollama: %s at %s "
+            "(dev-pipeline-validation 전용 — G3 후보 3종의 대체 아님, L40S 실측은 별개)",
+            settings.ollama_model,
+            settings.ollama_base_url,
+        )
+        generator = OllamaGenerator(
+            base_url=settings.ollama_base_url,
+            model_name=settings.ollama_model,
+            max_new_tokens=settings.generation_max_new_tokens,
+            request_timeout_s=settings.ollama_request_timeout_s,
+            connect_timeout_s=settings.ollama_connect_timeout_s,
+            model_id=f"ollama:{settings.ollama_model}",
+        )
+        generator.warmup()
+        logger.info("생성모델 로드 완료(ollama): %s", generator.model_id)
+        return generator
+
     if settings.is_generation_mock:
         logger.warning("GENERATION_MODEL_ID=mock — 결정론적 에코 문장으로 동작합니다(실제 생성 품질 없음)")
         return MockGenerator()

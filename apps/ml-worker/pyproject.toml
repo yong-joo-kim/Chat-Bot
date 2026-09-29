@@ -11,12 +11,15 @@ dependencies = [
   "numpy>=1.26,<2.0",
   "sentence-transformers>=3.0,<4.0",
   "torch>=2.2,<3.0",
+  # GENERATION_BACKEND=ollama(dev-pipeline-validation, No.17 FR-NG2)의 HTTP 클라이언트.
+  # 기본 backend(transformers)에서는 로드되지만 호출되지 않는다 — 가볍고(torch/transformers
+  # 대비) 이미 dev 그룹에서 fastapi TestClient용으로 쓰이고 있어 실 런타임 의존성으로 승격한다.
+  "httpx>=0.27,<1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0,<9.0",
-  "httpx>=0.27,<1.0",
 ]
 
 [tool.pytest.ini_options]
