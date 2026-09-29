@@ -1,0 +1,49 @@
+{
+  "model_id": "ollama_dev-pipeline-validation_qwen3:4b-instruct-2507-q4_K_M@main",
+  "device": "cpu",
+  "target_count": 60,
+  "cases": [
+    {
+      "case_id": "refund-policy",
+      "generated": 1,
+      "semantic_kept": 0,
+      "novel": 1,
+      "conflicts": 0,
+      "semantic_pass_rate": 0.0,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    },
+    {
+      "case_id": "delivery-eta",
+      "generated": 1,
+      "semantic_kept": 1,
+      "novel": 1,
+      "conflicts": 0,
+      "semantic_pass_rate": 1.0,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    },
+    {
+      "case_id": "agent-connect",
+      "generated": 1,
+      "semantic_kept": 0,
+      "novel": 1,
+      "conflicts": 0,
+      "semantic_pass_rate": 0.0,
+      "novelty_pass_rate": 1.0,
+      "conflict_rate": 0.0
+    }
+  ],
+  "aggregate": {
+    "semantic_pass_rate": 0.3333,
+    "novelty_pass_rate": 1.0,
+    "conflict_rate": 0.0
+  },
+  "latency": {
+    "n": 3,
+    "target_count": 60,
+    "mean_ms": 28274.3,
+    "p95_ms": 28366.0,
+    "max_ms": 28366.0
+  }
+}
