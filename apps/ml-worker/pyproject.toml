@@ -21,6 +21,11 @@ dependencies = [
 dev = [
   "pytest>=8.0,<9.0",
 ]
+# No.21 군집 품질 기준선(eval/clustering_baseline.py)용 — 제품 경로가 아니며 런타임 설치 목록은 그대로다.
+# scikit-learn은 sentence-transformers의 간접 의존성으로 이미 설치돼 있으나(선언되지 않음), HDBSCAN 하한(1.3)을 문서화한다.
+eval = [
+  "scikit-learn>=1.3,<2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

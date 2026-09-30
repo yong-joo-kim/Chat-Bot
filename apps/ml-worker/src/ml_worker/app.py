@@ -162,6 +162,7 @@ def _load_generator() -> Generator:
                 warmup_timeout_s=settings.generation_warmup_timeout_s,
                 target_cap=cap,
                 model_id=f"vllm:{settings.vllm_model.strip()}",
+                label_max_new_tokens=settings.cluster_label_max_new_tokens,
             )
         else:
             generator = OllamaGenerator(
@@ -173,6 +174,7 @@ def _load_generator() -> Generator:
                 model_id=f"ollama:{settings.ollama_model}",
                 target_cap=cap,
                 warmup_timeout_s=settings.generation_warmup_timeout_s,
+                label_max_new_tokens=settings.cluster_label_max_new_tokens,
             )
         generator.warmup()  # type: ignore[attr-defined]
         logger.info(
@@ -202,6 +204,7 @@ def _load_generator() -> Generator:
         device=settings.generation_device,
         max_new_tokens=settings.generation_max_new_tokens,
         model_id=settings.resolved_generation_model_id,
+        label_max_new_tokens=settings.cluster_label_max_new_tokens,
     )
     generator.warmup()
     logger.info("생성모델 로드 완료: %s", generator.model_id)
@@ -363,6 +366,38 @@ if settings.loads_generation:
             profile=_generator.profile,  # type: ignore[arg-type]
             targetCap=_generator.target_cap or settings.generation_target_count_max,
         )
+
+    # ── No.21 발화 묶음 분석의 묶음 이름 제안(설계서 §16.4). 생성 프로파일에서만 존재한다 — 기능 본체는
+    # 이 경로 없이도 성립한다(꺼짐·실패 = label null). 로그에는 키워드·문장을 남기지 않는다(건수만).
+    class ClusterLabelRequest(BaseModel):
+        keywords: list[str]
+        samples: list[str]
+        locale: Literal["ko"]
+
+    class ClusterLabelResponse(BaseModel):
+        modelId: str
+        label: str | None
+
+    @app.post("/cluster-label", response_model=ClusterLabelResponse)
+    def cluster_label(req: ClusterLabelRequest) -> ClusterLabelResponse:
+        # 상한 초과는 /augment와 같이 400(Pydantic 기본 422가 아니라 명시 검사).
+        if not 1 <= len(req.keywords) <= 20:
+            raise HTTPException(status_code=400, detail=f"keywords 개수는 1~20이어야 합니다: {len(req.keywords)}")
+        if len(req.samples) > 5:
+            raise HTTPException(status_code=400, detail=f"samples 개수 상한 초과: {len(req.samples)} > 5")
+        if any(not 1 <= len(k) <= 30 or not k.strip() for k in req.keywords):
+            raise HTTPException(status_code=400, detail="keywords 각 항목은 1~30자의 비어 있지 않은 문자열이어야 합니다")
+        if any(not 1 <= len(s) <= 300 or not s.strip() for s in req.samples):
+            raise HTTPException(status_code=400, detail="samples 각 항목은 1~300자의 비어 있지 않은 문자열이어야 합니다")
+
+        try:
+            generator = get_generator()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        label = generator.label(req.keywords, req.samples)
+        logger.info("cluster-label 처리: keywords=%d samples=%d 결과=%s", len(req.keywords), len(req.samples), "있음" if label else "없음")
+        return ClusterLabelResponse(modelId=generator.model_id, label=label)
 
 
 if __name__ == "__main__":

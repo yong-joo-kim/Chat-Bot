@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # 미설정이면 계약 상한(GENERATION_TARGET_COUNT_MAX)을 따른다 — No.17 실측 전까지 절삭 효과 없음.
     vllm_target_cap: int | None = None
 
+    # ── No.21 묶음 이름 제안(POST /cluster-label — 생성 프로파일 전용, 설계서 §16.4) ─────────────
+    # 이름 1개(JSON {"name": ...})면 충분하므로 증강보다 훨씬 작은 토큰 상한을 쓴다.
+    cluster_label_max_new_tokens: int = 64
+
     @property
     def normalized_generation_backend(self) -> str:
         return self.generation_backend.strip().lower()
