@@ -147,7 +147,7 @@ export interface AugmentationProvider {
 
 ## 재검토 트리거
 
-- **LLM 호출 소비자가 2곳 이상** → `packages/llm-provider` 승격.
+- **LLM 호출 소비자가 2곳 이상** → `packages/llm-provider` 승격. → ⚠ **2026-09-30 갱신(No.21)**: 묶음 이름 제안으로 소비자가 2곳이 됐으나 **승격하지 않았다**(공유 계약 없음) — 트리거를 "**같은 생성 연산(같은 계약)을 쓰는 두 번째 소비자, 또는 cloud 구현이 필요한 두 번째 소비자**"로 정밀화한다. 아래 §갱신(2026-09-30b).
 
 
 ---
@@ -182,3 +182,14 @@ export interface AugmentationProvider {
 4. **시간 제한**: API `AUGMENTATION_TIMEOUT_MS`(30초)는 불변. ml-worker 원격 요청 시간 제한 기본 25초로 API보다 먼저 포기한다(§2 표의 "G2/G3 타임아웃(기본 30초)"은 API 쪽 값 그대로).
 5. **경량 여부 표시**: ml-worker `/augment/health` 선택 필드(`backend`·`profile`·`targetCap`)로만 보고한다. `GET .../augmentations/capability`와 콘솔은 바뀌지 않는다(PM — API·화면 변경 0). capability에 생성기 구성을 올리는 것은 No.17 운영 채택 때 설계한다.
 6. `packages/llm-provider` 승격 트리거(§6) **미발동** — 백엔드가 늘어도 LLM 소비자는 증강 1곳이다.
+
+---
+
+## 갱신 (2026-09-30b — No.21: 두 번째 LLM 소비자 · 승격 트리거 발동 판정 · 미승격)
+
+발화 묶음 분석(No.21, **ADR-0047 §7·§8**). 포트 1 + 구현 3종·팩토리 1곳·모든 실패의 G1 수렴·출구 게이트·`/augment` 계약은 **불변**이다.
+
+1. **두 번째 소비자**: 묶음 이름 제안(`ClusterNameSuggester` — 구현 `local`(ml-worker 생성 프로파일 `/cluster-label`) · `mock`)이 LLM 호출 소비자가 됐다. 기본 꺼짐 · 꺼져도 기능 성립 · 실패는 "이름 없음"으로 수렴(G1 폴백과 같은 원칙).
+2. **§6 승격 트리거는 문자 그대로 발동했으나 승격하지 않는다.** 두 소비자는 ① 입출력 계약이 다르고(예문 N개 생성 vs 이름 1개) ② 배포 형태 요구가 다르다(증강 = `rule`·`gemini`·`local` / 이름 = `local`만 — 업로드 발화의 개인정보 밀도 때문에 cloud 금지). 공유할 수 있는 것이 "ml-worker 생성 프로세스로 HTTP를 보낸다"뿐이라 패키지는 빈 추상화가 된다(`packages/pii-mask`는 **같은 함수**를 두 곳이 써서 승격했다). 이름 제안 포트는 §6의 규약대로 **Nest 데코레이터·Prisma 무의존 파일**로 두어 파일 이동만으로 승격 가능하게 한다.
+3. **트리거 정밀화**: "LLM 호출 소비자 2곳" → "**같은 생성 연산(같은 입출력 계약)을 쓰는 두 번째 소비자, 또는 cloud 구현이 필요한 두 번째 소비자**"(예: No.24 생성형 답변 제안·No.34 요약이 cloud를 요구할 때).
+4. **출구**: 이름 제안 호출 파일은 새 클래스가 아니라 `AUGMENT_LOCAL`의 레지스트리 파일로 등록된다(같은 ml-worker 생성 프로세스 · `fetch` 전 가드). 거버넌스 모드에서 이름 제안을 켜면 `AUGMENTATION_LOCAL_BASE_URL` 호스트가 허용 목록에 있어야 기동한다(`AUGMENTATION_PROVIDER=local` 검사와 같은 규칙).

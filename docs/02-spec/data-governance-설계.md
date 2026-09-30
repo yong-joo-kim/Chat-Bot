@@ -715,6 +715,7 @@ export function openField(field: EncryptedFieldId, rowId: string, stored: string
 | `AUDIT_LOGS` | `AuditLog` + `RetentionRun` | 전역만 | 감사 하한 | 행 삭제 + 앵커 |
 
 - `MessageFeedback`(텍스트 0)·운영 테이블은 1차 대상 아님(§26).
+- **[No.21 — 2026-09-30] 발화 묶음 분석(`UtteranceAnalysis`·`UtteranceCluster`·`AnalyzedUtterance` — 업로드 발화 마스킹본)은 이 표의 종류가 아니다.** 보존 일수는 기능 설정 `UTTERANCE_ANALYSIS_RETENTION_DAYS`(기본 90 — 분석 생성 시 `expiresAt` 고정)이고, **삭제 실행은 이 파기 잡**이 한다: `CUSTOMER_IDENTITY` 뒤·`AUDIT_LOGS` 앞 단계 · 대상 = `expiresAt < now` ∧ 종결 상태 · `governance-data.writer.ts` `deleteUtteranceAnalyses()`(한 트랜잭션 `enableSecureDelete` → 발화 → 묶음 → 분석 **행 삭제**) · 삭제 발화 행 수로 1회 상한 차감 · 삭제가 있을 때만 요약 감사 `affectedByKind.UTTERANCE_ANALYSIS`(0이면 키 없음 — 결과·감사 바이트 동일). 종류로 넣지 않은 이유는 전역 "키 없음 = 무기한" 규약에 한 종류만 "기본 90일" 예외를 만들지 않기 위해서다. 열람 감사(`VIEW`) 대상 +1(발화 목록 — 11 → 12) · 내보내기 감사(`EXPORT`) 호출 파일 +1(3 → 4) · 데이터 지도 선택 키 `utteranceAnalysis?`(분석 0건이면 생략) · 출구 클래스 추가 0(`EMBEDDING` · 이름 제안은 `AUGMENT_LOCAL` 파일 +1)(`deep-clustering-설계.md` §13·§14 · ADR-0047 §5).
 
 ### 8.2 유효 일수 (순수 함수 `resolveEffectiveDays(kind, globalRow, chatbotRow, now, bounds)`)
 
