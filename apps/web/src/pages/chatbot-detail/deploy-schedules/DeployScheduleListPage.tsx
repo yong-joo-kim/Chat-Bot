@@ -17,6 +17,8 @@ import { MultiSelectDropdown } from '../../../components/MultiSelectDropdown';
 import { EngineDisabledBanner } from '../../../components/EngineDisabledBanner';
 import { SeverityBadge } from '../../../components/SeverityBadge';
 import { useDeployScheduleMeta } from '../../../lib/useDeployScheduleMeta';
+import { useApprovalPolicy } from '../../../lib/useApprovalPolicy';
+import { matchScheduleApproval, ScheduleApprovalStatusText } from './ScheduleApprovalStatusText';
 import { ArchivedBanner } from '../ArchivedBanner';
 import { DeployScheduleRow } from './DeployScheduleRow';
 import { ScheduleDeployDialog } from './ScheduleDeployDialog';
@@ -42,6 +44,8 @@ export function DeployScheduleListPage(): JSX.Element {
   const canCreateAny = can('chatbot:write') || can('channel:write') || can('dialogue:write');
 
   const meta = useDeployScheduleMeta();
+  // [신규 No.36] 2인 승인 상태 합성용 — 환경 분리가 켜졌고 조회 권한이 있을 때만 조회한다(챗봇 스코프 목록 한정).
+  const approvalPolicy = useApprovalPolicy(chatbot.id, environmentStatus?.enabled === true && can('chatbot:read') && can('dialogue:read'));
   const [items, setItems] = useState<DeployScheduleListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -123,12 +127,13 @@ export function DeployScheduleListPage(): JSX.Element {
     }
   }
 
-  function handleCreated(label: string): void {
+  function handleCreated(label: string, info?: { approvalRequested: boolean }): void {
     setCreateOpen(false);
     setRetryTarget(null);
-    showToast(msg.dialog.createSuccess(label));
+    showToast(info?.approvalRequested ? MESSAGES.switchApproval.schedule.createdAndRequested : msg.dialog.createSuccess(label));
     setPage(1);
     void load();
+    void approvalPolicy.reload();
   }
 
   return (
@@ -224,6 +229,17 @@ export function DeployScheduleListPage(): JSX.Element {
                 item={item}
                 can={isArchived ? () => false : can}
                 detailHref={`/chatbots/${chatbot.id}/deploy-schedules/${item.id}`}
+                approvalSlot={
+                  item.action === 'SWITCH_PROD_VERSION' ? (
+                    <ScheduleApprovalStatusText
+                      chatbotId={chatbot.id}
+                      scheduleId={item.id}
+                      createdByEmail={item.createdByEmail}
+                      match={matchScheduleApproval(item, approvalPolicy.status)}
+                      onSent={() => void approvalPolicy.reload()}
+                    />
+                  ) : undefined
+                }
                 onRetry={handleRetry}
                 onAcknowledge={handleAcknowledge}
                 onCancel={setCancelTarget}

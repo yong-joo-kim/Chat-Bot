@@ -7,6 +7,9 @@ import { GateResultBadge } from '../../../components/GateResultBadge';
 import { MESSAGES } from '../../../constants/messages';
 import { ApiError } from '../../../api/client';
 import { environmentApi } from '../../../api/environment';
+import { switchApprovalsApi } from '../../../api/switchApprovals';
+import { SeverityBadge } from '../../../components/SeverityBadge';
+import { approvalErrorView } from '../../../lib/approvalText';
 import { summaryLine } from '../versions/restore/restorePreviewText';
 import { SwitchBlockerText, SwitchWarningText, type ProdSwitchBlockerCode } from './lib/switchPreviewText';
 
@@ -20,11 +23,24 @@ export interface ProdSwitchDialogProps {
   onSwitched: (result: ProdSwitchResponse) => void;
   /** 게이트 사유 문구의 기준값(minPassRate·validHours) 표기용 — `EnvironmentStatusPanel`이 넘긴다. */
   gateSettings?: EnvironmentGateSettings;
+  /** [신규 No.36] 요청 모드 안내문에 넣을 승인 유효 시간(시간). 모르면 생략 — "정해진 시간 안에"로 표기한다. */
+  approvalTtlHours?: number | null;
+  /** [신규 No.36] 승인 요청을 보낸 뒤(요청 모드) 호출된다. 생략하면 대화상자만 닫는다. */
+  onRequested?: () => void;
 }
 
-/** EN1-d 운영 전환·롤백 공용(`environment-separation-ui-spec.md` §4.6). */
-export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onClose, onSwitched, gateSettings }: ProdSwitchDialogProps): JSX.Element {
+/**
+ * EN1-d 운영 전환·롤백 공용(`environment-separation-ui-spec.md` §4.6).
+ * [신규 No.36] 미리보기 응답의 `approval` 키(2인 승인이 켜졌을 때만 존재)로 모드를 정한다 — 키가 없으면 기존 동작과 같다.
+ * 요청 모드(운영 전환·직전 아닌 롤백)는 승인 요청을 보내고, 단독 롤백 모드(직전 운영 버전 롤백)는 승인 없이 바로 되돌린다.
+ */
+export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onClose, onSwitched, gateSettings, approvalTtlHours = null, onRequested }: ProdSwitchDialogProps): JSX.Element {
   const msg = MESSAGES.environment.switchDialog;
+  const apMsg = MESSAGES.switchApproval.dialog;
+  const [forceRequest, setForceRequest] = useState(false);
+  const [soloAck, setSoloAck] = useState(false);
+  const [soloAckError, setSoloAckError] = useState(false);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [preview, setPreview] = useState<ProdSwitchPreviewResponse | null>(null);
@@ -63,8 +79,52 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
     setAckError(false);
     setReason('');
     setBanner(null);
+    setForceRequest(false);
+    setSoloAck(false);
+    setSoloAckError(false);
+    setPendingRequestId(null);
     void fetchPreview();
   }, [isOpen, fetchPreview]);
+
+  // [신규 No.36] 모드 판정 — `approval` 키가 없으면 기존(둘 다 false).
+  const approvalRequired = preview?.approval?.required === true;
+  const soloRollback = kind === 'ROLLBACK' && approvalRequired && preview?.approval?.soloRollbackAllowed === true && !forceRequest;
+  const requestMode = approvalRequired && !soloRollback;
+
+  async function handleRequest(): Promise<void> {
+    if (!preview || confirming) return;
+    if (preview.warnings.length > 0 && !acknowledgeWarnings) {
+      setAckError(true);
+      return;
+    }
+    setConfirming(true);
+    setBanner(null);
+    setPendingRequestId(null);
+    try {
+      const common = {
+        expectedProdVersionId: preview.expectedProdVersionId,
+        acknowledgeWarnings: preview.warnings.length > 0 ? acknowledgeWarnings : undefined,
+        reason: reason.trim() ? reason.trim() : undefined,
+      };
+      await switchApprovalsApi.createRequest(
+        chatbotId,
+        kind === 'SWITCH'
+          ? { action: 'PROD_SWITCH', targetVersionId: preview.target.versionId, ...common }
+          : { action: 'PROD_ROLLBACK', targetVersionId: preview.target.versionId, ...common },
+      );
+      if (!isMountedRef.current) return;
+      if (onRequested) onRequested();
+      else onClose();
+    } catch (e) {
+      if (!isMountedRef.current) return;
+      const view = approvalErrorView(e, 'REQUEST');
+      setBanner(view.text);
+      if (view.kind === 'PENDING_EXISTS') setPendingRequestId(view.requestId ?? null);
+      if (view.kind === 'STALE' || view.kind === 'POLICY_UNAVAILABLE') await fetchPreview();
+    } finally {
+      if (isMountedRef.current) setConfirming(false);
+    }
+  }
 
   function handleClose(): void {
     if (confirming) return;
@@ -75,6 +135,11 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
     if (!preview || confirming) return;
     if (preview.warnings.length > 0 && !acknowledgeWarnings) {
       setAckError(true);
+      return;
+    }
+    // [신규 No.36] 단독 롤백은 중첩 대화상자 대신 필수 체크로 확인한다(조정 A-5).
+    if (soloRollback && !soloAck) {
+      setSoloAckError(true);
       return;
     }
     setConfirming(true);
@@ -97,6 +162,11 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
       } else if (e instanceof ApiError && e.code === 'ENV_GATE_NOT_PASSED') {
         setBanner(MESSAGES.environment.errors.ENV_GATE_NOT_PASSED);
         await fetchPreview();
+      } else if (e instanceof ApiError && e.code === 'ENV_APPROVAL_REQUIRED') {
+        // [신규 No.36] 열려 있던 대화상자가 정책을 모르던 경우 — 안내 후 미리보기를 다시 조회해 요청 모드로 전환한다
+        // (사유·경고 확인 체크는 유지되고, 자동으로 요청을 보내지 않는다 — 한 번 더 확정 버튼을 눌러야 한다).
+        setBanner(approvalErrorView(e, 'REQUEST').text);
+        await fetchPreview();
       } else {
         setBanner(e instanceof ApiError ? e.message : MESSAGES.errors.generic);
       }
@@ -105,7 +175,15 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
     }
   }
 
-  const title = kind === 'SWITCH' ? msg.titleSwitch : msg.titleRollback;
+  const title = soloRollback
+    ? apMsg.soloTitle
+    : requestMode
+      ? kind === 'SWITCH'
+        ? apMsg.requestTitleSwitch
+        : apMsg.requestTitleRollback
+      : kind === 'SWITCH'
+        ? msg.titleSwitch
+        : msg.titleRollback;
   const isNoop = preview?.outcome === 'NOOP';
   // FR-EN4-4: 롤백에서는 게이트 BLOCK도 경고로만 취급 — 확정 버튼을 막지 않는다(긴급 복귀 우선).
   const effectiveBlockers = (preview?.blockers ?? []).filter((b) => !(kind === 'ROLLBACK' && b === 'GATE_BLOCKED'));
@@ -128,6 +206,24 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
           {banner && (
             <p className="modal-banner modal-banner--warning" role="status" aria-live="polite">
               {banner}
+              {pendingRequestId && (
+                <>
+                  {' '}
+                  <Link to={`/environment-approvals/${chatbotId}/${pendingRequestId}`}>{apMsg.pendingExistsLink}</Link>
+                </>
+              )}
+            </p>
+          )}
+
+          {/* [신규 No.36] 요청 모드·단독 롤백 모드 안내(ui-spec §9.4) — 승인 정책이 꺼져 있으면(approval 키 없음) 렌더하지 않는다. */}
+          {!isNoop && requestMode && (
+            <p className="modal-banner modal-banner--info">
+              {kind === 'ROLLBACK' ? apMsg.rollbackRequestInfo : apMsg.requestInfo(approvalTtlHours)}
+            </p>
+          )}
+          {!isNoop && soloRollback && (
+            <p className="modal-banner modal-banner--info">
+              <SeverityBadge severity="WARNING" label={apMsg.soloBadge} /> {apMsg.soloInfo}
             </p>
           )}
 
@@ -197,6 +293,27 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
                   <p className="char-counter">{msg.reasonCount(Array.from(reason).length, ENVIRONMENT_LIMITS.reasonMaxCodePoints)}</p>
                 </div>
               )}
+
+              {!hasBlockers && soloRollback && (
+                <div>
+                  <label className="restore-ack-checkbox" id="switch-solo-ack-label">
+                    <input
+                      type="checkbox"
+                      checked={soloAck}
+                      onChange={(e) => {
+                        setSoloAck(e.target.checked);
+                        setSoloAckError(false);
+                      }}
+                    />
+                    {apMsg.soloAck}
+                  </label>
+                  {soloAckError && (
+                    <p className="field-error" role="alert">
+                      {apMsg.soloAckError}
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -204,16 +321,33 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={confirming} data-autofocus="cancel">
               {isNoop || hasBlockers ? msg.confirmedButtonOnly : msg.cancelButton}
             </button>
+            {!isNoop && !hasBlockers && soloRollback && (
+              <button type="button" className="btn btn-secondary" onClick={() => setForceRequest(true)} disabled={confirming}>
+                {apMsg.soloAlternative}
+              </button>
+            )}
             {!isNoop && !hasBlockers && (
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => void handleConfirm()}
+                onClick={() => void (requestMode ? handleRequest() : handleConfirm())}
                 disabled={confirming}
                 aria-disabled={confirming}
-                aria-describedby={ackError ? 'switch-ack-warnings-label' : undefined}
+                aria-describedby={ackError ? 'switch-ack-warnings-label' : soloAckError ? 'switch-solo-ack-label' : undefined}
               >
-                {confirming ? msg.confirming : kind === 'SWITCH' ? msg.confirmButtonSwitch(preview.target.versionNo) : msg.confirmButtonRollback(preview.target.versionNo)}
+                {confirming
+                  ? requestMode
+                    ? apMsg.requesting
+                    : msg.confirming
+                  : requestMode
+                    ? kind === 'SWITCH'
+                      ? apMsg.requestConfirmSwitch(preview.target.versionNo)
+                      : apMsg.requestConfirmRollback(preview.target.versionNo)
+                    : soloRollback
+                      ? apMsg.soloConfirm(preview.target.versionNo)
+                      : kind === 'SWITCH'
+                        ? msg.confirmButtonSwitch(preview.target.versionNo)
+                        : msg.confirmButtonRollback(preview.target.versionNo)}
               </button>
             )}
           </div>

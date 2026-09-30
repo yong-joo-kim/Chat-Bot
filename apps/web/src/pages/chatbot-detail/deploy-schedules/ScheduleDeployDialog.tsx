@@ -9,7 +9,7 @@ import type {
   EnvironmentSwitchLogItem,
   TestCaseSet,
 } from '@chat-bot/shared-types';
-import { DEPLOY_SCHEDULE_LIMITS } from '@chat-bot/shared-types';
+import { DEPLOY_SCHEDULE_LIMITS, ENVIRONMENT_LIMITS } from '@chat-bot/shared-types';
 import { Modal } from '../../../components/Modal';
 import { ScheduledAtField } from '../../../components/ScheduledAtField';
 import { GateResultBadge } from '../../../components/GateResultBadge';
@@ -18,6 +18,9 @@ import { formatDateTime } from '../../../lib/date';
 import { ApiError } from '../../../api/client';
 import { deploySchedulesApi } from '../../../api/deploySchedules';
 import { environmentApi } from '../../../api/environment';
+import { switchApprovalsApi } from '../../../api/switchApprovals';
+import { approvalErrorView } from '../../../lib/approvalText';
+import { useApprovalPolicy } from '../../../lib/useApprovalPolicy';
 import { testSetsApi } from '../../../api/validation';
 import { useAuth } from '../../../context/AuthContext';
 import { canManageDeploySchedule } from '../../../lib/deploySchedulePermissions';
@@ -32,8 +35,12 @@ export interface ScheduleDeployDialogProps {
   chatbotId: string;
   isOpen: boolean;
   onClose: () => void;
-  /** 성공 시 목록 새로고침 + Toast를 호출부가 담당한다(§4.3 "제출 성공"). */
-  onCreated: (confirmLabel: string) => void;
+  /**
+   * 성공 시 목록 새로고침 + Toast를 호출부가 담당한다(§4.3 "제출 성공").
+   * [신규 No.36] `info.approvalRequested`는 2인 승인이 켜진 챗봇의 운영 전환 예약에서 승인 요청까지 함께 보냈을 때 true —
+   * 호출부가 토스트 문구를 고른다(생략하는 기존 소비자는 그대로 동작한다).
+   */
+  onCreated: (confirmLabel: string, info?: { approvalRequested: boolean }) => void;
   timezone: string;
   chatbotStatus: ChatbotStatus;
   mode?: 'CREATE' | 'RESUME';
@@ -121,6 +128,13 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
   const [staleBanner, setStaleBanner] = useState(false);
   const [limitExceeded, setLimitExceeded] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // [신규 No.36] 예약은 만들어졌지만 승인 요청이 실패한 2단계 실패 결과(대화상자 안 결과 화면).
+  const [partial, setPartial] = useState<{ scheduleId: string; label: string; text: string; requestId: string | null } | null>(null);
+
+  // [신규 No.36] 2인 승인 정책 — 운영 전환 예약을 고른 때만 조회한다(권한이 없으면 조회하지 않는다).
+  const approvalPolicy = useApprovalPolicy(chatbotId, isOpen && action === 'SWITCH_PROD_VERSION' && can('chatbot:read') && can('dialogue:read'));
+  const approvalOn = approvalPolicy.status?.policy.required === true;
+  const approvalCreateFlow = approvalOn && action === 'SWITCH_PROD_VERSION' && mode !== 'RESUME';
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -147,6 +161,7 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
     setStaleBanner(false);
     setLimitExceeded(false);
     setSubmitError(null);
+    setPartial(null);
     const now = new Date();
     setLocal(toLocalTime(defaultScheduledAt(now, DEPLOY_SCHEDULE_LIMITS.minLeadMinutes), timezone));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +256,9 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
     if (action === 'RESTORE_VERSION') return msg.confirmButtonByAction.RESTORE_VERSION(formatted, versionNo ?? 0);
     if (action === 'PUBLISH') return enableWebChannel ? msg.confirmButtonByAction.PUBLISH_WITH_CHANNEL(formatted) : msg.confirmButtonByAction.PUBLISH(formatted);
     if (action === 'SET_WEB_CHANNEL') return direction ? msg.confirmButtonByAction.SET_WEB_CHANNEL_OPEN(formatted) : msg.confirmButtonByAction.SET_WEB_CHANNEL_CLOSE(formatted);
-    if (action === 'SWITCH_PROD_VERSION' && switchTargetNo !== undefined) return msg.confirmButtonByAction.SWITCH_PROD_VERSION(formatted, switchTargetNo);
+    if (action === 'SWITCH_PROD_VERSION' && switchTargetNo !== undefined) {
+      return approvalCreateFlow ? MESSAGES.switchApproval.schedule.confirmButton(formatted, switchTargetNo) : msg.confirmButtonByAction.SWITCH_PROD_VERSION(formatted, switchTargetNo);
+    }
     return '';
   }
 
@@ -274,13 +291,38 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
         // 트랜잭션에서 실제로 비교되는 값이다 — `environmentStatus.prod.versionId`(지금의 실제 운영만 아는 값)를
         // 쓰면 체인 예약에서 기준이 달라 `409 ENV_POINTER_STALE`가 났다(수정 전 우회 코드).
         const previewedProdVersionId = action === 'SWITCH_PROD_VERSION' ? preview.switchProd?.expectedProdVersionId : undefined;
-        await deploySchedulesApi.create(chatbotId, {
+        const created = await deploySchedulesApi.create(chatbotId, {
           ...dto,
           previewedContentHash,
           previewedProdVersionId,
           memo: memo.trim() ? memo.trim() : undefined,
           postRunTestSetId: postRunTestEnabled && postRunTestSetId ? postRunTestSetId : undefined,
         } as never);
+        // [신규 No.36] 2인 승인이 켜진 챗봇 — 예약 생성 API는 그대로이고, 콘솔이 이어서 승인 요청을 보낸다(같은 흐름).
+        // 예약 생성이 실패했으면 여기까지 오지 않는다(요청도 보내지 않는다).
+        if (approvalCreateFlow && created?.schedule?.id) {
+          const reason = memo.trim();
+          try {
+            await switchApprovalsApi.createRequest(chatbotId, {
+              action: 'SCHEDULED_PROD_SWITCH',
+              deployScheduleId: created.schedule.id,
+              reason: reason && Array.from(reason).length <= ENVIRONMENT_LIMITS.reasonMaxCodePoints ? reason : undefined,
+            });
+          } catch (requestError) {
+            if (!isMountedRef.current) return;
+            const view = approvalErrorView(requestError, 'SCHEDULE_REQUEST');
+            setPartial({
+              scheduleId: created.schedule.id,
+              label,
+              text: view.kind === 'OTHER' ? MESSAGES.switchApproval.schedule.partialReasonFallback : view.text,
+              requestId: view.requestId ?? null,
+            });
+            return;
+          }
+          if (!isMountedRef.current) return;
+          onCreated(label, { approvalRequested: true });
+          return;
+        }
       }
       if (!isMountedRef.current) return;
       onCreated(label);
@@ -374,7 +416,27 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
 
   return (
     <Modal isOpen={isOpen} title={title} onClose={handleClose} closeOnEsc={!submitting} initialFocusSelector='[data-autofocus="cancel"]'>
-      {!action ? (
+      {partial ? (
+        <div>
+          <p className="modal-banner modal-banner--warning" role="alert">
+            <strong>{MESSAGES.switchApproval.schedule.partialTitle}</strong> {MESSAGES.switchApproval.schedule.partialBody}
+          </p>
+          <p>{partial.text}</p>
+          {partial.requestId && (
+            <p>
+              <Link to={`/environment-approvals/${chatbotId}/${partial.requestId}`}>{MESSAGES.switchApproval.dialog.pendingExistsLink}</Link>
+            </p>
+          )}
+          <div className="modal-actions">
+            <Link to={`/chatbots/${chatbotId}/deploy-schedules/${partial.scheduleId}`} className="btn btn-secondary" onClick={() => onCreated(partial.label, { approvalRequested: false })}>
+              {MESSAGES.switchApproval.schedule.viewSchedules}
+            </Link>
+            <button type="button" className="btn btn-primary" data-autofocus="cancel" onClick={() => onCreated(partial.label, { approvalRequested: false })}>
+              {MESSAGES.switchApproval.schedule.close}
+            </button>
+          </div>
+        </div>
+      ) : !action ? (
         <ActionPickerStep options={actionOptions} onSelect={setAction} />
       ) : (
         <div>
@@ -392,6 +454,12 @@ export function ScheduleDeployDialog(props: ScheduleDeployDialogProps): JSX.Elem
             <p className="modal-banner modal-banner--error" role="alert">
               {submitError}
             </p>
+          )}
+          {approvalCreateFlow && (
+            <p className="modal-banner modal-banner--info">{MESSAGES.switchApproval.schedule.dialogInfo}</p>
+          )}
+          {approvalOn && action === 'SWITCH_PROD_VERSION' && mode === 'RESUME' && (
+            <p className="modal-banner modal-banner--info">{MESSAGES.switchApproval.schedule.resumeNotice}</p>
           )}
           {nonBlockerPreconditionMessages.map((m, i) => (
             <p key={i} className="modal-banner modal-banner--error" role="alert">

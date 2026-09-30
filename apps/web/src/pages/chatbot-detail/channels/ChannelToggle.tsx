@@ -10,12 +10,20 @@ export function ChannelToggle({
   locked,
   reason,
   onToggle,
+  onLabel,
+  offLabel,
+  busy = false,
 }: {
   id: string;
   enabled: boolean;
   locked: boolean;
   reason?: string;
   onToggle: () => void;
+  /** [신규 No.36] 켜짐/꺼짐 글자를 바꿔 쓰는 소비자용(기본값 = 기존 "사용 중/사용 안 함"). */
+  onLabel?: string;
+  offLabel?: string;
+  /** [신규 No.36] 요청 진행 중 — aria-disabled(포커스 유지)이지만 잠금 아이콘·사유는 띄우지 않는다. */
+  busy?: boolean;
 }): JSX.Element {
   const reasonId = `${id}-reason`;
   return (
@@ -24,15 +32,15 @@ export function ChannelToggle({
         type="button"
         role="switch"
         aria-checked={enabled}
-        aria-disabled={locked || undefined}
+        aria-disabled={locked || busy || undefined}
         aria-describedby={locked && reason ? reasonId : undefined}
         className={`channel-toggle${locked ? ' channel-toggle--locked' : ''}`}
         onClick={() => {
-          if (locked) return;
+          if (locked || busy) return;
           onToggle();
         }}
       >
-        <span aria-hidden="true">{locked ? '🔒' : enabled ? '●' : '○'}</span> {enabled ? MESSAGES.channels.toggleOn : MESSAGES.channels.toggleOff}
+        <span aria-hidden="true">{locked ? '🔒' : enabled ? '●' : '○'}</span> {enabled ? (onLabel ?? MESSAGES.channels.toggleOn) : (offLabel ?? MESSAGES.channels.toggleOff)}
       </button>
       {locked && reason && (
         <p id={reasonId} className="channel-toggle-reason">

@@ -10,6 +10,7 @@ import { ForbiddenState } from '../../../components/security/ForbiddenState';
 import { ArchivedBanner } from '../ArchivedBanner';
 import { MESSAGES } from '../../../constants/messages';
 import { versionsApi } from '../../../api/versions';
+import { useApprovalPolicy } from '../../../lib/useApprovalPolicy';
 import { EnvironmentOffPanel } from './EnvironmentOffPanel';
 import { EnvironmentStatusPanel } from './EnvironmentStatusPanel';
 import { EnvironmentEnableDialog } from './EnvironmentEnableDialog';
@@ -66,9 +67,13 @@ export function EnvironmentTab(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatbot.id]);
 
+  // [신규 No.36] 운영 전환 2인 승인 정책·대기 요청 — 환경 분리가 켜졌고 조회 권한(chatbot:read+dialogue:read)이 있을 때만 조회한다.
+  const approval = useApprovalPolicy(chatbot.id, canReadDialogue && can('chatbot:read') && environmentStatus?.enabled === true);
+
   function handleRefresh(): void {
     refreshEnvironmentStatus();
     void loadCurrent();
+    void approval.reload();
   }
 
   // [신규 No.40 — §6] `dialogue:read` 없이 EN1에 들어온 사용자(예: AGENT)는 어떤 상태 화면도 렌더하지
@@ -98,6 +103,8 @@ export function EnvironmentTab(): JSX.Element {
           canDeploy={canDeploy}
           canPromote={canPromote}
           openGateOnLoad={openGateOnLoad}
+          approval={approval}
+          isArchived={isArchived}
           onDisableRequested={() => setDisableOpen(true)}
           onRefresh={handleRefresh}
         />

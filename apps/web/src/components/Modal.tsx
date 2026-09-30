@@ -25,21 +25,32 @@ export function Modal({ isOpen, title, onClose, children, closeOnEsc = true, ini
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2)}`).current;
+  // [신규 No.36] 호출부가 매 렌더마다 새 `onClose`(인라인 화살표)를 넘겨도 아래 이펙트가 다시 돌지 않게 최신 값만 ref로 든다.
+  // 이펙트가 렌더마다 재실행되면 열려 있는 동안 타이핑할 때마다 포커스가 첫 요소(취소·닫기)로 되돌아가 입력이 끊긴다.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closeOnEscRef = useRef(closeOnEsc);
+  closeOnEscRef.current = closeOnEsc;
+  const initialFocusSelectorRef = useRef(initialFocusSelector);
+  initialFocusSelectorRef.current = initialFocusSelector;
+  // 초기 포커스 대상(`initialFocusSelector`)에 이미 포커스를 줬는지 — 내용이 비동기로 나중에 그려지는 대화상자(미리보기 조회 뒤 취소 버튼이 생김)는
+  // 대상이 처음 나타난 시점에 한 번만 옮긴다(아래 두 번째 이펙트).
+  const initialFocusDoneRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) return undefined;
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
-    const focusTarget =
-      (initialFocusSelector && dialog?.querySelector<HTMLElement>(initialFocusSelector)) ||
-      dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    const selector = initialFocusSelectorRef.current;
+    const focusTarget = (selector && dialog?.querySelector<HTMLElement>(selector)) || dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
     focusTarget?.focus();
+    initialFocusDoneRef.current = Boolean(selector && dialog?.querySelector(selector));
 
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
-        if (!closeOnEsc) return;
+        if (!closeOnEscRef.current) return;
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === 'Tab' && dialog) {
@@ -63,7 +74,23 @@ export function Modal({ isOpen, title, onClose, children, closeOnEsc = true, ini
       document.removeEventListener('keydown', handleKeyDown, true);
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, closeOnEsc, initialFocusSelector, onClose]);
+  }, [isOpen]);
+
+  // 열려 있는 동안 매 렌더 뒤: 초기 포커스 대상이 이번에 처음 생겼거나(비동기 내용) 포커스가 대화상자 밖으로 사라졌을 때(대상 요소가 다시 그려짐)만
+  // 대상으로 옮긴다. 그 밖의 렌더(타이핑 등)에서는 포커스를 건드리지 않는다.
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    const selector = initialFocusSelectorRef.current;
+    if (!dialog || !selector) return;
+    const target = dialog.querySelector<HTMLElement>(selector);
+    if (!target) return;
+    const focusLost = !dialog.contains(document.activeElement);
+    if (!initialFocusDoneRef.current || focusLost) {
+      initialFocusDoneRef.current = true;
+      if (document.activeElement !== target) target.focus();
+    }
+  });
 
   if (!isOpen) return null;
 

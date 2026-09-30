@@ -16,6 +16,8 @@ import { ScheduledAtField } from '../../../components/ScheduledAtField';
 import { canManageDeploySchedule } from '../../../lib/deploySchedulePermissions';
 import { formatScheduleDateTime, localPartsToInstant, timezoneLabel } from '../../../lib/scheduleTime';
 import { useDeployScheduleMeta } from '../../../lib/useDeployScheduleMeta';
+import { useApprovalPolicy } from '../../../lib/useApprovalPolicy';
+import { matchScheduleApproval, ScheduleApprovalStatusText } from './ScheduleApprovalStatusText';
 import { ScheduleChainPanel } from './ScheduleChainPanel';
 import { StateCheckPanel } from './StateCheckPanel';
 import { ReadinessWarningList } from './ReadinessWarningList';
@@ -41,6 +43,8 @@ export function DeployScheduleDetailPage(): JSX.Element {
   const meta = useDeployScheduleMeta();
   const timezone = meta?.timezone ?? 'Asia/Seoul';
 
+  // [신규 No.36] 2인 승인 상태 합성용(챗봇 스코프 상세 한정) — 환경 분리가 켜졌고 조회 권한이 있을 때만 조회한다.
+  const approvalPolicy = useApprovalPolicy(chatbot.id, environmentStatus?.enabled === true && can('chatbot:read') && can('dialogue:read'));
   const [detail, setDetail] = useState<DeployScheduleDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -146,11 +150,12 @@ export function DeployScheduleDetailPage(): JSX.Element {
     }
   }
 
-  function handleDialogCreated(label: string): void {
+  function handleDialogCreated(label: string, info?: { approvalRequested: boolean }): void {
     setRetryOpen(false);
     setResumeOpen(false);
-    showToast(msg.dialog.createSuccess(label));
+    showToast(info?.approvalRequested ? MESSAGES.switchApproval.schedule.createdAndRequested : msg.dialog.createSuccess(label));
     void load();
+    void approvalPolicy.reload();
   }
 
   if (loading) {
@@ -251,11 +256,25 @@ export function DeployScheduleDetailPage(): JSX.Element {
 
       {detail.status === 'SUCCEEDED' && <ScheduleResultSummaryPanel chatbotId={chatbot.id} detail={detail} />}
 
+      {detail.action === 'SWITCH_PROD_VERSION' && (
+        <p>
+          <ScheduleApprovalStatusText
+            chatbotId={chatbot.id}
+            scheduleId={detail.id}
+            createdByEmail={detail.createdByEmail}
+            match={matchScheduleApproval(detail, approvalPolicy.status)}
+            onSent={() => void approvalPolicy.reload()}
+          />
+        </p>
+      )}
+
       {(detail.status === 'FAILED' || detail.status === 'MISSED') && detail.failureReason && (
         <p className="field-error" role="alert">
           {msg.reasons.failure[detail.failureReason]}
         </p>
       )}
+      {/* [신규 No.36] 승인 없이 예약 시각이 지나 실패한 경우의 상세 설명(운영은 바뀌지 않았다). 재시도("지금 다시 예약")는 아래 버튼을 그대로 쓴다. */}
+      {detail.status === 'FAILED' && detail.failureReason === 'APPROVAL_MISSING' && <p>{MESSAGES.switchApproval.schedule.missingDetail}</p>}
 
       {detail.status === 'HELD' && detail.heldReason && <p>{msg.reasons.held[detail.heldReason]}</p>}
 

@@ -77,6 +77,14 @@ import { HandoffHistoryDetailPage } from './pages/handoff-console/HandoffHistory
 import { InboxListPage } from './pages/inbox/InboxListPage';
 import { InboxThreadDetailPage } from './pages/inbox/InboxThreadDetailPage';
 import { InboxTagsPage } from './pages/inbox/InboxTagsPage';
+import { GuardrailShell } from './pages/chatbot-detail/guardrails/GuardrailShell';
+import { GuardrailRuleListPage } from './pages/chatbot-detail/guardrails/GuardrailRuleListPage';
+import { GuardrailRuleFormPage } from './pages/chatbot-detail/guardrails/GuardrailRuleFormPage';
+import { GuardrailPiiSettingsPage } from './pages/chatbot-detail/guardrails/GuardrailPiiSettingsPage';
+import { GuardrailOverviewPage } from './pages/chatbot-detail/guardrails/GuardrailOverviewPage';
+import { GuardrailEventsPage } from './pages/chatbot-detail/guardrails/GuardrailEventsPage';
+import { ApprovalListPage } from './pages/settings/environment-approvals/ApprovalListPage';
+import { ApprovalDetailPage } from './pages/settings/environment-approvals/ApprovalDetailPage';
 
 /** 미인증 상태에서 보호 경로에 직접 진입한 경우 `returnTo`를 실어 `/login`으로 보낸다(F-2, AC-U-1). */
 function RedirectToLogin(): JSX.Element {
@@ -195,6 +203,23 @@ export function App(): JSX.Element {
               {/* [No.22] TP0 — 토픽 관리, DialogueShell 서브내비 8번째(topic-system-ui-spec.md §1). */}
               <Route path="topics" element={<TopicsPage />} />
             </Route>
+            {/* [신규 No.36] "검증" 그룹 4번째 탭 "안전 가드레일" — 셸 + 서브라우트 5개(ai-guardrails-ui-spec.md §1). */}
+            <Route
+              path="guardrails"
+              element={
+                <RequirePermission permission="security:read" menuName={MESSAGES.detail.tabGuardrails}>
+                  <GuardrailShell />
+                </RequirePermission>
+              }
+            >
+              <Route index element={<Navigate to="rules" replace />} />
+              <Route path="rules" element={<GuardrailRuleListPage />} />
+              <Route path="rules/new" element={<GuardrailRuleFormPage />} />
+              <Route path="rules/:ruleId" element={<GuardrailRuleFormPage />} />
+              <Route path="pii" element={<GuardrailPiiSettingsPage />} />
+              <Route path="overview" element={<GuardrailOverviewPage />} />
+              <Route path="events" element={<GuardrailEventsPage />} />
+            </Route>
             <Route path="validation" element={<ValidationShell />}>
               <Route index element={<Navigate to="sets" replace />} />
               <Route path="sets" element={<TestSetListPage />} />
@@ -252,6 +277,24 @@ export function App(): JSX.Element {
             element={
               <RequirePermission permission="cs:read" menuName={MESSAGES.common.inboxNav}>
                 <InboxThreadDetailPage />
+              </RequirePermission>
+            }
+          />
+          {/* [신규 No.36] 운영 전환 승인 — 전역 승인 대기 목록(AP-1)과 요청 상세(AP-2). 목록은 승인할 수 있는 사람(`chatbot:deploy`)만,
+              상세는 조회 권한(`chatbot:read`)이면 열리고 승인·반려·취소 컨트롤은 화면 안에서 `chatbot:deploy`로 다시 가른다. */}
+          <Route
+            path="/environment-approvals"
+            element={
+              <RequirePermission permission="chatbot:deploy" menuName={MESSAGES.switchApproval.navLabel}>
+                <ApprovalListPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/environment-approvals/:chatbotId/:requestId"
+            element={
+              <RequirePermission permission="chatbot:read" menuName={MESSAGES.switchApproval.navLabel}>
+                <ApprovalDetailPage />
               </RequirePermission>
             }
           />

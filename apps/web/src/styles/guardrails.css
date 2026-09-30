@@ -1,0 +1,295 @@
+/*
+ * [신규 No.36] 안전 가드레일·운영 전환 2인 승인 화면 스타일(ai-guardrails-ui-spec.md §2.1 "신규 스타일 원칙").
+ * 기존 클래스(settings-page·dialogue-table·desktop-only/mobile-only·settings-card-list·form-field·field-hint·form-banner·
+ * modal-banner·environment-status-card·stats-subnav)를 재사용하고, 여기서는 이 기능에만 필요한 보조 규칙만 둔다.
+ * 새 색을 만들지 않는다 — 색은 SeverityBadge·GateResultBadge 토큰을 그대로 쓰고, 글자·아이콘을 항상 병기한다.
+ * global.css를 건드리지 않고 별도 파일로 둔다(global.responsive.spec가 global.css 끝부분을 기준점으로 삼는다).
+ */
+
+/* 긴 이름·이메일은 잘라 내지 않고 줄바꿈한다(text-overflow 금지, ui-spec §15). */
+.guardrail-break {
+  word-break: break-all;
+}
+
+/* 링크를 버튼처럼 보이게 한 요소도 터치 영역 44×44px를 지킨다(UIUX §4). */
+.guardrail-shell a.btn,
+.approval-pending-card a.btn,
+.approval-list-page a.btn,
+.approval-detail-page a.btn,
+.guardrail-rules-page a.btn,
+.guardrail-form-page a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  text-decoration: none;
+}
+
+.guardrail-shell-title {
+  margin: 0;
+}
+.guardrail-shell-subtitle {
+  margin: 0;
+}
+
+/* 규칙 표 */
+.guardrail-rule-table .guardrail-move-buttons,
+.settings-card-actions .guardrail-move-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+.guardrail-move-button[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.guardrail-row-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.guardrail-warning-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.guardrail-empty-steps {
+  text-align: left;
+  display: inline-block;
+  margin: 8px 0 16px;
+  padding-left: 20px;
+}
+
+/* 규칙 폼 — 데스크톱 2열(폼 + 시험하기), 640px 미만 1열 */
+.guardrail-form-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.guardrail-breadcrumb {
+  margin: 0 0 8px;
+}
+.chip--invalid {
+  border-color: var(--color-danger);
+  border-style: dashed;
+}
+.guardrail-readonly-list dt {
+  font-weight: 600;
+  margin-top: 8px;
+}
+.guardrail-readonly-list dd {
+  margin: 0;
+}
+.guardrail-delete-button {
+  margin-right: auto;
+}
+
+/* 시험하기 */
+.guardrail-test-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: var(--color-bg);
+}
+.guardrail-test-panel > summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.guardrail-test-actions {
+  margin-top: 8px;
+}
+.guardrail-result-text-box {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  background: var(--color-bg-subtle);
+}
+/* 결과 문구·대화 본문은 글자로만 보인다(HTML 해석 없음) — 줄바꿈만 살린다. */
+.guardrail-result-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 2px 0 8px;
+}
+.guardrail-test-live {
+  margin-top: 8px;
+}
+
+/* 개인정보 가림 설정 */
+.guardrail-pii-item {
+  margin-bottom: 12px;
+}
+.guardrail-pii-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-weight: 600;
+}
+.guardrail-pii-preserve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-left: 28px;
+}
+.guardrail-default-badge {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.guardrail-pii-readonly {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* 현황 */
+.guardrail-summary-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+.guardrail-alerts,
+.guardrail-hitl {
+  margin-top: 20px;
+}
+
+/* 걸린 기록 */
+.guardrail-event-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.guardrail-event-filter .form-field {
+  margin-bottom: 0;
+}
+.guardrail-filter-actions {
+  display: flex;
+  gap: 8px;
+}
+.guardrail-conversation {
+  background: var(--color-bg-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+/* 데이터 지도 절 */
+.guardrail-datamap-list dd {
+  margin: 0 0 6px;
+}
+
+/* 시뮬레이터 — 접힘 밖 안내·미리보기 */
+.guardrail-inbound-notice,
+.rag-preview-panel {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-subtle);
+  font-size: 14px;
+}
+.rag-preview-panel summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* 2인 승인 */
+.approval-policy-panel,
+.approval-pending-card {
+  margin: 16px 0;
+}
+.approval-policy-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+}
+.approval-policy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 8px 0;
+}
+.approval-ttl-form {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0;
+}
+.approval-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.environment-disable-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  max-width: 420px;
+}
+.environment-disable-wrap .field-hint {
+  text-align: right;
+}
+.approval-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 16px 0;
+}
+.approval-detail-actions .field-hint {
+  flex-basis: 100%;
+}
+.approval-remaining {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.schedule-approval-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .guardrail-summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .guardrail-form-layout {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@media (max-width: 639px) {
+  .guardrail-summary-cards {
+    grid-template-columns: 1fr;
+  }
+  /* 승인·반려 버튼은 세로 전체 폭(44px 이상, ui-spec §15) */
+  .approval-detail-actions .btn {
+    width: 100%;
+  }
+  .environment-disable-wrap {
+    align-items: stretch;
+    max-width: none;
+  }
+}

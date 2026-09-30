@@ -117,6 +117,10 @@ export function TabNav({
         <NavLink to={`/chatbots/${chatbotId}/validation`} className={tabClassName} onClick={handleClick}>
           {MESSAGES.detail.tabValidation}
         </NavLink>
+        {/* [신규 No.36] "검증" 그룹 4번째 탭 — `security:read`가 없는 역할도 링크는 보이고 진입 시 페이지 안에서 `ForbiddenState`로 막는다(다른 탭과 같은 원칙). */}
+        <NavLink to={`/chatbots/${chatbotId}/guardrails`} className={tabClassName} onClick={handleClick}>
+          {MESSAGES.detail.tabGuardrails}
+        </NavLink>
       </div>
       <span className="tab-nav-divider" aria-hidden="true" />
       <div className="tab-nav-group" role="group" aria-label={MESSAGES.detail.tabGroupDeploy}>

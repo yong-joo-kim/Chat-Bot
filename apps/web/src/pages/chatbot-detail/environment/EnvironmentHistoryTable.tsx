@@ -9,6 +9,8 @@ import { ErrorState } from '../../../components/ErrorState';
 import { EmptyState } from '../../../components/EmptyState';
 import { Pagination } from '../../../components/Pagination';
 import { KebabMenu } from '../../../components/KebabMenu';
+import { SeverityBadge } from '../../../components/SeverityBadge';
+import { Link } from 'react-router-dom';
 
 export interface EnvironmentHistoryTableProps {
   chatbotId: string;
@@ -16,6 +18,39 @@ export interface EnvironmentHistoryTableProps {
   onRollbackRequested: (item: EnvironmentSwitchLogItem) => void;
   onScheduleSwitchRequested: (item: EnvironmentSwitchLogItem) => void;
   currentProdVersionId?: string;
+}
+
+/**
+ * [신규 No.36] "방식" 셀의 승인 표식 — `approvalMode`가 있을 때만 글자 배지를 덧붙인다(없으면 기존과 같다). 2인 승인 전환은
+ * 요청 상세로 가는 링크(배포 권한이 있을 때만 — 상세 화면의 승인·반려 컨트롤과 같은 권한)를 함께 둔다.
+ */
+function ApprovalModeMark({ item, chatbotId, canDeploy }: { item: EnvironmentSwitchLogItem; chatbotId: string; canDeploy: boolean }): JSX.Element | null {
+  const ap = MESSAGES.switchApproval.history;
+  if (item.approvalMode === 'APPROVED') {
+    return (
+      <>
+        {' '}
+        <SeverityBadge severity="INFO" label={ap.approved} />
+        {canDeploy && item.approvalRequestId && (
+          <>
+            {' '}
+            <Link to={`/environment-approvals/${chatbotId}/${item.approvalRequestId}`} aria-label={ap.viewRequestLabel(item.toVersionNo)}>
+              {ap.viewRequest}
+            </Link>
+          </>
+        )}
+      </>
+    );
+  }
+  if (item.approvalMode === 'SOLO_ROLLBACK') {
+    return (
+      <>
+        {' '}
+        <SeverityBadge severity="WARNING" label={ap.solo} />
+      </>
+    );
+  }
+  return null;
 }
 
 /** EN1-f 전환 이력(`environment-separation-ui-spec.md` §4.8). append-only — 삭제·수정 액션 없음. */
@@ -118,6 +153,7 @@ export function EnvironmentHistoryTable({
                     <td>
                       {msg.methodLabel[item.method]}
                       {item.method === 'DISABLE' && item.disableMode && ` (${msg.disableModeLabel[item.disableMode]})`}
+                      <ApprovalModeMark item={item} chatbotId={chatbotId} canDeploy={canDeploy} />
                     </td>
                     <td>{msg.versionArrow(item.toVersionNo, item.fromVersionNo)}</td>
                     <td>{item.actorEmail ?? '—'}</td>
@@ -159,6 +195,7 @@ export function EnvironmentHistoryTable({
                       <dd>
                         {msg.methodLabel[item.method]}
                         {item.method === 'DISABLE' && item.disableMode && ` (${msg.disableModeLabel[item.disableMode]})`}
+                        <ApprovalModeMark item={item} chatbotId={chatbotId} canDeploy={canDeploy} />
                       </dd>
                     </div>
                     <div>

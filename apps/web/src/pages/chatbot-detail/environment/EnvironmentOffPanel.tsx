@@ -19,6 +19,8 @@ export function EnvironmentOffPanel({ canDeploy, onEnableClick }: { canDeploy: b
           {msg.enableButton}
         </button>
       )}
+      {/* [신규 No.36] 2인 승인 패널은 환경 분리가 켜진 뒤에만 있다 — 그 사실만 한 줄로 알린다(ui-spec §9.2). */}
+      <p className="field-hint">{MESSAGES.switchApproval.policy.offModeHint}</p>
     </div>
   );
 }

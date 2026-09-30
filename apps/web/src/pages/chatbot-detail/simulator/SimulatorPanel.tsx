@@ -189,6 +189,8 @@ export function SimulatorPanel({ chatbotId, isArchived, mode, overlay, environme
         workflowSteps: res.workflowSteps,
         answeredTopic: res.answeredTopic,
         target: res.target,
+        guardrailInbound: res.guardrailInbound,
+        ragRequested: useRag,
       });
       setMessages((prev) => [...prev, ...next]);
       setState(res.state);

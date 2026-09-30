@@ -8,6 +8,7 @@ import { ApiStepPanel } from './ApiStepPanel';
 import { SurveyStepPanel } from './SurveyStepPanel';
 import { WorkflowStepPanel } from './WorkflowStepPanel';
 import { OverlayBadge } from './OverlayBadge';
+import { GuardrailInboundNotice, RagPreviewPanel } from './GuardrailPanels';
 import type { SimMessage } from './types';
 
 /** 말풍선 1개(SIM1/SIM1-D 공유, ui-spec §3.2). */
@@ -80,6 +81,9 @@ export function ChatBubble({
       {message.answeredTopic && (
         <p className="field-hint">{MESSAGES.topics.simulatorAnsweredTopic(message.answeredTopic.name, topicStatusLabel(message.answeredTopic.enabled ? 'ACTIVE' : 'INACTIVE'))}</p>
       )}
+      {/* [신규 No.36] 입구 판정 안내·AI 답변 미리보기는 판정 근거(접힘) 밖, 말풍선 바로 아래에 둔다. 키가 없으면 렌더하지 않는다. */}
+      {message.guardrailInbound && <GuardrailInboundNotice chatbotId={chatbotId} view={message.guardrailInbound} ragRequested={message.ragRequested} />}
+      {message.matchTrace?.ragPreview && <RagPreviewPanel preview={message.matchTrace.ragPreview} />}
       {(message.trace || message.target) && (
         <TracePanel trace={message.trace ?? []} chatbotId={chatbotId} matchTrace={message.matchTrace} target={message.target} />
       )}

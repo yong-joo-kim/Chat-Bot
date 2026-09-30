@@ -12,6 +12,9 @@ import { StagingPromoteDialog } from './StagingPromoteDialog';
 import { ProdSwitchDialog } from './ProdSwitchDialog';
 import { GateSettingsPanel } from './GateSettingsPanel';
 import { EnvironmentHistoryTable } from './EnvironmentHistoryTable';
+import type { UseApprovalPolicyResult } from '../../../lib/useApprovalPolicy';
+import { ApprovalPolicyPanel } from './approval/ApprovalPolicyPanel';
+import { ApprovalPendingCard } from './approval/ApprovalPendingCard';
 
 type EnabledStatus = Extract<EnvironmentStatus, { enabled: true }>;
 
@@ -24,6 +27,12 @@ export interface EnvironmentStatusPanelProps {
   canPromote: boolean;
   /** [신규 No.40 — §4.6(c)] `?openGate=1`로 들어왔으면 게이트 설정 섹션을 펼친 채로 시작한다. */
   openGateOnLoad?: boolean;
+  /**
+   * [신규 No.36] 운영 전환 2인 승인 정책·요청 조회 결과(`EnvironmentTab`의 `useApprovalPolicy`). 생략하면(기존 소비자·시험)
+   * 승인 관련 UI를 렌더하지 않고 기존과 동일하게 동작한다.
+   */
+  approval?: UseApprovalPolicyResult;
+  isArchived?: boolean;
   onDisableRequested: () => void;
   onRefresh: () => void;
 }
@@ -37,12 +46,20 @@ export function EnvironmentStatusPanel({
   canDeploy,
   canPromote,
   openGateOnLoad = false,
+  approval,
+  isArchived = false,
   onDisableRequested,
   onRefresh,
 }: EnvironmentStatusPanelProps): JSX.Element {
   const msg = MESSAGES.environment;
+  const apMsg = MESSAGES.switchApproval;
   const { showToast } = useToast();
   const deployMeta = useDeployScheduleMeta();
+  // [신규 No.36] 정책이 켜졌는지 — 환경 상태 응답의 `approval`(켜졌을 때만 존재)을 우선하고, 별도 조회 결과로 보완한다.
+  const approvalOn = status.approval?.required === true || approval?.status?.policy.required === true;
+  const approvalTtl = status.approval?.ttlHours ?? approval?.status?.policy.ttlHours ?? null;
+  // 승인 요청을 막 보낸 직후 새로 생긴 대기 카드 제목으로 포커스를 옮긴다.
+  const [focusPendingCard, setFocusPendingCard] = useState(false);
 
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [switchDialog, setSwitchDialog] = useState<{ kind: 'SWITCH' | 'ROLLBACK'; targetVersionId?: string } | null>(null);
@@ -99,9 +116,38 @@ export function EnvironmentStatusPanel({
       <div className="environment-status-header">
         <h1>{msg.off.title}</h1>
         {canDeploy && (
-          <button type="button" className="btn btn-secondary" onClick={onDisableRequested}>
-            {sp.disableButton}
-          </button>
+          <div className="environment-disable-wrap">
+            {/* [신규 No.36] 2인 승인이 켜져 있으면 끄기를 막는다 — aria-disabled(포커스 유지) + 🔒 + 사유 글자, 클릭해도 대화상자를 열지 않는다. */}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              aria-disabled={approvalOn || undefined}
+              aria-describedby={approvalOn ? 'env-disable-locked-reason' : undefined}
+              onClick={() => {
+                if (approvalOn) return;
+                onDisableRequested();
+              }}
+            >
+              {approvalOn && <span aria-hidden="true">🔒 </span>}
+              {sp.disableButton}
+            </button>
+            {approvalOn && (
+              <p id="env-disable-locked-reason" className="field-hint">
+                {apMsg.environment.disableLocked}{' '}
+                <a
+                  href="#approval-policy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const heading = document.getElementById('approval-policy-title');
+                    heading?.scrollIntoView?.();
+                    heading?.focus();
+                  }}
+                >
+                  {apMsg.environment.disableLockedLink}
+                </a>
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -133,14 +179,14 @@ export function EnvironmentStatusPanel({
                     aria-disabled={!canSwitchNow}
                     disabled={!canSwitchNow}
                   >
-                    {sp.switchPreviewButton}
+                    {approvalOn ? apMsg.environment.switchButtonOn : sp.switchPreviewButton}
                   </button>{' '}
                   <button
                     type="button"
                     className="btn btn-secondary"
                     onClick={() => status.staging && setScheduleTarget({ versionId: status.staging.versionId, versionNo: status.staging.versionNo })}
                   >
-                    {sp.scheduleSwitchButton}
+                    {approvalOn ? apMsg.environment.scheduleButtonOn : sp.scheduleSwitchButton}
                   </button>
                 </>
               )}
@@ -158,9 +204,21 @@ export function EnvironmentStatusPanel({
           {status.prod.legacyTiebreak && <p className="field-hint">ⓘ {msg.switchDialog.warnings.LEGACY_TIEBREAK}</p>}
           {status.prod.semanticPending > 0 && <p className="field-hint">{msg.targetBadge.semanticPendingHint(status.prod.semanticPending)}</p>}
           {canDeploy && (
-            <button type="button" className="btn btn-secondary" onClick={() => setSwitchDialog({ kind: 'ROLLBACK' })}>
-              {sp.rollbackButton}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                aria-describedby={approvalOn ? 'env-rollback-hint' : undefined}
+                onClick={() => setSwitchDialog({ kind: 'ROLLBACK' })}
+              >
+                {sp.rollbackButton}
+              </button>
+              {approvalOn && (
+                <p id="env-rollback-hint" className="field-hint">
+                  {apMsg.environment.rollbackHint}
+                </p>
+              )}
+            </>
           )}
         </section>
       </div>
@@ -171,6 +229,32 @@ export function EnvironmentStatusPanel({
           {status.activeSwitchSchedule.status === 'PENDING' ? sp.scheduledStatusPending : sp.scheduledStatusHeld}){' '}
           <Link to={`/chatbots/${chatbotId}/deploy-schedules/${status.activeSwitchSchedule.scheduleId}`}>{sp.scheduledLink}</Link>
         </p>
+      )}
+
+      {/* [신규 No.36] 승인 대기 요청 카드(제안 · 승인 전) + 운영 전환 2인 승인 설정 패널 — 3카드와 게이트 사이(ui-spec §9.2).
+          정책 조회가 실패해도 이 두 블록만 축약 오류로 대체되고 전환 흐름은 막히지 않는다. */}
+      {approval && approval.status?.pending && (
+        <ApprovalPendingCard
+          chatbotId={chatbotId}
+          request={approval.status.pending}
+          focusOnMount={focusPendingCard}
+          onChanged={() => {
+            setFocusPendingCard(false);
+            onRefresh();
+          }}
+        />
+      )}
+      {approval && approval.status && <ApprovalPolicyPanel chatbotId={chatbotId} status={approval.status} archived={isArchived} onChanged={onRefresh} />}
+      {approval && !approval.status && approval.loading && <div className="skeleton skeleton-card" aria-busy="true" />}
+      {approval && !approval.status && !approval.loading && approval.error && (
+        <div className="error-state" role="alert">
+          <p className="error-state-title">
+            <span aria-hidden="true">⚠</span> {apMsg.policy.loadFailed}
+          </p>
+          <button type="button" className="btn btn-secondary" onClick={() => void approval.reload()}>
+            {MESSAGES.common.retry}
+          </button>
+        </div>
       )}
 
       <p className="field-hint">{gateSummary}</p>
@@ -215,9 +299,16 @@ export function EnvironmentStatusPanel({
           isOpen={switchDialog !== null}
           onClose={() => setSwitchDialog(null)}
           gateSettings={status.gate}
+          approvalTtlHours={approvalTtl}
           onSwitched={(res) => {
             setSwitchDialog(null);
             showToast(msg.switchDialog.successToast(res.prod.versionNo));
+            onRefresh();
+          }}
+          onRequested={() => {
+            setSwitchDialog(null);
+            showToast(apMsg.dialog.requestSuccess);
+            setFocusPendingCard(true);
             onRefresh();
           }}
         />
@@ -228,9 +319,10 @@ export function EnvironmentStatusPanel({
           chatbotId={chatbotId}
           isOpen={scheduleTarget !== null}
           onClose={() => setScheduleTarget(null)}
-          onCreated={(label) => {
+          onCreated={(label, info) => {
             setScheduleTarget(null);
-            showToast(MESSAGES.deploySchedules.dialog.createSuccess(label));
+            showToast(info?.approvalRequested ? apMsg.schedule.createdAndRequested : MESSAGES.deploySchedules.dialog.createSuccess(label));
+            if (info?.approvalRequested) setFocusPendingCard(true);
             onRefresh();
           }}
           timezone={deployMeta.timezone}

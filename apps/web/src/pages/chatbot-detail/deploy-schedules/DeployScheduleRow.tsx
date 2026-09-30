@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { DeployScheduleListItem, Permission } from '@chat-bot/shared-types';
 import { DeployScheduleStatusBadge } from '../../../components/DeployScheduleStatusBadge';
@@ -23,10 +24,12 @@ export interface DeployScheduleRowProps {
   onAcknowledge: (item: DeployScheduleListItem) => void;
   onCancel: (item: DeployScheduleListItem) => void;
   detailHref: string;
+  /** [신규 No.36] 2인 승인 상태 글자·버튼(챗봇 스코프 목록에서만 넘긴다 — 전역 목록은 챗봇마다 승인을 조회하지 않는다, 조정 A-7). */
+  approvalSlot?: ReactNode;
 }
 
 /** S1/S4 공용 목록 1행(`scheduled-deploy-ui-spec.md` §4.1.2/§4.4.1). */
-export function DeployScheduleRow({ item, chatbotName, can, onRetry, onAcknowledge, onCancel, detailHref }: DeployScheduleRowProps): JSX.Element {
+export function DeployScheduleRow({ item, chatbotName, can, onRetry, onAcknowledge, onCancel, detailHref, approvalSlot }: DeployScheduleRowProps): JSX.Element {
   const msg = MESSAGES.deploySchedules;
   const reasons = msg.reasons;
   const timezone = useDeployScheduleTimezone();
@@ -49,6 +52,7 @@ export function DeployScheduleRow({ item, chatbotName, can, onRetry, onAcknowled
         <span>{item.createdByEmail}</span>
         {item.memo && <span className="deploy-schedule-row-memo">메모: "{item.memo}"</span>}
         {reasonText && <span className="deploy-schedule-row-reason">{reasonText}</span>}
+        {approvalSlot}
       </div>
       {canManage && (
         <div className="deploy-schedule-row-actions">

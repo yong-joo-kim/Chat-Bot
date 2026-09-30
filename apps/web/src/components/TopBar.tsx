@@ -8,6 +8,7 @@ import { inboxApi } from '../api/inbox';
 import { ApiError } from '../api/client';
 import { SystemSettingsMenu } from './security/SystemSettingsMenu';
 import { UserMenu } from './security/UserMenu';
+import { ApprovalNavLink } from './ApprovalNavLink';
 
 const MY_ACTIVE_COUNT_POLL_MS = 60000;
 const INBOX_SUMMARY_POLL_MS = 60000;
@@ -102,6 +103,8 @@ export function TopBar(): JSX.Element | null {
               {myActiveCount > 0 && ` (${MESSAGES.handoffConsole.myActiveCount(myActiveCount)})`}
             </Link>
           )}
+          {/* [신규 No.36] 운영 전환 승인 대기 — `chatbot:deploy`가 없으면 링크를 렌더하지 않는다(F-4). */}
+          <ApprovalNavLink />
           {/* [신규 No.42] OI-13 */}
           {canSeeInbox && (
             <Link to="/inbox">

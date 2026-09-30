@@ -3,6 +3,9 @@
  * `docs/03-design/chatbot-operations-ui-spec.md`에 등장한 따옴표 문구를 그대로 옮긴다.
  * 서버가 내려주는 오류 `message`는 예외로 그대로 표시하되, `code` 기반 UI 반응은 이 파일의 상수를 사용한다.
  */
+import { GUARDRAIL_MESSAGES } from './guardrails.messages';
+import { SWITCH_APPROVAL_MESSAGES } from './switchApproval.messages';
+
 export const MESSAGES = {
   common: {
     appName: 'Chat Bot',
@@ -13,6 +16,8 @@ export const MESSAGES = {
     monitoringNav: '모니터링',
     /** [신규 No.42] `TopBar` "통합 인박스" 진입점(OI-13, §12 D-2). */
     inboxNav: '통합 인박스',
+    /** [신규 No.36] `TopBar` "승인 대기" 진입점(운영 전환 2인 승인 — `chatbot:deploy` 보유자만). */
+    approvalsNav: '승인 대기',
     save: '저장',
     saving: '저장 중…',
     cancel: '취소',
@@ -170,6 +175,8 @@ export const MESSAGES = {
     tabGroupDeploy: '배포',
     // [신규 No.41] "배포" 그룹 5번째 탭(§1 WF3·§13-1 확정) — 환경 탭 바로 뒤.
     tabWorkflowAutomation: '업무 자동화',
+    // [신규 No.36] "검증" 그룹 4번째 탭 겸 화면 제목 — "가드레일"이라는 말은 이 1곳에만 쓴다(ai-guardrails-ui-spec.md §0.3).
+    tabGuardrails: '안전 가드레일',
     statusChangeSuccess: '상태가 변경되었습니다.',
   },
   dashboard: {
@@ -3027,6 +3034,8 @@ export const MESSAGES = {
         INTERNAL_ERROR: '알 수 없는 오류',
         // [신규 No.40] 실행 시 차단 게이트 재평가 미달(영구, 재시도 없음).
         GATE_NOT_PASSED: '필수 시험 기준 미달',
+        // [신규 No.36] 2인 승인이 켜진 챗봇의 운영 전환 예약이 승인 없이 도래(영구, 재시도 없음) — ui-spec §13.3.
+        APPROVAL_MISSING: '승인 없음(2인 승인 필요)',
       },
       held: {
         PREDECESSOR_FAILED: '선행 예약 실패로 보류됨',
@@ -4976,6 +4985,9 @@ export const MESSAGES = {
    * [신규 No.21] 발화 묶음 분석 화면 문구(`deep-clustering-ui-spec.md`). 화면 문자열에는 기술 용어를
    * 쓰지 않는다(DC-15) — 예외는 `clusterHelp` 한 문장뿐이며 `utteranceAnalysis.messages.spec.ts`가 이를 검사한다.
    */
+  // [신규 No.36] 안전 가드레일·운영 전환 2인 승인 문구는 별도 파일에서 가져온다(파일이 너무 커지는 것을 피함).
+  guardrails: GUARDRAIL_MESSAGES,
+  switchApproval: SWITCH_APPROVAL_MESSAGES,
   utteranceAnalysis: {
     navLabel: '발화 묶음 분석',
     pageTitle: '발화 묶음 분석',

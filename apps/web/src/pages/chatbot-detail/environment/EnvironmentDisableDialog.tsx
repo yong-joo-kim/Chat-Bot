@@ -29,6 +29,8 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
   const [restoringStep, setRestoringStep] = useState(false);
   const [draftNotRestoredError, setDraftNotRestoredError] = useState(false);
   const [otherError, setOtherError] = useState<string | null>(null);
+  // [신규 No.36] 확정 시 409 ENV_APPROVAL_REQUIRED(POLICY_ACTIVE) — 그 사이 2인 승인이 켜진 경우의 방어.
+  const [policyBlocked, setPolicyBlocked] = useState(false);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -58,6 +60,7 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
     setMode('KEEP_PROD');
     setDraftNotRestoredError(false);
     setOtherError(null);
+    setPolicyBlocked(false);
     void fetchPreview();
   }, [isOpen, fetchPreview]);
 
@@ -109,6 +112,8 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
       if (!isMountedRef.current) return;
       if (e instanceof ApiError && e.code === 'ENV_DRAFT_NOT_RESTORED') {
         setDraftNotRestoredError(true);
+      } else if (e instanceof ApiError && e.code === 'ENV_APPROVAL_REQUIRED') {
+        setPolicyBlocked(true);
       } else if (e instanceof ApiError && (e.code === 'ENV_POINTER_STALE' || e.code === 'ENV_SWITCH_BUSY')) {
         setOtherError(MESSAGES.environment.errors[e.code]);
         await fetchPreview();
@@ -121,6 +126,9 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
   }
 
   const busy = confirming || restoringStep;
+  // [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다 — 미리보기 응답 키(`approvalPolicyActive`) 또는 확정 시 409로 안다.
+  const previewBlocked = preview?.approvalPolicyActive === true;
+  const blockedByPolicy = previewBlocked || policyBlocked;
 
   return (
     <Modal isOpen={isOpen} title={msg.title} onClose={handleClose} closeOnEsc={!busy} initialFocusSelector='[data-autofocus="cancel"]'>
@@ -134,7 +142,19 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
           {msg.loadFailed}
         </p>
       )}
-      {!loading && !loadError && preview && (
+      {!loading && !loadError && preview && blockedByPolicy && (
+        <div>
+          <p className={`modal-banner ${policyBlocked ? 'modal-banner--error' : 'modal-banner--warning'}`} role="status" aria-live="polite">
+            {MESSAGES.switchApproval.environment.disableDialogLocked}
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose} data-autofocus="cancel">
+              {MESSAGES.switchApproval.environment.disableDialogOk}
+            </button>
+          </div>
+        </div>
+      )}
+      {!loading && !loadError && preview && !blockedByPolicy && (
         <div>
           {otherError && (
             <p className="modal-banner modal-banner--error" role="alert">

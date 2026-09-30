@@ -12,7 +12,9 @@ export function RagUsageToggle({ checked, onChange, disabled }: { checked: boole
         <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
         {msg.label}
       </label>
-      <p className="field-hint">{msg.caption}</p>
+      <p className="field-hint">
+        {msg.caption} {MESSAGES.guardrails.simulator.ragToggleCaptionExtra}
+      </p>
     </div>
   );
 }
