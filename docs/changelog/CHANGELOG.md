@@ -500,3 +500,27 @@ feat: 선제적(Proactive) 메시징(No.35) 기능그룹 구현
 ### 검증
 
 분할 전후 최종 트리 기준 shared-types 빌드 오류 0, api tsc 오류 0 · jest 361 suites / 5,347 tests(1 skip, 2회 연속 확인), web tsc 오류 0 · vitest 204 files / 1,095 tests, widget tsc 오류 0 · vitest 34 files / 253 tests · 빌드 성공 · 번들 gzip 19.30KB(100KB 예산 이내). 이 그룹의 개별 커밋 단독 게이트는 따로 실행하지 않았다.
+
+## 온디바이스/엣지 추론 (No.37) — 2026-09-30
+
+`apps/ml-worker`와 문서만 변경(API·위젯·엔진·화면 변경 0). ADR-0046.
+
+### 변경 요약
+
+- **뜻 해석**: 엣지 = 고객사 사내 소형 서버. 브라우저·휴대폰 추론과 다지점 원격 관리는 범위 밖.
+- **vLLM 생성 백엔드 추가**: OpenAI 호환 `/v1/chat/completions`, 기동 시 `/v1/models` 확인, 새 의존성 0. `GENERATION_BACKEND` = `transformers` | `ollama` | `vllm`.
+- **Ollama = 경량 설치 구성**: "동작 보장·품질 미보증". 1회 생성 상한 20건(`OLLAMA_TARGET_CAP`), 초과 요청은 400이 아니라 상한까지만 생성. 원격 요청 제한 25초(API 30초보다 먼저 포기).
+- **주소 통제**: 루프백·사설·localhost·허용목록만 통과, 링크로컬·미지정·멀티캐스트는 항상 거부, 리다이렉트 미추적, 생성기 생성 전 검사.
+- **`/augment/health`**: `backend`·`profile`·`targetCap` 선택 필드 추가, 원격 백엔드는 `device=external`.
+- **시연 모델**: RTX 3050 + Ollama `qwen3:4b-instruct-2507-q4_K_M`(20건 약 13초, 의미 보존 0.948). `qwen3.5:4b-q4_K_M`은 3케이스 모두 0건·p95 약 99.6초로 부적합(사고 토큰 소진 추정, 미검증).
+
+### 알려진 한계
+
+- 실제 vLLM 서버 검증 미실시(시험은 가짜 서버 기반) — No.17 실측 때 확인.
+- 콘솔→API→ml-worker 전 경로 수동 확인(AC-ED3-5) 미수행.
+- K-1: 예문 20개 이상 의도는 G3가 항상 G1로 폴백(범위 밖 기존 결함).
+- 이름 해석은 기동 시 1회만 검사(DNS 재바인딩 한계, ADR-0046).
+
+### 검증
+
+ml-worker pytest 113건 통과(4회 반복 동일), api `--testPathPattern augment` 9 suites / 156 tests 통과.
