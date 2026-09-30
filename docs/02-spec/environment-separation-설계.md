@@ -513,6 +513,7 @@ export const DisableEnvironmentPreviewResponseSchema = z.object({
   draftDiffersFromProd: z.boolean(), diffSummary: VersionDiffSummarySchema,
   cancelledSwitchSchedules: z.number().int().nonnegative(),
   potentialTieShift: z.boolean(),        // 동점 노드가 있어 "운영 유지" 후 라이브 동점 승자가 달라질 수 있음(§27 L-6)
+  promoteDraftBlocked: z.literal(true).optional(),   // [N40-3] 차단 게이트 ∧ 초안≠운영(contentHash) — 해당할 때만 키(n40-follow-up-설계.md §3.7)
 });
 export const DisableEnvironmentSchema = z.object({
   mode: EnvironmentDisableMode, expectedProdVersionId: z.string().uuid(),
@@ -652,12 +653,12 @@ export function shouldShowRecurredAfterApply(input: { recurredCount: number; las
 
 ### 5.4 끄기 — 미리보기 → (필요 시 콘솔의 기존 복원) → 확정 (FR-EN1-3 · FR-0-154)
 
-- **미리보기** `POST …/disable/preview`(DB 변경 0): 운영 버전 · 초안 해시 · 운영 해시 · 차이 요약(No.25 `VersionDiffService`, 초안 ↔ 운영 버전) · 취소될 활성 전환 예약 수 · 동점 이동 가능성(`potentialTieShift`).
+- **미리보기** `POST …/disable/preview`(DB 변경 0): 운영 버전 · 초안 해시 · 운영 해시 · 차이 요약(No.25 `VersionDiffService`, 초안 ↔ 운영 버전) · 취소될 활성 전환 예약 수 · 동점 이동 가능성(`potentialTieShift`). **[N40-3]** 게이트가 차단 모드이고 초안 해시 ≠ 운영 해시면 `promoteDraftBlocked: true`(해당할 때만 키 — 게이트 모드는 기존 `getPointerStatus()` 결과를 재사용해 조회 추가 0).
 - **콘솔 흐름**(권고 기본 = "운영 유지"):
   1. `draftDiffersFromProd = false` → 선택 없이 확인만 → `disable({ mode: 'KEEP_PROD', … })`.
   2. "운영 유지"(`KEEP_PROD`) + 초안 ≠ 운영 → 콘솔이 **기존 복원 API**(`POST …/versions/:prodVersionId/restore/preview` → `restore`)를 호출한다. 복원은 `BEFORE_RESTORE` 백업으로 초안 변경을 보존하고 사후 검증으로 초안 해시 = 운영 해시를 보장한다. 그다음 `disable({ mode:'KEEP_PROD', expectedDraftHash: 복원 응답의 contentHash })`.
-  3. "초안을 운영으로"(`PROMOTE_DRAFT`) → 차이 확인 후 `disable({ mode:'PROMOTE_DRAFT', expectedDraftHash: 미리보기 값 })` — 끄는 순간 초안이 라이브가 된다.
-- **확정** `POST …/disable` — 한 트랜잭션: 재조회 → 모드 꺼짐 `409 ENV_MODE_DISABLED` → `prodVersionId ≠ expectedProdVersionId` → `409 ENV_POINTER_STALE` → 초안 해시 재계산(`readConsistent(tx)` + `computeFromCaptured`) ≠ `expectedDraftHash` → `409 ENV_POINTER_STALE` → `decideDisable()`: `KEEP_PROD`인데 초안 해시 ≠ 운영 버전 `contentHash` → **`409 ENV_DRAFT_NOT_RESTORED`**(콘솔이 2단계를 다시 수행) → `writer.disable(tx)`(`prodVersionId` CAS → null · `stagingVersionId`·`enabledAt` null · 이력 1행 `PROD/DISABLE`·`disableMode`) → `hooks.cancelSwitchForEnvDisable(tx, chatbotId, actor, now)`(활성 `SWITCH_PROD_VERSION` → `CANCELLED`, 건수 반환). RUNNING 전환 예약이 있으면 `409 ENV_SWITCH_BUSY`.
+  3. "초안을 운영으로"(`PROMOTE_DRAFT`) → 차이 확인 후 `disable({ mode:'PROMOTE_DRAFT', expectedDraftHash: 미리보기 값 })` — 끄는 순간 초안이 라이브가 된다. **단 미리보기에 `promoteDraftBlocked`가 있으면(차단 게이트 ∧ 초안≠운영) 콘솔은 이 선택지를 비활성화하고 "스테이징 승격 → 운영 전환"을 안내한다**(N40-3 · `n40-follow-up-설계.md` §4).
+- **확정** `POST …/disable` — 한 트랜잭션: 재조회 → 모드 꺼짐 `409 ENV_MODE_DISABLED` → `prodVersionId ≠ expectedProdVersionId` → `409 ENV_POINTER_STALE` → 초안 해시 재계산(`readConsistent(tx)` + `computeFromCaptured`) ≠ `expectedDraftHash` → `409 ENV_POINTER_STALE` → `decideDisable()`: `KEEP_PROD`인데 초안 해시 ≠ 운영 버전 `contentHash` → **`409 ENV_DRAFT_NOT_RESTORED`**(콘솔이 2단계를 다시 수행) → **[N40-3]** `decidePromoteDraftGate()`: `PROMOTE_DRAFT` ∧ 게이트 `BLOCK`(트랜잭션 안 환경 행 `gateMode` — 2인 승인 검사와 같은 조회에서 읽는다) ∧ 초안 해시 ≠ 운영 `contentHash` → **`409 ENV_GATE_NOT_PASSED`**(`details.reason=PROMOTE_DRAFT_BLOCKED` — `n40-follow-up-설계.md` §3.4) → `writer.disable(tx)`(`prodVersionId` CAS → null · `stagingVersionId`·`enabledAt` null · 이력 1행 `PROD/DISABLE`·`disableMode`) → `hooks.cancelSwitchForEnvDisable(tx, chatbotId, actor, now)`(활성 `SWITCH_PROD_VERSION` → `CANCELLED`, 건수 반환). RUNNING 전환 예약이 있으면 `409 ENV_SWITCH_BUSY`.
 - **커밋 후**: `textVectors.purgeChatbot(chatbotId)`(보존 저장소 전부 삭제 — 모드 꺼진 챗봇 0행 불변식) · L1/L2 캐시 해당 챗봇 제거 · 감사 `STATUS_CHANGE`(true→false, summary: 방식·취소 예약 n건).
 - **결과**: `restore()`의 **세 번째 호출부를 만들지 않는다**(FR-0-154 · D-3 = 2파일 유지). 이력·버전·로그의 `servedVersionId`는 남는다. 게이트 설정은 환경 행에 남아 다시 켜면 그대로 적용된다.
 - ⚠ `KEEP_PROD`의 사후 상태는 **해시 동일**이지 **동점 `updatedAt` 동일**은 아니다 — 복원이 바뀐 행의 `updatedAt`을 복원 시각으로 쓴다(ADR-0031 §3 차이 적용). 끈 뒤 라이브 동점 승자가 끄기 직전 운영과 다를 수 있는 창은 "동점 노드가 있고 그 노드가 복원으로 갱신된 경우"뿐이며 미리보기가 `potentialTieShift`로 경고한다(§27 L-6).
@@ -892,7 +893,7 @@ preview(chatbotId, { kind, targetVersionId? })          // DB 변경 0 · chatbo
 switch/rollback(chatbotId, dto, invocation?)            // invocation = 예약 실행(주체·접두·scheduleId·now)
   ① assertWritable · 모드 꺼짐 409 ENV_MODE_DISABLED · target 소속 확인(404) · target = currentProd → 200 { outcome: NOOP } (이력·감사 0 — EX-EN-16)
   ② allowed? 아니면 409 ENV_TARGET_NOT_STAGING (예약 실행은 생성 시 검증 — scheduled: true면 건너뜀, FR-EN5-2)
-  ③ gate BLOCK ∧ kind = SWITCH → 409 ENV_GATE_NOT_PASSED (롤백은 경고만 — FR-EN4-4)
+  ③ gate BLOCK ∧ gateKind = SWITCH → 409 ENV_GATE_NOT_PASSED (gateKind = ROLLBACK은 kind = ROLLBACK ∧ 대상 = 직전 운영 버전일 때만 — 그 롤백만 경고로 낮춘다 · 그 밖의 이력 버전 롤백은 SWITCH와 같은 게이트 — N40-1 수정 2026-10-01 · FR-EN4-4)
   ④ 경고 있음 ∧ acknowledgeWarnings ≠ true → 400 VALIDATION_FAILED(field: acknowledgeWarnings) (예약 실행은 생성 시 확인)
   ⑤ tx: writer.switchProd(expected = dto.expectedProdVersionId, next = target, method)   → count 0 → 409 ENV_POINTER_STALE
   ⑥ 커밋 후: pin ① · warm · 감사 UPDATE(ChatbotEnvironment — 주체 = invocation.actor ?? ALS) · 백그라운드 GC
@@ -948,7 +949,7 @@ evaluateProdSwitchGate(input: {
 | 합격률 < `minPassRate` | `BELOW_THRESHOLD` |
 | 그 외 | `PASS/PASSED` |
 
-- 판정 비통과 → 모드 `BLOCK`이면 `BLOCK`, `WARN`이면 `WARN`. **`kind = ROLLBACK`이면 `BLOCK`을 `WARN`으로 낮춘다**(긴급 복귀 우선 — FR-EN4-4 · AC-EN6-6).
+- 판정 비통과 → 모드 `BLOCK`이면 `BLOCK`, `WARN`이면 `WARN`. **`kind = ROLLBACK`이면 `BLOCK`을 `WARN`으로 낮춘다**(긴급 복귀 우선 — FR-EN4-4 · AC-EN6-6). **[N40-1 수정 2026-10-01]** 서비스는 `kind = ROLLBACK`을 **직전 운영 버전 롤백**(`pickRollbackTarget()` 결과)일 때만 넘기고(`ProdSwitchService.resolveGateKind()`), 그 밖의 이력 버전 롤백은 `SWITCH`로 평가한다. 이 함수 자체는 불변이다(AC-EN6-7). 끄기 `PROMOTE_DRAFT`는 이 함수를 부르지 않는다. 초안은 평가 대상이 아니므로 차단 모드에서 초안≠운영이면 평가 없이 거부한다(N40-3 · `n40-follow-up-설계.md` §3).
 - 합격률 = `pass / (pass + fail + notJudged + unresolved)` — `readiness-warnings.service.ts` 110~111행과 **같은 식**(순수 함수 `computePassRate(summaryA)`로 추출해 양쪽이 공유 — 동작 불변).
 - 최근 실행 조회: `testRun.findFirst({ where: { chatbotId, targetVersionId: target, status: 'SUCCEEDED', mode: 'SINGLE', setId? }, orderBy: { finishedAt: 'desc' } })` — 새 인덱스 `(chatbotId, targetVersionId)`. **스테이징을 대상으로 한 실행은 `targetVersionId`로 해석·저장돼 있으므로** 그 버전이 운영 전환 대상이 될 때 그대로 인정된다.
 - 미리보기·즉시 전환·예약 실행이 **같은 함수**를 호출한다(NFR-ENM2). 전환 후 자동 롤백·판정 롤백 없음(FR-EN6-6). 예약 전환의 실행 직후 TC(보고만)는 기존 G3 옵션을 재사용한다(§11.3).
@@ -1199,7 +1200,7 @@ computeEnvironmentProtectedIds({ prodVersionId, stagingVersionId, prodHistoryDes
 | `ENV_MODE_ALREADY_ENABLED` | 409 | 켜진 챗봇에 켜기(동시 켜기 경합 포함) |
 | `ENV_POINTER_STALE` | 409 | 기대 포인터·초안 해시 불일치(미리보기 이후 변경) · 예약 생성의 기준 불일치 |
 | `ENV_TARGET_NOT_STAGING` | 409 | 전환 대상이 스테이징·운영 이력이 아님 · 롤백 후보 없음 |
-| `ENV_GATE_NOT_PASSED` | 409 | 차단 게이트 미달·설정 오류(운영 전환만) |
+| `ENV_GATE_NOT_PASSED` | 409 | 차단 게이트 미달·설정 오류(운영 전환 · 직전이 아닌 이력 버전 롤백 — N40-1) · 모드 끄기 `PROMOTE_DRAFT`에서 차단 게이트 ∧ 초안≠운영(`details: [{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }]` — N40-3 · 신규 코드 0) |
 | `ENV_SWITCH_BUSY` | 409 | DB 경합·복원 잠금·RUNNING 예약(재시도 가능) |
 | `ENV_DRAFT_NOT_RESTORED` | 409 | 끄기 `KEEP_PROD`인데 초안 ≠ 운영(콘솔이 복원 후 재시도) |
 | `VERSION_REFERENCED_BY_ENVIRONMENT` | 409 | 포인터·운영 이력 보호 버전 삭제 |
@@ -1374,6 +1375,7 @@ computeEnvironmentProtectedIds({ prodVersionId, stagingVersionId, prodHistoryDes
 | L-8 | 모델 교체 직후 초안에 없는 버전 문장은 콘솔 현황 조회 전까지 재임베딩되지 않는다 | 현황 조회 시 백그라운드 재시도(쿨다운 60초) · 전환 미리보기 경고 |
 | L-9 | 목록 수준 "삭제됨" 표시는 버전을 읽지 않는다 | 상세에서 버전 이름 확인(§15.2) |
 | L-10 | 망분리 구축형(개발/운영 서버 분리)은 1차에서 한 서버 안의 초안/스테이징/운영으로 운영해야 한다 | 2차 서버 간 이관(P-1 (d)) |
+| L-11 | (N40-3) 차단 게이트를 `BLOCK → WARN`으로 낮춘 뒤 "초안을 운영으로" 끄기는 가능하다 · 경고 모드에서 "초안을 운영으로"는 게이트 경고 없이 진행된다 | 게이트 설정 변경은 `chatbot:deploy` + 감사(운영 전환과 같은 신뢰 모델) · 강한 통제는 2인 승인 · 경고 모드 안내 추가는 PM 확인 Q-1(`n40-follow-up-설계.md` §10) |
 
 ### 27.1 구현 편차 (backend-implementer, 2026-09-25 — PM 지시로 기록)
 
@@ -1393,6 +1395,13 @@ computeEnvironmentProtectedIds({ prodVersionId, stagingVersionId, prodHistoryDes
 | R1-M1 | `VersionBundleService.invalidateChatbot()`/`invalidateVersion()`에 호출부가 0건이었다(§13.2·§5.4 문구는 있었으나 배선이 빠짐) | `versions`(버전 삭제)·`environment/core`(전환·롤백 확정)는 §2.2 경계상 `environment/serving`을 직접 import할 수 없어, `common/events/environment-cache.events.ts`(신규 — Node `EventEmitter` 기반 전역 이벤트 버스, `PrismaModule`과 같은 `@Global()` 패턴)를 신설했다. `VersionRetentionService#deleteOne()`은 커밋 후 `emitVersionDeleted()`를, `ProdSwitchService#switch()`는 커밋 후 `emitChatbotPointerChanged()`를 발행하고 `VersionBundleService`가 두 이벤트를 구독해 `invalidateVersion`/`invalidateChatbot`을 호출한다. `EnvironmentModeService#disable()`은 최상위 `environment` 모듈이라 `serving`을 직접 import할 수 있어 이벤트 없이 `invalidateChatbot()`을 직접 호출한다 | 통합 시험 §N — 시뮬레이터 대상으로 캐시를 데운 뒤 그 버전을 삭제하면 같은 versionId 요청이 404가 됨을 확인 |
 | R1-M2 | `EnvironmentModeService#enable()`이 `RestoreLockRegistry`를 보지 않아 복원 진행 중에도 켜기가 진행될 수 있었다(§5.3 ①) | `RestoreLockRegistry`(기존 `versions/restore/restore-lock.registry.ts`)를 `VersionsModule` 전용 provider에서 `RestoreLockModule`(신규 — "1 export = 1 모듈" 공유 패턴, `VersionCaptureModule`·`VersionReadModule`과 동형)로 분리해 `VersionsModule`·`EnvironmentModule` 양쪽이 **같은 인스턴스**를 주입받게 했다. `enable()` 진입부에서 `restoreLock.isLocked(chatbotId)` → `409 ENV_SWITCH_BUSY` | 통합 시험 §O — 잠금 중 409, 해제 후 성공 확인(단위 시험 대신 통합으로 — DI 배선 자체가 검증 대상이라) |
 | R1-L1 | (Low, 수정 불필요) `embedMissing()`의 P2002 처리는 설계 허용 범위 — 변경 없음 | — | — |
+
+### 27.3 결함 후속 N40-1·N40-3 (2026-10-01 — `docs/04-test/결함분류-2026-10-01.md`)
+
+| # | 결함 | 수정 | 상태 |
+|---|---|---|---|
+| N40-1 | 롤백이 임의 이력 버전에도 차단 게이트를 경고로 낮춤(ADR-0039 §5 문구와 괴리) | 게이트 완화 = 직전 운영 버전 롤백만(`resolveGateKind()`) · 순수 함수·API 계약 불변 | 코드 반영 완료(2026-10-01) · 문서 = 이 패치 |
+| N40-3 | 끄기 `PROMOTE_DRAFT`가 게이트 없이 초안을 라이브로 | 차단 게이트 ∧ 초안≠운영 → `409 ENV_GATE_NOT_PASSED` · 미리보기 `promoteDraftBlocked` · 대화상자 안내 | 설계 완료 → `n40-follow-up-설계.md` |
 
 ---
 
@@ -1414,6 +1423,8 @@ computeEnvironmentProtectedIds({ prodVersionId, stagingVersionId, prodHistoryDes
 | R-12 | FR-EN2-5 "토픽 활성·설문 변경·전환 시 무효화" | 무효화는 기존 `invalidate()` 1곳(토픽·설문은 이미 호출) · 전환은 키에 버전 id가 있어 무효화 불필요 | 무효화 지점 1곳 규약 |
 | R-13 | P-10 표시 설정 | 버전 읽기 실패 시 `getConfig`는 챗봇 행 값 | 표시 설정은 답변이 아님 |
 | R-14 | J-19 감사 "액션은 architect" | 기존 `STATUS_CHANGE`·`UPDATE` 재사용 | `AuditAction` 14 불변(T-10) |
+| R-15 | FR-EN4-4 "롤백(직전 또는 이력 중 선택) · 게이트는 경고만" | 경고 완화는 **직전 운영 버전 롤백만** · 이력 중 선택한 그 밖의 버전은 일반 전환 게이트(N40-1) | ADR-0039 §5 "롤백 = 직전 운영 버전" · 차단 게이트 우회 방지 · 2인 승인 예외와 같은 집합 |
+| R-16 | FR-EN1-3 ② "초안을 운영으로(차이 미리보기 확인 후 끔)" · AC-EN1-5 | 게이트 **차단 모드 ∧ 초안≠운영**이면 거부(`ENV_GATE_NOT_PASSED`) · 경고 모드는 현행 | 차단 게이트의 약속을 끄기 입구에도 적용(N40-3) · PM 결정 2026-09-30 안 A |
 
 ---
 

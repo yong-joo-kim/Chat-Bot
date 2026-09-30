@@ -417,6 +417,8 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**(N40-3 · 2026-10-01) 차단 게이트 상태**: 미리보기에 `promoteDraftBlocked: true`가 있으면 라디오 2개를 유지하되 "초안을 운영으로" 라디오에 `disabled`를 주고, 바로 아래에 안내 문구 `promoteDraftBlockedHint`("차단 게이트가 켜져 있어 선택할 수 없습니다. 초안을 운영에 반영하려면 스테이징으로 승격한 뒤 운영 전환(필수 시험 통과)을 거쳐 주세요.")를 `field-hint`(`id` 부여)로 두고 라디오의 `aria-describedby`로 연결한다. 기본 선택은 "운영 유지" 그대로다. 확정 응답이 `409 ENV_GATE_NOT_PASSED`면(미리보기 이후 게이트가 차단으로 바뀐 경합) `role="alert"` 배너에 `promoteDraftBlockedError`("그사이 차단 게이트가 켜져 초안을 바로 운영으로 올릴 수 없습니다. '운영 유지'로 끄거나, 스테이징 승격 후 운영 전환을 거쳐 주세요.")를 띄우고, 선택을 "운영 유지"로 되돌린 뒤 미리보기를 다시 불러온다(복원은 자동 실행하지 않는다). `approvalPolicyActive`가 함께 있으면 정책 잠금 안내가 우선이다(`n40-follow-up-설계.md` §4).
+
 `potentialTieShift`(§27 L-6, `KEEP_PROD`에만 해당) 경고는 "운영 유지"가 선택돼 있을 때만 보인다. 기본 선택은 **항상 "운영 유지"**(P-6 확정안 — 라디오 첫 항목, 사전 선택 자체는 "기본값 임의 선택 금지"(UIUX §6) 원칙의 예외로 취급한다 — 이 값은 성별·생년월일 같은 개인정보가 아니라 **안전한 기본 동작**(운영 응답 불변)이며 요구사항이 명시적으로 "기본 = 운영 유지"를 확정했다).
 
 ### 컴포넌트 분해
@@ -424,7 +426,7 @@
 | 컴포넌트 | props / 데이터 바인딩 |
 |---|---|
 | `EnvironmentDisableDialog` | `chatbotId` → `POST .../disable/preview`(`DisableEnvironmentPreviewResponse`) |
-| 라디오 그룹 | `mode: 'KEEP_PROD'｜'PROMOTE_DRAFT'`, 방향키 탐색(UIUX §6) |
+| 라디오 그룹 | `mode: 'KEEP_PROD'｜'PROMOTE_DRAFT'`, 방향키 탐색(UIUX §6) · (N40-3) `preview.promoteDraftBlocked`면 `PROMOTE_DRAFT` 라디오 `disabled` + `aria-describedby` → 안내 문구 |
 | 확정 처리(내부) | `KEEP_PROD`: `versionsApi.restorePreview(chatbotId, prod.versionId)` → `versionsApi.restore(...)` → `POST .../disable({ mode:'KEEP_PROD', expectedProdVersionId, expectedDraftHash: 복원응답.contentHash })`. `PROMOTE_DRAFT`: 바로 `POST .../disable({ mode:'PROMOTE_DRAFT', expectedDraftHash: preview.draftContentHash })` |
 
 ---
