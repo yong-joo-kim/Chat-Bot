@@ -31,6 +31,8 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
   const [otherError, setOtherError] = useState<string | null>(null);
   // [신규 No.36] 확정 시 409 ENV_APPROVAL_REQUIRED(POLICY_ACTIVE) — 그 사이 2인 승인이 켜진 경우의 방어.
   const [policyBlocked, setPolicyBlocked] = useState(false);
+  // [N40-3] 확정 시 409 ENV_GATE_NOT_PASSED(PROMOTE_DRAFT_BLOCKED) — 그 사이 차단 게이트가 켜진 경우.
+  const [promoteDraftBlockedError, setPromoteDraftBlockedError] = useState(false);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -61,6 +63,7 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
     setDraftNotRestoredError(false);
     setOtherError(null);
     setPolicyBlocked(false);
+    setPromoteDraftBlockedError(false);
     void fetchPreview();
   }, [isOpen, fetchPreview]);
 
@@ -95,6 +98,7 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
     setConfirming(true);
     setOtherError(null);
     setDraftNotRestoredError(false);
+    setPromoteDraftBlockedError(false);
     try {
       let expectedDraftHash = preview.draftContentHash;
       let expectedProdVersionId = preview.prod.versionId;
@@ -114,6 +118,12 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
         setDraftNotRestoredError(true);
       } else if (e instanceof ApiError && e.code === 'ENV_APPROVAL_REQUIRED') {
         setPolicyBlocked(true);
+      } else if (e instanceof ApiError && e.code === 'ENV_GATE_NOT_PASSED') {
+        // [N40-3] 미리보기 이후 게이트가 BLOCK으로 바뀐 경합 — 안내 후 "운영 유지"로 되돌리고 미리보기를 다시 불러온다
+        // (복원 등 사용자가 누르지 않은 동작은 자동으로 실행하지 않는다).
+        setPromoteDraftBlockedError(true);
+        setMode('KEEP_PROD');
+        await fetchPreview();
       } else if (e instanceof ApiError && (e.code === 'ENV_POINTER_STALE' || e.code === 'ENV_SWITCH_BUSY')) {
         setOtherError(MESSAGES.environment.errors[e.code]);
         await fetchPreview();
@@ -129,6 +139,8 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
   // [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다 — 미리보기 응답 키(`approvalPolicyActive`) 또는 확정 시 409로 안다.
   const previewBlocked = preview?.approvalPolicyActive === true;
   const blockedByPolicy = previewBlocked || policyBlocked;
+  // [N40-3] 차단 게이트 ∧ 초안≠운영이면 "초안을 운영으로"를 고를 수 없다 — 키 존재만 본다(정책 잠금 안내가 우선이라 위 분기가 먼저 렌더된다).
+  const promoteDraftBlocked = preview?.promoteDraftBlocked === true;
 
   return (
     <Modal isOpen={isOpen} title={msg.title} onClose={handleClose} closeOnEsc={!busy} initialFocusSelector='[data-autofocus="cancel"]'>
@@ -161,6 +173,11 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
               {otherError}
             </p>
           )}
+          {promoteDraftBlockedError && (
+            <p className="modal-banner modal-banner--error" role="alert">
+              {msg.promoteDraftBlockedError}
+            </p>
+          )}
           {draftNotRestoredError && (
             <p className="modal-banner modal-banner--error" role="alert">
               {msg.draftNotRestoredError}
@@ -184,9 +201,21 @@ export function EnvironmentDisableDialog({ chatbotId, isOpen, onClose, onDisable
                   </p>
                 )}
                 <label>
-                  <input type="radio" name="environment-disable-mode" checked={mode === 'PROMOTE_DRAFT'} onChange={() => setMode('PROMOTE_DRAFT')} />
+                  <input
+                    type="radio"
+                    name="environment-disable-mode"
+                    checked={mode === 'PROMOTE_DRAFT'}
+                    onChange={() => setMode('PROMOTE_DRAFT')}
+                    disabled={promoteDraftBlocked}
+                    aria-describedby={promoteDraftBlocked ? 'environment-disable-promote-blocked-hint' : undefined}
+                  />
                   {msg.modePromoteDraft}
                 </label>
+                {promoteDraftBlocked && (
+                  <p id="environment-disable-promote-blocked-hint" className="field-hint">
+                    <span aria-hidden="true">⚠</span> {msg.promoteDraftBlockedHint}
+                  </p>
+                )}
               </fieldset>
             </>
           )}

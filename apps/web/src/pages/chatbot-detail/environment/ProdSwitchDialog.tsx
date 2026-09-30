@@ -11,6 +11,7 @@ import { switchApprovalsApi } from '../../../api/switchApprovals';
 import { SeverityBadge } from '../../../components/SeverityBadge';
 import { approvalErrorView } from '../../../lib/approvalText';
 import { summaryLine } from '../versions/restore/restorePreviewText';
+import { displayGate, effectiveSwitchBlockers, isRollbackGateRelaxed } from './lib/rollbackGate';
 import { SwitchBlockerText, SwitchWarningText, type ProdSwitchBlockerCode } from './lib/switchPreviewText';
 
 export interface ProdSwitchDialogProps {
@@ -185,8 +186,10 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
         ? msg.titleSwitch
         : msg.titleRollback;
   const isNoop = preview?.outcome === 'NOOP';
-  // FR-EN4-4: 롤백에서는 게이트 BLOCK도 경고로만 취급 — 확정 버튼을 막지 않는다(긴급 복귀 우선).
-  const effectiveBlockers = (preview?.blockers ?? []).filter((b) => !(kind === 'ROLLBACK' && b === 'GATE_BLOCKED'));
+  // FR-EN4-4: 직전 운영 버전으로의 롤백(directRollback)에서만 게이트 BLOCK을 경고로 취급한다(긴급 복귀 우선).
+  // [N40-1] 직전이 아닌 이력 버전(directRollback=false)은 일반 전환과 같은 게이트가 적용되어 차단이 유지된다.
+  const gateRelaxed = isRollbackGateRelaxed(kind === 'ROLLBACK', preview?.directRollback);
+  const effectiveBlockers = effectiveSwitchBlockers(preview?.blockers ?? [], gateRelaxed);
   const hasBlockers = effectiveBlockers.length > 0;
 
   return (
@@ -235,7 +238,7 @@ export function ProdSwitchDialog({ chatbotId, kind, targetVersionId, isOpen, onC
               <p className="restore-diff-summary">{summaryLine(preview.diffSummary.rows)}</p>
 
               <p>
-                <GateResultBadge gate={kind === 'ROLLBACK' ? { ...preview.gate, verdict: preview.gate.verdict === 'BLOCK' ? 'WARN' : preview.gate.verdict } : preview.gate} settings={gateSettings} />
+                <GateResultBadge gate={displayGate(preview.gate, gateRelaxed)} settings={gateSettings} />
               </p>
 
               {hasBlockers ? (

@@ -17,6 +17,7 @@ import { formatDateTime } from '../../../lib/date';
 import { useMinuteClock } from '../../../lib/useApprovalPolicy';
 import { ApprovalStatusText } from '../../chatbot-detail/environment/approval/ApprovalStatusText';
 import { RemainingTimeText } from '../../chatbot-detail/environment/approval/RemainingTimeText';
+import { displayGate, effectiveSwitchBlockers, isRollbackGateRelaxed } from '../../chatbot-detail/environment/lib/rollbackGate';
 import { SwitchBlockerText, SwitchWarningText, type ProdSwitchBlockerCode } from '../../chatbot-detail/environment/lib/switchPreviewText';
 import { summaryLine } from '../../chatbot-detail/versions/restore/restorePreviewText';
 
@@ -105,8 +106,9 @@ export function ApprovalDetailPage(): JSX.Element {
   const isSelf = Boolean(user && detail && user.id === detail.requestedBy.id);
   const live = detail?.livePreview ?? null;
   const isPending = detail?.status === 'PENDING';
-  // 롤백에서는 게이트 BLOCK을 경고로만 취급한다(ProdSwitchDialog와 같은 규약).
-  const blockers = (live?.blockers ?? []).filter((b) => !(detail?.action === 'PROD_ROLLBACK' && b === 'GATE_BLOCKED'));
+  // 직전 운영 버전으로의 롤백(directRollback)에서만 게이트 BLOCK을 경고로 취급한다(ProdSwitchDialog와 같은 규약, N40-1).
+  const gateRelaxed = isRollbackGateRelaxed(detail?.action === 'PROD_ROLLBACK', live?.directRollback);
+  const blockers = effectiveSwitchBlockers(live?.blockers ?? [], gateRelaxed);
   const blocked = blockers.length > 0;
   const warnings = live?.warnings ?? [];
   const isScheduled = detail?.action === 'SCHEDULED_PROD_SWITCH';
@@ -300,7 +302,7 @@ export function ApprovalDetailPage(): JSX.Element {
           <p>{m.liveCurrentToTarget(live.current.versionNo, live.target.versionNo)}</p>
           <p className="restore-diff-summary">{summaryLine(live.diffSummary.rows)}</p>
           <p>
-            {m.liveGate}: <GateResultBadge gate={detail.action === 'PROD_ROLLBACK' ? { ...live.gate, verdict: live.gate.verdict === 'BLOCK' ? 'WARN' : live.gate.verdict } : live.gate} settings={gateSettings} />
+            {m.liveGate}: <GateResultBadge gate={displayGate(live.gate, gateRelaxed)} settings={gateSettings} />
           </p>
           {blocked ? (
             <ul className="restore-blocker-list">

@@ -4320,6 +4320,9 @@ export const MESSAGES = {
       confirming: '처리하는 중…',
       restoringStep: (versionNo: number) => `초안을 v${versionNo}로 맞추는 중…`,
       draftNotRestoredError: '초안 복원이 완료되지 않았습니다. 다시 시도해 주세요.',
+      // [N40-3] 차단 게이트가 켜진 챗봇에서 초안≠운영일 때 "초안을 운영으로"를 막는 안내(n40-follow-up-설계.md §4.2).
+      promoteDraftBlockedHint: '차단 게이트가 켜져 있어 선택할 수 없습니다. 초안을 운영에 반영하려면 스테이징으로 승격한 뒤 운영 전환(필수 시험 통과)을 거쳐 주세요.',
+      promoteDraftBlockedError: "그사이 차단 게이트가 켜져 초안을 바로 운영으로 올릴 수 없습니다. '운영 유지'로 끄거나, 스테이징 승격 후 운영 전환을 거쳐 주세요.",
       retryFromStep1: '다시 시도',
       successToast: '환경 분리를 종료했습니다.',
       loadFailed: '확인 정보를 불러오지 못했습니다.',

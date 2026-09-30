@@ -182,6 +182,37 @@ describe('AP-2 승인 요청 상세', () => {
     expect(screen.getByRole('button', { name: '반려…' })).not.toHaveAttribute('aria-disabled');
   });
 
+  describe('롤백 요청의 게이트 BLOCK(N40-1)', () => {
+    const blockedLive = (extra: Partial<ProdSwitchPreviewResponse>): ProdSwitchPreviewResponse =>
+      livePreview({ kind: 'ROLLBACK', blockers: ['GATE_BLOCKED'], gate: { verdict: 'BLOCK', reason: 'NO_RUN', run: null }, ...extra });
+
+    it('직전 운영 버전 롤백(directRollback=true)이면 BLOCK이 경고로 완화되어 승인할 수 있다', async () => {
+      api.getRequest.mockResolvedValue(detail({ action: 'PROD_ROLLBACK', livePreview: blockedLive({ directRollback: true }) }));
+      renderDetail();
+      const approve = await screen.findByRole('button', { name: '승인하고 운영에 적용' });
+      expect(approve).not.toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByText(/승인해도 적용되지 않습니다/)).toBeNull();
+    });
+
+    it('직전이 아닌 롤백(directRollback=false)이면 일반 전환처럼 승인이 aria-disabled + 차단 사유로 막힌다', async () => {
+      const user = userEvent.setup();
+      api.getRequest.mockResolvedValue(detail({ action: 'PROD_ROLLBACK', livePreview: blockedLive({ directRollback: false }) }));
+      renderDetail();
+      const approve = await screen.findByRole('button', { name: '승인하고 운영에 적용' });
+      expect(approve).toHaveAttribute('aria-disabled', 'true');
+      expect(approve).toHaveAccessibleDescription(/승인해도 적용되지 않습니다/);
+      await user.click(approve);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(api.approve).not.toHaveBeenCalled();
+    });
+
+    it('전환(SWITCH) 요청은 directRollback 키와 무관하게 기존대로 BLOCK이 막는다', async () => {
+      api.getRequest.mockResolvedValue(detail({ livePreview: blockedLive({ kind: 'SWITCH' }) }));
+      renderDetail();
+      expect(await screen.findByRole('button', { name: '승인하고 운영에 적용' })).toHaveAttribute('aria-disabled', 'true');
+    });
+  });
+
   it('본인이 요청한 건: 승인·반려는 aria-disabled + 이유이고 "요청 취소"만 쓸 수 있다', async () => {
     const user = userEvent.setup();
     mockUserId = 'user-kim';

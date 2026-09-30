@@ -131,6 +131,68 @@ describe('EnvironmentDisableDialog', () => {
     await screen.findByText('동점 규칙이 복원 시점 기준으로 바뀔 수 있습니다.');
   });
 
+  describe('차단 게이트 ∧ 초안≠운영(N40-3)', () => {
+    const HINT = /차단 게이트가 켜져 있어 선택할 수 없습니다/;
+
+    it('promoteDraftBlocked면 "초안을 운영으로" 라디오가 비활성이고 안내 문구가 aria-describedby로 연결된다', async () => {
+      mockDisablePreview.mockResolvedValue(basePreview({ draftDiffersFromProd: true, promoteDraftBlocked: true }));
+      renderDialog();
+
+      const radios = await screen.findAllByRole('radio');
+      expect(radios[0]).toBeEnabled();
+      expect(radios[0]).toBeChecked();
+      expect(radios[1]).toBeDisabled();
+      expect(radios[1]).toHaveAccessibleDescription(HINT);
+    });
+
+    it('키가 없으면 기존처럼 두 라디오 모두 활성이고 안내가 없다', async () => {
+      mockDisablePreview.mockResolvedValue(basePreview({ draftDiffersFromProd: true }));
+      renderDialog();
+
+      const radios = await screen.findAllByRole('radio');
+      expect(radios[1]).toBeEnabled();
+      expect(screen.queryByText(HINT)).toBeNull();
+    });
+
+    it('2인 승인 정책 잠금(approvalPolicyActive)이 우선이라 라디오 없이 잠금 안내만 보인다', async () => {
+      mockDisablePreview.mockResolvedValue(basePreview({ draftDiffersFromProd: true, promoteDraftBlocked: true, approvalPolicyActive: true }));
+      renderDialog();
+
+      await screen.findByText(/2인 승인/);
+      expect(screen.queryByRole('radio')).toBeNull();
+      expect(screen.queryByText(HINT)).toBeNull();
+    });
+
+    it('확정이 409 ENV_GATE_NOT_PASSED면 alert 배너를 띄우고 "운영 유지"로 되돌린 뒤 미리보기를 다시 불러온다', async () => {
+      mockDisablePreview
+        .mockResolvedValueOnce(basePreview({ draftDiffersFromProd: true }))
+        .mockResolvedValueOnce(basePreview({ draftDiffersFromProd: true, promoteDraftBlocked: true }));
+      mockDisable.mockRejectedValue(new ApiError(409, '차단', 'ENV_GATE_NOT_PASSED', [{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }]));
+      renderDialog();
+
+      const user = userEvent.setup();
+      const radios = await screen.findAllByRole('radio');
+      await user.click(radios[1]);
+      await user.click(screen.getByRole('button', { name: '환경 분리 끄기' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('그사이 차단 게이트가 켜져 초안을 바로 운영으로 올릴 수 없습니다.');
+      await waitFor(() => expect(mockDisablePreview).toHaveBeenCalledTimes(2));
+      const after = await screen.findAllByRole('radio');
+      expect(after[0]).toBeChecked();
+      expect(after[1]).toBeDisabled();
+      expect(mockRestorePreview).not.toHaveBeenCalled();
+    });
+
+    it('axe 스캔 위반 0건(비활성 라디오 + 안내)', async () => {
+      mockDisablePreview.mockResolvedValue(basePreview({ draftDiffersFromProd: true, promoteDraftBlocked: true }));
+      const { container } = renderDialog();
+      await screen.findAllByRole('radio');
+      const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+      expect(results).toHaveNoViolations();
+    });
+  });
+
   it('axe 스캔 위반 0건', async () => {
     mockDisablePreview.mockResolvedValue(basePreview({ draftDiffersFromProd: true, potentialTieShift: true }));
     const { container } = renderDialog();

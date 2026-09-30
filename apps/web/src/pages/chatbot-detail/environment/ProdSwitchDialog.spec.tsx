@@ -109,6 +109,27 @@ describe('ProdSwitchDialog', () => {
     expect(screen.getByRole('button', { name: 'v44으로 되돌리기' })).toBeInTheDocument();
   });
 
+  it('직전 운영 버전 롤백(directRollback=true)은 BLOCK이 WARN으로 완화되고 확정 버튼이 있다(N40-1)', async () => {
+    mockProdPreview.mockResolvedValue(
+      basePreview({ kind: 'ROLLBACK', directRollback: true, blockers: [], gate: { verdict: 'BLOCK', reason: 'BELOW_THRESHOLD', run: null } }),
+    );
+    renderDialog('ROLLBACK');
+
+    expect(await screen.findByRole('button', { name: 'v44으로 되돌리기' })).toBeInTheDocument();
+    expect(screen.queryByText(/필수 시험 기준을 충족하지 못해 전환할 수 없습니다/)).toBeNull();
+  });
+
+  it('직전이 아닌 롤백(directRollback=false)에서 GATE_BLOCKED면 확정 버튼 없이 차단 사유만 보인다(N40-1)', async () => {
+    mockProdPreview.mockResolvedValue(
+      basePreview({ kind: 'ROLLBACK', directRollback: false, blockers: ['GATE_BLOCKED'], gate: { verdict: 'BLOCK', reason: 'BELOW_THRESHOLD', run: null } }),
+    );
+    renderDialog('ROLLBACK');
+
+    await screen.findByText(/필수 시험 기준을 충족하지 못해 전환할 수 없습니다/);
+    expect(screen.queryByRole('button', { name: /되돌리기/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '확인' })).toBeInTheDocument();
+  });
+
   it('경고가 있으면 확인 체크박스를 선택해야 확정 버튼이 활성화된다', async () => {
     mockProdPreview.mockResolvedValue(basePreview({ warnings: [{ code: 'LEGACY_TIEBREAK' }] }));
     renderDialog();
