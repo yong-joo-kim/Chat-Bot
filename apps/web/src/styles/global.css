@@ -4108,3 +4108,326 @@ a:focus-visible {
   gap: 4px;
   margin-top: 4px;
 }
+
+/* ==================================================================================
+ * 발화 묶음 분석(No.21) — deep-clustering-ui-spec.md
+ * ================================================================================== */
+
+.ua-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ua-page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ua-stored-count {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.ua-breadcrumb {
+  color: var(--color-text-muted);
+}
+.ua-actions-row,
+.ua-template-buttons,
+.ua-header-actions,
+.ua-form-actions,
+.ua-selection-bar,
+.ua-rename-actions,
+.ua-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ua-help summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+}
+.ua-help p {
+  margin: 4px 0 8px;
+}
+.ua-filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.ua-empty-steps {
+  text-align: left;
+  display: inline-block;
+  margin: 8px 0;
+}
+.ua-expiry-soon {
+  font-weight: 700;
+}
+.ua-row-note,
+.ua-col-note {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.ua-preview-table {
+  max-width: 560px;
+}
+.ua-preview-table td {
+  text-align: right;
+}
+.ua-fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 16px 12px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+.ua-fieldset--inner {
+  margin: 8px 0;
+}
+.ua-fieldset legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.ua-checkbox-label,
+.ua-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.ua-fieldset input[type='number'] {
+  max-width: 200px;
+}
+.ua-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 상태 낱글자 · 진행 */
+.ua-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ua-step--active {
+  font-weight: 700;
+}
+.ua-overall-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ua-progress-percent {
+  font-weight: 700;
+}
+
+/* 머리 · 요약 */
+.ua-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ua-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  margin: 0;
+}
+.ua-header-meta dt {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+}
+.ua-header-meta dd {
+  margin: 0;
+}
+.ua-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.ua-summary > div {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--color-bg);
+}
+.ua-summary dt {
+  color: var(--color-text-muted);
+}
+.ua-summary dd {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: 700;
+}
+.ua-notice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ua-notice-list .form-banner {
+  margin-bottom: 8px;
+}
+.ua-info summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+/* 표 */
+.ua-table th[scope='row'] {
+  font-weight: 600;
+  text-align: left;
+}
+.ua-cluster-table thead th,
+.ua-utterance-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-bg-subtle, #f9fafb);
+  z-index: 1;
+}
+.ua-cluster-table,
+.ua-utterance-table {
+  min-width: 860px;
+}
+.ua-cluster-name {
+  min-width: 220px;
+  text-align: left;
+}
+.ua-rename-button {
+  margin-left: 8px;
+}
+.ua-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ua-ai-suggest {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px dashed #92400e;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 400;
+}
+.ua-ai-suggest-label {
+  font-weight: 700;
+}
+.ua-reps-row td {
+  background: var(--color-bg-subtle, #f9fafb);
+}
+.ua-utterance-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 220px;
+}
+.ua-utterance-table input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+  margin: 10px;
+}
+.ua-flags {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ua-suggested {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ua-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.ua-filter-bar .form-field {
+  margin-bottom: 0;
+}
+.ua-selection-bar {
+  margin: 8px 0;
+}
+.ua-selection-count,
+.ua-result-count {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* 예문으로 넣기 대화상자 */
+.modal-dialog:has(.ua-apply-dialog) {
+  max-width: 760px;
+  width: 100%;
+}
+.ua-scroll-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 8px 8px 28px;
+}
+
+/* 좁은 화면 — 목록 표를 카드로 */
+@media (max-width: 767px) {
+  .ua-table thead {
+    position: absolute;
+    left: -9999px;
+  }
+  .ua-table,
+  .ua-table tbody,
+  .ua-table tr,
+  .ua-table td,
+  .ua-table th[scope='row'] {
+    display: block;
+    width: 100%;
+  }
+  .ua-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+  }
+  .ua-table td,
+  .ua-table th[scope='row'] {
+    border-bottom: none;
+    padding: 4px 0;
+  }
+  .ua-table td[data-label]::before {
+    content: attr(data-label) ': ';
+    font-weight: 600;
+  }
+  .ua-table .ua-file-name {
+    order: -1;
+  }
+  .ua-table .ua-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ua-form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .ua-fieldset input[type='number'] {
+    max-width: none;
+    width: 100%;
+  }
+  .ua-preview-table {
+    max-width: none;
+  }
+}

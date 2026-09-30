@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { MESSAGES } from '../../constants/messages';
 import { NavPendingBadge } from './NavPendingBadge';
 import { NegativeFeedbackNavBadge } from './NegativeFeedbackNavBadge';
+import { UtteranceAnalysisNavLink } from '../chatbot-detail/utterance-analysis/UtteranceAnalysisNavLink';
 
 /**
  * [No.44 R2] 학습현황 요약(`learningSummary`/`refreshLearningSummary`)은 더 이상 이 컴포넌트가 직접
@@ -52,6 +53,8 @@ export function StatsShell(): JSX.Element {
             {MESSAGES.apiCallLogs.tabLabel}
           </NavLink>
         )}
+        {/* [No.21] 발화 묶음 분석 — `dialogue:read` ∧ 기능 켜짐(capability 404면 숨김). */}
+        <UtteranceAnalysisNavLink chatbotId={chatbot.id} className={subNavClassName} />
       </nav>
       <div className="stats-content">
         <Outlet context={ctx satisfies StatsShellContext} />

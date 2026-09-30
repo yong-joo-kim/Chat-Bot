@@ -9,6 +9,7 @@ import { DataGovernanceModeBanner } from '../../../components/DataGovernanceMode
 import { EgressJudgementBadge } from '../../../components/DataGovernanceBadges';
 import { MESSAGES } from '../../../constants/messages';
 import { formatDateTime } from '../../../lib/date';
+import { UtteranceAnalysisDataMapSection } from '../../chatbot-detail/utterance-analysis/UtteranceAnalysisDataMapSection';
 
 /**
  * [신규 No.41 2차] 업무 자동화 웹훅 출구 행의 마스킹 라벨은 대상별 정책(각 발송 대상의
@@ -387,6 +388,9 @@ export function DataGovernanceMapPage(): JSX.Element {
         <p>{msg.externalLlmAugmentationText(data.risks.externalLlmAugmentation)}</p>
         <p>{msg.maskingModeText(data.risks.piiMaskMode)}</p>
       </section>
+
+      {/* [신규 No.21] 업로드 발화 분석 카드(UA-4) — 분석이 1건 이상일 때만 선택 키가 있다. 읽기 전용. */}
+      {data.utteranceAnalysis && <UtteranceAnalysisDataMapSection map={data.utteranceAnalysis} />}
 
       {/* [신규 No.42] 통합 인박스 카드(§3.12 OI-12) — 고객 0명이면 선택 키 자체가 없어 렌더되지 않는다. */}
       {data.inbox && (

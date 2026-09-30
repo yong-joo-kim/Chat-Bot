@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { UnansweredQuestionSummary } from '@chat-bot/shared-types';
+import { ApiError } from '../../api/client';
 import { makeChatbot } from '../../test/fixtures';
+import { makeCapability } from '../chatbot-detail/utterance-analysis/testFixtures';
 import type { ChatbotDetailContext } from '../ChatbotDetailLayout';
 import { StatsShell } from './StatsShell';
 
@@ -31,9 +33,22 @@ vi.mock('../ChatbotDetailLayout', () => ({
   useChatbotDetailContext: () => mockContext,
 }));
 
+// [No.21] 서브내비 4번째 링크(발화 묶음 분석)는 권한·기능 켜짐(capability)에 따라 달라지므로 둘 다 바꿀 수 있게 했다.
+let mockCan: (permission: string) => boolean = () => true;
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ can: () => true }),
+  useAuth: () => ({ can: (permission: string) => mockCan(permission) }),
 }));
+
+const mockCapability = vi.fn();
+vi.mock('../../api/utteranceAnalyses', () => ({
+  utteranceAnalysesApi: { capability: (...args: unknown[]) => mockCapability(...args) },
+}));
+
+beforeEach(() => {
+  mockCan = () => true;
+  mockCapability.mockReset();
+  mockCapability.mockResolvedValue(makeCapability());
+});
 
 function renderShell(learningSummary: UnansweredQuestionSummary | null): ReturnType<typeof render> {
   mockContext = {
@@ -100,5 +115,43 @@ describe('StatsShell — 학습현황 탭 배지(No.44 소스 분리, R2: 부모
 
     await screen.findByText('학습현황');
     expect(screen.queryByLabelText(/대기 중인/)).not.toBeInTheDocument();
+  });
+});
+
+/** [No.21] deep-clustering-ui-spec.md §1.2 — 통계 서브내비 4번째 항목 "발화 묶음 분석". */
+describe('StatsShell — 발화 묶음 분석 서브내비 링크(No.21)', () => {
+  it('기능이 켜져 있고 dialogue:read 권한이 있으면 4번째 링크로 보인다', async () => {
+    renderShell(null);
+
+    const link = await screen.findByRole('link', { name: '발화 묶음 분석' });
+    expect(link).toHaveAttribute('href', `/chatbots/${chatbot.id}/stats/utterance-analyses`);
+    const labels = screen.getAllByRole('link').map((a) => a.textContent?.trim());
+    expect(labels).toEqual(['기본 통계', '학습현황', '외부 연동 로그', '발화 묶음 분석']);
+  });
+
+  it('capability가 404(기능 꺼짐)이면 링크를 숨기고 나머지 링크는 그대로다', async () => {
+    mockCapability.mockRejectedValue(new ApiError(404, 'Not Found'));
+    renderShell(null);
+
+    await waitFor(() => expect(mockCapability).toHaveBeenCalled());
+    await screen.findByText('학습현황');
+    expect(screen.queryByRole('link', { name: '발화 묶음 분석' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(3);
+  });
+
+  it('404가 아닌 조회 실패는 링크를 숨기지 않는다(페이지에서 오류를 처리)', async () => {
+    mockCapability.mockRejectedValue(new ApiError(500, 'Server Error'));
+    renderShell(null);
+
+    expect(await screen.findByRole('link', { name: '발화 묶음 분석' })).toBeInTheDocument();
+  });
+
+  it('dialogue:read 권한이 없으면 링크를 그리지 않고 capability도 조회하지 않는다', async () => {
+    mockCan = (permission) => permission !== 'dialogue:read';
+    renderShell(null);
+
+    await screen.findByText('기본 통계');
+    expect(screen.queryByRole('link', { name: '발화 묶음 분석' })).not.toBeInTheDocument();
+    expect(mockCapability).not.toHaveBeenCalled();
   });
 });

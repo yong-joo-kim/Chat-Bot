@@ -58,6 +58,9 @@ import { DataGovernanceMapPage } from './pages/settings/data-governance/DataGove
 import { DataGovernanceRetentionPage } from './pages/settings/data-governance/DataGovernanceRetentionPage';
 import { PurgeHistoryPage } from './pages/settings/data-governance/PurgeHistoryPage';
 import { ApiCallLogPage } from './pages/stats/ApiCallLogPage';
+import { UtteranceAnalysisListPage } from './pages/chatbot-detail/utterance-analysis/UtteranceAnalysisListPage';
+import { NewAnalysisPage } from './pages/chatbot-detail/utterance-analysis/NewAnalysisPage';
+import { UtteranceAnalysisDetailPage } from './pages/chatbot-detail/utterance-analysis/UtteranceAnalysisDetailPage';
 import { KbSourcesPage } from './pages/settings/kb-crawling/KbSourcesPage';
 import { KbSourceShell } from './pages/settings/kb-crawling/KbSourceShell';
 import { KbSourceOverviewPage } from './pages/settings/kb-crawling/KbSourceOverviewPage';
@@ -127,6 +130,31 @@ export function App(): JSX.Element {
               <Route path="learning" element={<LearningQueuePage />} />
               {/* [No.26] L1 외부 연동 로그 — StatsShell 3번째 서브탭(ui-spec §1 L1 권고안). */}
               <Route path="api-calls" element={<ApiCallLogPage />} />
+              {/* [No.21] 발화 묶음 분석 — StatsShell 4번째 서브탭(deep-clustering-ui-spec.md §1). */}
+              <Route
+                path="utterance-analyses"
+                element={
+                  <RequirePermission permission="dialogue:read" menuName={MESSAGES.utteranceAnalysis.navLabel}>
+                    <UtteranceAnalysisListPage />
+                  </RequirePermission>
+                }
+              />
+              <Route
+                path="utterance-analyses/new"
+                element={
+                  <RequirePermission permission="dialogue:write" menuName={MESSAGES.utteranceAnalysis.navLabel}>
+                    <NewAnalysisPage />
+                  </RequirePermission>
+                }
+              />
+              <Route
+                path="utterance-analyses/:analysisId"
+                element={
+                  <RequirePermission permission="dialogue:read" menuName={MESSAGES.utteranceAnalysis.navLabel}>
+                    <UtteranceAnalysisDetailPage />
+                  </RequirePermission>
+                }
+              />
             </Route>
             <Route path="settings" element={<SettingsTab />} />
             <Route path="versions" element={<VersionListPage />} />
