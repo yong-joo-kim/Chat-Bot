@@ -82,3 +82,71 @@ def test_ollama_backend_boot_fails_clearly_when_server_unreachable():
     with pytest.raises(Exception):
         with TestClient(app_module.app):
             pass
+
+
+# ── No.37 추가분(기존 시험은 수정하지 않는다) ──────────────────────────────────────────
+# 127.0.0.1 임시 포트의 가짜 Ollama 서버(conftest `fake_backend`)를 쓴다.
+import logging  # noqa: E402
+
+from appenv import configure as _configure  # noqa: E402
+from appenv import reset_env as _reset_env  # noqa: E402
+
+_OLLAMA_MODEL = "fake-model"
+
+
+def _ollama_env(server, **extra):
+    env = {"GENERATION_BACKEND": "ollama", "OLLAMA_BASE_URL": server.base_url, "OLLAMA_MODEL": _OLLAMA_MODEL}
+    env.update(extra)
+    return env
+
+
+def test_ollama_public_address_fails_boot_before_connecting():
+    _configure("augment", GENERATION_BACKEND="ollama", OLLAMA_BASE_URL="http://8.8.8.8:11434")
+    try:
+        with pytest.raises(RuntimeError, match="GENERATION_BACKEND_ALLOWED_HOSTS"):
+            with TestClient(app_module.app):
+                pass
+    finally:
+        _reset_env()
+
+
+def test_legacy_ollama_only_settings_still_boot(fake_backend):
+    """AC-ED2-5: 기존 OLLAMA_* 키만 설정한 설치가 새 키 없이 그대로 기동한다."""
+    _configure("augment", **_ollama_env(fake_backend, OLLAMA_CONNECT_TIMEOUT_S="2"))
+    try:
+        with TestClient(app_module.app) as client:
+            res = client.post("/augment", json={"seeds": ["환불"], "targetCount": 2, "locale": "ko"})
+            assert res.status_code == 200
+            assert res.json()["modelId"] == f"ollama:{_OLLAMA_MODEL}"
+            assert res.json()["candidates"] == ["문장 하나", "문장 둘"]
+    finally:
+        _reset_env()
+
+
+def test_ollama_health_reports_external_lightweight_and_boot_warns(fake_backend, caplog):
+    """AC-ED3-2/3: device=external, profile=lightweight, 기동 WARN 로그에 '품질 미보증'."""
+    with caplog.at_level(logging.INFO, logger="ml_worker"):
+        _configure("augment", **_ollama_env(fake_backend))
+        try:
+            with TestClient(app_module.app) as client:
+                health = client.get("/augment/health").json()
+        finally:
+            _reset_env()
+    assert health["device"] == "external"
+    assert health["backend"] == "ollama"
+    assert health["profile"] == "lightweight"
+    assert health["targetCap"] == 20
+    assert health["warmedUp"] is True
+    assert "품질 미보증" in caplog.text
+    assert "구성=lightweight" in caplog.text
+
+
+def test_ollama_warmup_failure_reports_not_warmed_up_but_boots(fake_backend):
+    """C-6: 워밍업 결과가 0건이면 warmedUp=false로 보고하되 기동은 막지 않는다."""
+    fake_backend.content = "[]"
+    _configure("augment", **_ollama_env(fake_backend))
+    try:
+        with TestClient(app_module.app) as client:
+            assert client.get("/augment/health").json()["warmedUp"] is False
+    finally:
+        _reset_env()

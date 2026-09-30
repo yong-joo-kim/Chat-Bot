@@ -6,6 +6,7 @@ modelId 문자열이 바뀌어 apps/api 쪽 기존 벡터가 자동으로 무효
 """
 from __future__ import annotations
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,26 +40,69 @@ class Settings(BaseSettings):
     generation_target_count_max: int = 60
     generation_seeds_max: int = 20
 
-    # ── No.17 파이프라인 검증 전용 백엔드 선택(`docs/requirements/nlg-bot-to-bot.md` FR-NG2,
-    # dev-pipeline-validation, 2026-09-29) ──────────────────────────────────────────────
+    # ── 생성 백엔드 선택(No.17 FR-NG2 → No.37 확장, ADR-0046) ────────────────────────────
     # "transformers"(기본값 — 위 GENERATION_* 그대로, HFCausalLMGenerator 경로. 동작 무변화)
-    # | "ollama" — 별도 Ollama 서버(HTTP API)에 위탁한다. ⚠ Ollama 경로는 개발·시연용 소형
-    # 양자화 모델(3050 4GB에서도 도는) 파이프라인 흐름 검증 전용이다. G3 후보 3종(8B~32B급,
-    # L40S 실측 대상 — `eval/report/generation-model-comparison.md`)의 대체가 아니다.
-    generation_backend: str = "transformers"  # transformers | ollama
+    # | "ollama" — 별도 Ollama 서버에 위탁. **경량 설치 구성(No.37) — 동작 보장·품질 미보증**,
+    #   G3 후보 3종(8B~32B급, L40S 실측 대상)의 대체가 아니다(운영 채택 판정은 No.17).
+    # | "vllm" — 생성 전용 사내 vLLM 서버(OpenAI 호환 /v1/chat/completions)에 위탁(운영 구성).
+    # 그 외 값은 생성 프로세스 기동 실패(`app._load_generator`가 검사 — 임베딩 전용 프로세스는 영향 없음).
+    generation_backend: str = "transformers"  # transformers | ollama | vllm
+    # 워밍업 1회 요청에만 적용되는 시간 제한(모델 적재 시간 흡수).
+    generation_warmup_timeout_s: float = 120.0
+    # 루프백·사설 대역 밖 주소를 쓰려면 여기에 명시(콤마 구분, host | host:port | *.suffix).
+    generation_backend_allowed_hosts: str = ""
+    # true면 루프백·사설 대역도 목록에 있어야 한다(거버넌스 모드 설치 권장).
+    generation_backend_require_allowlist: bool = False
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:4b-instruct-2507-q4_K_M"
-    # ml-worker 자신의 HTTP 클라이언트 타임아웃. apps/api 쪽 AUGMENTATION_TIMEOUT_MS(기본
-    # 30초)와는 별개 값이다 — 실측 결과(§ eval/report/ollama-dev-pipeline-validation.md)
-    # 운영 조건(후보 60건)에서 30~44초가 걸려 API 쪽 30초 예산을 넘기는 경우가 관찰됐다.
-    # ml-worker 자신은 더 오래 기다려 완주를 시도하고, API는 그 사이 자체적으로 G1로
-    # 폴백한다(NFR-NGR1 — 이 값이 API 타임아웃보다 길어도 안전하다).
-    ollama_request_timeout_s: float = 90.0
+    # 원격 요청 시간 제한 — apps/api의 AUGMENTATION_TIMEOUT_MS(기본 30초)보다 먼저 포기하도록
+    # 25초로 둔다(P-9: API가 포기한 뒤에도 생성이 계속되는 헛일 축소). 30초 초과는 기동 경고.
+    ollama_request_timeout_s: float = 25.0
     ollama_connect_timeout_s: float = 5.0
+    # 미설정이면 GENERATION_MAX_NEW_TOKENS를 명시 설정했을 때 그 값, 아니면 768
+    # (`resolved_ollama_max_new_tokens`). 3050 조건 A(20건·768토큰)에서 출발한 값.
+    ollama_max_new_tokens: int | None = None
+    # 경량 구성 1회 생성 상한(P-3). 1~generation_target_count_max.
+    # 미설정이면 min(20, GENERATION_TARGET_COUNT_MAX) — `resolved_ollama_target_cap`.
+    ollama_target_cap: int | None = None
+
+    vllm_base_url: str = ""  # 서버 루트(끝 /v1 금지). vllm이면 필수
+    vllm_model: str = ""  # vLLM --served-model-name. vllm이면 필수
+    vllm_api_key: SecretStr | None = None  # 비밀값 — repr/로그/상태에 노출 금지(ED-8)
+    vllm_request_timeout_s: float = 25.0
+    vllm_connect_timeout_s: float = 5.0
+    vllm_max_new_tokens: int = 2048  # No.17 운영 실측 후 확정
+    # 미설정이면 계약 상한(GENERATION_TARGET_COUNT_MAX)을 따른다 — No.17 실측 전까지 절삭 효과 없음.
+    vllm_target_cap: int | None = None
+
+    @property
+    def normalized_generation_backend(self) -> str:
+        return self.generation_backend.strip().lower()
+
+    @property
+    def resolved_ollama_target_cap(self) -> int:
+        if self.ollama_target_cap is not None:
+            return self.ollama_target_cap
+        return min(20, self.generation_target_count_max)
+
+    @property
+    def resolved_vllm_target_cap(self) -> int:
+        if self.vllm_target_cap is not None:
+            return self.vllm_target_cap
+        return self.generation_target_count_max
+
+    @property
+    def resolved_ollama_max_new_tokens(self) -> int:
+        if self.ollama_max_new_tokens is not None:
+            return self.ollama_max_new_tokens
+        if "generation_max_new_tokens" in self.model_fields_set:
+            return self.generation_max_new_tokens
+        return 768
 
     @property
     def is_ollama_backend(self) -> bool:
-        return self.generation_backend.strip().lower() == "ollama"
+        return self.normalized_generation_backend == "ollama"
 
     @property
     def is_mock(self) -> bool:

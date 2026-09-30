@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 import time
@@ -34,7 +35,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from ml_worker.embedder import Embedder, MockEmbedder, SentenceTransformerEmbedder  # noqa: E402
-from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator, OllamaGenerator  # noqa: E402
+from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator, OllamaGenerator, VllmGenerator  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 REPORT_DIR = ROOT / "report" / "generation"
@@ -105,9 +106,28 @@ def build_generator(
     max_new_tokens: int,
     backend: str = "transformers",
     ollama_base_url: str = "http://localhost:11434",
+    vllm_base_url: str = "",
 ) -> Generator:
     if model.strip().lower() == "mock":
         return MockGenerator()
+    if backend == "vllm":
+        # 운영 후보 실측(No.17)에 재사용하는 경로. 키는 셸 기록에 남지 않도록 CLI 인자가 아니라
+        # 환경변수 VLLM_API_KEY로만 받는다. --model은 vLLM의 --served-model-name 값이다.
+        if not vllm_base_url:
+            raise SystemExit("--backend vllm에는 --vllm-base-url이 필요합니다(서버 루트, 끝에 /v1 금지).")
+        generator = VllmGenerator(
+            base_url=vllm_base_url,
+            model_name=model,
+            api_key=os.environ.get("VLLM_API_KEY") or None,
+            max_new_tokens=max_new_tokens,
+            request_timeout_s=120.0,
+            connect_timeout_s=5.0,
+            warmup_timeout_s=180.0,
+            target_cap=60,
+            model_id=f"vllm_{model}@main",
+        )
+        generator.warmup()
+        return generator
     if backend == "ollama":
         # ⚠ dev-pipeline-validation 전용(No.17 FR-NG2, 2026-09-29) — G3 후보 3종(8B~32B급,
         # L40S 실측 대상)의 대체가 아니다. modelId에 이 표식을 남겨 보고서가 절대 섞이지
@@ -215,17 +235,18 @@ def main() -> None:
     parser.add_argument(
         "--backend",
         default="transformers",
-        choices=["transformers", "ollama"],
+        choices=["transformers", "ollama", "vllm"],
         help="ollama = dev-pipeline-validation 전용(No.17 FR-NG2) — G3 후보 3종의 대체 아님",
     )
     parser.add_argument("--ollama-base-url", default="http://localhost:11434")
+    parser.add_argument("--vllm-base-url", default="", help="vLLM 서버 루트. API 키는 환경변수 VLLM_API_KEY로만 전달")
     args = parser.parse_args()
 
     print(f"[gen-eval] 임베딩 모델 로딩(검증용): {args.embedding_model}")
     embedder = build_embedder(args.embedding_model, args.embedding_device)
 
     print(f"[gen-eval] 생성모델 로딩: {args.model} (backend={args.backend} device={args.device})")
-    generator = build_generator(args.model, args.device, args.max_new_tokens, args.backend, args.ollama_base_url)
+    generator = build_generator(args.model, args.device, args.max_new_tokens, args.backend, args.ollama_base_url, args.vllm_base_url)
     print(f"[gen-eval] modelId={generator.model_id}")
 
     case_results = []

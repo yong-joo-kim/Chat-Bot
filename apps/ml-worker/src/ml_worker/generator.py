@@ -8,6 +8,9 @@
   5지표 실측으로 확정한다**(ADR-0026 §5) — 이 클래스는 어떤 모델이든 `AutoModelForCausalLM`으로
   로드 가능하면 그대로 얹을 수 있는 범용 래퍼일 뿐, 특정 모델 이름을 하드코딩하지 않는다.
 
+- `OllamaGenerator`: Ollama 서버 위탁 — **경량 설치 구성(No.37): 동작 보장·품질 미보증**.
+- `VllmGenerator`: 생성 전용 사내 vLLM 서버(OpenAI 호환 대화형 API) 위탁 — 운영 구성(No.37).
+
 `apps/api`는 이 계층을 전혀 모른다 — `POST /augment { seeds, targetCount, locale }
 -> { modelId, candidates }` 계약만 안다(설계서 §5.2).
 """
@@ -54,8 +57,51 @@ def parse_candidate_array(text: str) -> list[str]:
     return [line for line in lines if line]
 
 
+def strip_think_blocks(text: str) -> str:
+    """`<think>…</think>` 블록 제거(여러 개·줄바꿈 포함). 닫히지 않은 `<think>`는 그 뒤 전부 제거.
+    닫는 태그만 남은 경우(템플릿이 여는 태그를 미리 넣는 모델)는 마지막 닫는 태그 뒤만 남긴다.
+    원격 백엔드(Ollama·vLLM) 응답 전용 — 공용 `parse_candidate_array`는 바꾸지 않는다(ED-4)."""
+    out = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    out = re.sub(r"<think>.*\Z", "", out, flags=re.DOTALL)
+    if "</think>" in out:
+        out = out.rsplit("</think>", 1)[1]
+    return out
+
+
+def salvage_truncated_array(text: str) -> list[str]:
+    """토큰 한도로 잘린 JSON 배열에서 **닫힌 문자열 원소만** 복구한다(No.37 §8, R-7).
+    마지막 미완 원소는 버린다. 잘림 신호(done_reason/finish_reason == length)가 있을 때만 쓴다."""
+    stripped = re.sub(r"```json|```", "", text).strip()
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    if not stripped.startswith("["):
+        return parse_candidate_array(text)
+    decoder = json.JSONDecoder()
+    out: list[str] = []
+    pos = 1
+    while pos < len(stripped):
+        while pos < len(stripped) and stripped[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(stripped) or stripped[pos] != '"':
+            break
+        try:
+            value, pos = decoder.raw_decode(stripped, pos)
+        except json.JSONDecodeError:
+            break
+        out.append(value)
+    return out
+
+
 class Generator(ABC):
     model_id: str
+    # No.37 선택 속성 — 기존 구현체는 기본값을 상속한다.
+    backend: str = "transformers"  # transformers | ollama | vllm
+    profile: str = "standard"  # standard | lightweight (경량 설치 구성 표식 — 품질 보증 아님)
+    target_cap: int | None = None  # 1회 생성 상한. None = 계약 상한
 
     @abstractmethod
     def generate(self, seeds: list[str], target_count: int) -> list[str]:
@@ -136,22 +182,33 @@ class HFCausalLMGenerator(Generator):
         return self._model is not None
 
 
+def _host_of(base_url: str) -> str:
+    """로그·오류 메시지용 `scheme://host:port` (경로·자격증명 제외)."""
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(base_url)
+    host = parts.hostname or "?"
+    port = f":{parts.port}" if parts.port else ""
+    return f"{parts.scheme}://{host}{port}"
+
+
 class OllamaGenerator(Generator):
     """G3 슬롯의 두 번째 백엔드 — Ollama 서버(HTTP API)에 생성을 위탁한다.
 
-    ⚠ **dev-pipeline-validation 전용**(`docs/requirements/nlg-bot-to-bot.md` FR-NG2,
-    2026-09-29). `eval/report/generation-model-comparison.md`가 정의한 G3 후보 3종
-    (한국어 특화 8B급·다국어 14B급·32B 양자화급, **L40S 실측 대상**)의 대체가 **아니다**.
-    이 클래스가 부르는 모델(`qwen3:4b-instruct-2507-q4_K_M` 등, Ollama 4bit 양자화)은
-    완전히 다른 체급이며, 이 경로로 얻은 품질 수치는 그 세 후보의 채택 여부를 판단하는
-    근거로 쓸 수 없다(FR-0-260). 이 클래스의 목적은 "요청→생성→검증→제안 표시"
-    파이프라인이 3050(4GB) 같은 소형 GPU 환경에서도 끝까지 도는지 확인하는 것뿐이다.
+    **경량 설치 구성 — 동작 보장·품질 미보증**(No.37 P-3, ADR-0046). 4GB급 GPU에서도 도는
+    소형 양자화 모델로 "요청→생성→검증→제안 표시" 흐름이 끝까지 도는지를 보장할 뿐, 품질은
+    보증하지 않는다. `eval/report/generation-model-comparison.md`의 G3 후보 3종(한국어 특화
+    8B급·다국어 14B급·32B 양자화급, **L40S 실측 대상**)의 대체가 **아니며**, 이 경로의 품질 수치는
+    그 세 후보의 채택 근거로 쓸 수 없다(FR-0-260). 운영 G3 채택 판정은 No.17.
 
     `HFCausalLMGenerator`와 달리 모델을 이 프로세스 메모리에 얹지 않는다 — 별도 Ollama
     서버 프로세스(기본 `http://localhost:11434`)에 HTTP로 위탁한다. 시드→프롬프트 규약
     (`build_prompt`)과 출력 파싱(`parse_candidate_array`)은 그대로 재사용해 `/augment`
     계약(`{ seeds, targetCount, locale } -> { modelId, candidates }`)을 바꾸지 않는다.
     """
+
+    backend = "ollama"
+    profile = "lightweight"
 
     def __init__(
         self,
@@ -163,6 +220,8 @@ class OllamaGenerator(Generator):
         connect_timeout_s: float,
         model_id: str,
         client: object | None = None,
+        target_cap: int = 20,
+        warmup_timeout_s: float = 120.0,
     ) -> None:
         # 지연 임포트: transformers 백엔드(기본값)에서는 httpx가 필요 없다.
         import httpx
@@ -170,11 +229,16 @@ class OllamaGenerator(Generator):
         self._base_url = base_url.rstrip("/")
         self._model_name = model_name
         self._max_new_tokens = max_new_tokens
+        self._connect_timeout_s = connect_timeout_s
+        self._warmup_timeout_s = warmup_timeout_s
+        self.target_cap = target_cap
         # `client`는 단위시험에서 `httpx.Client(transport=httpx.MockTransport(...))`를 주입해
         # 실제 네트워크 없이 연결 성공/실패·모델 유무·타임아웃 분기를 검증하기 위한 것이다
-        # (운영 경로는 항상 이 인자를 생략해 기본 클라이언트를 쓴다).
+        # (운영 경로는 항상 이 인자를 생략해 기본 클라이언트를 쓴다). 리다이렉트는 따라가지
+        # 않는다(ED-7 — 주소 검사 우회 방지).
         self._client = client if client is not None else httpx.Client(
-            timeout=httpx.Timeout(request_timeout_s, connect=connect_timeout_s)
+            timeout=httpx.Timeout(request_timeout_s, connect=connect_timeout_s),
+            follow_redirects=False,
         )
         self.model_id = model_id
         self._warmed_up = False
@@ -220,15 +284,27 @@ class OllamaGenerator(Generator):
             )
 
     def warmup(self) -> None:
-        self.generate(["워밍업 문장입니다."], 1)
-        self._warmed_up = True
+        """워밍업 요청에만 `warmup_timeout_s`를 적용한다(첫 호출은 모델을 VRAM에 올리느라 오래 걸림).
+        결과가 1건 이상일 때만 `warmed_up=True`. 0건이어도 기동을 막지는 않는다(일시 상태일 수 있음)."""
+        import httpx
+
+        result = self._generate(
+            ["워밍업 문장입니다."], 1, timeout=httpx.Timeout(self._warmup_timeout_s, connect=self._connect_timeout_s)
+        )
+        self._warmed_up = len(result) >= 1
+        if not self._warmed_up:
+            logger.warning("Ollama 워밍업이 후보를 만들지 못했습니다 — warmedUp=false로 보고합니다(기동은 계속).")
 
     @property
     def warmed_up(self) -> bool:
         return self._warmed_up
 
     def generate(self, seeds: list[str], target_count: int) -> list[str]:
+        return self._generate(seeds, target_count)
+
+    def _generate(self, seeds: list[str], target_count: int, timeout: object | None = None) -> list[str]:
         prompt = build_prompt(seeds, target_count)
+        extra = {"timeout": timeout} if timeout is not None else {}
         try:
             res = self._client.post(
                 f"{self._base_url}/api/generate",
@@ -242,6 +318,7 @@ class OllamaGenerator(Generator):
                         "top_p": 0.95,
                     },
                 },
+                **extra,
             )
             res.raise_for_status()
             body = res.json()
@@ -249,14 +326,149 @@ class OllamaGenerator(Generator):
             logger.warning("Ollama /api/generate 호출 실패 — 빈 후보로 수렴합니다: %s", exc)
             return []
 
+        text = strip_think_blocks(str(body.get("response", "")))
         if body.get("done_reason") == "length":
             logger.warning(
                 "Ollama 응답이 토큰 한도(num_predict=%s)에서 잘렸습니다(targetCount=%s) — "
-                "GENERATION_MAX_NEW_TOKENS를 늘리는 것을 검토하세요(No.17 §1.4 C-3).",
+                "닫힌 원소만 복구합니다. OLLAMA_MAX_NEW_TOKENS를 늘리는 것을 검토하세요(No.17 §1.4 C-3).",
                 self._max_new_tokens,
                 target_count,
             )
-        return parse_candidate_array(body.get("response", ""))
+            return salvage_truncated_array(text)
+        return parse_candidate_array(text)
+
+    def healthy(self) -> bool:
+        return self._client is not None
+
+
+class VllmGenerator(Generator):
+    """생성 전용 사내 vLLM 서버(OpenAI 호환 `/v1/chat/completions`)에 위탁하는 운영 구성(No.37).
+
+    httpx만 쓴다(OpenAI SDK 미사용 — 전송·재시도 정책이 통제 밖으로 나가지 않게, ADR-0026 §4).
+    프롬프트는 `build_prompt()` 한 벌을 단일 `user` 메시지로 보낸다(모델별 `system` 역할 처리 차이를
+    피하고 Ollama 경로와 같은 입력으로 정렬). 모든 실패는 빈 배열로 수렴하고, 로그·오류에는 호스트·
+    상태 코드·예외 클래스 이름만 남긴다(경로·API 키·응답 본문 0 — ED-8).
+    """
+
+    backend = "vllm"
+    profile = "standard"
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model_name: str,
+        api_key: str | None,
+        max_new_tokens: int,
+        request_timeout_s: float,
+        connect_timeout_s: float,
+        warmup_timeout_s: float,
+        target_cap: int,
+        model_id: str,
+        client: object | None = None,
+    ) -> None:
+        import httpx
+
+        base = base_url.strip().rstrip("/")
+        if base.endswith("/v1"):
+            raise RuntimeError("VLLM_BASE_URL 끝의 '/v1'을 빼고 적으세요(코드가 /v1/... 경로를 붙입니다).")
+        self._base_url = base
+        self._host = _host_of(base)
+        self._model_name = model_name
+        self._max_new_tokens = max_new_tokens
+        self._connect_timeout_s = connect_timeout_s
+        self._warmup_timeout_s = warmup_timeout_s
+        self.target_cap = target_cap
+        self.model_id = model_id
+        self._warmed_up = False
+        # 인증 헤더는 요청마다 붙인다(주입 클라이언트에서도 동일하게 동작). 키가 없으면 헤더 없음.
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        # 리다이렉트는 따라가지 않는다(ED-7 — 허용 주소 검사를 3xx로 우회하지 못하게).
+        self._client = client if client is not None else httpx.Client(
+            timeout=httpx.Timeout(request_timeout_s, connect=connect_timeout_s),
+            follow_redirects=False,
+        )
+        self._verify_server_and_model()
+
+    def _verify_server_and_model(self) -> None:
+        try:
+            res = self._client.get(f"{self._base_url}/v1/models", headers=self._headers)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                f"vLLM 서버({self._host})에 연결할 수 없습니다({type(exc).__name__}). "
+                "서버가 떠 있는지, VLLM_BASE_URL이 맞는지 확인하세요."
+            ) from None
+        if 300 <= res.status_code < 400:
+            raise RuntimeError(
+                f"vLLM 서버({self._host})가 리다이렉트(HTTP {res.status_code})를 응답했습니다. 리다이렉트는 따라가지 않습니다."
+            )
+        if res.status_code != 200:
+            raise RuntimeError(f"vLLM 서버({self._host}) 응답 이상: HTTP {res.status_code}")
+        try:
+            body = res.json()
+            ids = [e["id"] for e in body["data"] if isinstance(e, dict) and isinstance(e.get("id"), str)]
+        except Exception:  # noqa: BLE001
+            raise RuntimeError(f"vLLM 서버({self._host})의 /v1/models 응답을 해석할 수 없습니다.") from None
+        if self._model_name not in ids:
+            raise RuntimeError(
+                f"vLLM 서버({self._host})가 모델 '{self._model_name}'을 제공하지 않습니다(제공 목록: {sorted(ids) or '없음'}). "
+                "vLLM의 `--served-model-name`과 `VLLM_MODEL`이 같은지 확인하세요."
+            )
+
+    def warmup(self) -> None:
+        import httpx
+
+        result = self._generate(
+            ["워밍업 문장입니다."], 1, timeout=httpx.Timeout(self._warmup_timeout_s, connect=self._connect_timeout_s)
+        )
+        self._warmed_up = len(result) >= 1
+        if not self._warmed_up:
+            logger.warning("vLLM 워밍업이 후보를 만들지 못했습니다 — warmedUp=false로 보고합니다(기동은 계속).")
+
+    @property
+    def warmed_up(self) -> bool:
+        return self._warmed_up
+
+    def generate(self, seeds: list[str], target_count: int) -> list[str]:
+        return self._generate(seeds, target_count)
+
+    def _generate(self, seeds: list[str], target_count: int, timeout: object | None = None) -> list[str]:
+        prompt = build_prompt(seeds, target_count)
+        extra = {"timeout": timeout} if timeout is not None else {}
+        try:
+            res = self._client.post(
+                f"{self._base_url}/v1/chat/completions",
+                json={
+                    "model": self._model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": self._max_new_tokens,
+                    "temperature": 0.9,
+                    "top_p": 0.95,
+                    "stream": False,
+                },
+                headers=self._headers,
+                **extra,
+            )
+            if res.status_code != 200:
+                logger.warning("vLLM 생성 호출 실패(host=%s, HTTP %s) — 빈 후보로 수렴합니다.", self._host, res.status_code)
+                return []
+            choice = res.json()["choices"][0]
+            content = choice["message"]["content"]
+            finish_reason = choice.get("finish_reason")
+        except Exception as exc:  # noqa: BLE001 — Generator 계약: 실패 시 빈 배열(예외 클래스 이름만 기록)
+            logger.warning("vLLM 생성 호출 실패(host=%s, %s) — 빈 후보로 수렴합니다.", self._host, type(exc).__name__)
+            return []
+
+        text = strip_think_blocks(content if isinstance(content, str) else "")
+        if finish_reason == "length":
+            logger.warning(
+                "vLLM 응답이 토큰 한도(max_tokens=%s)에서 잘렸습니다(targetCount=%s) — "
+                "닫힌 원소만 복구합니다. VLLM_MAX_NEW_TOKENS를 늘리는 것을 검토하세요.",
+                self._max_new_tokens,
+                target_count,
+            )
+            return salvage_truncated_array(text)
+        return parse_candidate_array(text)
 
     def healthy(self) -> bool:
         return self._client is not None

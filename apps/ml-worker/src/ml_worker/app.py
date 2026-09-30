@@ -9,6 +9,10 @@
 추가로 노출한다(설계서 §5.2). `embed` 프로파일(기본값)에서는 이 경로가 **존재하지 않는다**(404) —
 `/embed`·`/health` 계약은 role과 무관하게 바이트 단위로 동일하다(FR-L2-37).
 
+생성 백엔드는 `GENERATION_BACKEND`로 transformers | ollama(경량 설치 구성) | vllm(운영 구성) 중
+하나를 고른다(No.37, ADR-0046). 원격 2종은 기동 시 주소 검사(루프백·사설·허용 목록)를 거치고
+`/augment`는 백엔드별 1회 생성 상한으로 절삭한다. `/augment` 요청·응답 계약은 불변이다.
+
 학습(파인튜닝) 파이프라인·Job Queue는 여전히 두지 않는다(추론 전용 원칙 유지, ADR-0024/0027).
 이 프로세스가 죽어도 apps/api는 저하 모드(규칙 매칭 / G1 증강)로 전환할 뿐 대화가 멈추지 않는다
 (FR-0-44, FR-L1-7).
@@ -22,9 +26,16 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from ml_worker.backend_guard import assert_backend_url_allowed, is_loopback_url
 from ml_worker.config import settings
 from ml_worker.embedder import Embedder, MockEmbedder, SentenceTransformerEmbedder
-from ml_worker.generator import Generator, HFCausalLMGenerator, MockGenerator, OllamaGenerator
+from ml_worker.generator import (
+    Generator,
+    HFCausalLMGenerator,
+    MockGenerator,
+    OllamaGenerator,
+    VllmGenerator,
+)
 
 logger = logging.getLogger("ml_worker")
 
@@ -64,27 +75,116 @@ def _load_model() -> Embedder:
     return embedder
 
 
+_GENERATION_BACKENDS = ("transformers", "ollama", "vllm")
+_API_TIMEOUT_S = 30.0  # apps/api AUGMENTATION_TIMEOUT_MS 기본값 — 이보다 길면 헛일 경고(설계서 §10)
+
+
+def _validate_remote_settings(backend: str) -> tuple[str, float, float, int, int]:
+    """원격 백엔드(ollama|vllm) 필수값·범위 검사(설계서 §5.3). 실패 시 RuntimeError로 기동 실패.
+    반환: (base_url, request_timeout_s, connect_timeout_s, max_new_tokens, target_cap)."""
+    cap_max = settings.generation_target_count_max
+    if backend == "vllm":
+        base_url = settings.vllm_base_url.strip()
+        if not base_url:
+            raise RuntimeError("GENERATION_BACKEND=vllm이면 VLLM_BASE_URL이 필요합니다.")
+        if not settings.vllm_model.strip():
+            raise RuntimeError("GENERATION_BACKEND=vllm이면 VLLM_MODEL이 필요합니다.")
+        if base_url.rstrip("/").endswith("/v1"):
+            raise RuntimeError("VLLM_BASE_URL 끝의 /v1을 빼고 적으세요(코드가 /v1/... 경로를 붙입니다).")
+        request_s, connect_s = settings.vllm_request_timeout_s, settings.vllm_connect_timeout_s
+        max_tokens, cap, cap_key = settings.vllm_max_new_tokens, settings.resolved_vllm_target_cap, "VLLM_TARGET_CAP"
+        timeout_key = "VLLM_REQUEST_TIMEOUT_S"
+    else:
+        base_url = settings.ollama_base_url.strip()
+        request_s, connect_s = settings.ollama_request_timeout_s, settings.ollama_connect_timeout_s
+        max_tokens, cap, cap_key = (
+            settings.resolved_ollama_max_new_tokens,
+            settings.resolved_ollama_target_cap,
+            "OLLAMA_TARGET_CAP",
+        )
+        timeout_key = "OLLAMA_REQUEST_TIMEOUT_S"
+    if not 1 <= cap <= cap_max:
+        raise RuntimeError(f"{cap_key}={cap}은 1~{cap_max}(GENERATION_TARGET_COUNT_MAX) 범위여야 합니다.")
+    if request_s <= 0 or connect_s <= 0 or settings.generation_warmup_timeout_s <= 0:
+        raise RuntimeError("생성 백엔드 시간 제한(*_TIMEOUT_S)은 0보다 커야 합니다.")
+    if max_tokens <= 0:
+        raise RuntimeError("생성 백엔드 최대 토큰 수(*_MAX_NEW_TOKENS)는 0보다 커야 합니다.")
+    if request_s > _API_TIMEOUT_S:
+        logger.warning(
+            "%s=%s가 30초보다 깁니다 — API AUGMENTATION_TIMEOUT_MS(기본 30초)보다 길면 API가 포기한 뒤에도 "
+            "생성이 계속됩니다(API 값을 올렸다면 그 값 - 5초 이하로 맞추세요).",
+            timeout_key,
+            request_s,
+        )
+    return base_url, request_s, connect_s, max_tokens, cap
+
+
+def _host_only(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    return (parts.hostname or "?") + (f":{parts.port}" if parts.port else "")
+
+
 def _load_generator() -> Generator:
-    # No.17 파이프라인 검증 전용 백엔드(dev-pipeline-validation, 2026-09-29) — 아래
-    # `is_generation_mock`/`HFCausalLMGenerator` 분기(기존 transformers 경로)는 이 분기와
-    # 무관하게 한 줄도 바뀌지 않았다. `GENERATION_BACKEND=ollama`일 때만 여기서 갈린다.
-    if settings.is_ollama_backend:
+    # 생성 백엔드 3종(transformers | ollama | vllm) 교체 지점 1곳(No.37, 설계서 §4.4). 값 검사를
+    # 이 함수 첫 줄에 두어 임베딩 전용 프로세스(`loads_generation` 거짓)는 영향받지 않는다(NFR-EDR2).
+    backend = settings.normalized_generation_backend
+    if backend not in _GENERATION_BACKENDS:
+        raise RuntimeError(
+            f"알 수 없는 GENERATION_BACKEND 값: '{settings.generation_backend}' — transformers | ollama | vllm 중 하나여야 합니다."
+        )
+
+    if backend in ("ollama", "vllm"):
+        base_url, request_s, connect_s, max_tokens, cap = _validate_remote_settings(backend)
+        # 주소 검사는 생성기 생성(=네트워크 연결) 전에 실행한다(ED-11).
+        assert_backend_url_allowed(
+            base_url,
+            settings.generation_backend_allowed_hosts,
+            settings.generation_backend_require_allowlist,
+        )
+        generator: Generator
+        if backend == "vllm":
+            raw_key = settings.vllm_api_key.get_secret_value().strip() if settings.vllm_api_key else ""
+            if raw_key and base_url.lower().startswith("http://") and not is_loopback_url(base_url):
+                logger.warning(
+                    "VLLM_API_KEY가 설정됐지만 VLLM_BASE_URL이 루프백이 아닌 http입니다(%s) — "
+                    "키가 평문으로 전송됩니다. https 또는 사내 게이트웨이 TLS를 검토하세요.",
+                    _host_only(base_url),
+                )
+            generator = VllmGenerator(
+                base_url=base_url,
+                model_name=settings.vllm_model.strip(),
+                api_key=raw_key or None,
+                max_new_tokens=max_tokens,
+                request_timeout_s=request_s,
+                connect_timeout_s=connect_s,
+                warmup_timeout_s=settings.generation_warmup_timeout_s,
+                target_cap=cap,
+                model_id=f"vllm:{settings.vllm_model.strip()}",
+            )
+        else:
+            generator = OllamaGenerator(
+                base_url=base_url,
+                model_name=settings.ollama_model,
+                max_new_tokens=max_tokens,
+                request_timeout_s=request_s,
+                connect_timeout_s=connect_s,
+                model_id=f"ollama:{settings.ollama_model}",
+                target_cap=cap,
+                warmup_timeout_s=settings.generation_warmup_timeout_s,
+            )
+        generator.warmup()  # type: ignore[attr-defined]
         logger.info(
-            "생성모델 백엔드=ollama: %s at %s "
-            "(dev-pipeline-validation 전용 — G3 후보 3종의 대체 아님, L40S 실측은 별개)",
-            settings.ollama_model,
-            settings.ollama_base_url,
+            "생성 백엔드=%s 구성=%s 모델=%s 호스트=%s 1회 상한=%s",
+            generator.backend,
+            generator.profile,
+            generator.model_id,
+            _host_only(base_url),
+            generator.target_cap,
         )
-        generator = OllamaGenerator(
-            base_url=settings.ollama_base_url,
-            model_name=settings.ollama_model,
-            max_new_tokens=settings.generation_max_new_tokens,
-            request_timeout_s=settings.ollama_request_timeout_s,
-            connect_timeout_s=settings.ollama_connect_timeout_s,
-            model_id=f"ollama:{settings.ollama_model}",
-        )
-        generator.warmup()
-        logger.info("생성모델 로드 완료(ollama): %s", generator.model_id)
+        if generator.profile == "lightweight":
+            logger.warning("경량 설치 구성: 동작 보장·품질 미보증 (운영 G3 채택 판정은 No.17)")
         return generator
 
     if settings.is_generation_mock:
@@ -195,6 +295,17 @@ class AugmentHealthResponse(BaseModel):
     modelId: str | None = None
     device: str
     warmedUp: bool
+    # No.37 선택 필드 — API zod 스키마는 모르는 키를 버리므로 API 동작에는 영향이 없다.
+    backend: Literal["transformers", "ollama", "vllm"] | None = None
+    profile: Literal["standard", "lightweight"] | None = None
+    targetCap: int | None = None
+
+
+def _augment_device() -> str:
+    """원격 백엔드(ollama|vllm)는 연산이 외부 서빙 엔진에서 일어나므로 `cuda`를 사실처럼 쓰지 않는다."""
+    if settings.normalized_generation_backend in ("ollama", "vllm"):
+        return "external"
+    return settings.generation_device
 
 
 # ── No.16 증강 생성 프로파일(ADR-0026 §5) — `ML_WORKER_ROLE=embed`(기본값)에서는 이 두 경로를
@@ -223,19 +334,34 @@ if settings.loads_generation:
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-        candidates = generator.generate(req.seeds, req.targetCount)
+        # 백엔드별 1회 생성 상한 절삭(No.37 P-3/P-6) — 계약 상한 400 검사(위)는 그대로 먼저 돈다.
+        cap = generator.target_cap or settings.generation_target_count_max
+        effective = min(req.targetCount, cap)
+        if effective < req.targetCount:
+            logger.info("targetCount 절삭: 요청 %s -> 적용 %s (백엔드 상한)", req.targetCount, effective)
+        candidates = generator.generate(req.seeds, effective)
+        if generator.target_cap is not None:
+            # 원격 백엔드만 결과 절단(API 후보 임베딩 배치 상한 초과 차단). transformers/mock 경로는 무변경.
+            candidates = candidates[:effective]
         return AugmentResponse(modelId=generator.model_id, candidates=candidates)
 
     @app.get("/augment/health", response_model=AugmentHealthResponse)
     def augment_health() -> AugmentHealthResponse:
+        backend = settings.normalized_generation_backend
+        known_backend = backend if backend in _GENERATION_BACKENDS else None
         if _generator is None:
-            return AugmentHealthResponse(status="loading", device=settings.generation_device, warmedUp=False)
+            return AugmentHealthResponse(
+                status="loading", device=_augment_device(), warmedUp=False, backend=known_backend
+            )
         warmed_up = getattr(_generator, "warmed_up", True)
         return AugmentHealthResponse(
             status="ok",
             modelId=_generator.model_id,
-            device=settings.generation_device,
+            device=_augment_device(),
             warmedUp=warmed_up,
+            backend=_generator.backend,  # type: ignore[arg-type]
+            profile=_generator.profile,  # type: ignore[arg-type]
+            targetCap=_generator.target_cap or settings.generation_target_count_max,
         )
 
 
