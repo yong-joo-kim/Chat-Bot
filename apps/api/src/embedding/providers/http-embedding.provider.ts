@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
 import {
   EmbeddingKind,
+  EmbeddingModelChangedError,
   EmbeddingProvider,
   EmbeddingProviderUnavailableError,
   EmbeddingResponseInvalidError,
@@ -76,7 +77,7 @@ export class HttpEmbeddingProvider implements EmbeddingProvider {
     if (body.modelId !== this.modelId || body.dimension !== this.dimension) {
       // 런타임 중 ml-worker의 모델이 바뀐 경우 — 호출부가 EX-N1-2(저하 모드 + staleModel)로 처리하도록
       // 명확한 에러 타입으로 알린다. 여기서 임의로 벡터를 반환하지 않는다.
-      throw new EmbeddingProviderUnavailableError(
+      throw new EmbeddingModelChangedError(
         `ml-worker 모델이 변경되었습니다(expected=${this.modelId}, actual=${body.modelId})`,
       );
     }

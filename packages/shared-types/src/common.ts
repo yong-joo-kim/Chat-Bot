@@ -185,6 +185,10 @@ export const ApiErrorCode = z.enum([
   'KB_SOURCE_BUSY',
   'KB_INGEST_NOT_ALLOWED',
   'KB_HOST_NOT_ALLOWED',
+  // 딥러닝 군집분석(No.21) 그룹 추가(deep-clustering-설계.md §11) — 3종.
+  'UTTERANCE_ANALYSIS_BUSY',
+  'UTTERANCE_ANALYSIS_STORE_FULL',
+  'UTTERANCE_ANALYSIS_TOO_FEW',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

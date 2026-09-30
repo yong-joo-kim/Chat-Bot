@@ -31,6 +31,8 @@ export const ChatbotVersionTrigger = z.enum([
   // [신규 No.40] 환경 분리 — 켜기(자동 캡처) · 스테이징 승격.
   'ENV_INIT',
   'PROMOTE',
+  // [신규 No.21] 발화 묶음 분석 결과를 의도 예문으로 반영하기 직전(자동) — AUTO 그룹.
+  'BEFORE_UTTERANCE_APPLY',
 ]);
 export type ChatbotVersionTrigger = z.infer<typeof ChatbotVersionTrigger>;
 
@@ -43,6 +45,7 @@ export const CHATBOT_VERSION_TRIGGER_LABELS: Record<ChatbotVersionTrigger, strin
   BEFORE_RESTORE: '복원 직전 백업(자동)',
   ENV_INIT: '환경 분리 시작(자동)',
   PROMOTE: '스테이징 승격',
+  BEFORE_UTTERANCE_APPLY: '발화 묶음 반영 직전(자동)',
 };
 
 /** 목록 필터(FR-H2-1) — MANUAL / 자동 4종 / 복원 직전 백업 / 환경(No.40)으로 묶는다. */
@@ -51,7 +54,7 @@ export type VersionTriggerGroup = z.infer<typeof VersionTriggerGroup>;
 
 export const VERSION_TRIGGER_GROUPS: Record<VersionTriggerGroup, readonly ChatbotVersionTrigger[]> = {
   MANUAL: ['MANUAL'],
-  AUTO: ['BEFORE_IMPORT', 'BEFORE_BULK_DELETE', 'BEFORE_AUGMENT_ACCEPT', 'BEFORE_LEARNING_BULK_APPLY'],
+  AUTO: ['BEFORE_IMPORT', 'BEFORE_BULK_DELETE', 'BEFORE_AUGMENT_ACCEPT', 'BEFORE_LEARNING_BULK_APPLY', 'BEFORE_UTTERANCE_APPLY'],
   RESTORE_BACKUP: ['BEFORE_RESTORE'],
   ENVIRONMENT: ['ENV_INIT', 'PROMOTE'],
 };

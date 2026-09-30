@@ -166,6 +166,23 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   // 선제적(Proactive) 메시징(No.35) 그룹 추가(proactive-messaging-설계.md §12.1, ADR-0045) — 문구·
   // 버튼 원문은 화이트리스트에 없다(FR-PA7-5). 경로 패턴(`trigger`)은 관리자 설정이라 포함한다.
   ProactiveRule: ['name', 'enabled', 'position', 'triggerKind', 'trigger', 'devices', 'startsAt', 'endsAt', 'schedule', 'purposeConfirmedAt'],
+  // 발화 묶음 분석(No.21) 그룹 추가(deep-clustering-설계.md §13.2, ADR-0047) — 건수·열거값·조건 수치만.
+  // 문장·파일 이름·메모·키워드류 필드명은 0건이다(UA-9 — `text`·`fileName`·`memo`·`keywords`).
+  UtteranceAnalysis: [
+    'status',
+    'validCount',
+    'totalRows',
+    'clusterCount',
+    'appliedCount',
+    'fileKind',
+    'conditions',
+    'intentId',
+    'created',
+    'excludedByReason',
+    'clusters',
+    'utterances',
+    'rows',
+  ],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

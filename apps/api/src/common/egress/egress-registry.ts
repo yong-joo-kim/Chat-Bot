@@ -40,7 +40,8 @@ export const EGRESS_REGISTRY: readonly EgressExitDef[] = [
   },
   {
     exitId: 'AUGMENT_LOCAL',
-    files: ['augmentation/providers/local-augmentation.provider.ts'],
+    // [신규 No.21] 발화 묶음 분석의 이름 제안 출구 파일 1개를 같은 클래스에 추가한다(새 클래스 0 — DC-11).
+    files: ['augmentation/providers/local-augmentation.provider.ts', 'utterance-analysis/naming/cluster-name-http.client.ts'],
     dataKind: 'SEED_UNMASKED',
     masked: 'NO',
     label: '증강 생성기(로컬)',

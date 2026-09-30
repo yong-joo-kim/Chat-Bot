@@ -168,6 +168,7 @@ export class GovernanceBootstrapService implements OnModuleInit {
         augmentationGeminiApiKey: this.config.get<string>('AUGMENTATION_GEMINI_API_KEY'),
         augmentationGeminiBaseUrl: this.config.get<string>('AUGMENTATION_GEMINI_BASE_URL'),
         augmentationLocalBaseUrl: this.config.get<string>('AUGMENTATION_LOCAL_BASE_URL'),
+        utteranceNameSuggestEnabled: this.config.get<boolean>('UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED') ?? false,
       },
       (url) => {
         try {

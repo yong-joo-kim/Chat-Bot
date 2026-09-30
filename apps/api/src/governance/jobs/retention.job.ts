@@ -194,6 +194,35 @@ export class RetentionJob implements OnApplicationBootstrap, OnModuleDestroy {
         }
       }
 
+      // [신규 No.21] UTTERANCE_ANALYSIS — 만료 시각(`expiresAt`)이 지난 종결 상태 분석의 발화·묶음·분석 행을
+      // 삭제한다(deep-clustering-설계.md §14.2). 보존 종류가 아니라 기능 설정 일수(생성 시 `expiresAt` 고정)라
+      // 정책 화면·정책 조회와 무관하다. 분석이 없으면 키를 만들지 않는다(파기 결과·감사 바이트 동일).
+      if (!signal?.stopping() && rowsBudget.remaining > 0) {
+        let affected = 0;
+        for (;;) {
+          if (signal?.stopping() || rowsBudget.remaining <= 0) {
+            partial = true;
+            break;
+          }
+          const expired = await this.prisma.utteranceAnalysis.findMany({
+            where: { expiresAt: { lt: now }, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
+            select: { id: true },
+            orderBy: { expiresAt: 'asc' },
+            take: 20,
+          });
+          if (expired.length === 0) break;
+          const deleted = await this.writer.deleteUtteranceAnalyses(expired.map((e) => e.id));
+          if (deleted.analyses === 0) break; // 경합으로 0건 — 무한루프 방지
+          affected += deleted.analyses;
+          rowsBudget.remaining -= Math.max(1, deleted.utterances); // 예산 단위 = 삭제한 발화 행 수
+          await this.sleep(this.batchPauseMs());
+        }
+        if (affected > 0) {
+          affectedByKind.UTTERANCE_ANALYSIS = affected;
+          totalAffected += affected;
+        }
+      }
+
       // AUDIT_LOGS(전역만) — 행 삭제 + 앵커
       let headSeqAfter: number | null = null;
       let anchorSeqAfter: number | null = null;

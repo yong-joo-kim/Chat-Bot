@@ -233,6 +233,20 @@ const EnvSchema = z.object({
   PUBLIC_PROACTIVE_RULES_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(300),
   PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(300),
   PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(20),
+  // 발화 묶음 분석(No.21) 그룹 추가(deep-clustering-설계.md §18.1, ADR-0047) — 전부 선택(기본값 있음 ·
+  // 기동 조건 불변). 새 백그라운드 루프 0 — `jest.isolate-env.js` 변경 불필요. 알고리즘 상수(시드·nInit·
+  // maxIter·조각 크기)는 설정이 아니라 코드 상수 1곳 + `algorithmVersion`이다.
+  UTTERANCE_ANALYSIS_ENABLED: envBoolean(true),
+  UTTERANCE_ANALYSIS_MAX_ROWS: z.coerce.number().int().min(100).max(20000).default(5000),
+  UTTERANCE_ANALYSIS_MAX_CHARS: z.coerce.number().int().min(50).max(1000).default(300),
+  UTTERANCE_ANALYSIS_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  UTTERANCE_ANALYSIS_MAX_STORED_PER_CHATBOT: z.coerce.number().int().min(1).max(200).default(20),
+  UTTERANCE_ANALYSIS_EMBED_BATCH_SIZE: z.coerce.number().int().min(1).max(64).default(16),
+  UTTERANCE_ANALYSIS_EMBED_PAUSE_MS: z.coerce.number().int().min(0).max(5000).default(100),
+  UTTERANCE_ANALYSIS_EMBED_YIELD_RATIO: z.coerce.number().min(0).max(10).default(1),
+  UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED: envBoolean(false),
+  UTTERANCE_ANALYSIS_NAME_SUGGEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  UTTERANCE_ANALYSIS_NAME_SUGGEST_BUDGET_MS: z.coerce.number().int().min(10000).max(1800000).default(300000),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

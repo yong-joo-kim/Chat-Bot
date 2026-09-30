@@ -114,6 +114,9 @@ export const AuditTargetType = z.enum([
   // 생성/수정/삭제/켜기·끄기/순서 변경 감사 대상. 스위치 변경은 targetType Chatbot으로 기록한다
   // (AUDIT_FIELDS.Chatbot에 'proactive' 추가). 34 → 35종.
   'ProactiveRule',
+  // 딥러닝 군집분석(No.21) 그룹 추가(deep-clustering-설계.md §13.2, ADR-0047) — 분석 요청·반영·삭제·
+  // 다운로드(EXPORT)·열람(VIEW) 감사 대상. 35 → 36종.
+  'UtteranceAnalysis',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -153,6 +156,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   InboxTag: '인박스 태그',
   KbSource: '지식베이스 소스',
   ProactiveRule: '선제 안내',
+  UtteranceAnalysis: '발화 묶음 분석',
 };
 
 /**

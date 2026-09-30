@@ -10,7 +10,7 @@ import { UnansweredCollectorService } from './unanswered-collector.service';
 import { LearningApplyService } from './learning-apply.service';
 import { DecompositionService } from './decomposition.service';
 import { DecomposedResolveService } from './decomposed-resolve.service';
-import { MorphAnalyzerFactory } from './morph/morph-analyzer.factory';
+import { MorphAnalyzerModule } from './morph/morph-analyzer.module';
 import { VersionCaptureModule } from '../versions/capture/version-capture.module';
 import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
 import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
@@ -34,6 +34,8 @@ import { EnvironmentServingModule } from '../environment/serving/environment-ser
     // 상세 "초안에서 삭제됨"(VersionBundleService.getCore()).
     EnvironmentCoreModule,
     EnvironmentServingModule,
+    // [신규 No.21 — §6.4] 형태소 분석기(garu 적재 1회)를 발화 묶음 분석과 공유한다 — 동작 불변.
+    MorphAnalyzerModule,
   ],
   controllers: [UnansweredQuestionsController],
   providers: [
@@ -42,7 +44,6 @@ import { EnvironmentServingModule } from '../environment/serving/environment-ser
     UnansweredCollectorService,
     DecompositionService,
     DecomposedResolveService,
-    MorphAnalyzerFactory,
   ],
   // `ConversationModule`이 수집 단일 진입점을 주입받는다(DD-51).
   exports: [UnansweredCollectorService],

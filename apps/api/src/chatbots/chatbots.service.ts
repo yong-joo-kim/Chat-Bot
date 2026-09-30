@@ -429,6 +429,12 @@ export class ChatbotsService {
       await tx.proactiveDailyStat.deleteMany({ where: { chatbotId: id } });
       await tx.proactiveRule.deleteMany({ where: { chatbotId: id } });
       await tx.chatbotProactiveSetting.deleteMany({ where: { chatbotId: id } });
+      // 발화 묶음 분석(No.21) 그룹 추가(deep-clustering-설계.md §14.4, ADR-0047) — 업로드 발화의 분석
+      // 결과는 파생 데이터라 동반 삭제 대상이다(사전검사 409 대상이 아니다). 발화 → 묶음 → 분석 순서(FK
+      // 방향). 27 → 30테이블. `chatbot.delete` 직전.
+      await tx.analyzedUtterance.deleteMany({ where: { analysis: { chatbotId: id } } });
+      await tx.utteranceCluster.deleteMany({ where: { analysis: { chatbotId: id } } });
+      await tx.utteranceAnalysis.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

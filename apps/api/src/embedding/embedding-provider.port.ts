@@ -40,6 +40,14 @@ export class EmbeddingProviderUnavailableError extends Error {
   }
 }
 
+/** 런타임 중 임베딩 서비스의 모델이 바뀌었을 때 — 가용성 오류의 하위 타입이라 기존 `catch`는 그대로 동작한다. */
+export class EmbeddingModelChangedError extends EmbeddingProviderUnavailableError {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause);
+    this.name = 'EmbeddingModelChangedError';
+  }
+}
+
 /** 응답 스키마가 계약과 다를 때(zod 파싱 실패 등) — 외부 응답을 신뢰하지 않는다(FR-0-42와 같은 원칙). */
 export class EmbeddingResponseInvalidError extends Error {
   constructor(message: string, readonly cause?: unknown) {

@@ -11,7 +11,9 @@ export type LearningApplyReason =
   | 'UNANSWERED_RESOLVE'
   | 'UNANSWERED_BULK_RESOLVE'
   | 'AUGMENTATION_ACCEPT'
-  | 'UNANSWERED_DECOMPOSED_RESOLVE';
+  | 'UNANSWERED_DECOMPOSED_RESOLVE'
+  // [신규 No.21] 발화 묶음 분석 예문 반영 — 타입 확장만(본문·반환값 불변, deep-clustering-설계.md §15).
+  | 'UTTERANCE_ANALYSIS_APPLY';
 
 export interface LearningApplyResult {
   /** 'IMMEDIATE' = 규칙 매칭 즉시 반영(현재) · 'QUEUED' = 학습 Job 적재(향후 No.16/23). */

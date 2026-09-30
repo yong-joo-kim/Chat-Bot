@@ -252,6 +252,28 @@ export class GovernanceDataWriter {
     });
   }
 
+  /**
+   * [신규 No.21] 만료된 발화 묶음 분석 삭제(deep-clustering-설계.md §14.2) — 한 트랜잭션에서 `secure_delete` 후
+   * 발화 → 묶음 → 분석 순서로 지운다(마스킹본이라도 사람 이름 등이 남을 수 있는 텍스트 행). 종결 상태만 지운다.
+   * 문장은 이력·로그에 남지 않는다 — 건수만 돌려준다.
+   */
+  async deleteUtteranceAnalyses(ids: readonly string[]): Promise<{ analyses: number; utterances: number }> {
+    if (ids.length === 0) return { analyses: 0, utterances: 0 };
+    return this.prisma.$transaction(async (tx) => {
+      await enableSecureDelete(tx);
+      const terminal = await tx.utteranceAnalysis.findMany({
+        where: { id: { in: [...ids] }, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
+        select: { id: true },
+      });
+      const targetIds = terminal.map((t) => t.id);
+      if (targetIds.length === 0) return { analyses: 0, utterances: 0 };
+      const utterances = await tx.analyzedUtterance.deleteMany({ where: { analysisId: { in: targetIds } } });
+      await tx.utteranceCluster.deleteMany({ where: { analysisId: { in: targetIds } } });
+      const analyses = await tx.utteranceAnalysis.deleteMany({ where: { id: { in: targetIds } } });
+      return { analyses: analyses.count, utterances: utterances.count };
+    });
+  }
+
   async createRetentionRun(data: {
     runId: string;
     kind: RetentionRunKind;

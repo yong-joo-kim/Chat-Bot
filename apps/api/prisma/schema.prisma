@@ -109,6 +109,8 @@ model Chatbot {
   proactiveSetting        ChatbotProactiveSetting?
   proactiveRules          ProactiveRule[]
   proactiveDailyStats     ProactiveDailyStat[]
+  /// [신규 No.21] 역참조만 — DB 컬럼 변화 0(ADR-0047). 발화 묶음 분석은 환경 밖 · 영구삭제 동반 삭제.
+  utteranceAnalyses       UtteranceAnalysis[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -2322,4 +2324,145 @@ model ProactiveDailyStat {
   @@unique([ruleId, dayBucket])
   @@index([chatbotId, dayBucket])
   @@map("proactive_daily_stats")
+}
+
+/// [신규 No.21] 발화 묶음 분석 1건(ADR-0047). 상태를 스스로 소유한다(`TrainingJob` kind 추가 0 — ADR-0027 갱신① 선례).
+/// ★쓰기 = utterance-analysis/core/utterance-analysis.store.ts 1파일(삭제는 + governance-data.writer.ts · chatbots.service.ts).
+/// 문장 원문 없음(파일 이름은 마스킹·절단본). 환경 밖 — 스냅샷·복사·토픽 분리·승격·자산 이관 대상 아님(FR-DC9-6).
+model UtteranceAnalysis {
+  id                 String    @id @default(uuid())
+  chatbotId          String
+  chatbot            Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// QUEUED | RUNNING | SUCCEEDED | FAILED | CANCELLED (zod UtteranceAnalysisStatus)
+  status             String    @default("QUEUED")
+  /// EMBEDDING | CLUSTERING | KEYWORDS | PROBING | NAMING | SAVING | null
+  stage              String?
+  progress           Int       @default(0)
+  /// 동시 실행 잠금 — QUEUED·RUNNING 동안 'ACTIVE', 종결 시 null. nullable 유일 = 서버 전체 1건(부분 인덱스 아님 — §10.2)
+  activeLock         String?   @unique
+  /// 결과 커밋 시각 — 이후 취소 불가(§8.3)
+  resultsCommittedAt DateTime?
+  /// 업로드 파일 이름(경로 제거·금지어·PII 마스킹·120자) — 사람 이름은 가려지지 않음(K-2)
+  fileName           String
+  /// XLSX | CSV
+  fileKind           String
+  /// JSON UtteranceAnalysisConditions(요청 조건 그대로)
+  conditions         String
+  /// JSON UtteranceAnalysisCounts(전체·유효·병합·제외 사유별·마스킹·금지어·발생 합 — 건수만)
+  counts             String
+  /// JSON string[] — TARGET_REDUCED | FEWER_THAN_TARGET | NO_CLUSTER | HEURISTIC_ANALYZER
+  notices            String    @default("[]")
+  embeddingModelId   String?
+  /// 'skmeans-1' — 결과를 바꾸는 알고리즘 상수가 바뀌면 올린다
+  algorithmVersion   String
+  /// 형태소 분석기 id(garu-ko@… | heuristic)
+  analyzerId         String?
+  /// OFF | DONE | FAILED
+  probeStatus        String    @default("OFF")
+  probeFailureReason String?
+  /// LIVE | PROD — 대조에 실제 쓴 번들
+  probeTargetKind    String?
+  probeVersionId     String?
+  probeVersionNo     Int?
+  probeContentHash   String?
+  probeThreshold     Float?
+  /// OFF | DONE | PARTIAL | FAILED
+  nameSuggestStatus  String    @default("OFF")
+  nameSuggestFailureReason String?
+  clusterCount       Int?
+  unassignedCount    Int?
+  candidateCount     Int?
+  appliedCount       Int       @default(0)
+  /// 오류 코드성 문자열(외부 오류 원문·스택·문장 0)
+  failureReason      String?
+  /// 요청자(FK 없음 — 사실 기록 · 이름 스냅샷)
+  requestedById      String?
+  requestedByEmail   String?
+  /// 보존 만료 시각 = 생성 시각 + UTTERANCE_ANALYSIS_RETENTION_DAYS(생성 시 고정 — §14.1)
+  expiresAt          DateTime
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  clusters   UtteranceCluster[]
+  utterances AnalyzedUtterance[]
+
+  @@index([chatbotId, createdAt])
+  @@index([expiresAt, status])
+  @@map("utterance_analyses")
+}
+
+/// [신규 No.21] 분석 결과의 묶음(미분류 포함). 중심점 벡터는 저장하지 않는다.
+model UtteranceCluster {
+  id              String            @id @default(uuid())
+  analysisId      String
+  analysis        UtteranceAnalysis @relation(fields: [analysisId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 1..m(발화 수 내림차순) · 미분류 = m+1
+  ordinal         Int
+  unassigned      Boolean           @default(false)
+  /// JSON [{ term, score, count }]
+  keywords        String            @default("[]")
+  /// 상위 키워드 3개 연결 | '묶음 N' | '미분류'
+  autoName        String
+  /// 관리자 수정 이름(메모 — 자산 아님 · 감사 아님 · ≤40자 · 금지어 차단 · PII 마스킹)
+  customName      String?
+  /// AI 제안 이름(검사 통과분만 · "AI 제안 — 확인 필요")
+  suggestedName   String?
+  utteranceCount  Int
+  occurrenceSum   Int
+  candidateCount  Int               @default(0)
+  appliedCount    Int               @default(0)
+  /// JSON number[] — 대표 발화 seq 최대 3
+  representativeSeqs String         @default("[]")
+
+  utterances AnalyzedUtterance[]
+
+  @@unique([analysisId, ordinal])
+  @@map("utterance_clusters")
+}
+
+/// [신규 No.21] 분석 대상 발화 1행(병합 후 고유 문장). ★text·sourceMemo는 금지어·PII 마스킹 완료본만(브랜드 타입 — DC-7).
+model AnalyzedUtterance {
+  id                  String            @id @default(uuid())
+  analysisId          String
+  analysis            UtteranceAnalysis @relation(fields: [analysisId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  clusterId           String
+  cluster             UtteranceCluster  @relation(fields: [clusterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 분석 안 정렬 순번(§5.4 ⑦) — 페이지 조회 키
+  seq                 Int
+  text                String
+  textNormalized      String
+  occurrenceCount     Int               @default(1)
+  sourceMemo          String?
+  hasBannedWord       Boolean           @default(false)
+  hasMaskToken        Boolean           @default(false)
+  similarityToCentroid Float?
+  /// 대조 결과(대조 끔 = 전부 null)
+  probeAnswered       Boolean?
+  /// INTENT | FAQ | NODE
+  probeMatchKind      String?
+  /// Intent/FaqEntry/DialogNode.id — FK 없음(사실 기록)
+  probeMatchId        String?
+  probeMatchName      String?
+  /// CONFIRMED | AMBIGUOUS | FAILED | SKIPPED
+  probeBand           String?
+  probeScore          Float?
+  wouldUseRag         Boolean           @default(false)
+  learningCandidate   Boolean           @default(false)
+  /// JSON [{ intentId, name, score, source }] ≤3
+  suggestedIntents    String            @default("[]")
+  /// 반영 기록 — Intent.id FK 없음(의도가 지워져도 사실 기록으로 남는다)
+  appliedIntentId     String?
+  appliedIntentName   String?
+  appliedById         String?
+  appliedByEmail      String?
+  appliedAt           DateTime?
+
+  @@unique([analysisId, seq])
+  @@unique([analysisId, textNormalized])
+  @@index([analysisId, clusterId, seq])
+  @@index([analysisId, learningCandidate, seq])
+  @@index([clusterId])
+  @@map("analyzed_utterances")
 }

@@ -572,12 +572,18 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
     });
   });
 
-  describe('G-15: @AuditView 부착 = VIEW_AUDIT_TARGETS 8개 · recordExport(/recordView( 호출 파일', () => {
-    it('recordExport( 호출 파일은 정확히 3개다(감사로그 CSV·설문 결과 CSV·TC 결과 CSV)', () => {
+  describe('G-15: @AuditView 부착 = VIEW_AUDIT_TARGETS 12개 · recordExport(/recordView( 호출 파일', () => {
+    it('recordExport( 호출 파일은 정확히 4개다(감사로그 CSV·설문 결과 CSV·TC 결과 CSV·발화 묶음 분석 결과 엑셀)', () => {
       const pattern = /\brecordExport\(/;
       const offenders = new Set(apiFileContents.filter(({ f, content }) => pattern.test(content) && !f.endsWith('audit-logs/audit-log.service.ts')).map(({ f }) => f));
       expect(offenders).toEqual(
-        new Set(['apps/api/src/audit-logs/audit-logs.service.ts', 'apps/api/src/stats/surveys/survey-results.service.ts', 'apps/api/src/validation/test-run.service.ts']),
+        new Set([
+          'apps/api/src/audit-logs/audit-logs.service.ts',
+          'apps/api/src/stats/surveys/survey-results.service.ts',
+          'apps/api/src/validation/test-run.service.ts',
+          // [신규 No.21] 닫힌 목록 2(FR-0-297, deep-clustering-설계.md §20.6) — 결과 엑셀 다운로드 감사.
+          'apps/api/src/utterance-analysis/export/utterance-analysis-export.service.ts',
+        ]),
       );
     });
 
@@ -589,14 +595,14 @@ describe('데이터 거버넌스(No.45) 정적 검사 — data-governance-설계
       expect(offenders).toEqual([]);
     });
 
-    it('@AuditView( 부착 위치(컨트롤러#핸들러) 집합이 view-audit-targets.ts의 VIEW_AUDIT_TARGETS 11개와 정확히 같다(No.42 +3)', () => {
+    it('@AuditView( 부착 위치(컨트롤러#핸들러) 집합이 view-audit-targets.ts의 VIEW_AUDIT_TARGETS 12개와 정확히 같다(No.42 +3 · No.21 +1)', () => {
       const targetsEntry = apiFileContents.find(({ f }) => f.endsWith('audit-logs/access/view-audit-targets.ts'));
       expect(targetsEntry).toBeDefined();
       const declared = Array.from(targetsEntry!.content.matchAll(/controller:\s*'([^']+)'/g)).length;
-      expect(declared).toBe(11);
+      expect(declared).toBe(12);
 
       const auditViewCallsites = apiFileContents.reduce((sum, { content }) => sum + nonCommentOccurrences(content, /@AuditView\(/), 0);
-      expect(auditViewCallsites).toBe(11);
+      expect(auditViewCallsites).toBe(12);
     });
   });
 

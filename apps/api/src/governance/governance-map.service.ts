@@ -49,6 +49,7 @@ export class GovernanceMapService {
     const inbox = await this.buildInbox();
     const kbSources = await this.buildKbSources();
     const proactive = await this.buildProactive();
+    const utteranceAnalysis = await this.buildUtteranceAnalysis();
 
     return {
       mode: runtime.mode,
@@ -62,6 +63,25 @@ export class GovernanceMapService {
       ...(inbox ? { inbox } : {}),
       ...(kbSources ? { kbSources } : {}),
       ...(proactive ? { proactive } : {}),
+      ...(utteranceAnalysis ? { utteranceAnalysis } : {}),
+    };
+  }
+
+  /** [신규 No.21] 분석 0건이면 키 자체를 생략한다(deep-clustering-설계.md §13.4 — 바이트 동일, No.35·No.41~43 선례). */
+  private async buildUtteranceAnalysis(): Promise<GovernanceMapResponse['utteranceAnalysis']> {
+    const analyses = await this.prisma.utteranceAnalysis.count();
+    if (analyses === 0) return undefined;
+    const utterances = await this.prisma.analyzedUtterance.count();
+    const nameSuggestEnabled = this.config.get<boolean>('UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED') ?? false;
+    return {
+      analyses,
+      utterances,
+      retentionDays: this.config.get<number>('UTTERANCE_ANALYSIS_RETENTION_DAYS') ?? 90,
+      storesMaskedOnly: true,
+      originalFileStored: false,
+      exits: nameSuggestEnabled ? ['EMBEDDING', 'AUGMENT_LOCAL'] : ['EMBEDDING'],
+      nameSuggestEnabled,
+      retentionJobEnabled: this.config.get<boolean>('DATA_RETENTION_JOB_ENABLED') ?? true,
     };
   }
 

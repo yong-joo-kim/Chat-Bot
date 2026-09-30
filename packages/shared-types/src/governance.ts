@@ -302,5 +302,19 @@ export const GovernanceMapResponseSchema = z.object({
       serverEnabled: z.boolean(),
     })
     .optional(),
+  /** [신규 No.21] 발화 묶음 분석이 1건 이상일 때만 채워진다(0건이면 키 생략 = 바이트 동일,
+   * deep-clustering-설계.md §13.4 — No.35·No.41~43 선례). */
+  utteranceAnalysis: z
+    .object({
+      analyses: z.number().int().nonnegative(),
+      utterances: z.number().int().nonnegative(),
+      retentionDays: z.number().int(),
+      storesMaskedOnly: z.literal(true),
+      originalFileStored: z.literal(false),
+      exits: z.array(z.enum(['EMBEDDING', 'AUGMENT_LOCAL'])),
+      nameSuggestEnabled: z.boolean(),
+      retentionJobEnabled: z.boolean(),
+    })
+    .optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

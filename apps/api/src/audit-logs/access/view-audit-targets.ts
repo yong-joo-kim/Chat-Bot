@@ -23,4 +23,6 @@ export const VIEW_AUDIT_TARGETS: readonly ViewAuditTargetDef[] = [
   { controller: 'InboxThreadsController', handler: 'list', targetType: 'InboxThread' },
   { controller: 'InboxThreadsController', handler: 'getDetail', targetType: 'InboxThread' },
   { controller: 'InboxCustomersController', handler: 'search', targetType: 'Customer' },
+  // 발화 묶음 분석(No.21) 그룹 추가(deep-clustering-설계.md §13.2 · R-14) — 마스킹 문장 열람, 11 → 12.
+  { controller: 'UtteranceAnalysesController', handler: 'listUtterances', targetType: 'UtteranceAnalysis' },
 ];

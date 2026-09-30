@@ -11,6 +11,8 @@ export interface EgressBootCheckInput {
   augmentationGeminiApiKey?: string;
   augmentationGeminiBaseUrl?: string;
   augmentationLocalBaseUrl?: string;
+  /** [신규 No.21] `UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED` — 켜져 있으면 로컬 생성기 호스트도 허용 목록에 있어야 한다. */
+  utteranceNameSuggestEnabled?: boolean;
 }
 
 export function checkEgressBootUrls(input: EgressBootCheckInput, isAllowed: (url: string) => boolean): { ok: boolean; reason?: string } {
@@ -23,6 +25,10 @@ export function checkEgressBootUrls(input: EgressBootCheckInput, isAllowed: (url
   }
   if (input.augmentationProvider === 'local' && input.augmentationLocalBaseUrl) {
     checks.push({ label: '증강 생성기(로컬)', url: input.augmentationLocalBaseUrl });
+  }
+  // [신규 No.21] 발화 묶음 분석 이름 제안(deep-clustering-설계.md §13.3) — 기존 `local` Provider 검사와 같은 규칙.
+  if (input.utteranceNameSuggestEnabled && input.augmentationLocalBaseUrl && input.augmentationProvider !== 'local') {
+    checks.push({ label: '발화 묶음 분석 이름 제안(로컬 생성기)', url: input.augmentationLocalBaseUrl });
   }
   for (const c of checks) {
     if (!c.url) continue;

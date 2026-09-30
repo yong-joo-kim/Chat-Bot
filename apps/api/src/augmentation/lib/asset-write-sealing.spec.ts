@@ -120,19 +120,21 @@ describe('제안 ≠ 자산 구조적 봉인 정적 검사 — ADR-0025 §13, AC
     });
   });
 
-  describe('S-2: applyLearningExample() 호출부는 allowlist 3곳뿐이다', () => {
+  describe('S-2: applyLearningExample() 호출부는 allowlist 4곳뿐이다', () => {
     const ALLOWLIST = [
       'learning/unanswered-questions.service.ts',
       'augmentation/augmentation-accept.service.ts',
       'learning/decomposed-resolve.service.ts',
+      // [신규 No.21] 발화 묶음 분석 예문 반영 — 닫힌 목록 1(FR-0-297, deep-clustering-설계.md §20.6).
+      'utterance-analysis/apply/utterance-apply.service.ts',
     ];
 
-    it('호출 파일이 정확히 3곳이며 전부 allowlist에 있다', () => {
+    it('호출 파일이 정확히 4곳이며 전부 allowlist에 있다', () => {
       const offenders = apiFileContents
         .filter(({ content }) => nonCommentOccurrences(content, /\.applyLearningExample\(/g) > 0)
         .map(({ f }) => f.replace(/\\/g, '/'));
 
-      expect(offenders).toHaveLength(3);
+      expect(offenders).toHaveLength(4);
       for (const file of offenders) {
         expect(ALLOWLIST.some((allowed) => file.endsWith(allowed))).toBe(true);
       }
