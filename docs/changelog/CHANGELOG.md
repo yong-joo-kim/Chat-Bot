@@ -573,3 +573,28 @@ ADR-0048. 규모 A — 모델 없이 동작(모델·LLM 판정 0, 동기 대화 
 ### 검증
 
 api jest 408 suites(5,913 tests, 1 skip) 통과, pii-mask 3 suites / 33 tests, web tsc 오류 0 · vitest 236 files / 1,444 tests, widget 34 files / 253 tests, ml-worker pytest 127. 성능(개발 PC, 규칙 50·표현 2,000): 입구 P95 약 0.46ms(목표 ≤1ms), 출구(가림 포함) P95 약 1.1ms(목표 ≤5ms). 기존 시험 기대값 변경은 닫힌 목록 3건(environment-sealing E-14 · governance-sealing G-15 12→13 · chatbots.service.spec 30→34)뿐.
+
+## 결함 수정 묶음 (No.37·21·36 후속) — 2026-10-01
+
+근거: `docs/04-test/결함분류-2026-10-01.md`. 기존 시험 기대값 변경 없음(import 경로 이동 1줄·타임아웃·신규 시험 추가 제외), 마이그레이션 0, 응답 변경은 선택 필드 2개뿐(키가 없으면 기존 응답과 바이트 동일).
+
+### 해결
+
+- **K-1**: 예문 시드를 최신 예문 19개 + 의도명 1개(상한 20)로 구성 — 예문 20개 이상 의도도 ml-worker 400 없이 생성. 공백 예문·공백 의도명 제외.
+- **N36-2**: 금지어·위험 응답 규칙이 제로폭 문자(`\p{Cf}`·U+034F·U+FE00~FE0F·U+115F·U+1160·U+3164·U+FFA0)로 회피되던 문제 차단. 공유 `normalizeText`·정규화 컬럼·임베딩 해시·스냅샷은 불변(금지어 필터 로컬 함수로만 처리). 탐지와 마스킹이 같은 제거 집합 사용.
+- **N40-1**: 롤백 게이트 완화(BLOCK→WARN)를 직전 운영 버전 롤백에만 적용(ADR-0039 §5). 롤백 preview에 선택 필드 `directRollback`. 웹 롤백 대화상자·승인 상세는 비직전 롤백의 차단을 표시(`rollbackGate.ts`).
+- **N40-3**: BLOCK 게이트에서 초안 해시 ≠ 운영 해시이면 환경 끄기 `PROMOTE_DRAFT`를 409 `ENV_GATE_NOT_PASSED`(`PROMOTE_DRAFT_BLOCKED`)로 거부. `KEEP_PROD`·초안=운영은 허용. disable preview에 선택 필드 `promoteDraftBlocked`. 웹 끄기 대화상자는 해당 선택 비활성+안내.
+- **D-5**: xlsx zip 항목 재정렬을 `XlsxSheetReader.read()`로 공통화 — `buildXlsxTemplate` 출력과 exceljs 생성 파일이 기존 대량등록 리더에서 읽힌다(상한 전체 30MB·항목별 20MB, 해제 전 판정).
+- **D-1**: ml-worker 의존성 선언을 실제 동작 버전에 맞춤(sentence-transformers >=6.1,<7 · numpy >=2.2,<3 · transformers >=5.17,<6 · pytest >=9.1,<10), `requirements-lock.txt` 추가(Windows·Python 3.10·CPU torch 기준).
+- **L-3**: 2,000자 절단을 공용 `truncateAnswer`로 통합. **T-1**: `kb-crawl-pass11` M-A 블록 타임아웃 안정화.
+
+### 알려진 한계·릴리스 노트
+
+- 이모지 금지어가 변이 선택자(U+FE0F)를 구분하지 않게 됨(`❤️`로 등록해도 `❤`에 적중).
+- 길이가 변하는 NFKC 문자·연속 공백이 섞이면 마스킹 위치가 어긋날 수 있음(기존 한계, 탐지는 정상).
+- 미해결(PM 결정 대기): K-1b(로컬·Gemini 실패 시 'G1 폴백' 로그만 남고 빈 배열), N36-1(2인 승인 정책 끄기 1인 우회), L-2(직전 버전 롤백 반복 토글), L-5(계좌 정규식의 날짜 오인). 범위 밖: N36-3. 원인 미확정: T-2(jest worker 종료 경고).
+- 미수행: V-3(xlsx 재정렬 도입 후 5,000행 메모리·시간 실측), 브라우저 수동 확인.
+
+### 검증
+
+api jest 416 suites(5,997 tests, 1 skip) 통과, web tsc 오류 0 · vitest 236 files / 1,454 tests, widget 34 files / 253 tests, pii-mask 33 tests, ml-worker pytest 127 · `pip check` 이상 없음. 관련 75개 스위트 3회 반복에서 부하 시 `utterance-analysis.integration.spec` 1건이 1회 실패(단독 재실행 100/100 통과, 원인 미확정).
