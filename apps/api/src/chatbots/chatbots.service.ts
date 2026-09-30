@@ -435,6 +435,13 @@ export class ChatbotsService {
       await tx.analyzedUtterance.deleteMany({ where: { analysis: { chatbotId: id } } });
       await tx.utteranceCluster.deleteMany({ where: { analysis: { chatbotId: id } } });
       await tx.utteranceAnalysis.deleteMany({ where: { chatbotId: id } });
+      // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §12.4, ADR-0048) — 규칙·출구 가림 설정·
+      // 판정 이벤트(문장 0)·운영 전환 승인 요청은 설정/사실 기록 데이터라 동반 삭제 대상이다(사전검사 409 대상이
+      // 아니다 — 16종 불변). 서로 FK가 없어 순서 무관. 30 → 34테이블. `chatbot.delete` 직전.
+      await tx.guardrailEvent.deleteMany({ where: { chatbotId: id } });
+      await tx.guardrailRule.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotGuardrailSetting.deleteMany({ where: { chatbotId: id } });
+      await tx.prodSwitchApprovalRequest.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

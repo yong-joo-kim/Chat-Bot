@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PaginationQuerySchema, csvEnumArray, paginated } from './common';
+import { GovernanceGuardrailsMapSchema } from './guardrails';
 
 export const GovernanceMode = z.enum(['OFF', 'ON']);
 export type GovernanceMode = z.infer<typeof GovernanceMode>;
@@ -316,5 +317,8 @@ export const GovernanceMapResponseSchema = z.object({
       retentionJobEnabled: z.boolean(),
     })
     .optional(),
+  /** [신규 No.36] 규칙 ≥1 · 이벤트 ≥1 · 가림 설정 행 ≥1 · 승인 정책 켜짐 ≥1일 때만 채워진다(0이면 키 생략 = 바이트 동일,
+   * ai-guardrails-설계.md §8.6). */
+  guardrails: GovernanceGuardrailsMapSchema.optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

@@ -3,12 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import type { EnvironmentGateSettings } from '@chat-bot/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { computeEnvironmentProtectedIds } from '../../versions/lib/environment-protected-versions';
+import type { ApprovalPolicy } from './lib/approval-policy';
 
 export interface PointerStatus {
   prodVersionId: string | null;
   stagingVersionId: string | null;
   enabledAt: Date | null;
   gate: EnvironmentGateSettings;
+  /** [신규 No.36] 운영 전환 2인 승인 정책 — 같은 `findUnique` 행에서 읽는다(쿼리 추가 0). */
+  approval: ApprovalPolicy;
 }
 
 const ENV_PROD_HISTORY_PROTECTED_DEFAULT = 5;
@@ -39,6 +42,7 @@ export class EnvironmentReadService {
         minPassRate: env?.gateMinPassRate ?? 95,
         validHours: env?.gateValidHours ?? 24,
       },
+      approval: { required: env?.approvalRequired ?? false, ttlHours: env?.approvalTtlHours ?? 24 },
     };
   }
 

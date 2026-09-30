@@ -37,6 +37,8 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     // [신규 No.35] 선제 안내 스위치·상한·간격 변경 감사 — `{ proactive: {...} }` 형태로만 채워진다
     // (proactive-messaging-설계.md §12.1 · ADR-0045 §10).
     'proactive',
+    // [신규 No.36] 출구 개인정보 가림 설정(종류·날짜 보호 — 문장 0, ai-guardrails-설계.md §7.4·§14).
+    'guardrailPiiExit',
   ],
   // [신규 No.22] 자산 6종에 'topicId' 추가 — 서비스가 값이 있을 때만 스냅샷 입력에 넣는다(토픽 없는
   // 챗봇의 감사 본문 불변, topic-system-설계.md §15).
@@ -87,7 +89,18 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
   Topic: ['name', 'description', 'sortOrder', 'enabled'],
   // 환경 분리 / 버전 관리(No.40) 그룹 추가(environment-separation-설계.md §18) — 사유 메모 본문·
   // 자산 본문·발화는 화이트리스트에 없다(FR-0-155).
-  ChatbotEnvironment: ['enabled', 'stagingVersionNo', 'prodVersionNo', 'gateMode', 'gateTestSetId', 'gateMinPassRate', 'gateValidHours'],
+  ChatbotEnvironment: [
+    'enabled',
+    'stagingVersionNo',
+    'prodVersionNo',
+    'gateMode',
+    'gateTestSetId',
+    'gateMinPassRate',
+    'gateValidHours',
+    // [신규 No.36] 운영 전환 2인 승인 정책(ai-guardrails-설계.md §10.2·§14).
+    'approvalRequired',
+    'approvalTtlHours',
+  ],
   // 데이터 거버넌스(No.45) 그룹 추가(data-governance-설계.md §11.1) — VIEW/EXPORT·파기 요약은
   // 이 화이트리스트를 거치지 않는다(요약 액션 — AuditLogService.isBulkSummary). `RAW_VIEW`도 여전히
   // 요약뿐(§9.4). 텍스트 필드는 0건(G-18).
@@ -183,6 +196,10 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'utterances',
     'rows',
   ],
+  // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §14, ADR-0048) — **표현·대체 문구 본문은 담지
+  // 않는다**(`expressionCount`·`hasReplacementText` 파생값만). 승인 요청은 사유·메모 본문 0.
+  GuardrailRule: ['name', 'category', 'appliesTo', 'action', 'matchType', 'enabled', 'sortOrder', 'expressionCount', 'hasReplacementText'],
+  ProdSwitchApprovalRequest: ['action', 'status', 'outcome', 'failureCode', 'closedReason', 'targetVersionNo', 'baseProdVersionNo', 'expiresAt', 'gateVerdict'],
 };
 
 /** 엔터티(도메인 객체)에서 화이트리스트 필드만 뽑아 스냅샷을 만든다. */

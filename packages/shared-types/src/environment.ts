@@ -104,6 +104,11 @@ export const EnvironmentStatusSchema = z.discriminatedUnion('enabled', [
         status: z.enum(['PENDING', 'HELD']),
       })
       .nullable(),
+    /**
+     * [신규 No.36 — 선택 필드, ui-spec A-8] 운영 전환 2인 승인이 **켜진** 챗봇에만 실린다(꺼짐 = 키 생략 =
+     * 기존 응답과 바이트 동일). 정책·요청 상세는 `GET …/environment/approval`.
+     */
+    approval: z.object({ required: z.literal(true), ttlHours: z.number().int().min(1).max(168) }).optional(),
   }),
 ]);
 export type EnvironmentStatus = z.infer<typeof EnvironmentStatusSchema>;
@@ -141,6 +146,8 @@ export const DisableEnvironmentPreviewResponseSchema = z.object({
   cancelledSwitchSchedules: z.number().int().nonnegative(),
   /** 동점 노드가 있어 "운영 유지" 후 라이브 동점 승자가 달라질 수 있음(§27 L-6). */
   potentialTieShift: z.boolean(),
+  /** [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다(켜졌을 때만 키 존재 — 기존 응답 바이트 동일). */
+  approvalPolicyActive: z.literal(true).optional(),
 });
 export type DisableEnvironmentPreviewResponse = z.infer<typeof DisableEnvironmentPreviewResponseSchema>;
 
@@ -208,6 +215,11 @@ export const ProdSwitchPreviewResponseSchema = z.object({
   gate: GateEvaluationSchema,
   blockers: z.array(z.enum(['TARGET_NOT_ALLOWED', 'GATE_BLOCKED', 'GATE_CONFIG_ERROR', 'TARGET_UNREADABLE', 'CHATBOT_ARCHIVED', 'ENV_MODE_DISABLED'])),
   warnings: z.array(ProdSwitchWarningSchema),
+  /**
+   * [신규 No.36] 2인 승인이 켜진 챗봇에서만 실린다(꺼짐 = 키 생략). `soloRollbackAllowed`는 ROLLBACK 미리보기에서
+   * 대상이 직전 운영 버전이면 true(승인 없이 즉시 되돌릴 수 있음).
+   */
+  approval: z.object({ required: z.literal(true), soloRollbackAllowed: z.boolean().optional() }).optional(),
 });
 export type ProdSwitchPreviewResponse = z.infer<typeof ProdSwitchPreviewResponseSchema>;
 
@@ -244,6 +256,10 @@ export const EnvironmentSwitchLogItemSchema = z.object({
   disableMode: EnvironmentDisableMode.nullable(),
   actorEmail: z.string().nullable(),
   reason: z.string().nullable(),
+  /** [신규 No.36] `APPROVED`(2인 승인 전환) | `SOLO_ROLLBACK`(직전 버전 단독 롤백) | null. 구 응답에는 키가 없을 수 있다. */
+  approvalMode: z.enum(['APPROVED', 'SOLO_ROLLBACK']).nullable().optional(),
+  /** [신규 No.36 — ui-spec A-9] 승인 요청 id(2인 승인 전환일 때). */
+  approvalRequestId: z.string().uuid().nullable().optional(),
   createdAt: z.coerce.date(),
 });
 export type EnvironmentSwitchLogItem = z.infer<typeof EnvironmentSwitchLogItemSchema>;

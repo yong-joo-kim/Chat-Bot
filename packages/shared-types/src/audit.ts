@@ -117,6 +117,10 @@ export const AuditTargetType = z.enum([
   // 딥러닝 군집분석(No.21) 그룹 추가(deep-clustering-설계.md §13.2, ADR-0047) — 분석 요청·반영·삭제·
   // 다운로드(EXPORT)·열람(VIEW) 감사 대상. 35 → 36종.
   'UtteranceAnalysis',
+  // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §14, ADR-0048) — 위험 응답 규칙 CRUD·
+  // 켜기/끄기·순서, 운영 전환 승인 요청 생성·승인·반려·취소·만료 감사 대상. 36 → 38종.
+  'GuardrailRule',
+  'ProdSwitchApprovalRequest',
 ]);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
@@ -157,6 +161,8 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   KbSource: '지식베이스 소스',
   ProactiveRule: '선제 안내',
   UtteranceAnalysis: '발화 묶음 분석',
+  GuardrailRule: '위험 응답 규칙',
+  ProdSwitchApprovalRequest: '운영 전환 승인 요청',
 };
 
 /**

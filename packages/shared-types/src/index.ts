@@ -40,3 +40,5 @@ export * from './kb-sync';
 export * from './proactive';
 export * from './proactive-eval';
 export * from './utterance-analysis';
+export * from './guardrails';
+export * from './prod-switch-approval';

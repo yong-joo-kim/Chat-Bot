@@ -1,7 +1,8 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { DialogOutput } from '@chat-bot/shared-types';
 import { maskPii } from '@chat-bot/pii-mask';
 import { BannedWordFilterService } from '../banned-words/banned-word-filter.service';
+import { GuardrailRuntimeService } from '../guardrails/runtime/guardrail-runtime.service';
 import type { InputKind } from '../learning/lib/collect-decision';
 import { RagHttpClient } from './rag-http.client';
 import { RagGateService } from './rag-gate.service';
@@ -64,6 +65,9 @@ export class RagAnswerService {
     private readonly callLog: RagCallLogService,
     @Inject('PendingAnswerStore') private readonly pendingStore: PendingAnswerStore,
     private readonly bannedWordFilter: BannedWordFilterService,
+    // [신규 No.36 — 6번째 인자(끝), 선택] 출구 판정(§6.1). 선택 인자라 기존 5인자 생성자 호출(단위 시험)은
+    // 무수정 통과한다 — 없으면 출구 판정 0(도입 전 동작).
+    @Optional() private readonly guardrails?: GuardrailRuntimeService,
   ) {}
 
   /** fire-and-forget 진입점 — 호출부(`PublicConversationService`)는 `await`하지 않는다. */
@@ -140,7 +144,30 @@ export class RagAnswerService {
       }
       const sources = input.showSources && !scopeMismatch ? sanitizeSources(judgement.response.source_info) : [];
       const answerText = truncateAnswer(judgement.response.result);
-      const outputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: answerText } } as DialogOutput]);
+      // [신규 No.36] 출구 가드레일(§6.1) — 2,000자 절단 직후 · 출구 금지어 마스킹 전. 예외를 던지지 않는다.
+      const verdict = this.guardrails ? await this.guardrails.evaluateOutbound(input.chatbotId, answerText) : null;
+
+      if (verdict && (verdict.kind === 'REPLACE' || verdict.kind === 'FALLBACK')) {
+        // 외부 호출 자체는 성공 — 호출 품질 기록은 그대로 남기고, 사용자에게는 기존 실패 수렴(`FAILED`)으로 끝낸다(출처 0).
+        await this.callLog.record({
+          chatbotId: input.chatbotId,
+          conversationLogId: input.messageId,
+          outcome: 'SUCCESS',
+          httpStatus: 200,
+          latencyMs,
+          retryCount: call.retryCount,
+          retrievalSuccess: 1,
+          sourceCount: judgement.response.source_info?.total_sources,
+          scopeCompany: input.scope.company,
+        });
+        const replacement = verdict.kind === 'REPLACE' && verdict.replacementText ? verdict.replacementText : input.fallbackText;
+        await this.finishAsFallback(input, logPort, maskedQuestion, { text: replacement, guardrailStage: 'OUTBOUND' });
+        this.guardrails?.recordEvents({ chatbotId: input.chatbotId, messageId: input.messageId, verdict });
+        return;
+      }
+
+      const finalText = verdict ? verdict.text : answerText;
+      const outputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: finalText } } as DialogOutput]);
 
       await this.callLog.record({
         chatbotId: input.chatbotId,
@@ -163,20 +190,31 @@ export class RagAnswerService {
         channelType: 'WEB',
         sessionId: input.sessionId,
         rawUserMessage: maskedQuestion,
-        rawBotResponse: answerText,
+        rawBotResponse: finalText,
         isAnswered: true,
         answeredByRag: true,
         inputKind: input.inputKind,
         feedbackOffered: input.feedbackOffered,
         ...(input.servedVersionId ? { servedVersionId: input.servedVersionId } : {}),
       });
+      if (verdict) this.guardrails?.recordEvents({ chatbotId: input.chatbotId, messageId: input.messageId, verdict });
     } finally {
       this.gate.release();
     }
   }
 
-  private async finishAsFallback(input: RagAnswerRunInput, logPort: ConversationLogPort, maskedQuestion: string): Promise<void> {
-    const outputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: input.fallbackText } } as DialogOutput]);
+  /**
+   * `override`([신규 No.36]) — 출구 가드레일이 답을 막았을 때만 준다: 사용자에게 나갈 문구와 대화 기록 표식.
+   * 없으면 현행과 같다(기존 호출 4곳 무수정).
+   */
+  private async finishAsFallback(
+    input: RagAnswerRunInput,
+    logPort: ConversationLogPort,
+    maskedQuestion: string,
+    override?: { text: string; guardrailStage: 'OUTBOUND' },
+  ): Promise<void> {
+    const fallbackText = override?.text ?? input.fallbackText;
+    const outputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: fallbackText } } as DialogOutput]);
     this.pendingStore.complete(input.messageId, { status: 'FAILED', outputs });
     await logPort.record({
       id: input.messageId,
@@ -185,12 +223,13 @@ export class RagAnswerService {
       channelType: 'WEB',
       sessionId: input.sessionId,
       rawUserMessage: maskedQuestion,
-      rawBotResponse: input.fallbackText,
+      rawBotResponse: fallbackText,
       isAnswered: false,
       answeredByRag: false,
       inputKind: input.inputKind,
       feedbackOffered: input.feedbackOffered,
       ...(input.servedVersionId ? { servedVersionId: input.servedVersionId } : {}),
+      ...(override ? { guardrailStage: override.guardrailStage } : {}),
     });
   }
 

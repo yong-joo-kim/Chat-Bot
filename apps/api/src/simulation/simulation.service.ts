@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { buildDialogueIndex, judgeBand, mergeOverlay, resolveTurn } from '@chat-bot/dialogue-engine';
+import { buildDialogueIndex, judgeBand, mergeOverlay, resolveTurn, willSurveyConsumeInput } from '@chat-bot/dialogue-engine';
 import type { DialogueIndex } from '@chat-bot/dialogue-engine';
 import type { ApiCallSuspension, DialogueTurnResult, WorkflowEmission } from '@chat-bot/dialogue-engine';
 import { maskPii } from '@chat-bot/pii-mask';
@@ -16,6 +16,7 @@ import {
   type CompareTurnResult,
   type DialogOutput,
   type DialogueBundle,
+  type GuardrailInboundView,
   type MatchTrace,
   type ResolvedBundleTarget,
   type SimulateApiMode,
@@ -29,6 +30,8 @@ import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
 import { DialogueBundleService } from '../dialogue-common/dialogue-bundle.service';
 import { TopicLookupService } from '../topics/topic-lookup.service';
 import { resolveAnsweredTopicId } from '../conversation/lib/answered-topic';
+import { buildBotResponseText } from '../conversation/lib/conversation-log';
+import { GuardrailRuntimeService } from '../guardrails/runtime/guardrail-runtime.service';
 import { SemanticMatchService } from '../embedding/semantic-match.service';
 import type { SemanticMatchVectorSource } from '../embedding/semantic-match.service';
 import { AnswerSettingsCacheService } from '../answer-settings/answer-settings-cache.service';
@@ -81,6 +84,9 @@ export class SimulationService {
     // [신규 No.41] 모의 표시 전용 — 발송·적재는 하지 않는다(W-9 — `WorkflowTriggerService` 미주입).
     private readonly workflowCatalog: WorkflowCatalogService,
     private readonly versionBundles: VersionBundleService,
+    // [신규 No.36 — 14번째 인자(끝), 선택] 입구·출구 판정 **표시**(이벤트 0 — `recordEvents(` 호출 0, GR-6). 선택 인자라
+    // 기존 13인자 생성자 호출(단위 시험)은 무수정 통과한다 — 없으면 두 키가 응답에 생기지 않는다.
+    private readonly guardrails?: GuardrailRuntimeService,
   ) {}
 
   /** [신규 No.22 — §6.5] 답한 자산의 topicId가 있을 때만 `{id,name,enabled}`를 채운다(추가 조회 0 — 맵은 호출부가 1회 조회). */
@@ -175,6 +181,20 @@ export class SimulationService {
         ? await this.semanticMatch.score(chatbotId, semanticText, bundle, thresholds, source.semanticSource)
         : undefined;
 
+    // [신규 No.36 — §9] 입구 판정 표시 — 텍스트 턴이고 설문이 소비하지 않을 턴만. 엔진 결과는 그대로 보여 준다
+    // (무엇에 매칭됐는지 관리자가 알아야 한다) — 운영이면 대체 문구가 나간다는 것을 표시로 알린다.
+    const guardrailVerdict =
+      semanticText !== undefined && !willSurveyConsumeInput(dto.state, bundle, now) ? await this.guardrails?.evaluateInbound(chatbotId, semanticText) : undefined;
+    const guardrailInbound: GuardrailInboundView | undefined =
+      guardrailVerdict && guardrailVerdict.action !== 'PASS'
+        ? {
+            action: guardrailVerdict.action,
+            ruleNames: guardrailVerdict.hits.map((h) => h.ruleName),
+            ...(guardrailVerdict.replacementText ? { replacementText: guardrailVerdict.replacementText } : {}),
+          }
+        : undefined;
+    const blockRag = guardrailVerdict?.action === 'REPLACE' || guardrailVerdict?.action === 'NO_RAG';
+
     const turnInput = dto.buttonAction ? { buttonAction: dto.buttonAction } : { message: dto.message ?? '' };
     let result: DialogueTurnResult = resolveTurn(turnInput, dto.state, bundle, now, { index, semantic, surveyPreview: dto.surveyPreview });
 
@@ -188,7 +208,7 @@ export class SimulationService {
     const names = enrichNames(bundle, result);
 
     const matchTrace = semantic
-      ? await this.buildMatchTrace(semantic, thresholds, settings, dto.useRag, semanticText)
+      ? await this.buildMatchTrace(semantic, thresholds, settings, dto.useRag && !blockRag, semanticText, chatbotId, buildBotResponseText(result.outputs))
       : settings.semanticEnabled
         ? ({ band: 'SKIPPED', top3: [], ragUsed: false } as MatchTrace)
         : undefined;
@@ -226,6 +246,7 @@ export class SimulationService {
       answeredTopic,
       ...(source.resolvedTarget ? { target: source.resolvedTarget } : {}),
       ...(workflowSteps ? { workflowSteps } : {}),
+      ...(guardrailInbound ? { guardrailInbound } : {}),
     };
   }
 
@@ -377,6 +398,8 @@ export class SimulationService {
     settings: Awaited<ReturnType<AnswerSettingsCacheService['get']>>,
     useRag: boolean,
     questionText: string | undefined,
+    chatbotId: string,
+    fallbackText: string,
   ): Promise<MatchTrace> {
     const band = judgeBand(semantic.ranked, thresholds);
     const top3 = semantic.ranked.slice(0, 3).map((c) => ({ kind: c.kind, id: c.id, label: c.matchedText, score: c.score }));
@@ -384,6 +407,7 @@ export class SimulationService {
     let ragUsed = false;
     let ragLatencyMs: number | undefined;
     let ragSourceCount: number | undefined;
+    let ragPreview: MatchTrace['ragPreview'];
 
     const canTryRag = useRag && band.kind === 'FAILED' && settings.ragEnabled && !!settings.ragCompany && this.ragHttpClient.isConfigured() && !!questionText;
 
@@ -409,6 +433,12 @@ export class SimulationService {
             if (judgement.ok) {
               ragUsed = true;
               ragSourceCount = judgement.response.source_info?.total_sources;
+              // [신규 No.36 — §9] 운영과 같은 절단(2,000자) 뒤 출구 판정 — 사용자에게 나갈 문구 미리보기(이벤트 0).
+              if (this.guardrails) {
+                const answerText = judgement.response.result.length <= 2000 ? judgement.response.result : `${judgement.response.result.slice(0, 2000)}…`;
+                const verdict = await this.guardrails.evaluateOutbound(chatbotId, answerText);
+                ragPreview = await this.guardrails.toRagPreview(verdict, answerText, fallbackText);
+              }
             }
           } else {
             this.ragGate.recordFailure();
@@ -422,7 +452,7 @@ export class SimulationService {
       }
     }
 
-    return { band: band.kind, top3, ragUsed, ragLatencyMs, ragSourceCount };
+    return { band: band.kind, top3, ragUsed, ragLatencyMs, ragSourceCount, ...(ragPreview ? { ragPreview } : {}) };
   }
 
   async compare(chatbotId: string, dto: CompareRequestDto): Promise<CompareResponse> {

@@ -24,5 +24,7 @@ export interface ConversationLogPort {
     feedbackOffered?: boolean;
     /** [신규 No.40] POST 시점의 운영 포인터(값이 있을 때만 키 — 조건부 전개, §14). */
     servedVersionId?: string;
+    /** [신규 No.36] 출구 대체·폴백 턴 표식(값이 있을 때만 키 — 조건부 전개, ai-guardrails-설계.md §6.2). */
+    guardrailStage?: 'INBOUND' | 'OUTBOUND';
   }): Promise<void>;
 }

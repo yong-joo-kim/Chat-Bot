@@ -111,6 +111,11 @@ model Chatbot {
   proactiveDailyStats     ProactiveDailyStat[]
   /// [신규 No.21] 역참조만 — DB 컬럼 변화 0(ADR-0047). 발화 묶음 분석은 환경 밖 · 영구삭제 동반 삭제.
   utteranceAnalyses       UtteranceAnalysis[]
+  /// [신규 No.36] 역참조만 — DB 컬럼 변화 0(ADR-0048). 위험 응답 규칙·출구 개인정보 가림 설정·운영 전환
+  /// 승인 요청은 환경 밖(스냅샷·복사·토픽 분리 대상 아님) · 영구삭제 동반 삭제.
+  guardrailRules          GuardrailRule[]
+  guardrailSetting        ChatbotGuardrailSetting?
+  switchApprovalRequests  ProdSwitchApprovalRequest[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -545,6 +550,10 @@ model ConversationLog {
   /// [신규 No.45] 보존기간 파기로 userMessage·botResponse를 ""로 소거한 시각. 쓰기 = governance-data.writer.ts 1파일.
   /// 행·수치·버킷·sessionId·groupId·매칭 id는 변경하지 않는다(ADR-0040 §4). null = 소거 전.
   textPurgedAt DateTime?
+  /// [신규 No.36] 가드레일이 이 턴의 답을 **막은** 경우만 INBOUND(입구 대체) | OUTBOUND(출구 대체·폴백).
+  /// 기록만·AI로 안 보냄·가림은 null. 금지어 `blockedByFilter`와 별개. 쓰기 주체 = record() 1곳 · 적재 후 불변 ·
+  /// 인덱스 없음 · 백필 없음(기존 행 = null이 사실).
+  guardrailStage String?
 
   @@index([chatbotId, createdAt])
   @@index([chatbotId, dayBucket])
@@ -1099,6 +1108,10 @@ model ChatbotEnvironment {
   gateValidHours   Int       @default(24)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  /// [신규 No.36] 운영 전환 2인 승인 정책(꺼짐 = 현행 동작). 쓰기 = environment-pointer.writer.ts 1파일.
+  approvalRequired Boolean   @default(false)
+  /// 승인 요청 만료 시간(1~168). 새 요청부터 적용.
+  approvalTtlHours Int       @default(24)
 
   @@map("chatbot_environments")
 }
@@ -1128,6 +1141,10 @@ model EnvironmentSwitchLog {
   actorEmail          String?
   /// 사유 메모(≤200 코드 포인트, 제어문자 금지 — MemoSchema 재사용)
   reason              String?
+  /// [신규 No.36] 2인 승인으로 실행된 전환의 승인 요청 id(FK 없음).
+  approvalRequestId   String?
+  /// [신규 No.36] APPROVED(2인 승인 전환) | SOLO_ROLLBACK(직전 버전 단독 롤백) | null.
+  approvalMode        String?
   createdAt           DateTime  @default(now())
 
   @@index([chatbotId, environment, createdAt])
@@ -2465,4 +2482,131 @@ model AnalyzedUtterance {
   @@index([analysisId, learningCandidate, seq])
   @@index([clusterId])
   @@map("analyzed_utterances")
+}
+
+/// [신규 No.36] 위험 응답 규칙(챗봇별 · 대화 자산 아님 — 스냅샷·복사·승격 대상 아님). 표현은 관리자가
+/// 쓴 설정값(원문 저장). 쓰기 유일 파일 = guardrails/core/guardrail-rule.store.ts(+ 영구삭제 deleteMany).
+model GuardrailRule {
+  id              String   @id @default(uuid())
+  chatbotId       String
+  chatbot         Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name            String
+  nameNormalized  String
+  /// GuardrailCategory
+  category        String
+  /// 원문 표현 JSON 배열(1~100 · 각 ≤50)
+  expressions     String
+  /// BannedWordMatchType(EXACT | CONTAINS)
+  matchType       String   @default("CONTAINS")
+  /// INBOUND | OUTBOUND | BOTH
+  appliesTo       String
+  /// MONITOR | REPLACE | NO_RAG
+  action          String   @default("MONITOR")
+  replacementText String?
+  enabled         Boolean  @default(true)
+  sortOrder       Int
+  createdById     String?
+  createdByEmail  String?
+  updatedById     String?
+  updatedByEmail  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([chatbotId, nameNormalized])
+  @@index([chatbotId, sortOrder])
+  @@index([enabled, chatbotId])
+  @@map("guardrail_rules")
+}
+
+/// [신규 No.36] 챗봇별 출구 개인정보 가림 설정(1:1 · 행 없음 = 기본값 주민번호·카드 + 날짜 보호).
+/// 쓰기 유일 파일 = guardrails/core/guardrail-setting.store.ts.
+model ChatbotGuardrailSetting {
+  chatbotId        String   @id
+  chatbot          Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// GuardrailPiiKind[] JSON
+  piiExitKinds     String   @default("[\"RRN\",\"CARD\"]")
+  piiPreserveDates Boolean  @default(true)
+  updatedById      String?
+  updatedByEmail   String?
+  updatedAt        DateTime @updatedAt
+
+  @@map("chatbot_guardrail_settings")
+}
+
+/// [신규 No.36] 가드레일 판정 이벤트(사실 기록 · **문장 0** · FK 0). 쓰기 유일 파일 =
+/// guardrails/runtime/guardrail-event.writer.ts. 자동 삭제 없음(문장이 없어 보존 종류 아님).
+model GuardrailEvent {
+  id            String   @id @default(uuid())
+  chatbotId     String
+  /// ConversationLog.id(= 공개 messageId) — FK 없음
+  messageId     String
+  /// INBOUND | OUTBOUND
+  stage         String
+  /// RULE | PII | ERROR
+  kind          String
+  ruleId        String?
+  ruleName      String?
+  category      String?
+  ruleAction    String?
+  /// MONITOR | REPLACE | NO_RAG | MASK | FALLBACK
+  appliedAction String
+  decisive      Boolean  @default(false)
+  /// CHANGED | NONE
+  effect        String
+  piiKind       String?
+  piiCount      Int?
+  errorCode     String?
+  dayBucket     String
+  createdAt     DateTime @default(now())
+
+  @@index([chatbotId, dayBucket])
+  @@index([chatbotId, ruleId, dayBucket])
+  @@index([chatbotId, createdAt])
+  @@index([messageId])
+  @@map("guardrail_events")
+}
+
+/// [신규 No.36] 운영 전환 2인 승인 요청(ADR-0048). 모든 상태 전이는 PENDING CAS. 챗봇당 대기 1건 =
+/// nullable @unique pendingLock(원시 부분 인덱스 0). 쓰기 유일 파일 =
+/// environment/approval/switch-approval.store.ts. 사유·반려 메모는 금지어 → PII 마스킹본(≤200).
+model ProdSwitchApprovalRequest {
+  id                String    @id @default(uuid())
+  chatbotId         String
+  chatbot           Chatbot   @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// PROD_SWITCH | PROD_ROLLBACK | SCHEDULED_PROD_SWITCH
+  action            String
+  targetVersionId   String
+  targetVersionNo   Int
+  baseProdVersionId String
+  baseProdVersionNo Int
+  deployScheduleId  String?
+  /// GateEvaluation JSON
+  gateSnapshot      String
+  /// string[] JSON
+  warningCodes      String
+  diffChangedCount  Int
+  reason            String?
+  /// PENDING | APPROVED | REJECTED | CANCELLED | EXPIRED
+  status            String
+  /// APPLIED | NOOP | FAILED | SCHEDULED (APPROVED일 때)
+  outcome           String?
+  failureCode       String?
+  /// REQUESTER | POLICY_OFF | BASE_CHANGED | SCHEDULE_INACTIVE (CANCELLED일 때)
+  closedReason      String?
+  decisionNote      String?
+  requestedById     String
+  requestedByEmail  String
+  decidedById       String?
+  decidedByEmail    String?
+  decidedAt         DateTime?
+  expiresAt         DateTime
+  /// 대기일 때만 chatbotId — 챗봇당 대기 1건
+  pendingLock       String?   @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([chatbotId, createdAt])
+  @@index([status, expiresAt])
+  @@index([deployScheduleId])
+  @@map("prod_switch_approval_requests")
 }

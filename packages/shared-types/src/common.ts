@@ -189,6 +189,14 @@ export const ApiErrorCode = z.enum([
   'UTTERANCE_ANALYSIS_BUSY',
   'UTTERANCE_ANALYSIS_STORE_FULL',
   'UTTERANCE_ANALYSIS_TOO_FEW',
+  // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §13.3, ADR-0048) — 운영 전환 2인 승인 6종.
+  // 가드레일 규칙 관리는 기존 코드(VALIDATION_FAILED·BANNED_WORD_BLOCKED 등)를 재사용한다.
+  'ENV_APPROVAL_REQUIRED',
+  'APPROVAL_SELF_FORBIDDEN',
+  'APPROVAL_NOT_PENDING',
+  'APPROVAL_BASE_CHANGED',
+  'APPROVAL_PENDING_EXISTS',
+  'APPROVAL_POLICY_UNAVAILABLE',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

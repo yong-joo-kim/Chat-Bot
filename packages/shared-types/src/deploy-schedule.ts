@@ -62,6 +62,8 @@ export const DeployScheduleFailureReason = z.enum([
   'INTERNAL_ERROR',
   // [신규 No.40] 실행 시 차단 게이트 재평가 미달 — 영구(재시도 없음).
   'GATE_NOT_PASSED',
+  // [신규 No.36] 2인 승인이 켜진 챗봇의 운영 전환 예약이 승인 없이 도래 — 영구(재시도 없음, ADR-0048).
+  'APPROVAL_MISSING',
 ]);
 export type DeployScheduleFailureReason = z.infer<typeof DeployScheduleFailureReason>;
 

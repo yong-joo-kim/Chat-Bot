@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type {
   EnvironmentVersionRef,
   GateEvaluation,
@@ -24,7 +25,9 @@ import { VersionVectorResolver } from '../../embedding/version-vectors/version-v
 import { EnvironmentCacheEvents } from '../../common/events/environment-cache.events';
 import { EnvironmentPointerWriter } from './environment-pointer.writer';
 import { EnvironmentReadService } from './environment-read.service';
+import type { PointerStatus } from './environment-read.service';
 import { isSwitchTargetAllowed, pickRollbackTarget, classifySwitch } from './lib/switch-rules';
+import { requiresApproval } from './lib/approval-policy';
 import { evaluateProdSwitchGate } from './lib/gate';
 import type { GateLatestRun } from './lib/gate';
 import { computeSwitchWarnings } from './lib/switch-warnings';
@@ -35,6 +38,17 @@ export interface SwitchInvocation {
   deployScheduleId?: string;
   /** 생략 시 `new Date()`(이 파일은 `deploy-schedules/**` D-12 스캔 대상 밖이다). */
   now?: Date;
+  /**
+   * [신규 No.36] 2인 승인 실행 호출 — 승인 서비스만 넘긴다. `claim`은 **포인터 CAS와 같은 트랜잭션 안에서** 요청을
+   * `PENDING → APPROVED`로 선점하는 콜백(0행이면 `APPROVAL_NOT_PENDING`으로 전체 롤백 — 승인됐는데 미실행 상태가
+   * 존재하지 않는다, ai-guardrails-설계.md §10.8).
+   */
+  approval?: { requestId: string; approverId: string; claim: (tx: Prisma.TransactionClient) => Promise<number> };
+}
+
+interface ApprovalTrace {
+  approvalMode?: 'APPROVED' | 'SOLO_ROLLBACK';
+  approvalRequestId?: string;
 }
 
 interface VersionMeta {
@@ -288,6 +302,16 @@ export class ProdSwitchService {
 
     const outcome = currentMeta && targetMeta ? classifySwitch(targetMeta.id, currentMeta.id) : 'NOOP';
 
+    // [신규 No.36] 2인 승인이 켜진 챗봇에서만 실린다(꺼짐 = 키 생략 = 현행 응답과 바이트 동일). 콘솔이 버튼 문구
+    // ("운영 전환" ↔ "승인 요청")를 이 값으로 고른다. `soloRollbackAllowed` = ROLLBACK 대상이 직전 운영 버전인가.
+    let approval: ProdSwitchPreviewResponse['approval'];
+    if (pointer.approval.required) {
+      approval = { required: true };
+      if (input.kind === 'ROLLBACK' && pointer.prodVersionId) {
+        approval.soloRollbackAllowed = targetId ? await this.isDirectRollbackTarget(chatbotId, pointer.prodVersionId, targetId) : false;
+      }
+    }
+
     return {
       kind: input.kind,
       current: currentMeta ? this.toRef(currentMeta) : { versionId: '', versionNo: 0, capturedAt: new Date(0), label: null },
@@ -298,7 +322,76 @@ export class ProdSwitchService {
       gate,
       blockers: Array.from(new Set(blockers)),
       warnings,
+      ...(approval ? { approval } : {}),
     };
+  }
+
+  /** 대상이 `pickRollbackTarget()` 결과(= 직전 운영 버전)와 같은가 — 2인 승인 예외 판정(R-8). */
+  private async isDirectRollbackTarget(chatbotId: string, currentProd: string, targetVersionId: string): Promise<boolean> {
+    const historyDesc = await this.environmentRead.getProdHistoryDesc(chatbotId);
+    const existing = await this.prisma.chatbotVersion.findMany({ where: { chatbotId }, select: { id: true } });
+    return pickRollbackTarget(historyDesc, currentProd, new Set(existing.map((v) => v.id))) === targetVersionId;
+  }
+
+  /**
+   * ★ [신규 No.36] 2인 승인 **강제 지점**(ai-guardrails-설계.md §10.8 · AG-11) — `switch()`의 `switchProd(` 호출 앞에서
+   * 정확히 1번 통과해야 한다. 정책이 꺼져 있으면 현행과 동일(즉시 통과 · 추가 쿼리 0 — 정책은 `getPointerStatus`
+   * 행에서 이미 읽었다).
+   */
+  private async assertApprovalSatisfied(
+    chatbotId: string,
+    dto: { targetVersionId: string; expectedProdVersionId: string },
+    kind: 'SWITCH' | 'ROLLBACK',
+    invocation: SwitchInvocation | undefined,
+    pointer: PointerStatus,
+    now: Date,
+  ): Promise<ApprovalTrace> {
+    if (!pointer.approval.required) return {};
+
+    // 승인 서비스가 넘긴 호출 — 요청 행을 다시 읽어 검증한다(요청자 ≠ 승인자 · 기준·대상 일치 · 만료 전).
+    if (invocation?.approval) {
+      const row = await this.prisma.prodSwitchApprovalRequest.findUnique({ where: { id: invocation.approval.requestId } });
+      if (!row || row.chatbotId !== chatbotId || row.status !== 'PENDING') {
+        throw new ApiException('APPROVAL_NOT_PENDING', 409, '이미 처리되었거나 만료된 승인 요청입니다.', [{ field: 'status', message: row?.status ?? 'NOT_FOUND' }]);
+      }
+      if (row.requestedById === invocation.approval.approverId) {
+        throw new ApiException('APPROVAL_SELF_FORBIDDEN', 403, '본인이 요청한 건은 승인할 수 없습니다. 다른 관리자에게 승인을 요청해 주세요.');
+      }
+      if (row.expiresAt.getTime() <= now.getTime()) {
+        throw new ApiException('APPROVAL_NOT_PENDING', 409, '승인 기한이 지나 만료되었습니다.', [{ field: 'status', message: 'EXPIRED' }]);
+      }
+      if (row.targetVersionId !== dto.targetVersionId || row.baseProdVersionId !== dto.expectedProdVersionId) {
+        throw new ApiException('ENV_POINTER_STALE', 409, '요청한 뒤 대상 또는 운영 버전이 바뀌었습니다. 다시 확인해 주세요.');
+      }
+      return { approvalMode: 'APPROVED', approvalRequestId: row.id };
+    }
+
+    // 롤백 예외 — 직전 운영 버전만(그 밖의 이력 버전은 승인 필요).
+    const isDirect = kind === 'ROLLBACK' && !!pointer.prodVersionId && (await this.isDirectRollbackTarget(chatbotId, pointer.prodVersionId, dto.targetVersionId));
+    if (!requiresApproval(pointer.approval, kind, isDirect)) return { approvalMode: 'SOLO_ROLLBACK' };
+
+    // 예약 실행 — 승인된 요청이 이 예약에 묶여 있어야 하고, 이미 쓰인 요청(전환 이력에 남은)은 다시 쓸 수 없다(1회용).
+    if (invocation?.deployScheduleId) {
+      const request = await this.prisma.prodSwitchApprovalRequest.findFirst({
+        where: {
+          chatbotId,
+          deployScheduleId: invocation.deployScheduleId,
+          status: 'APPROVED',
+          outcome: 'SCHEDULED',
+          targetVersionId: dto.targetVersionId,
+          baseProdVersionId: dto.expectedProdVersionId,
+        },
+        select: { id: true },
+      });
+      if (request) {
+        const used = await this.prisma.environmentSwitchLog.findFirst({ where: { chatbotId, approvalRequestId: request.id }, select: { id: true } });
+        if (!used) return { approvalMode: 'APPROVED', approvalRequestId: request.id };
+      }
+    }
+
+    throw new ApiException('ENV_APPROVAL_REQUIRED', 409, '이 챗봇은 운영 전환에 2인 승인이 필요합니다. 승인 요청을 보내 다른 관리자의 승인을 받아 주세요.', [
+      { field: 'reason', message: 'APPROVAL_REQUIRED' },
+    ]);
   }
 
   /** 즉시·예약·롤백 공용 확정(§9.3). */
@@ -319,6 +412,8 @@ export class ProdSwitchService {
     if (!targetMeta) throw new ApiException('NOT_FOUND', 404, NOT_FOUND_MESSAGE);
 
     if (dto.targetVersionId === chatbot.prodVersionId) {
+      // [신규 No.36] 승인 실행 호출에서 대상 = 현재 운영이면 요청 이후 기준이 바뀐 것이다(요청 시점에는 대상 ≠ 기준이었다).
+      if (invocation?.approval) throw new ApiException('ENV_POINTER_STALE', 409, '요청한 뒤 운영 버전이 바뀌었습니다. 다시 확인해 주세요.');
       const currentMeta = await this.loadVersionRow(chatbotId, chatbot.prodVersionId);
       return {
         outcome: 'NOOP',
@@ -337,6 +432,9 @@ export class ProdSwitchService {
       kind,
     });
     if (!allowed) throw new ApiException('ENV_TARGET_NOT_STAGING', 409, '전환 대상은 현재 스테이징 또는 운영 이력 버전만 가능합니다.');
+
+    // [신규 No.36] 2인 승인 강제 지점 — `switchProd(` 호출 앞 1곳(AG-11).
+    const approvalTrace = await this.assertApprovalSatisfied(chatbotId, dto, kind, invocation, pointer, now);
 
     const gate = await this.evaluateGate(chatbotId, dto.targetVersionId, kind);
     if (gate.verdict === 'BLOCK' && kind === 'SWITCH') {
@@ -362,7 +460,7 @@ export class ProdSwitchService {
     let count: number;
     try {
       count = await this.prisma.$transaction(async (tx) => {
-        return this.writer.switchProd(tx, {
+        const changed = await this.writer.switchProd(tx, {
           chatbotId,
           expectedProdVersionId: dto.expectedProdVersionId,
           versionId: targetMeta.id,
@@ -373,7 +471,16 @@ export class ProdSwitchService {
           now,
           actor: invocation?.actor ?? this.auditLogService.currentActorSnapshot(),
           reason: dto.reason,
+          approvalMode: approvalTrace.approvalMode,
+          approvalRequestId: approvalTrace.approvalRequestId,
         });
+        // [신규 No.36] 승인 요청 선점은 포인터 CAS와 **같은 트랜잭션 안**이다 — 0행(다른 승인·취소·정책 끔이 먼저)이면
+        // 포인터 갱신까지 전부 롤백된다.
+        if (changed > 0 && invocation?.approval) {
+          const claimed = await invocation.approval.claim(tx);
+          if (claimed === 0) throw new ApiException('APPROVAL_NOT_PENDING', 409, '이미 처리되었거나 만료된 승인 요청입니다.', [{ field: 'status', message: 'CLAIM_LOST' }]);
+        }
+        return changed;
       });
     } catch (e) {
       if (isBusyError(e)) throw new ApiException('ENV_SWITCH_BUSY', 409, '다른 변경과 동시에 처리되었습니다. 잠시 후 다시 시도해 주세요.');
@@ -402,7 +509,11 @@ export class ProdSwitchService {
       this.logger.warn(`전환 후 벡터 보존 실패(흡수): chatbotId=${chatbotId} versionId=${targetMeta.id}`);
     }
 
-    const prefix = invocation?.auditSummaryPrefix ? `${invocation.auditSummaryPrefix} ` : '';
+    const prefix = invocation?.auditSummaryPrefix
+      ? `${invocation.auditSummaryPrefix} `
+      : approvalTrace.approvalMode === 'SOLO_ROLLBACK'
+        ? '[2인 승인 예외 — 직전 버전 단독 롤백] '
+        : '';
     await this.auditLogService.record({
       action: 'UPDATE',
       targetType: 'ChatbotEnvironment',

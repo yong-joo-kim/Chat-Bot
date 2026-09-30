@@ -34,6 +34,9 @@ export class EnvironmentHistoryService {
       disableMode: row.disableMode as EnvironmentSwitchLogItem['disableMode'],
       actorEmail: row.actorEmail,
       reason: row.reason,
+      // [신규 No.36] 2인 승인 전환·단독 롤백 표식 — 값이 있을 때만 키를 싣는다(그 밖의 행 = 현행 응답과 바이트 동일).
+      ...(row.approvalMode ? { approvalMode: row.approvalMode as 'APPROVED' | 'SOLO_ROLLBACK' } : {}),
+      ...(row.approvalRequestId ? { approvalRequestId: row.approvalRequestId } : {}),
       createdAt: row.createdAt,
     }));
 

@@ -247,6 +247,14 @@ const EnvSchema = z.object({
   UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED: envBoolean(false),
   UTTERANCE_ANALYSIS_NAME_SUGGEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
   UTTERANCE_ANALYSIS_NAME_SUGGEST_BUDGET_MS: z.coerce.number().int().min(10000).max(1800000).default(300000),
+  // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §15, ADR-0048) — 전부 선택(기본값 있음 · 기동
+  // 조건 불변). 새 백그라운드 루프 0 — `jest.isolate-env.js` 변경 불필요. 승인 만료 시간은 환경변수가 아니라
+  // 챗봇별 정책(1~168시간)이다.
+  GUARDRAILS_ENABLED: envBoolean(true),
+  GUARDRAIL_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(600000).default(60000),
+  GUARDRAIL_MAX_RULES_PER_CHATBOT: z.coerce.number().int().min(1).max(200).default(50),
+  GUARDRAIL_MAX_EXPRESSIONS_PER_CHATBOT: z.coerce.number().int().min(100).max(10000).default(2000),
+  ENV_APPROVAL_OFF_LOCKED: envBoolean(false),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */

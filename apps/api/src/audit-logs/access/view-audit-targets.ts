@@ -25,4 +25,6 @@ export const VIEW_AUDIT_TARGETS: readonly ViewAuditTargetDef[] = [
   { controller: 'InboxCustomersController', handler: 'search', targetType: 'Customer' },
   // 발화 묶음 분석(No.21) 그룹 추가(deep-clustering-설계.md §13.2 · R-14) — 마스킹 문장 열람, 11 → 12.
   { controller: 'UtteranceAnalysesController', handler: 'listUtterances', targetType: 'UtteranceAnalysis' },
+  // AI 거버넌스·가드레일(No.36) 그룹 추가(ai-guardrails-설계.md §8.5 · R-13) — 이벤트 목록의 대화 마스킹본 열람, 12 → 13.
+  { controller: 'GuardrailsController', handler: 'listEvents', targetType: 'ConversationLog' },
 ];

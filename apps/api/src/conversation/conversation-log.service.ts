@@ -46,6 +46,9 @@ export interface RecordConversationLogParams {
   feedbackOffered?: boolean;
   /** [신규 No.40] 이 턴을 처리할 때의 운영 포인터(모드 켜짐) — 없으면 라이브 서빙(모드 꺼짐, §14). */
   servedVersionId?: string;
+  /** [신규 No.36] 가드레일이 이 턴의 답을 **막은** 경우만(입구 대체 = INBOUND · 출구 대체·폴백 = OUTBOUND) — 기록만·AI로
+   * 안 보냄·가림 턴은 undefined → null. 금지어 `blockedByFilter`와 별개(R-19). */
+  guardrailStage?: 'INBOUND' | 'OUTBOUND';
 }
 
 /**
@@ -111,6 +114,8 @@ export class ConversationLogService {
           inputKind: params.inputKind,
           // [신규 No.40] 쓰기 주체는 이 1곳뿐이다(E-8). 적재 후 불변.
           servedVersionId: params.servedVersionId ?? null,
+          // [신규 No.36] 쓰기 주체는 이 1곳뿐이다. 적재 후 불변.
+          guardrailStage: params.guardrailStage ?? null,
         },
       });
 

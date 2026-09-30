@@ -38,9 +38,19 @@ export interface PiiMaskResult {
  */
 export type PiiMaskMode = 'PARTIAL' | 'FULL';
 
+/** [신규 No.36] `PiiMaskCounts`의 키 = 종류 이름(`rrn`·`card`·`account`·`phone`·`email`). */
+export type PiiKind = keyof PiiMaskCounts;
+
 export interface PiiMaskOptions {
   /** 생략하면 `configurePiiMaskMode()`로 설치된 값(기본 `PARTIAL`)을 쓴다. */
   mode?: PiiMaskMode;
+  /**
+   * [신규 No.36 — 출구 전용] 주어지면 이 종류만 치환한다. 생략 = 5종 전부(기존 본문 그대로 실행 —
+   * 바이트 불변). 저장·송신 마스킹 호출은 이 인자를 쓰지 않는다(ai-guardrails-설계.md §7).
+   */
+  kinds?: readonly PiiKind[];
+  /** [신규 No.36 — 출구 전용] true면 `YYYY-MM-DD` 날짜를 계좌번호 후보에서 제외한다. 생략/false = 기존. */
+  preserveDates?: boolean;
 }
 
 /** 거버넌스 부트스트랩 1곳만 호출한다(설치 없음 = PARTIAL). 재설치는 시험 전용. */
@@ -92,6 +102,11 @@ function maskEmail(value: string): string {
  * `PARTIAL` 결과는 이 옵션 도입 전과 **바이트 동일**이다(No.45 FR-0-161).
  */
 export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
+  // [신규 No.36] 선택 인자가 있을 때만 별도 경로. 아래 기존 본문은 한 글자도 바꾸지 않는다(AG-7).
+  if (options?.kinds !== undefined || options?.preserveDates) {
+    const selective = maskPiiSelective(text, options.mode ?? installedMode, options.kinds, options.preserveDates === true);
+    if (selective) return selective;
+  }
   const mode = options?.mode ?? installedMode;
   const counts: PiiMaskCounts = { rrn: 0, card: 0, account: 0, phone: 0, email: 0 };
   if (!text) return { maskedText: text, counts };
@@ -118,5 +133,73 @@ export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
     return mode === 'FULL' ? '[이메일]' : maskEmail(m);
   });
 
+  return { maskedText: masked, counts };
+}
+
+// ── [신규 No.36] 출구 전용 선택 가림 ───────────────────────────────────────────────────────────
+// 같은 순서(주민번호 → 카드 → 전화 → 계좌 → 이메일)·같은 정규식·같은 치환 모양을 쓰되, 선택되지 않은
+// 종류의 일치 구간은 자리표시(사설 영역 문자 — 숫자·하이픈·@·영문 없음)로 잠시 바꿔 뒤 단계 정규식이
+// 가져가지 못하게 한다 → "앞 종류 우선" 분류가 선택과 무관하게 보존된다(ai-guardrails-설계.md §7.2).
+
+const ALL_KINDS: readonly PiiKind[] = ['rrn', 'card', 'phone', 'account', 'email'];
+const PLACEHOLDER_OPEN = '\uE000';
+const PLACEHOLDER_CLOSE = '\uE001';
+const PLACEHOLDER_DIGIT_BASE = 0xe100;
+const PRIVATE_USE_INPUT = /[\uE000-\uE1FF]/;
+const PLACEHOLDER_REGEX = /\uE000([\uE100-\uE1FF]+)\uE001/g;
+
+// 날짜(YYYY-MM-DD) — 계좌 정규식만 날짜를 오인한다(주민번호·카드·전화 정규식은 겹치지 않음).
+const DATE_REGEX = /(?<![\d-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d-])/g;
+
+function encodeIndex(index: number): string {
+  let value = index;
+  let out = '';
+  do {
+    out = String.fromCharCode(PLACEHOLDER_DIGIT_BASE + (value % 256)) + out;
+    value = Math.floor(value / 256);
+  } while (value > 0);
+  return out;
+}
+
+function decodeIndex(encoded: string): number {
+  let value = 0;
+  for (const ch of encoded) value = value * 256 + (ch.charCodeAt(0) - PLACEHOLDER_DIGIT_BASE);
+  return value;
+}
+
+/** 입력에 사설 영역 문자가 있으면 `null`(호출자가 기존 5종 전부 경로로 처리 — fail-closed, K-11). */
+function maskPiiSelective(
+  text: string,
+  mode: PiiMaskMode,
+  kinds: readonly PiiKind[] | undefined,
+  preserveDates: boolean,
+): PiiMaskResult | null {
+  const counts: PiiMaskCounts = { rrn: 0, card: 0, account: 0, phone: 0, email: 0 };
+  if (!text) return { maskedText: text, counts };
+  if (PRIVATE_USE_INPUT.test(text)) return null;
+
+  const selected = new Set<PiiKind>(kinds ?? ALL_KINDS);
+  const stash: string[] = [];
+  const hold = (original: string): string => {
+    stash.push(original);
+    return `${PLACEHOLDER_OPEN}${encodeIndex(stash.length - 1)}${PLACEHOLDER_CLOSE}`;
+  };
+
+  const apply = (kind: PiiKind, regex: RegExp, replacer: (m: string) => string, input: string): string =>
+    input.replace(regex, (m) => {
+      if (!selected.has(kind)) return hold(m);
+      counts[kind] += 1;
+      return replacer(m);
+    });
+
+  let masked = text;
+  masked = apply('rrn', RRN_REGEX, () => '[주민등록번호]', masked);
+  masked = apply('card', CARD_REGEX, () => '[카드번호]', masked);
+  masked = apply('phone', PHONE_REGEX, (m) => (mode === 'FULL' ? '[전화번호]' : maskPhone(m)), masked);
+  if (preserveDates) masked = masked.replace(DATE_REGEX, (m) => hold(m));
+  masked = apply('account', ACCOUNT_REGEX, () => '[계좌번호]', masked);
+  masked = apply('email', EMAIL_REGEX, (m) => (mode === 'FULL' ? '[이메일]' : maskEmail(m)), masked);
+
+  masked = masked.replace(PLACEHOLDER_REGEX, (_m, encoded: string) => stash[decodeIndex(encoded)] ?? '');
   return { maskedText: masked, counts };
 }

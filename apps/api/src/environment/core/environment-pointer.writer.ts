@@ -50,6 +50,10 @@ export interface SwitchProdInput {
   now: Date;
   actor: ActorSnapshot | null;
   reason?: string;
+  /** [신규 No.36] 2인 승인으로 실행된 전환의 요청 id(이력에 남긴다 — FK 없음). */
+  approvalRequestId?: string;
+  /** [신규 No.36] `APPROVED`(2인 승인 전환) | `SOLO_ROLLBACK`(직전 버전 단독 롤백) — 정책이 꺼져 있으면 생략(null). */
+  approvalMode?: 'APPROVED' | 'SOLO_ROLLBACK';
 }
 
 /**
@@ -174,9 +178,23 @@ export class EnvironmentPointerWriter {
         actorId: input.actor?.id ?? null,
         actorEmail: input.actor?.email ?? null,
         reason: input.reason ?? null,
+        // [신규 No.36] 값이 있을 때만 키를 둔다(정책 꺼짐 = 현행 이력 행과 같은 모양).
+        ...(input.approvalMode ? { approvalMode: input.approvalMode, approvalRequestId: input.approvalRequestId ?? null } : {}),
       },
     });
     return count;
+  }
+
+  /**
+   * [신규 No.36] 운영 전환 2인 승인 정책(ai-guardrails-설계.md §10.2) — 모드 켜짐 여부와 무관하게 upsert(게이트 선례).
+   * 켜기 조건(모드 켜짐 · 승인 가능자 ≥ 2)과 끄기 잠금은 호출 서비스가 검사한다.
+   */
+  async updateApprovalPolicy(db: Db, chatbotId: string, policy: { required: boolean; ttlHours: number }): Promise<void> {
+    await db.chatbotEnvironment.upsert({
+      where: { chatbotId },
+      create: { chatbotId, approvalRequired: policy.required, approvalTtlHours: policy.ttlHours },
+      update: { approvalRequired: policy.required, approvalTtlHours: policy.ttlHours },
+    });
   }
 
   /** 게이트 설정(§10) — 모드 꺼진 챗봇도 저장 가능(켜면 적용). */

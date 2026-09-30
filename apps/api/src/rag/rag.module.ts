@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BannedWordsModule } from '../banned-words/banned-words.module';
+import { GuardrailRuntimeModule } from '../guardrails/runtime/guardrail-runtime.module';
 import { RagHttpClient } from './rag-http.client';
 import { RagGateService } from './rag-gate.service';
 import { RagCallLogService } from './rag-call-log.service';
@@ -12,7 +13,7 @@ import { InMemoryPendingAnswerStore } from './pending-answer.store';
  * (`PublicConversationService`)가 메서드 인자로 전달한다(DD-85, 순환 참조 회피).
  */
 @Module({
-  imports: [BannedWordsModule],
+  imports: [BannedWordsModule, GuardrailRuntimeModule],
   providers: [
     RagHttpClient,
     RagGateService,

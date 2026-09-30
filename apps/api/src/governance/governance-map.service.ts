@@ -50,6 +50,7 @@ export class GovernanceMapService {
     const kbSources = await this.buildKbSources();
     const proactive = await this.buildProactive();
     const utteranceAnalysis = await this.buildUtteranceAnalysis();
+    const guardrails = await this.buildGuardrails();
 
     return {
       mode: runtime.mode,
@@ -64,6 +65,37 @@ export class GovernanceMapService {
       ...(kbSources ? { kbSources } : {}),
       ...(proactive ? { proactive } : {}),
       ...(utteranceAnalysis ? { utteranceAnalysis } : {}),
+      ...(guardrails ? { guardrails } : {}),
+    };
+  }
+
+  /**
+   * [신규 No.36] 규칙 ≥1 ∨ 이벤트 ≥1 ∨ 가림 설정 행 ≥1 ∨ 승인 정책 켜진 챗봇 ≥1일 때만 채운다(0이면 키 생략 = 바이트
+   * 동일 — ai-guardrails-설계.md §8.6, No.21·No.35 선례). 새 출구 0 · 이벤트에 문장 0.
+   */
+  private async buildGuardrails(): Promise<GovernanceMapResponse['guardrails']> {
+    const [rules, events, customized, approvalPolicyChatbots] = await Promise.all([
+      this.prisma.guardrailRule.count(),
+      this.prisma.guardrailEvent.count(),
+      this.prisma.chatbotGuardrailSetting.count(),
+      this.prisma.chatbotEnvironment.count({ where: { approvalRequired: true } }),
+    ]);
+    if (rules === 0 && events === 0 && customized === 0 && approvalPolicyChatbots === 0) return undefined;
+    const [enabledRules, ruleChatbots] = await Promise.all([
+      this.prisma.guardrailRule.count({ where: { enabled: true } }),
+      this.prisma.guardrailRule.findMany({ select: { chatbotId: true }, distinct: ['chatbotId'] }),
+    ]);
+    return {
+      chatbotsWithRules: ruleChatbots.length,
+      rules,
+      enabledRules,
+      events,
+      eventsStoreText: false,
+      exits: [],
+      piiExitDefaultKinds: ['RRN', 'CARD'],
+      piiExitCustomizedChatbots: customized,
+      approvalPolicyChatbots,
+      serverEnabled: this.config.get<boolean>('GUARDRAILS_ENABLED') ?? true,
     };
   }
 

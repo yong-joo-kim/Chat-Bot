@@ -43,6 +43,7 @@ import type { SemanticMatchVectorSource } from '../embedding/semantic-match.serv
 import { WorkflowTriggerService } from '../workflow/triggers/workflow-trigger.service';
 import { InboxIdentityService } from '../inbox/identity/inbox-identity.service';
 import { ProactivePublicService } from '../proactive/public/proactive-public.service';
+import { GuardrailRuntimeService } from '../guardrails/runtime/guardrail-runtime.service';
 import type { PublicChatbotConfigWithProactive, PublicProactiveEventDto } from '@chat-bot/shared-types';
 
 /** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
@@ -96,6 +97,9 @@ export class PublicConversationService {
     // [신규 No.35 — 19번째 인자(끝), 선택] `getConfig`의 `?proactive=1` 선택 확장 + 수집 처리
     // (§5.1·§5.3). 선택 인자라 기존 18인자 생성자 호출(단위 시험)은 무수정 통과한다.
     private readonly proactivePublic?: ProactivePublicService,
+    // [신규 No.36 — 20번째 인자(끝), 선택] 입구 가드레일 판정(③.6)·이벤트 적재. 선택 인자라 기존 19인자
+    // 생성자 호출(단위 시험)은 무수정 통과한다 — 없으면 입구 판정 0(도입 전 동작).
+    private readonly guardrails?: GuardrailRuntimeService,
   ) {}
 
   /**
@@ -285,6 +289,35 @@ export class PublicConversationService {
     // 설문 답("4점"·"1,3")에 임베딩 1회·질의 LRU 캐시 오염을 쓰지 않는다.
     const surveyExpected = willSurveyConsumeInput(inbound.state, bundle, now);
 
+    // ③.6 [신규 No.36] 입구 가드레일(ai-guardrails-설계.md §5.1) — 금지어 BLOCK(②.5)·상담 HANDLED(②.7)·버전 읽기 실패
+    // 폴백은 이미 반환했다. 설문이 소비할 턴·`NODE` 버튼(=filterableText undefined)은 판정하지 않는다. 전역 색인에
+    // 없는 챗봇은 메모리 조회 1회로 `PASS`(쿼리 0 · 정규화 0).
+    const guardrailVerdict = !surveyExpected && filterableText !== undefined ? await this.guardrails?.evaluateInbound(chatbot.id, filterableText) : undefined;
+    if (guardrailVerdict?.action === 'REPLACE' && guardrailVerdict.replacementText) {
+      // 엔진·의미 점수·설문·RAG·워크플로를 부르지 않고 안전 문구를 즉시 돌려준다. 상태는 보존한다(BLOCK과 같은 모양).
+      const messageId = randomUUID();
+      const outputs = await this.bannedWordFilter.maskOutbound([...handoffPrependOutputs, { type: 'TEXT' as const, payload: { text: guardrailVerdict.replacementText } }]);
+      void this.logService.record({
+        id: messageId,
+        chatbotId: chatbot.id,
+        groupId: chatbot.groupId,
+        channelType: 'WEB',
+        sessionId: dto.sessionId,
+        rawUserMessage: resolveUserMessageText(inbound),
+        rawBotResponse: buildBotResponseText(outputs),
+        isAnswered: false,
+        inputKind: resolveInputKind(inbound),
+        servedVersionId: serving.versionId ?? undefined,
+        guardrailStage: 'INBOUND',
+      });
+      this.guardrails?.recordEvents({ chatbotId: chatbot.id, messageId, verdict: guardrailVerdict });
+      const parsedState = ConversationStateSchema.safeParse(inbound.state);
+      const preservedState: ConversationState = parsedState.success ? parsedState.data : { version: CONVERSATION_STATE_VERSION, contextSession: null };
+      // 위기 질문 → 상담 연결이 가능한 챗봇이면 관찰 창 힌트를 싣는다(미응답 턴 · 출구 대체 `FAILED`와 대칭 — R-5).
+      const watchHint = await this.buildWatchHint(chatbot.id, dto.features, false);
+      return { messageId, outputs, state: preservedState, stateReset: false, ...(watchHint ? { handoff: watchHint } : {}) };
+    }
+
     // ③④ [신규] 1단계 의미 유사도 점수 주입(ADR-0020) — `NODE` 버튼(=filterableText undefined)은
     // 후보 대상이 아니다. `semanticEnabled=false`이면 엔진은 저하 모드(현행 규칙 매칭)로 동작한다.
     // [신규 No.40] 버전 경로는 5번째 인자로 리졸버 결과를 넘긴다(초안 경로는 4인자 그대로, `undefined`).
@@ -370,7 +403,12 @@ export class PublicConversationService {
     // ⑦ [신규] 2단계(외부 RAG) 분기 판정 — 9조건(FR-N2-1) + 유량 여유(회로·동시성·레이트리밋)까지
     // 전부 통과해야 PENDING으로 넘어간다. 하나라도 막히면 기존 폴백 경로로 수렴한다(FR-0-43).
     // [No.26] 외부 API가 개입한 턴은 항상 false다(FR-L4-12 · AC-L3-15).
-    const shouldTryRag = apiTurn ? false : this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind, surveyTurn);
+    const ragEligible = apiTurn ? false : this.evaluateRagEligibility(settings, bundle, result, inbound, isAnswered, inputKind, surveyTurn);
+    // [신규 No.36] "AI로 보내지 않음" — 엔진 결과는 그대로 두고 외부 RAG 진입만 막는다(유량 슬롯을 소비하지 않는다).
+    const shouldTryRag = ragEligible && guardrailVerdict?.action !== 'NO_RAG';
+    if (guardrailVerdict && guardrailVerdict.action !== 'PASS') {
+      this.guardrails?.recordEvents({ chatbotId: chatbot.id, messageId, verdict: guardrailVerdict, ragEligible });
+    }
     if (shouldTryRag && this.ragGate.tryAcquire()) {
       return this.startPendingRagAnswer({
         slug,

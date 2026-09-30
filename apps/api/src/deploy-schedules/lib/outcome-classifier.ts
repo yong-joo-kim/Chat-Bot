@@ -44,6 +44,9 @@ export function classifyExecutionError(e: unknown): ClassifiedError {
         return { kind: 'PERMANENT', reason: 'STATE_CHANGED' };
       case 'ENV_TARGET_NOT_STAGING':
         return { kind: 'PERMANENT', reason: 'TARGET_VERSION_MISSING' };
+      // [신규 No.36] 2인 승인이 켜진 챗봇의 운영 전환 예약이 승인 없이 도래 — 영구(실행 0 · 재시도 없음, ADR-0048).
+      case 'ENV_APPROVAL_REQUIRED':
+        return { kind: 'PERMANENT', reason: 'APPROVAL_MISSING' };
       case 'INTERNAL_ERROR':
         return { kind: 'PERMANENT', reason: 'INTERNAL_ERROR', detailCode: body.code };
       default:

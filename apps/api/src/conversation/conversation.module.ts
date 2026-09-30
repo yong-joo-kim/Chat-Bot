@@ -14,6 +14,7 @@ import { WorkflowTriggersModule } from '../workflow/triggers/workflow-triggers.m
 import { InboxIdentityModule } from '../inbox/identity/inbox-identity.module';
 import { InboxCoreModule } from '../inbox/core/inbox-core.module';
 import { ProactiveModule } from '../proactive/proactive.module';
+import { GuardrailRuntimeModule } from '../guardrails/runtime/guardrail-runtime.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -53,6 +54,8 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     // [신규 No.35] 설정 조회 `?proactive=1` 선택 확장 + 수집 핸들러가 `ProactivePublicService`를
     // 주입받는다(export 유일 — ADR-0045 §2).
     ProactiveModule,
+    // [신규 No.36] 입구 판정·이벤트 적재(`GuardrailRuntimeService` — export 유일, ADR-0048).
+    GuardrailRuntimeModule,
   ],
   controllers: [PublicConversationController],
   providers: [

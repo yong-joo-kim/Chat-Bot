@@ -16,6 +16,7 @@ import { queryBoolean } from './common';
 import { FeedbackRating } from './feedback';
 import { BundleTargetSchema, ResolvedBundleTargetSchema } from './bundle-target';
 import { WorkflowStepViewSchema } from './workflow';
+import { GuardrailInboundViewSchema, RagPreviewSchema } from './guardrails';
 
 /** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
 export const SimulatedAnsweredTopicSchema = z.object({
@@ -144,6 +145,8 @@ export const MatchTraceSchema = z.object({
   ragUsed: z.boolean(),
   ragLatencyMs: z.number().nonnegative().optional(),
   ragSourceCount: z.number().int().nonnegative().optional(),
+  /** [신규 No.36] 가드레일이 주입된 서버에서 RAG 답이 성공했을 때만 존재한다(출구 판정 미리보기 — 이벤트 0). */
+  ragPreview: RagPreviewSchema.optional(),
 });
 export type MatchTrace = z.infer<typeof MatchTraceSchema>;
 
@@ -182,6 +185,8 @@ export const SimulateResponseSchema = DialogueResolutionSchema.extend({
   target: ResolvedBundleTargetSchema.optional(),
   /** [신규 No.41] 이번 턴에 `WORKFLOW` 방출이 있었을 때만 존재한다 — 모의 표시(발송·적재 0). */
   workflowSteps: z.array(WorkflowStepViewSchema).optional(),
+  /** [신규 No.36] 입구 판정이 `PASS`가 아닐 때만 존재한다(엔진 결과는 그대로 — 운영이면 무엇이 나가는지 표시). */
+  guardrailInbound: GuardrailInboundViewSchema.optional(),
 });
 export type SimulateResponse = z.infer<typeof SimulateResponseSchema>;
 

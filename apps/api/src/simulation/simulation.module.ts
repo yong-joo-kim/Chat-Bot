@@ -10,6 +10,7 @@ import { TopicsModule } from '../topics/topics.module';
 import { EnvironmentCoreModule } from '../environment/core/environment-core.module';
 import { EnvironmentServingModule } from '../environment/serving/environment-serving.module';
 import { WorkflowCatalogModule } from '../workflow/catalog/workflow-catalog.module';
+import { GuardrailRuntimeModule } from '../guardrails/runtime/guardrail-runtime.module';
 import { SimulationController } from './simulation.controller';
 import { SimulationService } from './simulation.service';
 
@@ -33,6 +34,8 @@ import { SimulationService } from './simulation.service';
     EnvironmentCoreModule,
     EnvironmentServingModule,
     WorkflowCatalogModule,
+    // [신규 No.36] 입구·출구 판정 표시(이벤트 0 — `recordEvents(` 호출 0).
+    GuardrailRuntimeModule,
   ],
   controllers: [SimulationController],
   providers: [SimulationService],

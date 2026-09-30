@@ -350,11 +350,17 @@ describe('환경 분리(No.40) 정적 검사 — environment-separation-설계.m
     });
   });
 
-  describe('E-14: Permission.options.length === 18 · chatbot:deploy는 ADMIN에만 · @RequirePermission(\'chatbot:deploy\')는 environment.controller.ts 전용', () => {
-    it("`chatbot:deploy` 사용 파일이 environment.controller.ts뿐이다", () => {
+  describe('E-14: Permission.options.length === 18 · chatbot:deploy는 ADMIN에만 · @RequirePermission(\'chatbot:deploy\')는 environment 컨트롤러 3개 전용', () => {
+    // [신규 No.36 · 닫힌 목록 X-1] 운영 전환 2인 승인 동작의 권한이 `chatbot:deploy`라 승인 컨트롤러 2개가 허용 집합에 들어온다
+    // (ai-guardrails-설계.md §18.5 · C-12) — 신규 권한 0 · 이 3개 밖의 사용은 여전히 금지다.
+    it("`chatbot:deploy` 사용 파일이 environment.controller.ts · approval/switch-approvals.controller.ts · approval/environment-approvals-global.controller.ts뿐이다", () => {
       const offenders = apiFileContents.filter(({ content }) => /@RequirePermission\([^)]*'chatbot:deploy'/.test(content)).map(({ f }) => f);
-      const unique = Array.from(new Set(offenders));
-      expect(unique).toEqual([expect.stringMatching(/environment\/environment\.controller\.ts$/)]);
+      const unique = Array.from(new Set(offenders)).sort();
+      expect(unique).toEqual([
+        expect.stringMatching(/environment\/approval\/environment-approvals-global\.controller\.ts$/),
+        expect.stringMatching(/environment\/approval\/switch-approvals\.controller\.ts$/),
+        expect.stringMatching(/environment\/environment\.controller\.ts$/),
+      ]);
     });
   });
 

@@ -141,6 +141,8 @@ export class EnvironmentModeService {
       activeSwitchSchedule: activeSchedule
         ? { scheduleId: activeSchedule.id, scheduledAt: activeSchedule.scheduledAt, targetVersionNo: activeSchedule.targetVersionNo ?? 0, status: activeSchedule.status as 'PENDING' | 'HELD' }
         : null,
+      // [신규 No.36 — 선택 필드, ui-spec A-8] 2인 승인이 켜진 챗봇에만 실린다(꺼짐 = 키 생략 = 현행 응답과 바이트 동일).
+      ...(pointer.approval.required ? { approval: { required: true as const, ttlHours: pointer.approval.ttlHours } } : {}),
     };
   }
 
@@ -291,6 +293,8 @@ export class EnvironmentModeService {
     const prodServed = hydrateForServing(prodLoaded.envelope, chatbotId);
 
     const cancellable = await this.prisma.deploySchedule.count({ where: { chatbotId, action: 'SWITCH_PROD_VERSION', status: { in: ['PENDING', 'HELD'] } } });
+    // [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다 — 켜졌을 때만 키가 실린다(현행 응답과 바이트 동일).
+    const approvalPolicy = (await this.environmentRead.getPointerStatus(chatbotId)).approval;
 
     return {
       prod: { versionId: prodRow.id, versionNo: prodRow.versionNo, capturedAt: prodRow.createdAt, label: prodRow.label ?? null },
@@ -300,6 +304,7 @@ export class EnvironmentModeService {
       diffSummary: diff.summary,
       cancelledSwitchSchedules: cancellable,
       potentialTieShift: hasPotentialNodeTies(prodServed.bundle.dialogNodes),
+      ...(approvalPolicy.required ? { approvalPolicyActive: true as const } : {}),
     };
   }
 
@@ -314,6 +319,14 @@ export class EnvironmentModeService {
         async (tx) => {
           const chatbot = await tx.chatbot.findUnique({ where: { id: chatbotId }, select: { prodVersionId: true } });
           if (!chatbot?.prodVersionId) throw new ApiException('ENV_MODE_DISABLED', 409, '환경 분리 모드가 꺼져 있습니다.');
+          // [신규 No.36 — R-7] 운영 전환 2인 승인이 켜진 동안은 끌 수 없다 — 끄는 순간 초안이 곧 라이브가 되어 승인 관문의
+          // 옆문이 된다(`PROMOTE_DRAFT`는 물론 `KEEP_PROD`도 이후 편집이 곧 라이브). 정책을 먼저 꺼야 한다.
+          const policyRow = await tx.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { approvalRequired: true } });
+          if (policyRow?.approvalRequired) {
+            throw new ApiException('ENV_APPROVAL_REQUIRED', 409, '운영 전환 2인 승인이 켜져 있어 환경 분리를 끌 수 없습니다. 먼저 2인 승인을 꺼 주세요.', [
+              { field: 'reason', message: 'POLICY_ACTIVE' },
+            ]);
+          }
           if (chatbot.prodVersionId !== dto.expectedProdVersionId) throw new ApiException('ENV_POINTER_STALE', 409, '미리보기 이후 운영 버전이 바뀌었습니다.');
 
           const captured = await this.versionCapture.readConsistent(chatbotId, tx);
