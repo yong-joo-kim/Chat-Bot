@@ -157,7 +157,7 @@ export const RequirePermission = (...permissions: [Permission, ...Permission[]])
 - **불변**: `Permission` 유니온 **15종** · `ROLE_PERMISSIONS` · `@Public()` **6곳** · fail-closed 판정 순서 ①~⑦ · `403` 본문에 요구 권한 미표기 · 기존 호출(인자 1개) 한 글자도 변경 없음.
 - **AND만** 지원한다. OR 조합은 수요가 없고, 섞이면 판정 규칙이 데코레이터에서 읽히지 않는다.
 - 빈 호출(`RequirePermission()`)은 튜플 타입으로 **컴파일 오류**다. `PERMISSION_DENIED` 이력의 `summary`에는 요구 권한을 `a+b`로 남긴다(응답 본문에는 여전히 미포함).
-- 복원이 ADMIN 전용이 아닌 이유: 복원 직전 자동 백업으로 **가역 동작**이며(ADR-0031 §4), "즉시 롤백"은 사고 현장의 EDITOR가 할 수 있어야 의미가 있다. 조직 통제상 승인이 필요해지면(No.36/45) `chatbot:restore` 신설 또는 2인 승인을 재검토한다.
+- 복원이 ADMIN 전용이 아닌 이유: 복원 직전 자동 백업으로 **가역 동작**이며(ADR-0031 §4), "즉시 롤백"은 사고 현장의 EDITOR가 할 수 있어야 의미가 있다. 조직 통제상 승인이 필요해지면(No.36/45) `chatbot:restore` 신설 또는 2인 승인을 재검토한다. **→ 2026-09-30 판정(No.36 — ADR-0048): 2인 승인은 운영 전환(예약 포함) 1곳에만 도입하고 복원은 대상이 아니다(환경 모드에서 복원은 초안만 바꾼다). 신규 권한 0 — 승인자도 `chatbot:deploy` 보유자다(`chatbot:approve` 신설 기각).**
 
 
 ---

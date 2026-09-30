@@ -149,3 +149,14 @@ PENDING 반환 시점   : 적재 없음. messageId만 선발급
 1. 보류 턴의 평가 가능 표시(`feedback: { rateable: true }`)는 **PENDING 응답**에 실리고 최종 답변 말풍선(`READY`·`FAILED`)에 적용된다. 폴링 응답 스키마에는 싣지 않는다.
 2. `RagAnswerRunInput`·`ConversationLogPort.record()`에 선택 필드 `feedbackOffered`를 더해 백그라운드 완료 시 로그 1건에 같은 값을 적재한다(`groupId` 선례 — 추가 조회 0).
 3. **`pendingStore.complete(READY)`가 `logPort.record()`보다 먼저 실행된다**(`rag-answer.service.ts`) — 위젯이 `READY`를 받은 직후 극히 짧은 순간은 로그 행이 없어 평가가 `404`일 수 있다. 서버 순서는 바꾸지 않고(이 ADR의 경로 불가침) **위젯이 1초 뒤 1회 재시도**로 흡수한다.
+
+
+---
+
+## 갱신 (2026-09-30 — No.36: 가드레일 대체 = 기존 실패 수렴 재사용)
+
+AI 거버넌스·가드레일(No.36, **ADR-0048 §2**). §1~§6의 결정(PENDING 즉시 반환·폴링 규격·메모리 TTL 저장소·로그 1건)과 **폴링 응답 스키마는 불변**이다.
+
+1. 외부 RAG 답이 위험 응답 규칙(출구 "대체")에 걸리거나, 개인정보 가림 뒤 답이 토큰뿐이거나, 판정이 실패하면(가림 켜짐 포함) 그 턴은 **기존 실패 수렴(`finishAsFallback` → `FAILED`)** 으로 끝난다 — `outputs`만 대체 문구(또는 기존 폴백 문구)이고 출처는 없다. 위젯의 `FAILED` 처리(말풍선 + 상태 문구 + `IF_PENDING_FAILS` 관찰 창)가 그대로 동작해 **위젯 변경이 0**이다.
+2. 로그는 여전히 1건(`isAnswered=false`·`answeredByRag=false` + 새 선택 컬럼 `guardrailStage='OUTBOUND'`)이며 `complete()` → `record()` 순서 불변. `RagCallLog`는 외부 호출 자체의 결과(`SUCCESS`)를 남긴다.
+3. 가림만 된 답(`MASKED`)은 `READY`로 나간다(출처 유지).
