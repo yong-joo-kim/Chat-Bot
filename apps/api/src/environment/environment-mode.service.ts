@@ -29,6 +29,7 @@ import { VersionBundleService } from './serving/version-bundle.service';
 import { EnvironmentScheduleHooks } from '../deploy-schedules/env-hooks/environment-schedule.hooks';
 import { decideEnvInitVersion } from './lib/enable-plan';
 import { decideDisable } from './lib/disable-plan';
+import { decidePromoteDraftGate } from './lib/promote-draft-gate';
 
 /**
  * [신규 No.40] 켜기/끄기 미리보기·확정 · 게이트 설정(§5 · §10). 최상위 `environment/` 모듈 소속 —
@@ -294,7 +295,11 @@ export class EnvironmentModeService {
 
     const cancellable = await this.prisma.deploySchedule.count({ where: { chatbotId, action: 'SWITCH_PROD_VERSION', status: { in: ['PENDING', 'HELD'] } } });
     // [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다 — 켜졌을 때만 키가 실린다(현행 응답과 바이트 동일).
-    const approvalPolicy = (await this.environmentRead.getPointerStatus(chatbotId)).approval;
+    const pointer = await this.environmentRead.getPointerStatus(chatbotId);
+    const approvalPolicy = pointer.approval;
+    // [신규 N40-3] 확정과 같은 함수 — "초안을 운영으로"를 고르면 막히는가(차단 게이트 ∧ 초안≠운영). 해당할 때만 키가 실린다.
+    const promoteDraftBlocked =
+      decidePromoteDraftGate({ mode: 'PROMOTE_DRAFT', gateMode: pointer.gate.mode === 'BLOCK' ? 'BLOCK' : 'WARN', draftContentHash: draft.contentHash, prodContentHash: prodRow.contentHash }) === 'GATE_BLOCKED';
 
     return {
       prod: { versionId: prodRow.id, versionNo: prodRow.versionNo, capturedAt: prodRow.createdAt, label: prodRow.label ?? null },
@@ -305,6 +310,7 @@ export class EnvironmentModeService {
       cancelledSwitchSchedules: cancellable,
       potentialTieShift: hasPotentialNodeTies(prodServed.bundle.dialogNodes),
       ...(approvalPolicy.required ? { approvalPolicyActive: true as const } : {}),
+      ...(promoteDraftBlocked ? { promoteDraftBlocked: true as const } : {}),
     };
   }
 
@@ -321,7 +327,7 @@ export class EnvironmentModeService {
           if (!chatbot?.prodVersionId) throw new ApiException('ENV_MODE_DISABLED', 409, '환경 분리 모드가 꺼져 있습니다.');
           // [신규 No.36 — R-7] 운영 전환 2인 승인이 켜진 동안은 끌 수 없다 — 끄는 순간 초안이 곧 라이브가 되어 승인 관문의
           // 옆문이 된다(`PROMOTE_DRAFT`는 물론 `KEEP_PROD`도 이후 편집이 곧 라이브). 정책을 먼저 꺼야 한다.
-          const policyRow = await tx.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { approvalRequired: true } });
+          const policyRow = await tx.chatbotEnvironment.findUnique({ where: { chatbotId }, select: { approvalRequired: true, gateMode: true } });
           if (policyRow?.approvalRequired) {
             throw new ApiException('ENV_APPROVAL_REQUIRED', 409, '운영 전환 2인 승인이 켜져 있어 환경 분리를 끌 수 없습니다. 먼저 2인 승인을 꺼 주세요.', [
               { field: 'reason', message: 'POLICY_ACTIVE' },
@@ -338,6 +344,23 @@ export class EnvironmentModeService {
           const decision = decideDisable({ mode: dto.mode, draftContentHash: data.contentHash, prodContentHash: prodRow?.contentHash ?? '' });
           if (decision === 'NEED_RESTORE') {
             throw new ApiException('ENV_DRAFT_NOT_RESTORED', 409, '초안이 운영 버전과 다릅니다. 먼저 운영 버전으로 복원한 뒤 다시 시도해 주세요.');
+          }
+
+          // [신규 N40-3] 차단 게이트 ∧ 초안≠운영이면 "초안을 운영으로"를 거부한다(평가가 아니라 차단 — 설계 §3.3). 게이트 모드는
+          // 위에서 읽은 환경 행 그대로(추가 조회 0)이고, 행이 없으면 WARN으로 본다.
+          const gateDecision = decidePromoteDraftGate({
+            mode: dto.mode,
+            gateMode: policyRow?.gateMode === 'BLOCK' ? 'BLOCK' : 'WARN',
+            draftContentHash: data.contentHash,
+            prodContentHash: prodRow?.contentHash ?? '',
+          });
+          if (gateDecision === 'GATE_BLOCKED') {
+            throw new ApiException(
+              'ENV_GATE_NOT_PASSED',
+              409,
+              "차단 게이트가 켜져 있어 초안을 바로 운영으로 올릴 수 없습니다. 스테이징으로 승격한 뒤 운영 전환(필수 시험 통과)을 거치거나 '운영 유지'로 꺼 주세요.",
+              [{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }],
+            );
           }
 
           const actor = this.auditLogService.currentActorSnapshot();

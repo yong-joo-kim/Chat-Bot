@@ -104,6 +104,21 @@ export class ProdSwitchService {
     return { versionId: meta.id, versionNo: meta.versionNo, capturedAt: meta.createdAt, label };
   }
 
+  /**
+   * [N40-1] 게이트 완화(BLOCK → WARN)는 **직전 운영 버전으로의 롤백**에만 적용한다(ADR-0039 §5 — 롤백 = 직전 운영 버전 복귀).
+   * 이력의 임의 과거 버전으로 돌아가는 요청은 `kind = ROLLBACK`으로 들어와도 일반 전환(SWITCH)과 같은 게이트를 받는다.
+   */
+  /** 직전 운영 버전 롤백이면 'ROLLBACK'(게이트 BLOCK을 WARN으로 완화), 그 밖에는 일반 전환과 같은 'SWITCH' 게이트. */
+  private gateKindFor(directRollback: boolean): 'SWITCH' | 'ROLLBACK' {
+    return directRollback ? 'ROLLBACK' : 'SWITCH';
+  }
+
+  /** ROLLBACK이고 대상이 직전 운영 버전인가 — preview·switch가 **한 번만** 계산해 게이트·승인 예외·응답 필드가 공유한다. */
+  private async computeDirectRollback(chatbotId: string, kind: 'SWITCH' | 'ROLLBACK', currentProd: string | null, targetVersionId: string | undefined): Promise<boolean> {
+    if (kind !== 'ROLLBACK' || !currentProd || !targetVersionId) return false;
+    return this.isDirectRollbackTarget(chatbotId, currentProd, targetVersionId);
+  }
+
   private async evaluateGate(chatbotId: string, targetVersionId: string, kind: 'SWITCH' | 'ROLLBACK'): Promise<GateEvaluation> {
     const pointer = await this.environmentRead.getPointerStatus(chatbotId);
     const gate = pointer.gate;
@@ -278,13 +293,16 @@ export class ProdSwitchService {
       if (!allowed) blockers.push('TARGET_NOT_ALLOWED');
     }
 
+    // [N40-1] 직전 운영 버전 롤백 여부 — 게이트 완화·승인 예외·응답 `directRollback`이 이 한 값을 공유한다(중복 조회 제거).
+    const directRollback = await this.computeDirectRollback(chatbotId, input.kind, pointer.prodVersionId, targetId);
+
     let gate: GateEvaluation = { verdict: 'PASS', reason: 'NOT_CONFIGURED', run: null };
     let warnings: ProdSwitchWarning[] = [];
     let diffSummary: ProdSwitchPreviewResponse['diffSummary'] = { rows: [], totalChanged: 0, identical: true };
 
     if (targetMeta && currentMeta) {
       try {
-        gate = await this.evaluateGate(chatbotId, targetMeta.id, input.kind);
+        gate = await this.evaluateGate(chatbotId, targetMeta.id, this.gateKindFor(directRollback));
       } catch {
         blockers.push('GATE_CONFIG_ERROR');
       }
@@ -298,7 +316,8 @@ export class ProdSwitchService {
       }
     }
 
-    if (gate.verdict === 'BLOCK' && input.kind === 'SWITCH') blockers.push('GATE_BLOCKED');
+    // BLOCK 판정은 일반 전환과 "직전이 아닌 이력 버전 롤백"에서만 나온다(직전 롤백은 evaluateGate가 WARN으로 낮춘다 — N40-1).
+    if (gate.verdict === 'BLOCK') blockers.push('GATE_BLOCKED');
 
     const outcome = currentMeta && targetMeta ? classifySwitch(targetMeta.id, currentMeta.id) : 'NOOP';
 
@@ -308,7 +327,7 @@ export class ProdSwitchService {
     if (pointer.approval.required) {
       approval = { required: true };
       if (input.kind === 'ROLLBACK' && pointer.prodVersionId) {
-        approval.soloRollbackAllowed = targetId ? await this.isDirectRollbackTarget(chatbotId, pointer.prodVersionId, targetId) : false;
+        approval.soloRollbackAllowed = directRollback;
       }
     }
 
@@ -323,6 +342,8 @@ export class ProdSwitchService {
       blockers: Array.from(new Set(blockers)),
       warnings,
       ...(approval ? { approval } : {}),
+      // [N40-1] ROLLBACK 미리보기에서만 실린다(SWITCH = 키 생략 → 기존 응답과 바이트 동일). 웹이 "직전 롤백일 때만 GATE_BLOCKED 면제"로 좁힌다.
+      ...(input.kind === 'ROLLBACK' ? { directRollback } : {}),
     };
   }
 
@@ -345,6 +366,7 @@ export class ProdSwitchService {
     invocation: SwitchInvocation | undefined,
     pointer: PointerStatus,
     now: Date,
+    isDirect: boolean,
   ): Promise<ApprovalTrace> {
     if (!pointer.approval.required) return {};
 
@@ -367,7 +389,6 @@ export class ProdSwitchService {
     }
 
     // 롤백 예외 — 직전 운영 버전만(그 밖의 이력 버전은 승인 필요).
-    const isDirect = kind === 'ROLLBACK' && !!pointer.prodVersionId && (await this.isDirectRollbackTarget(chatbotId, pointer.prodVersionId, dto.targetVersionId));
     if (!requiresApproval(pointer.approval, kind, isDirect)) return { approvalMode: 'SOLO_ROLLBACK' };
 
     // 예약 실행 — 승인된 요청이 이 예약에 묶여 있어야 하고, 이미 쓰인 요청(전환 이력에 남은)은 다시 쓸 수 없다(1회용).
@@ -434,10 +455,11 @@ export class ProdSwitchService {
     if (!allowed) throw new ApiException('ENV_TARGET_NOT_STAGING', 409, '전환 대상은 현재 스테이징 또는 운영 이력 버전만 가능합니다.');
 
     // [신규 No.36] 2인 승인 강제 지점 — `switchProd(` 호출 앞 1곳(AG-11).
-    const approvalTrace = await this.assertApprovalSatisfied(chatbotId, dto, kind, invocation, pointer, now);
+    const directRollback = await this.computeDirectRollback(chatbotId, kind, chatbot.prodVersionId, dto.targetVersionId);
+    const approvalTrace = await this.assertApprovalSatisfied(chatbotId, dto, kind, invocation, pointer, now, directRollback);
 
-    const gate = await this.evaluateGate(chatbotId, dto.targetVersionId, kind);
-    if (gate.verdict === 'BLOCK' && kind === 'SWITCH') {
+    const gate = await this.evaluateGate(chatbotId, dto.targetVersionId, this.gateKindFor(directRollback));
+    if (gate.verdict === 'BLOCK') {
       throw new ApiException('ENV_GATE_NOT_PASSED', 409, '차단 게이트 기준을 충족하지 못해 전환할 수 없습니다.');
     }
 

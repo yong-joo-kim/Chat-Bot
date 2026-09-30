@@ -38,6 +38,7 @@ import { AnswerSettingsCacheService } from '../answer-settings/answer-settings-c
 import { RagHttpClient } from '../rag/rag-http.client';
 import { RagGateService } from '../rag/rag-gate.service';
 import { judgeRagResponse } from '../rag/lib/judge-rag-response';
+import { truncateAnswer } from '../rag/lib/truncate-answer';
 import { RagQueryResponseSchema } from '../rag/lib/rag-response.schema';
 import { LegacyApiService } from '../legacy-api/legacy-api.service';
 import { ApiConnectionCatalogService } from '../api-connections/catalog/api-connection-catalog.service';
@@ -435,7 +436,7 @@ export class SimulationService {
               ragSourceCount = judgement.response.source_info?.total_sources;
               // [신규 No.36 — §9] 운영과 같은 절단(2,000자) 뒤 출구 판정 — 사용자에게 나갈 문구 미리보기(이벤트 0).
               if (this.guardrails) {
-                const answerText = judgement.response.result.length <= 2000 ? judgement.response.result : `${judgement.response.result.slice(0, 2000)}…`;
+                const answerText = truncateAnswer(judgement.response.result);
                 const verdict = await this.guardrails.evaluateOutbound(chatbotId, answerText);
                 ragPreview = await this.guardrails.toRagPreview(verdict, answerText, fallbackText);
               }

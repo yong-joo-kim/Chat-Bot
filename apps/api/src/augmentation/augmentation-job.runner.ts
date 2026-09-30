@@ -14,7 +14,11 @@ import type { AugmentationThresholds, OtherIntentVector } from './lib/validate-c
 
 const DEFAULT_ACCEPT_THRESHOLD = 0.8;
 const MAX_RAW_TARGET = 60; // ml-worker /augment 계약 상한(targetCount 1~60)과 정합.
-const MAX_SEED_EXAMPLES = 20; // 시드 폭주 방지(설계서 §10.2).
+// 시드 폭주 방지(설계서 §10.2). ml-worker `/augment` 계약 상한(`GENERATION_SEEDS_MAX=20`, 초과 400)은 **총 시드 수** 기준이므로
+// 의도 이름 1개를 포함해 20개로 맞춘다(K-1 — 예문 20 + 이름 1 = 21이면 예문 많은 의도가 항상 400).
+// ⚠ 이 값은 ml-worker `GENERATION_SEEDS_MAX`(`config.py` 기본 20, 환경변수로 변경 가능)와 연동된다 — ml-worker 쪽을 낮추면
+// 여기도 같이 낮춰야 하고, 높여도 이 값을 올리기 전에는 효과가 없다(API는 설정을 읽지 않는다).
+export const MAX_SEEDS_TOTAL = 20;
 
 export interface AugmentationJobInput {
   readonly chatbotId: string;
@@ -118,7 +122,10 @@ export class AugmentationJobRunner {
     }
 
     const examples = this.parseExamples(intent.examples);
-    const seedTexts = [...examples.slice(-MAX_SEED_EXAMPLES), intent.name];
+    // 공백뿐인 예문은 ml-worker가 400으로 거부하므로 제외한다. 최신 예문을 우선(뒤에서 자름) + 의도 이름 1개.
+    const usableExamples = examples.filter((e) => e.trim().length > 0);
+    // 의도 이름은 생성 시 trim·1자 이상으로 검증되지만(DialogueNameSchema), 공백뿐이면 ml-worker가 400이므로 방어적으로 제외한다.
+    const seedTexts = [...usableExamples.slice(-(MAX_SEEDS_TOTAL - 1)), ...(intent.name.trim().length > 0 ? [intent.name] : [])];
 
     await onProgress(10);
 

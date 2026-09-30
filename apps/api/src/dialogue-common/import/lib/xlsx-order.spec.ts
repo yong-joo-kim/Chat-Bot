@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { unzipSync, zipSync } from 'fflate';
-import { XlsxSheetReader } from '../../dialogue-common/import/xlsx-sheet-reader';
+import { XlsxSheetReader } from '../xlsx-sheet-reader';
 import { XLSX_MAX_ENTRY_BYTES, XLSX_MAX_UNCOMPRESSED_BYTES, XlsxTooLargeError, reorderXlsxEntries } from './xlsx-order';
 
 async function exceljsFile(rows = 2): Promise<Buffer> {

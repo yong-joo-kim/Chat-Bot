@@ -1790,6 +1790,62 @@ describe('환경 분리 / 버전 관리(No.40) 통합 테스트', () => {
       expect(rollbackRes.body.prod.versionId).toBe(v1Id);
     });
 
+    it('N40-1. 차단 게이트 완화는 직전 운영 버전 롤백에만 — 이력의 임의 과거 버전으로 롤백하면 BLOCK이 유지된다(ADR-0039 §5)', async () => {
+      const { id: chatbotId } = await createChatbotWithSlug('롤백직전한정');
+      await activate(chatbotId);
+      const kw = await createKeyword(chatbotId, `롤백직전-${chatbotId.slice(0, 6)}`);
+      const nodeId = await createKeywordNode(chatbotId, kw, '응답-v1');
+      const enabled = await enableEnv(chatbotId);
+      const v1Id = (enabled as { prod: { versionId: string } }).prod.versionId;
+
+      const promote = async (text: string): Promise<string> => {
+        await setNodeOutputText(chatbotId, nodeId, text);
+        const staging = ((await getStatus(chatbotId)).body as { staging: { versionId: string } }).staging;
+        const res = await admin<{ staging: { versionId: string } }>('POST', `/chatbots/${chatbotId}/environment/staging/promote`, { expectedStagingVersionId: staging.versionId });
+        return res.body.staging.versionId;
+      };
+      const switchTo = async (target: string, expected: string) => {
+        const res = await admin('POST', `/chatbots/${chatbotId}/environment/prod/switch`, { targetVersionId: target, expectedProdVersionId: expected, acknowledgeWarnings: true });
+        expect(res.status).toBe(201);
+      };
+      // 이력: v1 → v2 → v3(현재 운영). 직전 운영 버전 = v2, v1은 "이력의 임의 과거 버전".
+      const v2Id = await promote('응답-v2');
+      await switchTo(v2Id, v1Id);
+      const v3Id = await promote('응답-v3');
+      await switchTo(v3Id, v2Id);
+
+      const setRes = await admin<{ id: string }>('POST', `/chatbots/${chatbotId}/test-sets`, { name: '롤백직전한정세트' });
+      expect(setRes.status).toBe(201);
+      const blockGate = await admin('PUT', `/chatbots/${chatbotId}/environment/gate`, { mode: 'BLOCK', testSetId: setRes.body.id, minPassRate: 95, validHours: 24 });
+      expect(blockGate.status).toBe(200);
+
+      // 비직전(v1) 롤백 — 미리보기는 BLOCK + GATE_BLOCKED, 실행은 409 ENV_GATE_NOT_PASSED, 운영 불변.
+      const farPreview = await admin<{ gate: { verdict: string }; blockers: string[] }>('POST', `/chatbots/${chatbotId}/environment/prod/preview`, { kind: 'ROLLBACK', targetVersionId: v1Id });
+      expect(farPreview.status).toBe(200);
+      expect(farPreview.body.gate.verdict).toBe('BLOCK');
+      expect(farPreview.body.blockers).toContain('GATE_BLOCKED');
+      const farRollback = await admin<{ code?: string }>('POST', `/chatbots/${chatbotId}/environment/prod/rollback`, {
+        targetVersionId: v1Id,
+        expectedProdVersionId: v3Id,
+        acknowledgeWarnings: true,
+      });
+      expect(farRollback.status).toBe(409);
+      expect(farRollback.body.code).toBe('ENV_GATE_NOT_PASSED');
+      expect(((await getStatus(chatbotId)).body as { prod: { versionId: string } }).prod.versionId).toBe(v3Id);
+
+      // 직전(v2) 롤백 — 기존대로 BLOCK이 WARN으로 낮아져 확인만으로 통과한다(긴급 복귀 우선).
+      const directPreview = await admin<{ gate: { verdict: string }; blockers: string[] }>('POST', `/chatbots/${chatbotId}/environment/prod/preview`, { kind: 'ROLLBACK', targetVersionId: v2Id });
+      expect(directPreview.body.gate.verdict).toBe('WARN');
+      expect(directPreview.body.blockers).not.toContain('GATE_BLOCKED');
+      const directRollback = await admin<{ prod: { versionId: string } }>('POST', `/chatbots/${chatbotId}/environment/prod/rollback`, {
+        targetVersionId: v2Id,
+        expectedProdVersionId: v3Id,
+        acknowledgeWarnings: true,
+      });
+      expect(directRollback.status).toBe(201);
+      expect(directRollback.body.prod.versionId).toBe(v2Id);
+    });
+
     it('S-8. AC-EN8-2 — 운영 전환은 감사 로그 1건을 남기고, 요약에는 버전 번호만 있을 뿐 자산 본문이 없다', async () => {
       const { id: chatbotId } = await createChatbotWithSlug('감사요약');
       await activate(chatbotId);
@@ -1917,6 +1973,168 @@ describe('환경 분리 / 버전 관리(No.40) 통합 테스트', () => {
       expect(switchRes.status).toBe(201);
       expect(switchRes.body.outcome).toBe('APPLIED');
       expect(switchRes.body.prod.versionId).toBe(v2Id);
+    });
+  });
+
+  describe('U. ★ N40-3 — 차단 게이트에서 끄기 PROMOTE_DRAFT 거부(n40-follow-up-설계 §3 · AC-EN1-7/8 · AC-N40-2~5)', () => {
+    interface DisablePreviewBody {
+      prod: { versionId: string };
+      draftContentHash: string;
+      prodContentHash: string;
+      draftDiffersFromProd: boolean;
+      promoteDraftBlocked?: true;
+    }
+    interface ErrBody {
+      code?: string;
+      details?: Array<{ field: string; message: string }>;
+    }
+
+    /** 자기 챗봇을 새로 만든다 — 운영 v1 · 초안 편집 여부 선택 · 게이트 모드 선택(BLOCK·WARN+세트·기본). */
+    async function setup(prefix: string, opts: { gate?: 'BLOCK' | 'WARN_SET' | 'NONE'; editDraft?: boolean } = {}) {
+      const { id: chatbotId, slug } = await createChatbotWithSlug(prefix);
+      await activate(chatbotId);
+      const keyword = `${prefix}-${chatbotId.slice(0, 6)}`;
+      const kw = await createKeyword(chatbotId, keyword);
+      const nodeId = await createKeywordNode(chatbotId, kw, '응답-v1');
+      const enabled = await enableEnv(chatbotId);
+      const v1Id = (enabled as { prod: { versionId: string } }).prod.versionId;
+      let setId: string | null = null;
+      if (opts.gate === 'BLOCK' || opts.gate === 'WARN_SET') {
+        const set = await admin<{ id: string }>('POST', `/chatbots/${chatbotId}/test-sets`, { name: `끄기게이트세트-${chatbotId.slice(0, 6)}` });
+        expect(set.status).toBe(201);
+        setId = set.body.id;
+        await putGate(chatbotId, opts.gate === 'BLOCK' ? 'BLOCK' : 'WARN', setId);
+      }
+      if (opts.editDraft !== false) await setNodeOutputText(chatbotId, nodeId, '응답-초안변경');
+      return { chatbotId, slug, keyword, nodeId, v1Id, setId };
+    }
+
+    async function putGate(chatbotId: string, mode: 'BLOCK' | 'WARN', testSetId: string): Promise<void> {
+      const res = await admin('PUT', `/chatbots/${chatbotId}/environment/gate`, { mode, testSetId, minPassRate: 95, validHours: 24 });
+      expect(res.status).toBe(200);
+    }
+
+    const previewDisable = (chatbotId: string) => admin<DisablePreviewBody>('POST', `/chatbots/${chatbotId}/environment/disable/preview`);
+    const confirmDisable = (chatbotId: string, mode: 'KEEP_PROD' | 'PROMOTE_DRAFT', prodId: string, hash: string) =>
+      admin<ErrBody & { enabled?: boolean }>('POST', `/chatbots/${chatbotId}/environment/disable`, { mode, expectedProdVersionId: prodId, expectedDraftHash: hash });
+
+    it('AC-EN1-7 ★ 재현 — BLOCK ∧ 초안≠운영이면 PROMOTE_DRAFT는 409 ENV_GATE_NOT_PASSED(PROMOTE_DRAFT_BLOCKED)이고 아무것도 바뀌지 않는다', async () => {
+      const bot = await setup('끄기차단', { gate: 'BLOCK' });
+      const preview = await previewDisable(bot.chatbotId);
+      expect(preview.status).toBe(200);
+      expect(preview.body.draftDiffersFromProd).toBe(true);
+      expect(preview.body.promoteDraftBlocked).toBe(true);
+
+      const before = {
+        env: await prisma.chatbotEnvironment.findUnique({ where: { chatbotId: bot.chatbotId } }),
+        logs: await prisma.environmentSwitchLog.count({ where: { chatbotId: bot.chatbotId } }),
+        audits: await prisma.auditLog.count({ where: { chatbotId: bot.chatbotId } }),
+      };
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ENV_GATE_NOT_PASSED');
+      expect(res.body.details).toEqual([{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }]);
+
+      // 쓰기 0 — 모드 켜짐·포인터·환경 행·전환 이력·감사 불변, 공개 응답은 여전히 운영(v1).
+      const status = (await getStatus(bot.chatbotId)).body as { enabled: boolean; prod: { versionId: string } };
+      expect(status.enabled).toBe(true);
+      expect(status.prod.versionId).toBe(bot.v1Id);
+      expect((await prisma.chatbot.findUnique({ where: { id: bot.chatbotId }, select: { prodVersionId: true } }))?.prodVersionId).toBe(bot.v1Id);
+      expect(await prisma.chatbotEnvironment.findUnique({ where: { chatbotId: bot.chatbotId } })).toEqual(before.env);
+      expect(await prisma.environmentSwitchLog.count({ where: { chatbotId: bot.chatbotId } })).toBe(before.logs);
+      expect(await prisma.auditLog.count({ where: { chatbotId: bot.chatbotId } })).toBe(before.audits);
+      expect(outputText(await sendPublic(bot.slug, sessionUuid(), `${bot.keyword} 문의`))).toBe('응답-v1');
+    });
+
+    it('AC-EN1-8(a) — BLOCK이어도 초안 = 운영이면 PROMOTE_DRAFT가 허용되고 미리보기에 promoteDraftBlocked 키가 없다', async () => {
+      const bot = await setup('끄기동일', { gate: 'BLOCK', editDraft: false });
+      const preview = await previewDisable(bot.chatbotId);
+      expect(preview.body.draftDiffersFromProd).toBe(false);
+      expect('promoteDraftBlocked' in preview.body).toBe(false);
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(201);
+      expect(res.body.enabled).toBe(false);
+    });
+
+    it('AC-EN1-8(b) — BLOCK ∧ 초안≠운영이어도 KEEP_PROD는 게이트와 무관하다(복원 전 ENV_DRAFT_NOT_RESTORED → 복원 후 성공)', async () => {
+      const bot = await setup('끄기유지', { gate: 'BLOCK' });
+      const preview = await previewDisable(bot.chatbotId);
+      const notRestored = await confirmDisable(bot.chatbotId, 'KEEP_PROD', bot.v1Id, preview.body.draftContentHash);
+      expect(notRestored.status).toBe(409);
+      expect(notRestored.body.code).toBe('ENV_DRAFT_NOT_RESTORED'); // 게이트 거부가 아니다.
+
+      const restorePreview = await admin<{ currentContentHash: string }>('POST', `/chatbots/${bot.chatbotId}/versions/${bot.v1Id}/restore/preview`);
+      const restored = await admin<{ contentHash: string }>('POST', `/chatbots/${bot.chatbotId}/versions/${bot.v1Id}/restore`, { expectedCurrentHash: restorePreview.body.currentContentHash, acknowledgeActive: true });
+      expect(restored.status).toBe(200);
+      const res = await confirmDisable(bot.chatbotId, 'KEEP_PROD', bot.v1Id, restored.body.contentHash);
+      expect(res.status).toBe(201);
+    });
+
+    it('AC-N40-3 — WARN + 필수 세트 지정 ∧ 초안≠운영이면 키 없음 · PROMOTE_DRAFT 성공(현행 동작)', async () => {
+      const bot = await setup('끄기경고세트', { gate: 'WARN_SET' });
+      const preview = await previewDisable(bot.chatbotId);
+      expect(preview.body.draftDiffersFromProd).toBe(true);
+      expect('promoteDraftBlocked' in preview.body).toBe(false);
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(201);
+    });
+
+    it('게이트 미설정(기본) ∧ 초안≠운영이면 키 없음 · PROMOTE_DRAFT 성공(현행 동작)', async () => {
+      const bot = await setup('끄기기본', { gate: 'NONE' });
+      const preview = await previewDisable(bot.chatbotId);
+      expect('promoteDraftBlocked' in preview.body).toBe(false);
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(201);
+    });
+
+    it('AC-N40-2 — 오래된 미리보기(초안이 그사이 편집됨)는 게이트보다 먼저 ENV_POINTER_STALE', async () => {
+      const bot = await setup('끄기오래된', { gate: 'BLOCK' });
+      const preview = await previewDisable(bot.chatbotId);
+      await setNodeOutputText(bot.chatbotId, bot.nodeId, '응답-또-편집');
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ENV_POINTER_STALE');
+    });
+
+    it('AC-N40-4 — WARN 미리보기 뒤 다른 관리자가 게이트를 BLOCK으로 바꾸면 확정이 409 PROMOTE_DRAFT_BLOCKED(트랜잭션 안 게이트 모드로 판정)', async () => {
+      const bot = await setup('끄기경합설정', { gate: 'WARN_SET' });
+      const preview = await previewDisable(bot.chatbotId);
+      expect('promoteDraftBlocked' in preview.body).toBe(false);
+      await putGate(bot.chatbotId, 'BLOCK', bot.setId as string);
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ENV_GATE_NOT_PASSED');
+      expect(res.body.details).toEqual([{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }]);
+    });
+
+    it('AC-N40-5 — BLOCK ∧ 필수 세트가 삭제(SET_MISSING)돼도 모드만 보고 거부한다', async () => {
+      const bot = await setup('끄기세트삭제', { gate: 'BLOCK' });
+      await prisma.testCaseSet.deleteMany({ where: { id: bot.setId as string } });
+      const preview = await previewDisable(bot.chatbotId);
+      expect(preview.body.promoteDraftBlocked).toBe(true);
+      const res = await confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ENV_GATE_NOT_PASSED');
+    });
+
+    it('동시 경합 — 게이트를 BLOCK으로 바꾸는 요청과 PROMOTE_DRAFT 끄기를 동시에 날려도 결과가 일관된다', async () => {
+      const bot = await setup('끄기동시', { gate: 'WARN_SET' });
+      const preview = await previewDisable(bot.chatbotId);
+      const [gateRes, disableRes] = await Promise.all([
+        admin('PUT', `/chatbots/${bot.chatbotId}/environment/gate`, { mode: 'BLOCK', testSetId: bot.setId, minPassRate: 95, validHours: 24 }),
+        confirmDisable(bot.chatbotId, 'PROMOTE_DRAFT', bot.v1Id, preview.body.draftContentHash),
+      ]);
+      const enabled = ((await getStatus(bot.chatbotId)).body as { enabled: boolean }).enabled;
+      if (disableRes.status === 201) {
+        expect(enabled).toBe(false); // 끄기가 먼저 — 게이트 변경은 성공하거나(꺼진 뒤 설정) 409일 수 있다.
+        expect([200, 409]).toContain(gateRes.status);
+      } else {
+        expect(disableRes.status).toBe(409);
+        expect(disableRes.body.code).toBe('ENV_GATE_NOT_PASSED');
+        expect(disableRes.body.details).toEqual([{ field: 'reason', message: 'PROMOTE_DRAFT_BLOCKED' }]);
+        expect(enabled).toBe(true);
+        expect(gateRes.status).toBe(200);
+      }
     });
   });
 });

@@ -148,6 +148,8 @@ export const DisableEnvironmentPreviewResponseSchema = z.object({
   potentialTieShift: z.boolean(),
   /** [신규 No.36] 2인 승인이 켜져 있으면 끄기가 거부된다(켜졌을 때만 키 존재 — 기존 응답 바이트 동일). */
   approvalPolicyActive: z.literal(true).optional(),
+  /** [N40-3] 차단 게이트 ∧ 초안≠운영(contentHash)이면 "초안을 운영으로" 확정이 409가 된다 — 해당할 때만 키 존재(기존 응답 바이트 동일). */
+  promoteDraftBlocked: z.literal(true).optional(),
 });
 export type DisableEnvironmentPreviewResponse = z.infer<typeof DisableEnvironmentPreviewResponseSchema>;
 
@@ -220,6 +222,11 @@ export const ProdSwitchPreviewResponseSchema = z.object({
    * 대상이 직전 운영 버전이면 true(승인 없이 즉시 되돌릴 수 있음).
    */
   approval: z.object({ required: z.literal(true), soloRollbackAllowed: z.boolean().optional() }).optional(),
+  /**
+   * [N40-1] ROLLBACK 미리보기에서만 실린다(SWITCH = 키 생략). 대상이 **직전 운영 버전**이면 true — 이때만 게이트 BLOCK이 WARN으로
+   * 완화된다. false(이력의 그 밖의 과거 버전)면 일반 전환과 같은 게이트가 적용되어 `GATE_BLOCKED` 차단이 유효하다.
+   */
+  directRollback: z.boolean().optional(),
 });
 export type ProdSwitchPreviewResponse = z.infer<typeof ProdSwitchPreviewResponseSchema>;
 

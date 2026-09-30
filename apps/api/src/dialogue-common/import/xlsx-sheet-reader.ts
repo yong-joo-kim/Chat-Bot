@@ -3,16 +3,27 @@ import { Readable } from 'stream';
 import ExcelJS from 'exceljs';
 import type { SheetReader, SheetRow } from './sheet-reader';
 import { ImportFileTooLargeError } from './sheet-reader';
+import { XlsxTooLargeError, reorderXlsxEntries } from './lib/xlsx-order';
 
 /**
  * `exceljs` 스트리밍 리더 기반 XLSX 파서(ADR-0007). 첫 번째 워크시트만 사용하고
  * `maxRows` 도달 시 즉시 중단한다(압축 폭탄 방어, NFR-S6). 업로드 파일은 파싱 후 즉시 버려진다.
+ *
+ * 스트리밍 리더는 `xl/workbook.xml`이 워크시트보다 **앞**에 있어야 읽으므로(exceljs가 만든 파일·`buildXlsxTemplate` 출력은
+ * 맨 뒤) 읽기 전에 항목 순서를 바로잡는다(D-5). 압축 해제 크기 상한 초과는 `ImportFileTooLargeError`로 변환한다.
  */
 @Injectable()
 export class XlsxSheetReader implements SheetReader {
   async read(buffer: Buffer, maxRows: number): Promise<SheetRow[]> {
     const rows: SheetRow[] = [];
-    const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(Readable.from(buffer), {
+    let ordered: Buffer;
+    try {
+      ordered = await reorderXlsxEntries(buffer);
+    } catch (e) {
+      if (e instanceof XlsxTooLargeError) throw new ImportFileTooLargeError();
+      throw e;
+    }
+    const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(Readable.from(ordered), {
       entries: 'emit',
       sharedStrings: 'cache',
       styles: 'ignore',

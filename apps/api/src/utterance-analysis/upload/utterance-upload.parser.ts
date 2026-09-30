@@ -7,7 +7,6 @@ import { ImportFileTooLargeError } from '../../dialogue-common/import/sheet-read
 import type { SheetReader } from '../../dialogue-common/import/sheet-reader';
 import { hasEncodingAnomaly, isHeaderMismatch } from '../../dialogue-common/import/lib/sheet-detect';
 import { inspectUpload } from '../lib/file-sniff';
-import { XlsxTooLargeError, reorderXlsxEntries } from '../lib/xlsx-order';
 import type { UploadFileKind } from '../lib/file-sniff';
 import type { RawUtteranceRow } from '../lib/prepare-utterances';
 
@@ -55,11 +54,10 @@ export class UtteranceUploadParser {
     const reader: SheetReader = kind === 'XLSX' ? this.xlsxReader : this.csvReader;
     let sheetRows;
     try {
-      // 기존 스트리밍 리더는 `xl/workbook.xml`이 워크시트보다 앞에 있어야 읽는다 — 항목 순서만 바로잡는다.
-      const input = kind === 'XLSX' ? await reorderXlsxEntries(file.buffer) : file.buffer;
-      sheetRows = await reader.read(input, limits.maxRows);
+      // xlsx 항목 순서 정규화·압축 폭탄 방어는 `XlsxSheetReader.read()`가 공통으로 처리한다(D-5).
+      sheetRows = await reader.read(file.buffer, limits.maxRows);
     } catch (e) {
-      if (e instanceof ImportFileTooLargeError || e instanceof XlsxTooLargeError) {
+      if (e instanceof ImportFileTooLargeError) {
         throw new ApiException('IMPORT_TOO_LARGE', 400, `파일이 너무 큽니다. 최대 ${maxBytes / (1024 * 1024)}MB, ${limits.maxRows}줄까지 올릴 수 있습니다.`);
       }
       // 서명은 ZIP이지만 엑셀 통합 문서가 아닌 경우 등 — 원인 문구를 서버 내부 오류로 새지 않게 한다.

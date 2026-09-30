@@ -1,14 +1,15 @@
 import { unzip, zip } from 'fflate';
 
 /**
- * XLSX 압축 항목 순서 정규화(No.21 — 업로드 견고성). 기존 스트리밍 리더(`XlsxSheetReader` — `exceljs`
+ * XLSX 압축 항목 순서 정규화(No.21 도입 → D-5로 공통 리더 안으로 이동). 스트리밍 리더(`XlsxSheetReader` — `exceljs`
  * `WorkbookReader`)는 `xl/workbook.xml`이 워크시트보다 **앞**에 있어야 읽을 수 있다. Excel·LibreOffice가 저장한
  * 파일은 그 순서지만 `exceljs` 등 일부 라이브러리가 만든 파일(이 저장소의 `buildXlsxTemplate` 출력 포함)은
  * `xl/workbook.xml`이 **맨 끝**이라 "Cannot read properties of undefined (reading 'sheets')"로 실패한다.
- * 그래서 읽기 전에 항목 순서만 바로잡는다(내용은 그대로 · 무압축 재포장). 기존 리더는 수정하지 않는다.
+ * 그래서 읽기 전에 항목 순서만 바로잡는다(내용은 그대로 · 무압축 재포장). `XlsxSheetReader.read()`가 항상 먼저 호출하므로
+ * 모든 업로드 경로(의도·키워드·FAQ·시험 케이스·발화 분석)가 보호된다.
  *
  * 압축 폭탄 방어: 전체 압축 해제 크기(30MB)와 항목별 크기(20MB)가 상한을 넘으면 **압축을 풀기 전에**(헤더의 원본 크기로)
- * 거부한다(호출부가 IMPORT_TOO_LARGE로 변환). 압축 해제·재포장은 fflate 비동기 API(워커 스레드)로 해 API 이벤트 루프를 막지 않는다.
+ * 거부한다(`XlsxSheetReader`가 `ImportFileTooLargeError`로 변환 → 호출부 IMPORT_TOO_LARGE). 압축 해제·재포장은 fflate 비동기 API(워커 스레드)로 해 API 이벤트 루프를 막지 않는다.
  * DB·Nest 무의존 순수 함수.
  */
 

@@ -13,6 +13,8 @@ import type { Harness } from './helpers/kb-crawl-db-harness';
 const DOCS = `${HOST}/docs/`;
 const okRobots = (f: FakeFetcher): FakeFetcher => f.route(`${HOST}/robots.txt`, html('User-agent: *\nAllow: /\n'));
 const redirect = (location: string, code = 302): KbFetchResult => ({ kind: 'REDIRECT', status: code, location, headers: {} });
+// T-1: M-A 블록만의 시험 제한(전역 20초는 그대로) — 문서 31건 삽입 + 51쪽 다중 tick 크롤이 병렬 부하에서 느려진다.
+const M_A_TIMEOUT_MS = 60_000;
 const docBody = (i: number): string => page(`문서 ${i}`, [], `문서 ${i}번의 서로 다른 본문입니다. `.repeat(12));
 
 async function addDoc(h: Harness, sourceId: string, path: string, over: Record<string, unknown> = {}) {
@@ -56,10 +58,23 @@ describe('KB pass 11', () => {
     const fresh = Array.from({ length: 20 }, (_, i) => `/docs/n${i + 1}`);
     const noindexBody = (i: number): string => `<html><head><title>비공개 ${i}</title><meta name="robots" content="noindex"></head><body><main><p>${`비공개 문서 ${i}번 본문입니다. `.repeat(12)}</p></main></body></html>`;
 
+    // T-1: 문서 본문이 `docBody(i)`로 결정적이라 추출기 호출 31회(해시·지문)는 한 번만 계산해 3개 시험이 재사용한다
+    // (병렬 CPU 경합 시 시험마다 반복하면 20초 기본 제한을 넘는 간헐 실패가 있었다).
+    let existingFields: Array<Awaited<ReturnType<typeof ingestedFields>>> | undefined;
+    const existingIngestedFields = async () => {
+      if (!existingFields) {
+        const computed: Array<Awaited<ReturnType<typeof ingestedFields>>> = [];
+        for (const i of existing.keys()) computed.push(await ingestedFields(docBody(i + 1)));
+        existingFields = computed;
+      }
+      return existingFields;
+    };
+
     /** 적재된 ACTIVE 31건 중 앞의 12건은 이번 크롤에서 noindex(EXCLUDED)가 되고, 새 문서 20건이 더 발견된다. */
     async function seed() {
       const { id } = await h.createSource();
-      for (const [i, p] of existing.entries()) await addDoc(h, id, p, { ...(await ingestedFields(docBody(i + 1))) });
+      const fields = await existingIngestedFields();
+      for (const [i, p] of existing.entries()) await addDoc(h, id, p, { ...fields[i] });
       const fetcher = okRobots(new FakeFetcher()).route(DOCS, html(page('목록', [...existing, ...fresh])));
       existing.forEach((p, i) => fetcher.route(`${HOST}${p}`, html(i < 12 ? noindexBody(i + 1) : docBody(i + 1))));
       fresh.forEach((p, i) => fetcher.route(`${HOST}${p}`, html(docBody(100 + i))));
@@ -70,7 +85,7 @@ describe('KB pass 11', () => {
       const { id, fetcher } = await seed();
       const run = await h.drive(h.makeRunner({ fetcher }).runner, await h.startRun(id, 'SYNC'));
       expect(run.demotedReason).toBe('NEW_RATIO');
-    });
+    }, M_A_TIMEOUT_MS);
 
     it('★ 재현 — 이전 tick에서 12건이 noindex로 EXCLUDED가 된 뒤 두 tick으로 쪼개도 같은 결과(NEW_RATIO · 분모는 실행 시작 시점 31)', async () => {
       const { id, fetcher } = await seed();
@@ -85,7 +100,7 @@ describe('KB pass 11', () => {
       expect(run.demotedReason).toBe('NEW_RATIO');
       expect(run.status).toBe('SUCCEEDED');
       expect(await h.prisma.kbIngestJob.count({ where: { runId } })).toBe(0);
-    });
+    }, M_A_TIMEOUT_MS);
 
     it('분모는 첫 조각에서 실행 행 counts에 한 번 고정되고, 종결 때 집계가 덮어써 남지 않는다', async () => {
       const { id, fetcher } = await seed();
@@ -95,7 +110,7 @@ describe('KB pass 11', () => {
       expect(JSON.parse((await h.store.findRun(runId))!.counts)).toHaveProperty('priorActiveIngested', 31);
       const run = await h.drive(runner, runId);
       expect(JSON.parse(run.counts)).not.toHaveProperty('priorActiveIngested');
-    });
+    }, M_A_TIMEOUT_MS);
   });
 
   /* ───────────────────────── L-B ───────────────────────── */

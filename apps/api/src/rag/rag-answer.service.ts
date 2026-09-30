@@ -10,12 +10,11 @@ import { RagCallLogService } from './rag-call-log.service';
 import type { PendingAnswerStore } from './pending-answer.store';
 import type { ConversationLogPort } from './conversation-log.port';
 import { judgeRagResponse } from './lib/judge-rag-response';
+import { truncateAnswer } from './lib/truncate-answer';
 import { sanitizeSources, scopeMismatchDetected } from './lib/sanitize-sources';
 import { RagErrorBodySchema, RagQueryResponseSchema } from './lib/rag-response.schema';
 import type { RagQueryResponseRaw } from './lib/rag-response.schema';
 import type { RagOutcome } from '@chat-bot/shared-types';
-
-const ANSWER_MAX_LENGTH = 2000;
 
 export interface RagAnswerRunInput {
   messageId: string;
@@ -43,10 +42,6 @@ type CallResult =
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function truncateAnswer(text: string): string {
-  return text.length <= ANSWER_MAX_LENGTH ? text : `${text.slice(0, ANSWER_MAX_LENGTH)}…`;
 }
 
 /**
