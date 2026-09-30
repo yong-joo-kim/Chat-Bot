@@ -1,0 +1,7043 @@
+{
+ "note": "[No.36] 저장 마스킹 골든 — 선택 인자 도입 전 현행 maskPii()로 생성한 기대값. 재생성 금지(바이트 불변 증명용).",
+ "cases": [
+  {
+   "text": "901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 901231-1234567 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 [주민등록번호] 입니다.",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [주민등록번호] 입니다.",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 9012311234567 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: [주민등록번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [주민등록번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "[000101-3123456]",
+   "PARTIAL": {
+    "maskedText": "[[주민등록번호]]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[[주민등록번호]]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "앞850505-2345678뒤",
+   "PARTIAL": {
+    "maskedText": "앞[주민등록번호]뒤",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[주민등록번호]뒤",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999",
+   "PARTIAL": {
+    "maskedText": "991231-9999999",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999, 그리고 991231-9999999",
+   "PARTIAL": {
+    "maskedText": "991231-9999999, 그리고 991231-9999999",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999, 그리고 991231-9999999",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 010203-5123456\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 [주민등록번호]\n다음 줄",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 [주민등록번호]\n다음 줄",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678",
+   "PARTIAL": {
+    "maskedText": "850505-0345678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 850505-0345678 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 850505-0345678 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 850505-0345678 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456",
+   "PARTIAL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 1234-5678-9012-3456 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 [카드번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [카드번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 1234 5678 9012 3456 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: [카드번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [카드번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "[1234567890123456]",
+   "PARTIAL": {
+    "maskedText": "[[주민등록번호]456]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[[주민등록번호]456]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34",
+   "PARTIAL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "앞1234-5678-9012-34뒤",
+   "PARTIAL": {
+    "maskedText": "앞[카드번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[카드번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234, 그리고 12345678901234",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4, 그리고 [주민등록번호]4",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4, 그리고 [주민등록번호]4",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345",
+   "PARTIAL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 1234-5678-9012-345\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 [카드번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 [카드번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111",
+   "PARTIAL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 4111-1111-1111-1111 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 [카드번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [카드번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678",
+   "PARTIAL": {
+    "maskedText": "010-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 010-1234-5678 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 010-****-5678 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [전화번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678",
+   "PARTIAL": {
+    "maskedText": "010-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 01012345678 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: 010-****-5678 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [전화번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "011-234-5678",
+   "PARTIAL": {
+    "maskedText": "011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "[011-234-5678]",
+   "PARTIAL": {
+    "maskedText": "[011-****-5678]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[[전화번호]]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567",
+   "PARTIAL": {
+    "maskedText": "021-****-4567",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "앞02-123-4567뒤",
+   "PARTIAL": {
+    "maskedText": "앞021-****-4567뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[전화번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678",
+   "PARTIAL": {
+    "maskedText": "031-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678, 그리고 031-1234-5678",
+   "PARTIAL": {
+    "maskedText": "031-****-5678, 그리고 031-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호], 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 +82-10-1234-5678\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 +[계좌번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 +[계좌번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567",
+   "PARTIAL": {
+    "maskedText": "010-****-4567",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 010-123-4567 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 010-****-4567 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [전화번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "016-9876-5432",
+   "PARTIAL": {
+    "maskedText": "016-****-5432",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 016-9876-5432 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: 016-****-5432 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [전화번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 110-234-567890 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "123-45-678901",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 123-45-678901 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "[1002-123-456789]",
+   "PARTIAL": {
+    "maskedText": "[1002-****-456789]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[1[전화번호]89]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "앞110-234-567890-12뒤",
+   "PARTIAL": {
+    "maskedText": "앞[계좌번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[계좌번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-345-6789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-345-6789, 그리고 12-345-6789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호], 그리고 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호], 그리고 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 356-0123-4567-89\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 [계좌번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 [계좌번호]\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com",
+   "PARTIAL": {
+    "maskedText": "a***@example.com",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 abcd@example.com 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 a***@example.com 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [이메일] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "a@b.co",
+   "PARTIAL": {
+    "maskedText": "a***@b.co",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "문의: a@b.co 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: a***@b.co 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [이메일] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "hong.gildong+test@sub.example.co.kr",
+   "PARTIAL": {
+    "maskedText": "h***@sub.example.co.kr",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "[hong.gildong+test@sub.example.co.kr]",
+   "PARTIAL": {
+    "maskedText": "[h***@sub.example.co.kr]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[[이메일]]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "앞user_01@naver.com뒤",
+   "PARTIAL": {
+    "maskedText": "앞u***@naver.com뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[이메일]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "x@y.z",
+   "PARTIAL": {
+    "maskedText": "x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "x@y.z, 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "x@y.z, 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z, 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 no-at-sign.example.com\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 no-at-sign.example.com\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 no-at-sign.example.com\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-09-30",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객 정보는 2026-09-30 입니다.",
+   "PARTIAL": {
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "문의: 1999-12-31 로 연락 주세요",
+   "PARTIAL": {
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "[2000-01-01]",
+   "PARTIAL": {
+    "maskedText": "[[계좌번호]]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[[계좌번호]]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "앞2026-13-01뒤",
+   "PARTIAL": {
+    "maskedText": "앞[계좌번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "앞[계좌번호]뒤",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930",
+   "PARTIAL": {
+    "maskedText": "20260930",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930, 그리고 20260930",
+   "PARTIAL": {
+    "maskedText": "20260930, 그리고 20260930",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930, 그리고 20260930",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3",
+   "PARTIAL": {
+    "maskedText": "2026-9-3",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "번호 2026-9-3\n다음 줄",
+   "PARTIAL": {
+    "maskedText": "번호 2026-9-3\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "번호 2026-9-3\n다음 줄",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "버전 1-2-3 입니다",
+   "PARTIAL": {
+    "maskedText": "버전 1-2-3 입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "버전 1-2-3 입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "v1.2.3-rc1",
+   "PARTIAL": {
+    "maskedText": "v1.2.3-rc1",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "v1.2.3-rc1",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "주문번호 20260930123456",
+   "PARTIAL": {
+    "maskedText": "주문번호 [주민등록번호]6",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "주문번호 [주민등록번호]6",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "전화 없음",
+   "PARTIAL": {
+    "maskedText": "전화 없음",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "전화 없음",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "",
+   "PARTIAL": {
+    "maskedText": "",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "   ",
+   "PARTIAL": {
+    "maskedText": "   ",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "   ",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "한글만 있는 문장입니다",
+   "PARTIAL": {
+    "maskedText": "한글만 있는 문장입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "한글만 있는 문장입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "ABC-DEF-GHI",
+   "PARTIAL": {
+    "maskedText": "ABC-DEF-GHI",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "ABC-DEF-GHI",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-34-56",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1-2-3-4",
+   "PARTIAL": {
+    "maskedText": "1-2-3-4",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1-2-3-4",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234",
+   "PARTIAL": {
+    "maskedText": "010-1234",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "010-1234",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678",
+   "PARTIAL": {
+    "maskedText": "1234-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1234-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "99999-99999-99999",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "0-0-0",
+   "PARTIAL": {
+    "maskedText": "0-0-0",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "0-0-0",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "850505-0345678 / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678 / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456 / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456 / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "991231-9999999 / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999 / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4 / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4 / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345 / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "011-234-5678 / x@y.z 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "011-****-5678 / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4 / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4 / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "010-****-4567 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "031-****-5678 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "016-9876-5432 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "016-****-5432 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "011-234-5678 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "011-****-5678 / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12 / 1002-123-456789 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-4567 / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-345-6789 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "016-9876-5432 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "016-****-5432 / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789 / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89 / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "hong.gildong+test@sub.example.co.kr / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "h***@sub.example.co.kr / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "12-345-6789 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "a@b.co / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "a***@b.co / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "x@y.z / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "x@y.z / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "hong.gildong+test@sub.example.co.kr / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "h***@sub.example.co.kr / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01 / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "x@y.z / 1002-123-456789 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "x@y.z / 1002-****-456789 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / 1[전화번호]89 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "20260930 / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930 / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "2026-9-3 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678 / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "850505-0345678 / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678 / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567 / 1002-123-456789 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 1002-****-456789 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / 1[전화번호]89 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "991231-9999999 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999 / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678 / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456 / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456 / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456 / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "031-****-5678 / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890 / 1002-123-456789 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678 / x@y.z 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "031-****-5678 / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789 / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89 / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / 1002-123-456789 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "a@b.co / 1234 5678 9012 3456 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "a***@b.co / [카드번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [카드번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "hong.gildong+test@sub.example.co.kr / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "h***@sub.example.co.kr / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "a@b.co / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "a***@b.co / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "x@y.z / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "x@y.z / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "20260930 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3 / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "2026-9-3 / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3 / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / x@y.z 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "20260930 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930 / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "850505-0345678 / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678 / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456 / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456 / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 3,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 3,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4 / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4 / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567 / x@y.z 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "010-****-4567 / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "031-****-5678 / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "016-9876-5432 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "016-****-5432 / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "011-234-5678 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "011-****-5678 / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-345-6789 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "hong.gildong+test@sub.example.co.kr / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "h***@sub.example.co.kr / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "12-345-6789 / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "a@b.co / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "a***@b.co / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "x@y.z / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "x@y.z / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com / x@y.z 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "2026-13-01 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "x@y.z / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "x@y.z / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2000-01-01 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "2026-9-3 / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3 / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456 / 1002-123-456789 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 1002-****-456789 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / 1[전화번호]89 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678 / 1234 5678 9012 3456 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "850505-0345678 / [카드번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678 / [카드번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999 / 011-234-5678 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "991231-9999999 / 011-****-5678 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999 / [전화번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "000101-3123456 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678 / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-0345678 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "850505-0345678 / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "850505-0345678 / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111 / 1234 5678 9012 3456 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / x@y.z 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / x@y.z 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-345 / 1234 5678 9012 3456 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [카드번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "031-1234-5678 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "031-****-5678 / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111 / 901231-1234567 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "02-123-4567 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "021-****-4567 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "010-****-4567 / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "016-9876-5432 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "016-****-5432 / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789 / 011-234-5678 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789 / 011-****-5678 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89 / [전화번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "+82-10-1234-5678 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "+[계좌번호] / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "+[계좌번호] / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "110-234-567890-12 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / 901231-1234567 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / [주민등록번호] 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [주민등록번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "123-45-678901 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12-345-6789 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "a@b.co / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "a***@b.co / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "1002-123-456789 / 011-234-5678 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "1002-****-456789 / 011-****-5678 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1[전화번호]89 / [전화번호] 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "356-0123-4567-89 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "no-at-sign.example.com / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "no-at-sign.example.com / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "no-at-sign.example.com / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "abcd@example.com / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "a***@example.com / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "user_01@naver.com / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "u***@naver.com / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 2,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "x@y.z / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "x@y.z / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "x@y.z / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "20260930 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "20260930 / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "20260930 / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3 / 1002-123-456789 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "2026-9-3 / 1002-****-456789 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3 / 1[전화번호]89 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1999-12-31 / 011-234-5678 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "9012311234567 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "991231-9999999 / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999 / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-9-3 / 011-234-5678 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "2026-9-3 / 011-****-5678 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-9-3 / [전화번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010203-5123456 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "901231-1234567 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "850505-2345678 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호] / [카드번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 2,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "991231-9999999 / 1234 5678 9012 3456 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "991231-9999999 / [카드번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "991231-9999999 / [카드번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-3456 / x@y.z 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 011-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / x@y.z 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234 5678 9012 3456 / x@y.z 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 1,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 011-234-5678 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 011-****-5678 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234567890123456 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]456 / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]456 / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "01012345678 / 011-234-5678 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 011-****-5678 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [전화번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1234-5678-9012-34 / x@y.z 그리고 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / x@y.z 그리고 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "4111-1111-1111-1111 / 901231-1234567 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "011-234-5678 / 901231-1234567 그리고 011-234-5678",
+   "PARTIAL": {
+    "maskedText": "011-****-5678 / [주민등록번호] 그리고 011-****-5678",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / [주민등록번호] 그리고 [전화번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "12345678901234 / 901231-1234567 그리고 1234 5678 9012 3456",
+   "PARTIAL": {
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 [카드번호]",
+    "counts": {
+     "rrn": 2,
+     "card": 1,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-1234-5678 / 1002-123-456789 그리고 x@y.z",
+   "PARTIAL": {
+    "maskedText": "010-****-5678 / 1002-****-456789 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 x@y.z",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 2,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "010-123-4567 / 1002-123-456789 그리고 1002-123-456789",
+   "PARTIAL": {
+    "maskedText": "010-****-4567 / 1002-****-456789 그리고 1002-****-456789",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[전화번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 3,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "주민 901231-1234567 카드 1234-5678-9012-3456 전화 010-1234-5678 계좌 110-234-567890 메일 abcd@example.com 날짜 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 010-****-5678 계좌 [계좌번호] 메일 a***@example.com 날짜 [계좌번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 2,
+     "phone": 1,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 [전화번호] 계좌 [계좌번호] 메일 [이메일] 날짜 [계좌번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 1,
+     "account": 2,
+     "phone": 1,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "2026-09-30에 010-1234-5678 로 전화, 계좌 110-234-567890-12",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]에 010-****-5678 로 전화, 계좌 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]에 [전화번호] 로 전화, 계좌 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "가나다라마바사 아자차카타파하",
+   "PARTIAL": {
+    "maskedText": "가나다라마바사 아자차카타파하",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "가나다라마바사 아자차카타파하",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  }
+ ]
+}
