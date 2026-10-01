@@ -72,6 +72,9 @@ const EnvSchema = z.object({
   AUGMENTATION_GEMINI_BASE_URL: z.string().optional(),
   AUGMENTATION_LOCAL_BASE_URL: z.string().optional(),
   AUGMENTATION_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  // [K-1c] 증강 회로차단 — 연속 인프라 실패 임계와 개방 시간(레거시 키와 같은 형식). 프로세스 단위로 공급자(gemini·local)마다 1개.
+  AUGMENTATION_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().int().min(1).default(5),
+  AUGMENTATION_CIRCUIT_OPEN_MS: z.coerce.number().int().min(1000).default(60000),
   AUGMENTATION_MAX_SUGGESTIONS: z.coerce.number().int().positive().default(20),
   AUGMENTATION_MAX_PENDING: z.coerce.number().int().positive().default(500),
   AUGMENTATION_SUFFICIENT_EXAMPLES: z.coerce.number().int().positive().default(10),

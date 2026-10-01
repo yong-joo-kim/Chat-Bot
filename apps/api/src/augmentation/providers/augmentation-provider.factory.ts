@@ -1,10 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AugmentationProvider, AugmentationProviderId } from './augmentation-provider.port';
 import { RuleBasedAugmentationProvider, SynonymDictSupplier } from './rule-augmentation.provider';
 import { GeminiAugmentationProvider } from './gemini-augmentation.provider';
 import { LocalAugmentationProvider } from './local-augmentation.provider';
 import { MockAugmentationProvider } from './mock-augmentation.provider';
+import { AugmentationCircuit } from './lib/augmentation-circuit';
+
+/** 회로 시계 주입 토큰(선택 — K-1c). 운영 배선은 제공하지 않는다(기본 `Date.now`). 시간 의존 시험이 가짜 시계를 넣는 용도다. */
+export const AUGMENTATION_CIRCUIT_CLOCK = 'AUGMENTATION_CIRCUIT_CLOCK';
 
 export type AugmentationDegradeReason = 'API_KEY_MISSING' | 'BASE_URL_MISSING' | 'UNHEALTHY';
 
@@ -34,7 +38,38 @@ export interface AugmentationProviderDeps {
 export class AugmentationProviderFactory {
   private readonly logger = new Logger('AugmentationProviderFactory');
 
-  constructor(private readonly config: ConfigService) {}
+  /**
+   * [K-1c] 공급자별 회로 상태(`gemini`·`local`) — 이 팩토리가 모듈 싱글턴이라 프로세스 수명으로 이어진다. **Provider 인스턴스는 캐시하지 않는다**
+   * (Gemini는 Job마다 다른 금지어 목록을 생성자로 받는다) — 장애 상태만 여기서 공유한다. 지연 생성이라 `rule`·`mock` 구성에서는 만들어지지 않는다(AC-L1-14).
+   */
+  private readonly circuits = new Map<'gemini' | 'local', AugmentationCircuit>();
+
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() @Inject(AUGMENTATION_CIRCUIT_CLOCK) private readonly clock?: () => number,
+  ) {}
+
+  private circuitFor(id: 'gemini' | 'local'): AugmentationCircuit {
+    let circuit = this.circuits.get(id);
+    if (!circuit) {
+      const openMs = Number(this.config.get<number>('AUGMENTATION_CIRCUIT_OPEN_MS') ?? 60_000);
+      const timeoutMs = Number(this.config.get<number>('AUGMENTATION_TIMEOUT_MS') ?? 30_000);
+      circuit = new AugmentationCircuit({
+        threshold: Number(this.config.get<number>('AUGMENTATION_CIRCUIT_FAILURE_THRESHOLD') ?? 5),
+        openMs,
+        probeLeaseMs: timeoutMs + 5_000, // 탐침이 기록 없이 사라져도 타임아웃 + 5초 뒤 새 탐침 허용
+        now: this.clock,
+        // 상태 전이 때만 1줄 — 문장·URL·키는 싣지 않는다(AC-K1c-7).
+        onTransition: (event, info) => {
+          if (event === 'OPENED') this.logger.warn(`증강 회로 개방: provider=${id} failures=${info.failures} openMs=${info.openMs}`);
+          else if (event === 'CLOSED') this.logger.log(`증강 회로 닫힘: provider=${id}`);
+          else this.logger.warn(`증강 회로 탐침 실패 — 재개방: provider=${id}`);
+        },
+      });
+      this.circuits.set(id, circuit);
+    }
+    return circuit;
+  }
 
   private get configuredProviderId(): AugmentationProviderId {
     const raw = (this.config.get<string>('AUGMENTATION_PROVIDER') ?? 'rule').trim().toLowerCase();
@@ -47,9 +82,8 @@ export class AugmentationProviderFactory {
   }
 
   /**
-   * 선택된 Provider 1종을 반환한다. 요청마다 새 인스턴스를 만들지 강제하지 않는다 — Gemini/Local은
-   * 회로차단 상태를 내부에 들고 있어야 하므로, 배선하는 쪽(backend-implementer)이 싱글턴으로
-   * 재사용하는 것을 권장한다(이 팩토리는 그 재사용 방식을 강제하지 않는다 — 매 호출 순수 함수형 결정).
+   * 선택된 Provider 1종을 반환한다. 인스턴스는 호출마다 새로 만든다(금지어 등 Job별 입력을 신선하게 유지) — 회로차단 **상태**만
+   * 공급자별로 이 팩토리가 소유해 주입한다(K-1c, ADR-0050 §2).
    */
   getProvider(deps?: AugmentationProviderDeps): AugmentationProvider {
     const configured = this.configuredProviderId;
@@ -68,6 +102,7 @@ export class AugmentationProviderFactory {
         baseUrl: this.config.get<string>('AUGMENTATION_GEMINI_BASE_URL'),
         timeoutMs: this.config.get<number>('AUGMENTATION_TIMEOUT_MS'),
         bannedWords: deps?.bannedWords,
+        circuit: this.circuitFor('gemini'),
       });
     }
 
@@ -80,6 +115,7 @@ export class AugmentationProviderFactory {
       return new LocalAugmentationProvider({
         baseUrl,
         timeoutMs: this.config.get<number>('AUGMENTATION_TIMEOUT_MS'),
+        circuit: this.circuitFor('local'),
       });
     }
 

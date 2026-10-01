@@ -67,4 +67,57 @@ describe('AugmentationProviderFactory', () => {
     const cap = await factory.getCapability();
     expect(cap).toMatchObject({ providerId: 'rule', configuredProviderId: 'rule', degraded: false });
   });
+
+  // K-1c — 회로 상태는 팩토리가 공급자별로 소유한다(Provider 인스턴스는 호출마다 새로 만든다).
+  describe('회로 소유(K-1c)', () => {
+    type Internals = { circuits: Map<string, unknown> };
+    const circuitsOf = (f: AugmentationProviderFactory): Map<string, unknown> => (f as unknown as Internals).circuits;
+    const geminiEnv = { AUGMENTATION_PROVIDER: 'gemini', AUGMENTATION_GEMINI_API_KEY: 'k' };
+
+    it('같은 팩토리의 두 getProvider()는 서로 다른 인스턴스지만 같은 회로를 공유한다', () => {
+      const f = factoryWith(geminiEnv);
+      const a = f.getProvider();
+      const b = f.getProvider();
+      expect(a).not.toBe(b);
+      expect(circuitsOf(f).size).toBe(1);
+      expect((a as unknown as { circuit: unknown }).circuit).toBe((b as unknown as { circuit: unknown }).circuit);
+    });
+
+    it('다른 팩토리는 독립 회로를 가진다', () => {
+      const a = factoryWith(geminiEnv).getProvider() as unknown as { circuit: unknown };
+      const b = factoryWith(geminiEnv).getProvider() as unknown as { circuit: unknown };
+      expect(a.circuit).not.toBe(b.circuit);
+    });
+
+    it('rule·mock 구성과 키 없는 저하 구성은 회로를 만들지 않는다(AC-K1c-4)', () => {
+      for (const env of [{}, { AUGMENTATION_PROVIDER: 'mock' }, { AUGMENTATION_PROVIDER: 'gemini' }, { AUGMENTATION_PROVIDER: 'local' }]) {
+        const f = factoryWith(env);
+        f.getProvider();
+        f.getFallbackProvider();
+        expect(circuitsOf(f).size).toBe(0);
+      }
+    });
+
+    it('local도 회로를 소유한다', () => {
+      const f = factoryWith({ AUGMENTATION_PROVIDER: 'local', AUGMENTATION_LOCAL_BASE_URL: 'http://x' });
+      f.getProvider();
+      expect([...circuitsOf(f).keys()]).toEqual(['local']);
+    });
+
+    it('설정 임계·개방 시간·주입 시계를 따른다(임계 1 · 개방 5초 · 가짜 시계) — 개방 중 capability는 UNHEALTHY', async () => {
+      const clock = { t: 1_000 };
+      const config = {
+        get: (k: string) => ({ ...geminiEnv, AUGMENTATION_CIRCUIT_FAILURE_THRESHOLD: 1, AUGMENTATION_CIRCUIT_OPEN_MS: 5_000 })[k as never],
+      } as unknown as ConfigService;
+      const f = new AugmentationProviderFactory(config, () => clock.t);
+      const circuit = circuitsOf(f).get('gemini') ?? (f.getProvider(), circuitsOf(f).get('gemini'));
+      const c = circuit as { tryAcquire(): unknown; record(p: unknown, o: string): void; isOpen(): boolean };
+      c.record(c.tryAcquire(), 'infra');
+      expect(c.isOpen()).toBe(true);
+      expect(await f.getCapability()).toMatchObject({ providerId: 'rule', configuredProviderId: 'gemini', degraded: true, degradeReason: 'UNHEALTHY' });
+      clock.t += 5_000;
+      expect(c.isOpen()).toBe(false);
+      expect(await f.getCapability()).toMatchObject({ providerId: 'gemini', degraded: false });
+    });
+  });
 });

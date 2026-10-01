@@ -77,6 +77,12 @@ describe('저장·송신 마스킹 날짜 제외(L-5)', () => {
     expect(await send(bot, '1990-05-12 (생년월일)')).toBe('1990-05-12 (생년월일)');
   });
 
+  it('AC-T5-1(규칙 v3): 구분자 없는 16자리 카드는 끝자리 노출 없이 [카드번호] · AMEX 공백형도 가려진다', async () => {
+    const bot = await h.createChatbot('카드저장');
+    expect(await send(bot, '카드 4111111111111111 결제 문의')).toBe('카드 [카드번호] 결제 문의');
+    expect(await send(bot, '카드 3782 822463 10005 결제')).toBe('카드 [카드번호] 결제');
+  });
+
   it('외부 RAG 질의 본문도 같은 규칙이다(일반 날짜 원문 · 생년월일 문맥 가림)', async () => {
     const ragBot = await h.createChatbot('날짜RAG');
     const put = await h.admin('PUT', `/chatbots/${ragBot.id}/answer-settings`, { semanticEnabled: false, ragEnabled: true, ragCompany: '테스트회사' });

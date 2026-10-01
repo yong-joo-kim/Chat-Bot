@@ -13,8 +13,12 @@ function makeRunner(opts: {
   primaryCandidates?: string[];
   fallbackCandidates?: string[];
   embedFails?: boolean;
+  /** K-1d — 폴백 G1 `generate()`가 거부(reject)할 오류. */
+  fallbackGenerateError?: Error;
+  /** K-1d — `getFallbackProvider()` 자체가 던질 오류. */
+  getFallbackError?: Error;
 }) {
-  const fallbackGenerate = jest.fn().mockResolvedValue(opts.fallbackCandidates ?? []);
+  const fallbackGenerate = opts.fallbackGenerateError ? jest.fn().mockRejectedValue(opts.fallbackGenerateError) : jest.fn().mockResolvedValue(opts.fallbackCandidates ?? []);
   const primaryGenerate = jest.fn().mockResolvedValue(opts.primaryCandidates ?? []);
   const outcomeFn = jest.fn().mockResolvedValue(opts.primary && opts.primary !== 'generate-only' ? opts.primary : { candidates: [] });
   const primaryProvider: Record<string, unknown> = { providerId: opts.primaryId, generate: primaryGenerate };
@@ -38,7 +42,11 @@ function makeRunner(opts: {
   const embed = opts.embedFails ? jest.fn().mockRejectedValue(new Error('down')) : jest.fn().mockImplementation(async (texts: string[]) => texts.map(() => new Float32Array([1])));
   const embeddingFactory = { getProvider: jest.fn().mockResolvedValue({ modelId: 'm', embed }) };
   const vectorCache = { get: jest.fn().mockResolvedValue({ entries: [{ ownerId: 'i1', ownerType: 'INTENT_NAME', vector: new Float32Array([1]) }] }) };
-  const getFallbackProvider = jest.fn().mockReturnValue({ providerId: 'rule', generate: fallbackGenerate });
+  const getFallbackProvider = opts.getFallbackError
+    ? jest.fn().mockImplementation(() => {
+        throw opts.getFallbackError;
+      })
+    : jest.fn().mockReturnValue({ providerId: 'rule', generate: fallbackGenerate });
   const augmentationFactory = { getProvider: jest.fn().mockReturnValue(primaryProvider), getFallbackProvider };
   const config = { get: jest.fn() };
   const runner = new AugmentationJobRunner(prisma as never, embeddingFactory as never, vectorCache as never, augmentationFactory as never, config as never);
@@ -114,5 +122,47 @@ describe('AugmentationJobRunner G1 폴백(K-1b)', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('from=local cause=TIMEOUT');
     expect(lines[0]).not.toContain('환불');
+  });
+
+  // K-1d — 폴백 G1 호출 예외가 Job 전체 FAILED로 번지지 않는다.
+  const CONVERGED = {
+    status: 'PARTIAL',
+    resultSummary: { generated: 0, accepted: 0, rejected: {}, providerId: 'rule', degraded: true, fallbackFrom: 'local', fallbackCause: 'TIMEOUT' },
+  };
+
+  it('K-1d ⑩ 폴백 generate()가 거부해도 PARTIAL + 1차 원인 유지(FAILED 아님)', async () => {
+    const t = makeRunner({ primaryId: 'local', primary: { candidates: [], failure: 'TIMEOUT' }, fallbackGenerateError: new TypeError('boom') });
+    expect(await t.run()).toEqual(CONVERGED);
+    expect(t.fallbackGenerate).toHaveBeenCalledTimes(1);
+    expect(t.created).toHaveLength(0);
+  });
+
+  it('K-1d ⑪ getFallbackProvider()가 던져도 같은 결과', async () => {
+    const t = makeRunner({ primaryId: 'local', primary: { candidates: [], failure: 'TIMEOUT' }, getFallbackError: new Error('factory down') });
+    expect(await t.run()).toEqual(CONVERGED);
+    expect(t.fallbackGenerate).not.toHaveBeenCalled();
+  });
+
+  it('K-1d ⑫ 예외 메시지에 시드 문장이 있어도 로그에 문장·메시지가 없다(G1 폴백 줄 1 + 예외 줄 1, 오류 이름만)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const t = makeRunner({ primaryId: 'local', primary: { candidates: [], failure: 'TIMEOUT' }, fallbackGenerateError: new RangeError('환불 하고 싶어요') });
+    await t.run();
+    const all = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+    expect(all.filter((m) => m.includes('G1 폴백'))).toHaveLength(1);
+    const exc = all.filter((m) => m.includes('폴백 생성기 예외'));
+    expect(exc).toHaveLength(1);
+    expect(exc[0]).toContain('error=RangeError');
+    expect(exc[0]).toContain('cause=TIMEOUT');
+    expect(all.join(' | ')).not.toContain('환불');
+  });
+
+  it('K-1d Error가 아닌 던짐 값은 error=unknown', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const t = makeRunner({ primaryId: 'local', primary: { candidates: [], failure: 'TIMEOUT' }, fallbackGenerateError: 'plain string' as unknown as Error });
+    expect(await t.run()).toEqual(CONVERGED);
+    const exc = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('폴백 생성기 예외'));
+    warn.mockRestore();
+    expect(exc[0]).toContain('error=unknown');
   });
 });

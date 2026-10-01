@@ -170,7 +170,7 @@ describe('GovernanceBootstrapService — pii-mask 규칙 버전 기동 로그(L-
   it.each([
     [undefined, 'PARTIAL'],
     ['FULL', 'FULL'],
-  ])('모드 OFF · PII_MASK_MODE=%s에서도 "pii-mask 규칙 v2" 1줄을 남긴다', async (piiMode, expectedPiiMode) => {
+  ])('모드 OFF · PII_MASK_MODE=%s에서도 "pii-mask 규칙 v3" 1줄을 남긴다', async (piiMode, expectedPiiMode) => {
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const prisma = { governanceJobState: { create: jest.fn().mockResolvedValue({}) } };
     const auditLog = { ensureChainHead: jest.fn().mockResolvedValue(undefined) };
@@ -181,7 +181,7 @@ describe('GovernanceBootstrapService — pii-mask 규칙 버전 기동 로그(L-
     );
     await service.onModuleInit();
     const lines = log.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pii-mask 규칙'));
-    expect(lines).toEqual([`pii-mask 규칙 v2(저장 마스킹 날짜 제외 · 생년월일 문맥 예외) · 모드 ${expectedPiiMode}`]);
+    expect(lines).toEqual([`pii-mask 규칙 v3(저장 마스킹 날짜 제외 · 생년월일 문맥 예외 · 긴 숫자열 카드 우선) · 모드 ${expectedPiiMode}`]);
     // 시험이 끝나면 PARTIAL로 되돌린다(프로세스 전역 설치값).
     const { resetPiiMaskModeForTest } = await import('@chat-bot/pii-mask');
     resetPiiMaskModeForTest();

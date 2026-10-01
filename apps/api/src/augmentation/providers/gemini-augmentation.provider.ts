@@ -5,6 +5,7 @@ import { EgressBlockedError, assertEgressAllowed, assertNoRedirectResponse, egre
 import { AUGMENT_GEMINI_DEFAULT_BASE_URL } from '../../common/egress/egress-registry';
 import { AUGMENTATION_SYSTEM_INSTRUCTION, buildAugmentationUserContent } from '../lib/gemini-prompt';
 import { AugmentationFailureCause, AugmentationGenerateInput, AugmentationGenerateOutcome, AugmentationProvider } from './augmentation-provider.port';
+import { AugmentationCircuit, CircuitOutcome, classifyCircuitFailure } from './lib/augmentation-circuit';
 
 /** 기동 검사(§6.4)와 같은 상수를 쓴다(`common/egress/egress-registry.ts`) — export(§6.1 표). */
 const DEFAULT_BASE_URL = AUGMENT_GEMINI_DEFAULT_BASE_URL;
@@ -15,8 +16,11 @@ export interface GeminiAugmentationConfig {
   readonly model?: string;
   readonly baseUrl?: string; // 사내 프록시·게이트웨이 주입용(하드코딩 금지 원칙).
   readonly timeoutMs?: number;
+  /** 주입 회로 없이 만들 때만 쓰는 자체 회로 설정(기본 5회 · 60초). 팩토리는 공급자별 공유 회로(`circuit`)를 주입한다. */
   readonly circuitFailureThreshold?: number;
   readonly circuitOpenMs?: number;
+  /** [K-1c] 팩토리가 소유한 공급자별 공유 회로 — Provider는 Job마다 새로 만들어지므로 상태를 여기에 둔다. 없으면 자기 회로(현행 호환). */
+  readonly circuit?: AugmentationCircuit;
   /** 시드 송신 전 검사할 금지어. DB 접근은 호출부(팩토리 생성 시점) 책임 — provider는 배열만 받는다. */
   readonly bannedWords?: readonly string[];
 }
@@ -37,7 +41,10 @@ const GeminiResponseSchema = z.object({
 
 /** 호출 중 원인을 분류해 던지는 내부 오류 — `generateWithOutcome()`의 catch가 원인 코드로 바꾼다(밖으로 새지 않는다). */
 class GeminiCallError extends Error {
-  constructor(readonly failure: AugmentationFailureCause) {
+  constructor(
+    readonly failure: AugmentationFailureCause,
+    readonly httpStatus?: number,
+  ) {
     super(`GEMINI_CALL_FAILED cause=${failure}`);
   }
 }
@@ -53,36 +60,63 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
   readonly requiresNetwork = true;
 
   private readonly logger = new Logger('GeminiAugmentationProvider');
-  private consecutiveFailures = 0;
-  private circuitOpenUntil = 0;
+  private readonly circuit: AugmentationCircuit;
 
-  constructor(private readonly config: GeminiAugmentationConfig) {}
+  constructor(private readonly config: GeminiAugmentationConfig) {
+    this.circuit =
+      config.circuit ??
+      new AugmentationCircuit({
+        threshold: config.circuitFailureThreshold ?? 5,
+        openMs: config.circuitOpenMs ?? 60_000,
+        onTransition: (event, info) => {
+          if (event === 'OPENED') this.logger.warn(`Gemini 연속 실패 ${info.failures}회 — ${info.openMs}ms 동안 회로를 엽니다.`);
+        },
+      });
+  }
 
   /** `generateWithOutcome()`의 후보만 돌려주는 얇은 위임 — 계약(C-1)·서명 불변. */
   async generate(input: AugmentationGenerateInput): Promise<readonly string[]> {
     return (await this.generateWithOutcome(input)).candidates;
   }
 
-  /** 실패 원인 분류(K-1b §2.3) — 예외를 던지지 않는다. `recordFailure()` 규칙은 불변(호출 예외 경로만 카운트). */
+  /**
+   * 실패 원인 분류(K-1b §2.3) — 예외를 던지지 않는다. 확인 순서는 DD-99 5단계(PII → 금지어 → 타임아웃 → 회로차단)에 맞춘다:
+   * 시드 마스킹·금지어 검사가 회로 확인보다 앞이라 시드 차단은 탐침을 소모하지 않고 회로 상태도 바꾸지 않는다(K-1c).
+   * 회로에는 인프라 실패(타임아웃·네트워크·5xx·429)만 계수한다 — 계약 오류(4xx)·형식 오류·출구 차단은 장애가 아니다.
+   */
   async generateWithOutcome(input: AugmentationGenerateInput): Promise<AugmentationGenerateOutcome> {
     if (!this.config.apiKey) return this.fail('NOT_CONFIGURED'); // 방어적 이중 확인(C-1)
-    if (this.isCircuitOpen()) return this.fail('CIRCUIT_OPEN');
 
+    const maskedSeeds = input.seeds.map((s) => maskPii(s).maskedText);
+    const banned = this.config.bannedWords ?? [];
+    if (maskedSeeds.some((s) => banned.some((w) => w && s.includes(w)))) {
+      // 시드 자체에 금지어가 있으면 외부로 내보내지 않는다(FR-L1-6 강제 경로 ②).
+      return this.fail('SEED_BLOCKED');
+    }
+
+    const permit = this.circuit.tryAcquire();
+    if (!permit) return this.fail('CIRCUIT_OPEN');
+
+    let outcome: CircuitOutcome = 'neutral';
     try {
-      const maskedSeeds = input.seeds.map((s) => maskPii(s).maskedText);
-      const banned = this.config.bannedWords ?? [];
-      if (maskedSeeds.some((s) => banned.some((w) => w && s.includes(w)))) {
-        // 시드 자체에 금지어가 있으면 외부로 내보내지 않는다(FR-L1-6 강제 경로 ②).
-        return this.fail('SEED_BLOCKED');
-      }
-
       const candidates = await this.callGemini(maskedSeeds, input.targetCount);
-      this.recordSuccess();
+      outcome = 'success';
       return { candidates };
     } catch (e) {
-      this.recordFailure();
-      const cause: AugmentationFailureCause = e instanceof GeminiCallError ? e.failure : e instanceof EgressBlockedError ? 'EGRESS_BLOCKED' : 'NETWORK';
+      let cause: AugmentationFailureCause;
+      if (e instanceof GeminiCallError) {
+        cause = e.failure;
+        outcome = classifyCircuitFailure(e.failure, e.httpStatus);
+      } else if (e instanceof EgressBlockedError) {
+        cause = 'EGRESS_BLOCKED';
+        outcome = 'neutral';
+      } else {
+        cause = 'NETWORK';
+        outcome = 'infra';
+      }
       return this.fail(cause);
+    } finally {
+      this.circuit.record(permit, outcome); // 탐침 누수 방지 — 어떤 경로든 반드시 기록한다.
     }
   }
 
@@ -91,26 +125,9 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
     return { candidates: [], failure };
   }
 
+  /** 공유 회로를 **읽기만** 한다(탐침 소모 없음) — 개방 중이면 false라 capability가 UNHEALTHY를 보고한다(K-1c). */
   async healthy(): Promise<boolean> {
-    return !!this.config.apiKey && !this.isCircuitOpen();
-  }
-
-  private isCircuitOpen(): boolean {
-    return Date.now() < this.circuitOpenUntil;
-  }
-
-  private recordSuccess(): void {
-    this.consecutiveFailures = 0;
-  }
-
-  private recordFailure(): void {
-    this.consecutiveFailures += 1;
-    const threshold = this.config.circuitFailureThreshold ?? 5;
-    if (this.consecutiveFailures >= threshold) {
-      const openMs = this.config.circuitOpenMs ?? 60_000;
-      this.circuitOpenUntil = Date.now() + openMs;
-      this.logger.warn(`Gemini 연속 실패 ${this.consecutiveFailures}회 — ${openMs}ms 동안 회로를 엽니다.`);
-    }
+    return !!this.config.apiKey && !this.circuit.isOpen();
   }
 
   private async callGemini(seeds: readonly string[], targetCount: number): Promise<string[]> {
@@ -159,7 +176,7 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
       clearTimeout(timer);
     }
 
-    if (!res.ok) throw new GeminiCallError(res.status >= 400 && res.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX');
+    if (!res.ok) throw new GeminiCallError(res.status >= 400 && res.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX', res.status);
 
     let json: unknown;
     try {

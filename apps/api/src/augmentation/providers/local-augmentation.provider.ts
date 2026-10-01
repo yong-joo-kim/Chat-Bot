@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
 import { EgressBlockedError } from '../../common/egress/egress-guard';
 import { AugmentationFailureCause, AugmentationGenerateInput, AugmentationGenerateOutcome, AugmentationProvider } from './augmentation-provider.port';
+import { AugmentationCircuit, CircuitOutcome, classifyCircuitFailure } from './lib/augmentation-circuit';
 
 const AugmentResponseSchema = z.object({
   modelId: z.string(),
@@ -19,6 +20,8 @@ const AugmentHealthResponseSchema = z.object({
 export interface LocalAugmentationConfig {
   readonly baseUrl: string; // `AUGMENTATION_LOCAL_BASE_URL`. 팩토리가 미설정 시 이 provider를 만들지 않는다.
   readonly timeoutMs?: number;
+  /** [K-1c] 팩토리가 소유한 공급자별 공유 회로. 없으면 회로 없음(현행 그대로). */
+  readonly circuit?: AugmentationCircuit;
 }
 
 /**
@@ -39,8 +42,20 @@ export class LocalAugmentationProvider implements AugmentationProvider {
     return (await this.generateWithOutcome(input)).candidates;
   }
 
-  /** 실패 원인 분류(K-1b §2.3) — 예외를 던지지 않는다. 로그에는 원인 코드만 남긴다(문장·URL·키 0). */
+  /**
+   * 실패 원인 분류(K-1b §2.3) — 예외를 던지지 않는다. 로그에는 원인 코드만 남긴다(문장·URL·키 0).
+   * 공유 회로가 주입됐으면(K-1c) 호출 전 확인 → 개방 중이면 네트워크 호출 없이 `CIRCUIT_OPEN`, 인프라 실패만 계수한다.
+   */
   async generateWithOutcome(input: AugmentationGenerateInput): Promise<AugmentationGenerateOutcome> {
+    const permit = this.config.circuit ? this.config.circuit.tryAcquire() : undefined;
+    if (permit === null) return this.fail('CIRCUIT_OPEN');
+
+    let circuitOutcome: CircuitOutcome = 'neutral';
+    const failed = (cause: AugmentationFailureCause, httpStatus?: number): AugmentationGenerateOutcome => {
+      circuitOutcome = classifyCircuitFailure(cause, httpStatus);
+      return this.fail(cause);
+    };
+
     const timeoutMs = this.config.timeoutMs ?? 30_000;
     const controller = new AbortController();
     let timedOut = false;
@@ -59,21 +74,23 @@ export class LocalAugmentationProvider implements AugmentationProvider {
         redirect: egressRedirectMode(),
       });
       assertNoRedirectResponse('AUGMENT_LOCAL', url, res.status);
-      if (!res.ok) return this.fail(res.status >= 400 && res.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX');
+      if (!res.ok) return failed(res.status >= 400 && res.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX', res.status);
       let json: unknown;
       try {
         json = await res.json();
       } catch {
-        return this.fail(timedOut ? 'TIMEOUT' : 'INVALID_RESPONSE');
+        return failed(timedOut ? 'TIMEOUT' : 'INVALID_RESPONSE');
       }
       const parsed = AugmentResponseSchema.safeParse(json);
-      if (!parsed.success) return this.fail('INVALID_RESPONSE');
+      if (!parsed.success) return failed('INVALID_RESPONSE');
+      circuitOutcome = 'success';
       return { candidates: parsed.data.candidates };
     } catch (e) {
-      if (e instanceof EgressBlockedError) return this.fail('EGRESS_BLOCKED');
-      return this.fail(timedOut ? 'TIMEOUT' : 'NETWORK');
+      if (e instanceof EgressBlockedError) return failed('EGRESS_BLOCKED');
+      return failed(timedOut ? 'TIMEOUT' : 'NETWORK');
     } finally {
       clearTimeout(timer);
+      if (permit) this.config.circuit?.record(permit, circuitOutcome); // 탐침 누수 방지 — 어떤 경로든 반드시 기록한다.
     }
   }
 

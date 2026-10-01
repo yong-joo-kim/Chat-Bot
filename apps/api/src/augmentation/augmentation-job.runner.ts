@@ -7,7 +7,7 @@ import { EmbeddingProviderFactory } from '../embedding/embedding-provider.factor
 import { VectorCacheService } from '../embedding/vector-cache.service';
 import type { TrainingJobTaskResult } from '../training-jobs/training-job.queue';
 import { AugmentationProviderFactory } from './providers/augmentation-provider.factory';
-import type { AugmentationFailureCause, AugmentationProviderId } from './providers/augmentation-provider.port';
+import type { AugmentationFailureCause, AugmentationProvider, AugmentationProviderId } from './providers/augmentation-provider.port';
 import type { SynonymDict } from './lib/rule-variants';
 import { resolveAugmentationThresholds } from './lib/augmentation-thresholds';
 import { validateCandidates } from './lib/validate-candidates';
@@ -142,20 +142,31 @@ export class AugmentationJobRunner {
 
     // K-1b(ADR-0049) — G2/G3가 사용 가능한 후보(공백 아닌 문자열)를 1건도 못 냈으면 원인과 무관하게 G1으로 같은 Job 안에서 1회
     // 다시 생성한다. 1건이라도 냈으면 보충·재시도하지 않는다. 원인 코드(C-6)는 표시·로그용이며 폴백 여부를 바꾸지 않는다.
-    let used = primary;
+    let used: AugmentationProvider | null = primary;
     let candidates: readonly string[] = outcome.candidates;
     let fallbackInfo: { from: 'gemini' | 'local'; cause: AugmentationFailureCause } | null = null;
     const usable = outcome.candidates.some((c) => c.trim().length > 0);
     if ((primary.providerId === 'gemini' || primary.providerId === 'local') && !usable) {
       const cause = outcome.failure ?? 'EMPTY_RESULT';
-      const fallback = this.augmentationFactory.getFallbackProvider(providerDeps);
-      candidates = await fallback.generate(generateInput);
-      used = fallback;
       fallbackInfo = { from: primary.providerId, cause };
       // 문장·URL·키는 남기지 않는다(NFR-LS4).
       this.logger.warn(`증강 G1 폴백: chatbotId=${chatbotId} intentId=${intentId} jobId=${jobId} from=${primary.providerId} cause=${cause}`);
+      // K-1d — 폴백 조달·생성의 예외가 Job 전체 FAILED로 번지지 않게 후보 0건(PARTIAL)으로 수렴한다. 결과 요약은 "G1도 0건"과 같은 모양이고
+      // 원인 코드는 1차 원인을 유지한다(새 필드·enum 없음). 로그에는 오류 이름만 남긴다(메시지·시드 문장 금지).
+      try {
+        const fallback = this.augmentationFactory.getFallbackProvider(providerDeps);
+        candidates = await fallback.generate(generateInput);
+        used = fallback;
+      } catch (e) {
+        candidates = [];
+        used = null;
+        this.logger.warn(
+          `증강 폴백 생성기 예외 — 후보 0건으로 처리: chatbotId=${chatbotId} intentId=${intentId} jobId=${jobId} from=${primary.providerId} cause=${cause} error=${e instanceof Error ? e.name : 'unknown'}`,
+        );
+      }
     }
-    const providerId: AugmentationProviderId = used.providerId;
+    // 폴백 조달이 실패해 `used`가 없어도 "G1을 시도했다"는 사실은 상수 'rule'로 남긴다.
+    const providerId: AugmentationProviderId = used ? used.providerId : 'rule';
     // 폴백이 없으면 지금과 같은 키만 싣는다(바이트 동일) — degraded 키를 새로 쓰지 않는다.
     const fallbackKeys = fallbackInfo ? { degraded: true, fallbackFrom: fallbackInfo.from, fallbackCause: fallbackInfo.cause } : {};
 
