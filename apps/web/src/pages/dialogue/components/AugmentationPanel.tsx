@@ -295,6 +295,11 @@ export function AugmentationPanel({ chatbotId, intentId, currentExampleCount, re
                       : msg.runSummary(runResult.generated, runResult.accepted, rejectedPartsText(runResult.rejected))}
                   </p>
                 )}
+                {!isGenerating && runResult?.degraded && runResult.fallbackFrom && (
+                  <p className="field-hint">
+                    <span aria-hidden="true">ⓘ</span> {msg.runFallbackNotice}
+                  </p>
+                )}
                 {!isGenerating && runResult && items.length === 0 && <p className="field-hint">{msg.allRejectedNotice}</p>}
 
                 {!isGenerating && items.length === 0 && !runResult && (

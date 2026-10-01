@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { MemoryRouter } from 'react-router-dom';
 import { ApiError } from '../../../../api/client';
 import { ToastProvider } from '../../../../components/Toast';
@@ -8,6 +9,8 @@ import { CHATBOT_ID, makeApproval, makePolicyStatus, REQUEST_ID } from '../../gu
 import { ApprovalPendingCard } from './ApprovalPendingCard';
 import { ApprovalPolicyPanel } from './ApprovalPolicyPanel';
 import { remainingLabel } from './RemainingTimeText';
+
+expect.extend(toHaveNoViolations);
 
 let mockCan: (p: string) => boolean = () => true;
 vi.mock('../../../../context/AuthContext', () => ({
@@ -47,6 +50,24 @@ describe('ApprovalPolicyPanel — 운영 전환 2인 승인 설정', () => {
     const dialog = await screen.findByRole('dialog', { name: '운영 전환 2인 승인 켜기' });
     expect(within(dialog).getByRole('button', { name: '취소' })).toHaveFocus();
     expect(within(dialog).getByLabelText('승인 유효 시간(시간)')).toHaveValue(24);
+  });
+
+  it('켜기 확인 대화상자에 "켠 뒤 끄지 못할 수 있다" 일반 안내가 있고, 기본 포커스는 취소이며 axe 위반이 없다 (N36-1)', async () => {
+    const user = userEvent.setup();
+    renderPanel(makePolicyStatus({ policy: { required: false, ttlHours: 24 } }));
+    await user.click(screen.getByRole('switch'));
+    const dialog = await screen.findByRole('dialog', { name: '운영 전환 2인 승인 켜기' });
+    expect(within(dialog).getByText('서버 설정에 따라 켠 뒤에는 끄지 못할 수 있습니다.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '취소' })).toHaveFocus();
+    expect(await axe(dialog, { rules: { 'color-contrast': { enabled: false } } })).toHaveNoViolations();
+  });
+
+  it('끄기 확인 대화상자에는 그 안내가 없다', async () => {
+    const user = userEvent.setup();
+    renderPanel(makePolicyStatus());
+    await user.click(screen.getByRole('switch'));
+    const dialog = await screen.findByRole('dialog', { name: '운영 전환 2인 승인 끄기' });
+    expect(within(dialog).queryByText('서버 설정에 따라 켠 뒤에는 끄지 못할 수 있습니다.')).not.toBeInTheDocument();
   });
 
   it('켜기: 만료 시간을 검증(1~168)하고 PUT {required:true, ttlHours}로 켠다', async () => {
@@ -108,6 +129,22 @@ describe('ApprovalPolicyPanel — 운영 전환 2인 승인 설정', () => {
     unmount();
     renderPanel(makePolicyStatus(), { archived: true });
     expect(screen.getByRole('switch')).toHaveAccessibleDescription('보관된 챗봇은 바꿀 수 없습니다.');
+  });
+
+  it('끄기 잠금 원인에 따라 문구가 갈린다 — GOVERNANCE_MODE는 거버넌스 문구, SERVER_SETTING은 기존 문구, 키 없음(잠금 아님)은 이유 없음', () => {
+    const governance = '데이터 거버넌스 모드에서는 2인 승인 끄기가 기본으로 잠겨 있습니다. 끄려면 서버 관리자에게 문의해 주세요.';
+    const server = '서버 설정으로 2인 승인 끄기가 잠겨 있습니다. 서버 관리자에게 문의해 주세요.';
+    const first = renderPanel(makePolicyStatus({ offLocked: true, offLockedBy: 'GOVERNANCE_MODE' }));
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('switch')).toHaveAccessibleDescription(governance);
+    first.unmount();
+    const second = renderPanel(makePolicyStatus({ offLocked: true, offLockedBy: 'SERVER_SETTING' }));
+    expect(screen.getByRole('switch')).toHaveAccessibleDescription(server);
+    second.unmount();
+    renderPanel(makePolicyStatus());
+    expect(screen.getByRole('switch')).not.toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByText(governance)).not.toBeInTheDocument();
+    expect(screen.queryByText(server)).not.toBeInTheDocument();
   });
 
   it('승인 유효 시간 변경은 새 요청부터 적용된다는 안내와 함께 PUT한다', async () => {

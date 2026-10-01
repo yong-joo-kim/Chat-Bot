@@ -2361,6 +2361,7 @@ export const MESSAGES = {
       rejectedParts ? `생성 ${generated}건 중 ${accepted}건 통과(${rejectedParts})` : `생성 ${generated}건 중 ${accepted}건 통과`,
     allRejectedSummary: (generated: number, rejectedParts: string) => `생성 ${generated}건 중 ${generated}건 모두 제외(${rejectedParts})`,
     allRejectedNotice: '이번 생성에서는 통과한 제안이 없습니다. 예문을 더 다양하게 등록한 뒤 다시 시도해 보세요.',
+    runFallbackNotice: '고급 증강을 사용할 수 없어 기본 방식으로 생성했습니다.',
     rejectReasonLabels: {
       SEMANTIC_DRIFT: '의미 이탈',
       NEAR_DUPLICATE: '유사 중복',

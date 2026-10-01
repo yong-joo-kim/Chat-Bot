@@ -63,7 +63,7 @@ export function ApprovalPolicyPanel({ chatbotId, status, archived, onChanged }: 
   // 스위치 잠금 사유(글자) — `aria-disabled` + `aria-describedby`로 연결된다(ChannelToggle).
   let lockReason: string | undefined;
   if (archived) lockReason = msg.cannotChangeArchived;
-  else if (on && status.offLocked) lockReason = msg.offLocked;
+  else if (on && status.offLocked) lockReason = status.offLockedBy === 'GOVERNANCE_MODE' ? msg.offLockedGovernance : msg.offLocked;
   else if (!on && status.eligibleApproverCount < 2) lockReason = msg.cannotEnableNotEnough(status.eligibleApproverCount);
   const locked = Boolean(lockReason);
 
@@ -234,6 +234,7 @@ export function ApprovalPolicyPanel({ chatbotId, status, archived, onChanged }: 
         <p>{msg.enableDialog.body1}</p>
         <p>{msg.enableDialog.body2}</p>
         <p>{msg.enableDialog.body3}</p>
+        <p>{msg.enableDialog.body4}</p>
         <div className="form-field">
           <label htmlFor="approval-enable-ttl">{msg.enableDialog.ttlLabel}</label>
           <input
