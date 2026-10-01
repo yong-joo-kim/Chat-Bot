@@ -156,7 +156,12 @@ export class RagAnswerService {
           scopeCompany: input.scope.company,
         });
         const replacement = verdict.kind === 'REPLACE' && verdict.replacementText ? verdict.replacementText : input.fallbackText;
-        await this.finishAsFallback(input, logPort, maskedQuestion, { text: replacement, guardrailStage: 'OUTBOUND' });
+        // [신규 No.32] 안전 문구 대체(REPLACE)만 `safety` 표식을 단다 — 출구 `FALLBACK`(챗봇 폴백 문구)은 표식 없음(말투 SAFETY 고정은 대체에만 — C-6).
+        await this.finishAsFallback(input, logPort, maskedQuestion, {
+          text: replacement,
+          guardrailStage: 'OUTBOUND',
+          ...(verdict.kind === 'REPLACE' ? { safety: true as const } : {}),
+        });
         this.guardrails?.recordEvents({ chatbotId: input.chatbotId, messageId: input.messageId, verdict });
         return;
       }
@@ -206,11 +211,11 @@ export class RagAnswerService {
     input: RagAnswerRunInput,
     logPort: ConversationLogPort,
     maskedQuestion: string,
-    override?: { text: string; guardrailStage: 'OUTBOUND' },
+    override?: { text: string; guardrailStage: 'OUTBOUND'; safety?: true },
   ): Promise<void> {
     const fallbackText = override?.text ?? input.fallbackText;
     const outputs = await this.bannedWordFilter.maskOutbound([{ type: 'TEXT', payload: { text: fallbackText } } as DialogOutput]);
-    this.pendingStore.complete(input.messageId, { status: 'FAILED', outputs });
+    this.pendingStore.complete(input.messageId, { status: 'FAILED', outputs, ...(override?.safety ? { safetyReplaced: true as const } : {}) });
     await logPort.record({
       id: input.messageId,
       chatbotId: input.chatbotId,

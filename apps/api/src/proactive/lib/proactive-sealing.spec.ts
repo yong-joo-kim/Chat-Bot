@@ -91,8 +91,8 @@ describe('선제적(Proactive) 메시징(No.35) 정적 검사 — 스캔 기반 
       expect(offenders).toEqual([]);
     });
 
-    it('EgressExitId는 7종이다(새 외부 출구 0)', () => {
-      expect(EgressExitId.options.length).toBe(7);
+    it('EgressExitId는 8종이다(선제 안내는 새 외부 출구 0 — 8번째 SPEECH_LOCAL은 No.32 음성 인식)', () => {
+      expect(EgressExitId.options.length).toBe(8);
     });
   });
 
@@ -192,11 +192,11 @@ describe('선제적(Proactive) 메시징(No.35) 정적 검사 — 스캔 기반 
     });
   });
 
-  describe('PA-7: @Public() 총 9 · 9번째 = recordProactiveEvent · proactive/**에 @Public 0', () => {
-    it('@Public() 총 9', () => {
+  describe('PA-7: @Public() 총 10(No.32 음성 인식 9→10) · 9번째 = recordProactiveEvent · proactive/**에 @Public 0', () => {
+    it('@Public() 총 10', () => {
       const controllerFiles = apiFiles.filter(({ f }) => f.endsWith('.controller.ts'));
       const total = controllerFiles.reduce((sum, { content }) => sum + nonCommentOccurrences(content, /@Public\(\)/g), 0);
-      expect(total).toBe(9);
+      expect(total).toBe(10);
     });
 
     it('recordProactiveEvent 앞 600자에 @Public()·@PublicRateBucket(·kind: \'PROACTIVE_EVENT\'가 있다', () => {

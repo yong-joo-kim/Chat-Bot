@@ -17,6 +17,7 @@ import {
   PublicFeedbackOfferSchema,
   PublicFeedbackRequestSchema,
   PublicFeedbackResponseSchema,
+  PublicSpeechReplySchema,
 } from '@chat-bot/shared-types';
 
 /**
@@ -432,6 +433,8 @@ describe('토픽 시스템(No.22) 정적 검사 — topic-system-설계.md §17'
       ['PublicFeedbackOfferSchema', PublicFeedbackOfferSchema],
       ['PublicFeedbackRequestSchema', PublicFeedbackRequestSchema],
       ['PublicFeedbackResponseSchema', PublicFeedbackResponseSchema],
+      // [신규 No.32 — X-12] 응답 선택 키 speech:{text,tone}
+      ['PublicSpeechReplySchema', PublicSpeechReplySchema],
     ];
 
     it('스캔 대상 스키마가 존재한다(회귀 방지)', () => {

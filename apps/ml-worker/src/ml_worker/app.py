@@ -41,6 +41,8 @@ logger = logging.getLogger("ml_worker")
 
 _embedder: Embedder | None = None
 _generator: Generator | None = None
+_transcriber: object | None = None  # speech 역할 전용(ml_worker.speech.transcriber.Transcriber)
+_vad: object | None = None
 
 
 def get_embedder() -> Embedder:
@@ -211,16 +213,47 @@ def _load_generator() -> Generator:
     return generator
 
 
+_VALID_ROLES = ("embed", "augment", "both", "speech")
+
+
+def _validate_role() -> None:
+    # 알 수 없는 역할은 조용히 아무것도 적재하지 않는 대신 기동 실패(No.32 NFR-VOR3, 기존 3값 동작 불변)
+    if settings.ml_worker_role not in _VALID_ROLES:
+        raise RuntimeError(
+            f"알 수 없는 ML_WORKER_ROLE 값: '{settings.ml_worker_role}' — embed | augment | both | speech 중 하나여야 합니다."
+        )
+
+
+def _load_speech() -> tuple[object, object]:
+    """speech 역할: STT 1종 + VAD. 선택 의존성([speech])이 없으면 기동 실패."""
+    from ml_worker.speech.transcriber import _load_transcriber
+    from ml_worker.speech.vad import load_vad
+
+    try:
+        import av  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError('speech 역할에는 선택 의존성이 필요합니다 — pip install -e ".[speech]"') from exc
+    transcriber = _load_transcriber(settings)
+    vad = load_vad(settings.stt_vad, settings.stt_backend.strip().lower())
+    logger.info("음성 인식 준비: backend=%s vad=%s", transcriber.backend, vad.name)
+    return transcriber, vad
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global _embedder, _generator
+    global _embedder, _generator, _transcriber, _vad
+    _validate_role()
     if settings.loads_embedding:
         _embedder = _load_model()
     if settings.loads_generation:
         _generator = _load_generator()
+    if settings.loads_speech:
+        _transcriber, _vad = _load_speech()  # type: ignore[assignment]
     yield
     _embedder = None
     _generator = None
+    _transcriber = None
+    _vad = None
 
 
 app = FastAPI(title="Chat Bot ml-worker", version="0.1.0", lifespan=lifespan)
@@ -398,6 +431,15 @@ if settings.loads_generation:
         label = generator.label(req.keywords, req.samples)
         logger.info("cluster-label 처리: keywords=%d samples=%d 결과=%s", len(req.keywords), len(req.samples), "있음" if label else "없음")
         return ClusterLabelResponse(modelId=generator.model_id, label=label)
+
+
+# ── No.32 음성 인식 프로파일 — `ML_WORKER_ROLE=speech`(배타)에서만 `/speech/*`를 등록한다. 다른 역할에서는
+# 경로가 존재하지 않고(404) av·faster-whisper를 import하지도 않는다. 이 역할에서 `/embed`·`/health`는
+# 역할 무관 계약 그대로 `loading`/503(임베더 미적재)이며 `/augment`·`/cluster-label`은 없다.
+if settings.loads_speech:
+    from ml_worker.speech.routes import register_speech_routes
+
+    register_speech_routes(app, settings, lambda: _transcriber, lambda: _vad)
 
 
 if __name__ == "__main__":

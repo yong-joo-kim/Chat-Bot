@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { envBoolean, envBooleanOptional } from './lib/env-boolean';
+import { isProductionRuntime } from './runtime-env';
 
 /**
  * 부팅 시 필수 환경변수를 검증한다(NFR-M1, EX-4-3).
@@ -259,6 +260,27 @@ const EnvSchema = z.object({
   GUARDRAIL_MAX_EXPRESSIONS_PER_CHATBOT: z.coerce.number().int().min(100).max(10000).default(2000),
   // 3상태(미설정 / true / false) — 명시값 우선, 미설정이면 DATA_GOVERNANCE_MODE=ON일 때 잠금(N36-1, ADR-0049).
   ENV_APPROVAL_OFF_LOCKED: envBooleanOptional(),
+  // 음성 AI(No.32) 그룹 추가(voice-ai-설계.md §12.1, ADR-0052) — 전부 선택(기본값에서 동작 불변). 새 백그라운드 루프 0 —
+  // `jest.isolate-env.js` 변경 불필요. `SPEECH_PROVIDER` 오타는 기존 enum 규약대로 기동 실패(H-8). **운영(`NODE_ENV=production`) ∧
+  // `SPEECH_ENABLED=true` ∧ `mock` = 기동 실패**(H-10 · DD-135 — 아래 교차 검사). `NODE_ENV`는 스키마 키가 아니다(원시 값 읽기 — `config/runtime-env.ts`).
+  SPEECH_ENABLED: envBoolean(false),
+  SPEECH_PROVIDER: z.enum(['mock', 'local']).default('mock'),
+  ML_WORKER_SPEECH_URL: z
+    .string()
+    .optional()
+    .transform((v) => {
+      const trimmed = (v ?? '').trim().replace(/\/+$/, '');
+      return trimmed.length > 0 ? trimmed : undefined;
+    }),
+  SPEECH_STT_TIMEOUT_MS: z.coerce.number().int().min(2000).max(60000).default(10000),
+  SPEECH_MAX_AUDIO_BYTES: z.coerce.number().int().min(65536).max(4194304).default(1048576),
+  SPEECH_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
+  SPEECH_HEALTH_CACHE_MS: z.coerce.number().int().min(5000).max(600000).default(30000),
+  /** 시간 초과·5xx 인프라 실패가 연속 이 횟수에 이르면 가용성을 하락시킨다(M-3). 1회로는 하락시키지 않는다. */
+  SPEECH_FAILURE_THRESHOLD: z.coerce.number().int().min(1).max(20).default(3),
+  SPEECH_SETTINGS_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(600000).default(60000),
+  PUBLIC_SPEECH_RATE_LIMIT_IP_PER_MIN: z.coerce.number().int().positive().default(30),
+  PUBLIC_SPEECH_RATE_LIMIT_SESSION_PER_MIN: z.coerce.number().int().positive().default(10),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -367,6 +389,24 @@ export function validate(config: Record<string, unknown>): EnvConfig {
   if (result.data.KB_SYNC_ENABLED && !result.data.RAG_BASE_URL) {
     // eslint-disable-next-line no-console
     console.warn('KB_SYNC_ENABLED=true인데 RAG_BASE_URL이 없습니다 — 소스 등록·미리보기만 가능하고 적재는 되지 않습니다.');
+  }
+
+  // 음성 AI(No.32) §7.3 · DD-135(H-10) — 운영(`NODE_ENV=production`) ∧ 서버 음성 켜짐 ∧ `mock`(명시·기본값 모두)이면 **기동 실패**: 가짜 인식 결과
+  // ("모의 인식 결과입니다")가 실제 사용자에게 나가는 것을 원천 차단한다. 비운영은 기동 + 경고 1회. `local`인데 주소가 없으면 기동은 하되 사용 불가(R-16 — 경고).
+  if (result.data.SPEECH_ENABLED) {
+    if (result.data.SPEECH_PROVIDER === 'mock') {
+      if (isProductionRuntime(config)) {
+        const issue = '운영 환경(NODE_ENV=production)에서 SPEECH_ENABLED=true이면 SPEECH_PROVIDER=local이 필요합니다(mock은 실제 음성 인식이 아닌 고정 결과를 돌려줍니다).';
+        // eslint-disable-next-line no-console
+        console.error(issue);
+        throw new Error(issue);
+      }
+      // eslint-disable-next-line no-console
+      console.warn('SPEECH_PROVIDER=mock — 실제 음성 인식이 아닌 고정 결과를 돌려줍니다(시연·개발 전용).');
+    } else if (!result.data.ML_WORKER_SPEECH_URL) {
+      // eslint-disable-next-line no-console
+      console.warn('SPEECH_PROVIDER=local인데 ML_WORKER_SPEECH_URL이 없습니다 — 음성 입력을 사용할 수 없습니다(마이크 숨김).');
+    }
   }
 
   return result.data;

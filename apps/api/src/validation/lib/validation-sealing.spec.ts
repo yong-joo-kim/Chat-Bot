@@ -144,7 +144,7 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
     expect(offenders).toEqual([]);
   });
 
-  it('7) @Public() 핸들러 수는 저장소 전체에서 정확히 9개다(이 그룹은 추가하지 않는다 — No.44 답변 평가가 7→8 · No.35 선제 안내 수집이 8→9로 올렸다, FR-0-66)', () => {
+  it('7) @Public() 핸들러 수는 저장소 전체에서 정확히 10개다(이 그룹은 추가하지 않는다 — No.44 답변 평가가 7→8 · No.35 선제 안내 수집이 8→9 · No.32 음성 인식이 9→10으로 올렸다, FR-0-66)', () => {
     const controllerFiles = collectAllApiControllerFiles();
     expect(controllerFiles.length).toBeGreaterThan(10);
     let total = 0;
@@ -152,6 +152,6 @@ describe('검증/품질 고도화 구조적 봉인 정적 검사 — ADR-0029/00
       const content = readFileSync(file, 'utf8');
       total += nonCommentOccurrences(content, /@Public\(\)/g);
     }
-    expect(total).toBe(9);
+    expect(total).toBe(10);
   });
 });

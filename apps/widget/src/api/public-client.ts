@@ -10,11 +10,13 @@ import type {
   PublicMessageResponse,
   PublicProactivePayload,
   PublicProactiveRule,
+  PublicVoiceConfig,
 } from '@chat-bot/shared-types';
 import { HANDOFF_SESSION_HEADER, HANDOFF_TOKEN_HEADER, WIDGET_FEATURE_HANDOFF_V1 } from '../constants/handoff';
 import { WIDGET_FEATURE_FEEDBACK_V1 } from '../constants/feedback';
 import { WIDGET_FEATURE_RICH_V1 } from '../constants/rich';
 import { IDENTITY_TOKEN_HEADER } from '../constants/identity';
+import { WIDGET_FEATURE_SPEECH_V1, type SpeechClientErrorKind } from '../constants/speech';
 import type { FeedbackRating } from '../core/feedback';
 
 /**
@@ -44,6 +46,32 @@ export class PublicApiError extends Error {
     super(message);
     this.name = 'PublicApiError';
   }
+}
+
+/** [신규 No.32] 음성 인식 호출 오류 — 본문 `code`를 읽어 분류한다(설계 §9.6 · C-10). */
+export class SpeechClientError extends Error {
+  constructor(
+    public kind: SpeechClientErrorKind,
+    public status?: number,
+  ) {
+    super(`speech:${kind}`);
+    this.name = 'SpeechClientError';
+  }
+}
+
+const SPEECH_CODE_KIND: Record<string, SpeechClientErrorKind> = {
+  SPEECH_UNAVAILABLE: 'UNAVAILABLE',
+  SPEECH_BUSY: 'BUSY',
+  SPEECH_AUDIO_INVALID: 'INVALID',
+  SPEECH_AUDIO_TOO_LARGE: 'TOO_LARGE',
+  SPEECH_FAILED: 'FAILED',
+  VALIDATION_FAILED: 'SESSION',
+};
+
+function classifySpeech(status: number, code: unknown): SpeechClientErrorKind {
+  if (status === 429) return 'RATE_LIMITED';
+  if (status === 403) return 'DISABLED';
+  return SPEECH_CODE_KIND[code as string] ?? (status === 503 ? 'UNAVAILABLE' : 'FAILED');
 }
 
 function classifyStatus(status: number): PublicApiErrorKind {
@@ -86,7 +114,8 @@ export function createPublicClient(apiBase: string, slug: string) {
   }
 
   return {
-    getConfig: (): Promise<PublicChatbotConfig> => request<PublicChatbotConfig>('/config'),
+    /** [신규 No.32] 응답 마지막 선택 키 `voice` — 키 없음이면 음성 UI·권한 요청 0. */
+    getConfig: (): Promise<PublicChatbotConfig & { voice?: PublicVoiceConfig }> => request<PublicChatbotConfig & { voice?: PublicVoiceConfig }>('/config'),
     /**
      * [No.24·No.44·No.42·No.46] 신버전 위젯 기능 선언(`features: ['handoff-v1', 'feedback-v1',
      * 'rich-v1']`)을 항상 싣는다(ADR-0036 §5.6 — 이게 없으면 서버가 구버전으로 취급해 편승
@@ -94,15 +123,59 @@ export function createPublicClient(apiBase: string, slug: string) {
      * 강등해 보낸다(ADR-0043 §6). 상담 토큰이 있으면 헤더로 함께 보낸다. [신규 No.42] 식별 토큰이
      * 있을 때만 `x-cb-identity` 헤더를 추가한다(없으면 요청 바이트 불변, `omnichannel-inbox-설계.md` §6.8).
      */
-    sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> =>
+    sendMessage: (payload: PublicMessagePayload, opts?: { handoffToken?: string; identityToken?: string; speech?: boolean }): Promise<PublicMessageResponse> =>
       request<PublicMessageResponse>('/messages', {
         method: 'POST',
-        body: JSON.stringify({ ...payload, features: [WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_FEEDBACK_V1, WIDGET_FEATURE_RICH_V1] }),
+        // [신규 No.32] `speech-v1`은 공개 설정 `voice.tts === true`일 때만 4번째로 싣는다 — 아니면 지금 배열 그대로.
+        body: JSON.stringify({
+          ...payload,
+          features: [
+            WIDGET_FEATURE_HANDOFF_V1,
+            WIDGET_FEATURE_FEEDBACK_V1,
+            WIDGET_FEATURE_RICH_V1,
+            ...(opts?.speech === true ? [WIDGET_FEATURE_SPEECH_V1] : []),
+          ],
+        }),
         headers: {
           ...(opts?.handoffToken ? { [HANDOFF_TOKEN_HEADER]: opts.handoffToken } : undefined),
           ...(opts?.identityToken ? { [IDENTITY_TOKEN_HEADER]: opts.identityToken } : undefined),
         },
       }),
+    /**
+     * [신규 No.32] 녹음 바이트를 그대로 POST(설계 §5.3 · §9.6). JSON 본문이 아니다. 실패는 `SpeechClientError`.
+     * `signal`이 중단되면 `AbortError`를 그대로 던진다(호출부가 취소·시간 초과를 구분).
+     */
+    async transcribeSpeech(blob: Blob, sessionId: string, signal: AbortSignal): Promise<{ text: string; durationMs: number; empty?: true }> {
+      let res: Response;
+      try {
+        res = await fetch(`${base}/speech/transcriptions`, {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': blob.type || 'application/octet-stream', [HANDOFF_SESSION_HEADER]: sessionId },
+          body: blob,
+          signal,
+        });
+      } catch (e) {
+        if (signal.aborted) throw e;
+        throw new SpeechClientError('NETWORK');
+      }
+      if (!res.ok) {
+        let code: unknown;
+        try {
+          code = ((await res.json()) as { code?: unknown }).code;
+        } catch {
+          code = undefined;
+        }
+        throw new SpeechClientError(classifySpeech(res.status, code), res.status);
+      }
+      try {
+        const body = (await res.json()) as { text: string; durationMs: number; empty?: true };
+        if (typeof body.text !== 'string') throw new Error('shape');
+        return body;
+      } catch {
+        throw new SpeechClientError('FAILED', res.status);
+      }
+    },
     /** 보류 답변 폴링(ADR-0023) — `messageId` 불일치/TTL 만료는 404(`NOT_FOUND`)로 온다. */
     pollMessage: (messageId: string): Promise<PendingAnswerPollResponse> =>
       request<PendingAnswerPollResponse>(`/messages/${encodeURIComponent(messageId)}`),

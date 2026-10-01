@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import {
   HANDOFF_SESSION_HEADER,
   HANDOFF_TOKEN_HEADER,
@@ -7,7 +8,7 @@ import {
   HandoffPollQuerySchema,
   HandoffPollResponse,
   PendingAnswerPollResponse,
-  PublicChatbotConfigWithProactive,
+  PublicChatbotConfigResponse,
   PublicFeedbackRequestDto,
   PublicFeedbackRequestSchema,
   PublicFeedbackResponse,
@@ -16,6 +17,8 @@ import {
   PublicMessageResponse,
   PublicProactiveEventDto,
   PublicProactiveEventSchema,
+  PublicSpeechTranscriptionResponse,
+  SPEECH_SESSION_HEADER,
 } from '@chat-bot/shared-types';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { Public } from '../common/auth/public.decorator';
@@ -31,9 +34,10 @@ import { isUuid } from './lib/is-uuid';
 /**
  * 공개 대화 API(No.11, 인증 없음). 관리자 API와 컨트롤러·DTO·오류 메시지를 공유하지 않는다(FR-0-17).
  * 가드 순서는 레이트리밋 → Origin이다 — Origin 판정의 DB 조회 전에 폭주 트래픽을 자른다(§8.3).
- * `@Public()`은 핸들러 단위로 **9곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
- * DD-45. 답변 평가(No.44)가 8번째로 추가됐다 — ADR-0038 §2. 선제 안내 수집(No.35)이 **맨 끝**에
- * 9번째로 추가됐다 — ADR-0045 §2, `@Public()` 전체 개수는 8→9).
+ * 한계(No.32 M-4): 음성 인식 경로(speech/transcriptions)도 이 순서를 그대로 따르므로, 허용되지 않은 Origin의 요청도 먼저 IP 버킷을 소비한다.
+ * `@Public()`은 핸들러 단위로 **10곳**에 각각 부착한다(No.12부터 전역 인증 가드가 opt-out을 요구,
+ * DD-45. 답변 평가(No.44)가 8번째로 추가됐다 — ADR-0038 §2. 선제 안내 수집(No.35)이 9번째로 추가됐다 —
+ * ADR-0045 §2. 음성 인식(No.32)이 **맨 끝**에 10번째로 추가됐다 — ADR-0052, `@Public()` 전체 개수는 9→10).
  */
 @UseGuards(PublicRateLimitGuard, PublicOriginGuard)
 @Controller('public/chatbots/:slug')
@@ -53,7 +57,7 @@ export class PublicConversationController {
   @Public()
   @Header('Cache-Control', 'no-store')
   @PublicRateBucket({ kind: 'PROACTIVE_RULES', when: { query: 'proactive', equals: '1' } })
-  getConfig(@Param('slug') slug: string, @Query('proactive') proactive?: string): Promise<PublicChatbotConfigWithProactive> {
+  getConfig(@Param('slug') slug: string, @Query('proactive') proactive?: string): Promise<PublicChatbotConfigResponse> {
     return proactive === '1' ? this.publicConversationService.getConfig(slug, { proactive: true }) : this.publicConversationService.getConfig(slug);
   }
 
@@ -159,5 +163,27 @@ export class PublicConversationController {
     @Body(new ZodValidationPipe(PublicProactiveEventSchema)) dto: PublicProactiveEventDto,
   ): Promise<void> {
     return this.publicConversationService.recordProactiveEvent(slug, dto);
+  }
+
+  /** [신규 No.32] 음성 인식(`@Public()` 10번째, ADR-0052) — 본문 = 녹음 바이트. 전용 버킷만 소비. */
+  @Post('speech/transcriptions')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @PublicRateBucket({ kind: 'SPEECH', key: { from: 'header', name: SPEECH_SESSION_HEADER, ns: 'session' }, perKeyLimit: { env: 'PUBLIC_SPEECH_RATE_LIMIT_SESSION_PER_MIN', fallback: 10 } })
+  async transcribeSpeech(
+    @Param('slug') slug: string,
+    @Headers(SPEECH_SESSION_HEADER) sessionId: string | undefined,
+    @Headers('content-type') contentType: string | undefined,
+    @Headers('content-length') contentLength: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PublicSpeechTranscriptionResponse> {
+    try {
+      return await this.publicConversationService.transcribeSpeech(slug, { sessionId, contentType, contentLength, body: req });
+    } catch (e) {
+      if (e instanceof ApiException && (e.getResponse() as { code?: string }).code === 'SPEECH_BUSY') res.setHeader('Retry-After', '2');
+      throw e;
+    }
   }
 }

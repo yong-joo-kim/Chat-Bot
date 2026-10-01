@@ -18,6 +18,8 @@ const BUCKET_SPEC_BY_KIND: Record<PublicRateBucketSpec['kind'], { ipPrefix: stri
   FEEDBACK: { ipPrefix: 'fb-ip', keyPrefix: 'fb-key', ipLimitEnv: 'PUBLIC_FEEDBACK_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 120 },
   PROACTIVE_RULES: { ipPrefix: 'pa-rules-ip', keyPrefix: 'pa-rules-key', ipLimitEnv: 'PUBLIC_PROACTIVE_RULES_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 300 },
   PROACTIVE_EVENT: { ipPrefix: 'pa-ev-ip', keyPrefix: 'pa-ev-key', ipLimitEnv: 'PUBLIC_PROACTIVE_EVENT_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 300 },
+  // [신규 No.32] 음성 인식 — 녹음 1회당 1요청이라 한도가 작다(IP 30/분 · 세션 10/분). 기존 4행과 접두가 겹치지 않는다(VO-12).
+  SPEECH: { ipPrefix: 'sp-ip', keyPrefix: 'sp-key', ipLimitEnv: 'PUBLIC_SPEECH_RATE_LIMIT_IP_PER_MIN', ipLimitFallback: 30 },
 };
 
 /**

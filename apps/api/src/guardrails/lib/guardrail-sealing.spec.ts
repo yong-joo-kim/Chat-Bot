@@ -92,10 +92,10 @@ describe('가드레일 정적 검사(GR-1~GR-14) — 스캔 기반 확인', () =
     expect(widgetSrc.length).toBeGreaterThan(5);
   });
 
-  describe('AG-2: Permission 18 · EgressExitId 7 · AuditTargetType 38 · 신규 오류 코드 6 불변 확인', () => {
+  describe('AG-2: Permission 18 · EgressExitId 8(No.32 SPEECH_LOCAL 추가) · AuditTargetType 38 · 신규 오류 코드 6 불변 확인', () => {
     it('개수 단언', () => {
       expect(Permission.options).toHaveLength(18);
-      expect(EgressExitId.options).toHaveLength(7);
+      expect(EgressExitId.options).toHaveLength(8);
       expect(AuditTargetType.options).toHaveLength(38);
       for (const code of ['ENV_APPROVAL_REQUIRED', 'APPROVAL_SELF_FORBIDDEN', 'APPROVAL_NOT_PENDING', 'APPROVAL_BASE_CHANGED', 'APPROVAL_PENDING_EXISTS', 'APPROVAL_POLICY_UNAVAILABLE']) {
         expect(ApiErrorCode.options).toContain(code);

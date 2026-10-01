@@ -1,0 +1,12 @@
+{
+  "config": "{\"slug\":\"<SLUG>\",\"name\":\"<NAME>\",\"skin\":{\"primaryColor\":\"#4F46E5\",\"headerTitle\":\"챗봇 상담\"},\"quickReplies\":[],\"launcherPosition\":\"RIGHT\",\"showLauncher\":true}",
+  "config_proactive": "{\"slug\":\"<SLUG>\",\"name\":\"<NAME>\",\"skin\":{\"primaryColor\":\"#4F46E5\",\"headerTitle\":\"챗봇 상담\"},\"quickReplies\":[],\"launcherPosition\":\"RIGHT\",\"showLauncher\":true,\"proactive\":{\"caps\":{\"maxPerSession\":1,\"minIntervalSec\":60,\"quietAfterUserMessageSec\":300},\"rules\":[]}}",
+  "message_answered": "{\"messageId\":\"<UUID>\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"엔진 답변입니다.\"}}],\"state\":{\"version\":1,\"contextSession\":null,\"pendingClarify\":null},\"stateReset\":false}",
+  "message_unanswered": "{\"messageId\":\"<UUID>\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"죄송해요, 잘 이해하지 못했어요. 다른 방식으로 질문해 주시겠어요?\"}}],\"state\":{\"version\":1,\"contextSession\":null,\"pendingClarify\":null},\"stateReset\":false}",
+  "message_block": "{\"messageId\":\"<UUID>\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"바람직하지 않은 표현이 포함되어 있습니다. 다시 입력해 주세요.\"}}],\"state\":{\"version\":1,\"contextSession\":null},\"stateReset\":false}",
+  "message_version_unavailable": "{\"messageId\":\"<UUID>\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"죄송해요, 잠시 답변을 준비하지 못했어요. 잠시 후 다시 시도해 주세요.\"}}],\"state\":{\"version\":1,\"contextSession\":null},\"stateReset\":false}",
+  "message_pending_start": "{\"messageId\":\"<UUID>\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"문서에서 찾아보고 있어요. 잠시만요.\"}}],\"state\":{\"version\":1,\"contextSession\":null,\"pendingClarify\":null},\"stateReset\":false,\"pendingAnswer\":{\"id\":\"<UUID>\",\"pollAfterMs\":1200,\"expiresAt\":\"<ISO>\"}}",
+  "poll_ready": "{\"status\":\"READY\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"문서 답변 본문입니다. 연락처는 02-123-4567 입니다.\"}}],\"sources\":[{\"fileName\":\"doc.pdf\",\"page\":1}]}",
+  "poll_failed": "{\"status\":\"FAILED\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"죄송해요, 잘 이해하지 못했어요. 다른 방식으로 질문해 주시겠어요?\"}}]}",
+  "poll_safety_replaced": "{\"status\":\"FAILED\",\"outputs\":[{\"type\":\"TEXT\",\"payload\":{\"text\":\"지금은 안내드릴 수 없어요. 전문 상담 기관에 연락해 주세요.\"}}]}"
+}

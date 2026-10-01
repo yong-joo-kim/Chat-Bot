@@ -61,6 +61,8 @@ import { RichUrlPolicyController } from '../../rich-messages/rich-url-policy.con
 // [신규 No.43] 지식베이스 자동 크롤링/동기화 컨트롤러 2개 — 둘 다 @Public() 0건(kb-crawling-설계.md §11).
 import { KbSourcesController } from '../../kb-sync/kb-sources.controller';
 import { ChatbotKbStatusController } from '../../kb-sync/chatbot-kb-status.controller';
+// [신규 No.32] 음성 AI 관리 컨트롤러 1개 — @Public() 0건(공개 인식은 PublicConversationController#transcribeSpeech로 이미 포함 — voice-ai-설계.md §14 VO-2).
+import { VoiceController } from '../../speech/voice.controller';
 // [신규 No.35] 선제적(Proactive) 메시징 컨트롤러 1개 — @Public() 0건(관리 API는 channel:read|write,
 // 공개 수집은 PublicConversationController#recordProactiveEvent로 이미 포함 — proactive-messaging-설계.md §16.3).
 import { ProactiveController } from '../../proactive/proactive.controller';
@@ -81,7 +83,7 @@ function routeHandlerNames(prototype: object): string[] {
 }
 
 /**
- * `@Public()`은 정확히 9곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 7→8→9, 근거는
+ * `@Public()`은 정확히 10곳에만 부착된다(FR-12-20, DD-45, AC-C-4 — **갱신**: 7→8→9→10, 근거는
  * `docs/02-spec/decisions/ADR-0038-answer-feedback-message-capability-ledger-and-queue-source-split.md`
  * §2, `feedback-loop-설계.md` §7.1, `docs/02-spec/decisions/ADR-0045-proactive-messaging-widget-local-dwell-trigger-config-extension-and-counter-only-telemetry.md`
  * §2). 8번째는 답변 평가(`PublicConversationController#submitFeedback`), 9번째는 선제 안내 수집
@@ -91,7 +93,7 @@ function routeHandlerNames(prototype: object): string[] {
  * 놓쳐도 CI가 잡게 한다 — 개수 고정 테스트를 무력화하지 않고 **의도적으로 갱신**한다(AC-N4-3).
  */
 describe('@Public() 부착 개수 — AC-C-4', () => {
-  it('정확히 9곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 답변 평가, 선제 안내 수집, 로그인, 로그아웃)에만 부착되어 있다', () => {
+  it('정확히 10곳(health, 공개 대화 2곳, 보류 답변 폴링, 상담 폴링, 답변 평가, 선제 안내 수집, 음성 인식, 로그인, 로그아웃)에만 부착되어 있다', () => {
     expect(isPublic(HealthController.prototype, 'check')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'getConfig')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'sendMessage')).toBe(true);
@@ -99,6 +101,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
     expect(isPublic(PublicConversationController.prototype, 'pollHandoff')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'submitFeedback')).toBe(true);
     expect(isPublic(PublicConversationController.prototype, 'recordProactiveEvent')).toBe(true);
+    expect(isPublic(PublicConversationController.prototype, 'transcribeSpeech')).toBe(true);
     expect(isPublic(AuthController.prototype, 'login')).toBe(true);
     expect(isPublic(AuthController.prototype, 'logout')).toBe(true);
   });
@@ -119,7 +122,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
    * `find apps/api/src -iname "*.controller.ts"`(공정 산출 기준)의 결과가 어긋나므로,
    * 새 컨트롤러 파일 추가 시 이 파일도 함께 갱신해야 함을 리뷰에서 잡아낼 수 있다.
    */
-  it('전수 스캔: 등록된 49개 컨트롤러 전체에서 @Public() 총개수가 정확히 9건이다(No.35 선제 안내 컨트롤러 1개 추가 — 48→49 · @Public() 8→9)', () => {
+  it('전수 스캔: 등록된 50개 컨트롤러 전체에서 @Public() 총개수가 정확히 10건이다(No.32 음성 AI 컨트롤러 1개 추가 — 49→50 · @Public() 9→10)', () => {
     const allControllers = [
       HealthController,
       PublicConversationController,
@@ -183,6 +186,8 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
       ChatbotKbStatusController,
       // [신규 No.35] 1개 추가 — 48 → 49.
       ProactiveController,
+      // [신규 No.32] 1개 추가 — 49 → 50.
+      VoiceController,
     ];
 
     const publicHandlers: string[] = [];
@@ -206,6 +211,7 @@ describe('@Public() 부착 개수 — AC-C-4', () => {
         'PublicConversationController#pollHandoff',
         'PublicConversationController#submitFeedback',
         'PublicConversationController#recordProactiveEvent',
+        'PublicConversationController#transcribeSpeech',
       ].sort(),
     );
   });

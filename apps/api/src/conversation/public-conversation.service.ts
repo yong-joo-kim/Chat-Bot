@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { resolveTurn, willSurveyConsumeInput } from '@chat-bot/dialogue-engine';
-import { CONVERSATION_STATE_VERSION, ConversationStateSchema, WIDGET_FEATURE_HANDOFF_V1 } from '@chat-bot/shared-types';
+import { CONVERSATION_STATE_VERSION, ConversationStateSchema, WIDGET_FEATURE_HANDOFF_V1, WIDGET_FEATURE_SPEECH_V1 } from '@chat-bot/shared-types';
 import type { PublicFeedbackOffer } from '@chat-bot/shared-types';
 import { isFeedbackOffered } from '../feedback/lib/feedback-offer';
 import type {
@@ -44,7 +44,10 @@ import { WorkflowTriggerService } from '../workflow/triggers/workflow-trigger.se
 import { InboxIdentityService } from '../inbox/identity/inbox-identity.service';
 import { ProactivePublicService } from '../proactive/public/proactive-public.service';
 import { GuardrailRuntimeService } from '../guardrails/runtime/guardrail-runtime.service';
-import type { PublicChatbotConfigWithProactive, PublicProactiveEventDto } from '@chat-bot/shared-types';
+import type { PublicChatbotConfigResponse, PublicProactiveEventDto, PublicSpeechTranscriptionResponse, SpeechReplyPlan } from '@chat-bot/shared-types';
+import { SpeechTranscriptionService, speechUnavailable } from '../speech/public/speech-transcription.service';
+import type { SpeechRequestInput } from '../speech/public/speech-transcription.service';
+import { VoicePublicService } from '../speech/reply/voice-public.service';
 
 /** [신규 No.40] §7.6 — 버전 읽기 실패 시 엔진을 호출하지 않는 고정 폴백 문구(엔진 상수를 새로 export하지
  * 않는다 — packages/dialogue-engine 변경 0). */
@@ -100,6 +103,11 @@ export class PublicConversationService {
     // [신규 No.36 — 20번째 인자(끝), 선택] 입구 가드레일 판정(③.6)·이벤트 적재. 선택 인자라 기존 19인자
     // 생성자 호출(단위 시험)은 무수정 통과한다 — 없으면 입구 판정 0(도입 전 동작).
     private readonly guardrails?: GuardrailRuntimeService,
+    // [신규 No.32 — 21번째 인자(끝), 선택] 공개 설정 `voice` 조립 · 응답 `speech` 계획·조립(봇 답변 반환 2지점 — H-3 · DD-136).
+    // 선택 인자라 기존 20인자 생성자 호출(단위 시험)은 무수정 통과한다 — 없으면 음성 0(도입 전 동작). 공급자·세마포어는 받지 않는다(VO-5).
+    private readonly voicePublic?: VoicePublicService,
+    // [신규 No.32 — 22번째 인자(끝), 선택] 공개 인식 처리 전용 — 대화 턴 경로(메시지 전송·보류 폴링)에서는 쓰지 않는다(VO-5).
+    private readonly speechTranscription?: SpeechTranscriptionService,
   ) {}
 
   /**
@@ -125,7 +133,7 @@ export class PublicConversationService {
     return { bundle: s.bundle, index: s.index, settings: s.settings, versionId: source.versionId, semanticSource: s.semanticSource };
   }
 
-  async getConfig(slug: string, opts?: { proactive?: boolean }): Promise<PublicChatbotConfigWithProactive> {
+  async getConfig(slug: string, opts?: { proactive?: boolean }): Promise<PublicChatbotConfigResponse> {
     const { chatbot, channel } = await this.access.resolve(slug);
     const config = parseChannelConfig('WEB', channel.config) as WebChannelConfig;
 
@@ -156,12 +164,35 @@ export class PublicConversationService {
       showLauncher: config.showLauncher,
     };
 
-    // [신규 No.35] §5.1 — 쿼리가 없거나(또는 `?proactive=1`이 아니거나) 선제 모듈이 없으면 이 줄
-    // **앞**의 객체를 그대로 반환한다(바이트 동일 · 추가 쿼리 0). 선제 코드는 이 줄 뒤에만 있다.
-    if (!opts?.proactive || !this.proactivePublic) return config8Keys;
+    // [신규 No.32] §5.1 — 음성 설정이 없는 챗봇은 `voice`가 `undefined`(전역 색인 캐시 적중 시 추가 쿼리 0) → 조건부 전개로 키 자체가 없다.
+    // `voice`는 항상 **마지막 키**다(`proactive` 뒤). 선제 경로(`?proactive=1`)도 같은 객체를 쓴다(설정의 진실 1벌 — R-12).
+    const voice = this.voicePublic ? await this.voicePublic.buildConfigVoice(chatbot.id) : undefined;
+
+    // [신규 No.35] §5.1 — 쿼리가 없거나(또는 `?proactive=1`이 아니거나) 선제 모듈이 없으면 선제 코드는 건너뛴다
+    // (음성 키가 없으면 바이트 동일 · 추가 쿼리 0). 선제 코드는 이 줄 뒤에만 있다.
+    if (!opts?.proactive || !this.proactivePublic) return voice ? { ...config8Keys, voice } : config8Keys;
 
     const proactive = await this.proactivePublic.buildPayload({ id: chatbot.id }, new Date(), () => this.loadServing(chatbot).then((s) => ({ index: s.index })));
-    return { ...config8Keys, proactive };
+    return { ...config8Keys, proactive, ...(voice ? { voice } : {}) };
+  }
+
+  /**
+   * [신규 No.32] `POST /public/chatbots/:slug/speech/transcriptions`(`@Public()` 10번째, ADR-0052) — voice-ai-설계.md §5.3 처리 순서의
+   * ①~⑤(서버 스위치 · 세션 헤더 · 형식 · 길이 헤더 · 슬러그 판정)를 여기서 하고 ⑥~⑫는 `SpeechTranscriptionService`가 한다.
+   * 슬러그 판정 실패(없음·비공개·WEB 꺼짐)는 404/403이 아니라 **같은 503 `SPEECH_UNAVAILABLE`**로 통일한다(R-8).
+   */
+  async transcribeSpeech(slug: string, input: SpeechRequestInput): Promise<PublicSpeechTranscriptionResponse> {
+    const transcription = this.speechTranscription;
+    if (!transcription || !transcription.isServerEnabled()) throw speechUnavailable();
+    transcription.precheck(input);
+    let chatbotId: string;
+    try {
+      chatbotId = (await this.access.resolve(slug)).chatbot.id;
+    } catch (e) {
+      if (e instanceof ApiException) throw speechUnavailable();
+      throw e;
+    }
+    return transcription.transcribe(chatbotId, input);
   }
 
   /** `POST /public/chatbots/:slug/proactive-events`(`@Public()` 9번째, §5.3) — 결합 검증 불일치·
@@ -178,6 +209,8 @@ export class PublicConversationService {
 
   async sendMessage(slug: string, dto: PublicMessageRequestDto, opts?: { handoffToken?: string; identityToken?: string }): Promise<PublicMessageResponse> {
     const { chatbot, channel } = await this.access.resolve(slug);
+    // [신규 No.32] 읽기 계획 — `speech-v1` 선언이 없으면 동기 `undefined`(캐시 조회조차 0 · 대화 턴 첫 쿼리 수 17 불변 — C-14).
+    const speechPlan = this.voicePublic && (dto.features ?? []).includes(WIDGET_FEATURE_SPEECH_V1) ? await this.voicePublic.plan(chatbot.id, dto.features) : undefined;
     const adapter = this.adapterFactory.getAdapter('WEB');
     const inbound = adapter.normalizeInbound({ ...dto, identityToken: opts?.identityToken });
 
@@ -315,7 +348,9 @@ export class PublicConversationService {
       const preservedState: ConversationState = parsedState.success ? parsedState.data : { version: CONVERSATION_STATE_VERSION, contextSession: null };
       // 위기 질문 → 상담 연결이 가능한 챗봇이면 관찰 창 힌트를 싣는다(미응답 턴 · 출구 대체 `FAILED`와 대칭 — R-5).
       const watchHint = await this.buildWatchHint(chatbot.id, dto.features, false);
-      return { messageId, outputs, state: preservedState, stateReset: false, ...(watchHint ? { handoff: watchHint } : {}) };
+      const safetyResponse: PublicMessageResponse = { messageId, outputs, state: preservedState, stateReset: false, ...(watchHint ? { handoff: watchHint } : {}) };
+      // [신규 No.32 · H-3] 입구 안전 문구 대체 = 봇 답변(DD-136) — 읽기 글자는 봇 출력만(전치 상담원 메시지 제외 — C-16). 말투는 CALM 고정.
+      return speechPlan ? withSpeech(this.voicePublic!, safetyResponse, speechPlan, 'SAFETY', outputs.slice(handoffPrependOutputs.length)) : safetyResponse;
     }
 
     // ③④ [신규] 1단계 의미 유사도 점수 주입(ADR-0020) — `NODE` 버튼(=filterableText undefined)은
@@ -426,6 +461,7 @@ export class PublicConversationService {
         prependOutputs: handoffPrependOutputs,
         feedbackOffered,
         servedVersionId: serving.versionId ?? undefined,
+        ...(speechPlan ? { speechPlan } : {}),
       });
     }
 
@@ -464,7 +500,11 @@ export class PublicConversationService {
       servedVersionId: serving.versionId ?? undefined,
     });
 
-    return response;
+    // [신규 No.32 · H-3] 정상 턴 = 봇 답변(DD-136) — `judgeAnswered`로 ANSWERED/UNANSWERED, 노드 꼬리표는 최종 노드(`matchedNodeId`) 기준.
+    // 읽기 글자는 봇 출력만(`slice` — 전치 상담원 메시지 제외, C-16). `logService.record()` 인자는 불변이다(speech 글자 미저장 — VO-8).
+    return speechPlan
+      ? withSpeech(this.voicePublic!, response, speechPlan, isAnswered ? 'ANSWERED' : 'UNANSWERED', outputs.slice(handoffPrependOutputs.length), result.matchedNodeId)
+      : response;
   }
 
   /** `GET /public/chatbots/:slug/messages/:messageId`(`@Public()` 6번째, ADR-0023). */
@@ -473,7 +513,13 @@ export class PublicConversationService {
     if (!snapshot) {
       throw new ApiException('PENDING_ANSWER_NOT_FOUND', 404, '요청하신 답변을 찾을 수 없거나 만료되었습니다.');
     }
-    return { status: snapshot.status, outputs: snapshot.outputs, sources: snapshot.sources };
+    // [신규 No.32] 최종 답(`READY`·`FAILED`)이고 말투 계획이 있으면 `speech`를 마지막 키로 붙인다 — `FAILED` + 안전 대체 표식 = `SAFETY`(CALM),
+    // 그 밖의 `FAILED`(챗봇 폴백 문구) = `UNANSWERED`. `PENDING`·만료(404)에는 붙지 않는다. 폴링 결과 출력에는 G-8 전치 출력이 없다.
+    const speech =
+      this.voicePublic && snapshot.speech && snapshot.outputs && (snapshot.status === 'READY' || snapshot.status === 'FAILED')
+        ? this.voicePublic.build(snapshot.speech, snapshot.status === 'READY' ? 'ANSWERED' : snapshot.safetyReplaced ? 'SAFETY' : 'UNANSWERED', snapshot.outputs)
+        : undefined;
+    return { status: snapshot.status, outputs: snapshot.outputs, sources: snapshot.sources, ...(speech ? { speech } : {}) };
   }
 
   private evaluateRagEligibility(
@@ -526,6 +572,8 @@ export class PublicConversationService {
     feedbackOffered: boolean;
     /** [신규 No.40] POST 시점의 운영 포인터 — 백그라운드 완료 시 같은 값으로 적재한다(§14). */
     servedVersionId?: string;
+    /** [신규 No.32] 폴링 최종 답용 말투 계획(보류 저장소에만 둔다). */
+    speechPlan?: SpeechReplyPlan;
   }): Promise<PublicMessageResponse> {
     const ttlMs = this.config.get<number>('PENDING_ANSWER_TTL_MS') ?? 300_000;
     const expiresAt = new Date(Date.now() + ttlMs);
@@ -537,7 +585,8 @@ export class PublicConversationService {
     // 유일한 반납 지점이 되어야 하므로 이중 반납(double-release)이 없도록 아래 두 줄만 감싼다.
     let waitingOutputs: DialogOutput[];
     try {
-      this.pendingStore.create(input.messageId, { chatbotId: input.chatbotId, slug: input.slug, expiresAt });
+      // [신규 No.32] 말투 **계획**만 저장한다(글자 아님) — 폴링 최종 답(READY·FAILED)의 `speech` 조립용. 대기 문구 응답에는 `speech`가 붙지 않는다(H-3).
+      this.pendingStore.create(input.messageId, { chatbotId: input.chatbotId, slug: input.slug, expiresAt, ...(input.speechPlan ? { speech: input.speechPlan } : {}) });
       waitingOutputs = await this.bannedWordFilter.maskOutbound([...(input.prependOutputs ?? []), { type: 'TEXT', payload: { text: RAG_WAITING_TEXT } }]);
     } catch (error) {
       this.ragGate.release();
@@ -626,4 +675,21 @@ function resolveInputKind(inbound: InboundTurn): InputKind {
   if (inbound.buttonAction?.kind === 'NODE') return 'BUTTON_NODE';
   if (inbound.buttonAction?.kind === 'MESSAGE') return 'BUTTON_MESSAGE';
   return 'TEXT';
+}
+
+/**
+ * [신규 No.32] 봇 답변 반환 지점(DD-136)에서만 호출하는 `speech` 조립 — **정확히 2곳**(입구 안전 문구 대체 · 정상 턴, VO-17). 읽기 글자가 비면
+ * 응답을 그대로(같은 참조) 돌려준다. `speech`는 항상 **마지막 키**다(조건부 전개). 시스템 안내 3종(BLOCK·버전 읽기 실패·보류 시작)·상담 HANDLED 반환문에는
+ * 쓰지 않는다.
+ */
+function withSpeech(
+  voicePublic: VoicePublicService,
+  response: PublicMessageResponse,
+  plan: SpeechReplyPlan,
+  kind: 'ANSWERED' | 'UNANSWERED' | 'SAFETY',
+  botOutputs: readonly DialogOutput[],
+  matchedNodeId?: string | null,
+): PublicMessageResponse {
+  const speech = voicePublic.build(plan, kind, botOutputs, matchedNodeId);
+  return speech ? { ...response, speech } : response;
 }

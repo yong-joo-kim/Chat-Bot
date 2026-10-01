@@ -22,7 +22,13 @@ export default defineConfig({
   },
   optimizeDeps: {
     // [신규 No.35] proactive-eval — 위젯·콘솔 공용 zod 무의존 판정 함수 서브패스(ADR-0045 §12).
-    include: ['@chat-bot/shared-types/output-view', '@chat-bot/shared-types/contrast', '@chat-bot/shared-types/proactive-eval'],
+    // [신규 No.32] speech-voice — 말투 대응표·읽기 보조 함수(위젯·콘솔·서버 공용 1벌, ADR-0052 · 설계 §4.2).
+    include: [
+      '@chat-bot/shared-types/output-view',
+      '@chat-bot/shared-types/contrast',
+      '@chat-bot/shared-types/proactive-eval',
+      '@chat-bot/shared-types/speech-voice',
+    ],
   },
   test: {
     environment: 'node',

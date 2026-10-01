@@ -19,7 +19,7 @@ export const PUBLIC_RATE_BUCKET_KEY = 'publicRateBucket';
  * 그대로인 이유 — ADR-0045 §3).
  */
 export interface PublicRateBucketSpec {
-  kind: 'POLL' | 'FEEDBACK' | 'PROACTIVE_RULES' | 'PROACTIVE_EVENT';
+  kind: 'POLL' | 'FEEDBACK' | 'PROACTIVE_RULES' | 'PROACTIVE_EVENT' | 'SPEECH';
   /** 두 번째 축의 키 출처 — 경로 파라미터·요청 헤더·요청 본문. `ns`는 버킷 키 접두사(충돌 방지).
    * 생략하면 IP축만 소비한다(`PROACTIVE_RULES`가 그렇다 — 선제 조회는 세션별 축이 없다). */
   key?: { from: 'param' | 'header' | 'body'; name: string; ns: string };

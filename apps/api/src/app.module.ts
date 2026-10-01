@@ -49,6 +49,7 @@ import { KbSyncModule } from './kb-sync/kb-sync.module';
 import { ProactiveModule } from './proactive/proactive.module';
 import { UtteranceAnalysisModule } from './utterance-analysis/utterance-analysis.module';
 import { GuardrailsModule } from './guardrails/guardrails.module';
+import { SpeechModule } from './speech/speech.module';
 import { validate } from './config/env.validation';
 
 // NOTE: 보안/이력(No.12~13) — `PermissionGuard`를 `APP_GUARD`로 전역 등록해 fail-closed로
@@ -117,6 +118,8 @@ import { validate } from './config/env.validation';
     // [신규 No.36] imports 맨 끝 — 새 백그라운드 루프 0이라 순서 의존은 없다(ai-guardrails-설계.md §2.1). 런타임은
     // `ConversationModule`·`RagModule`·`SimulationModule`이 `GuardrailRuntimeModule`로 따로 import한다.
     GuardrailsModule,
+    // [신규 No.32] imports 맨 끝 — 새 백그라운드 루프 0이라 순서 의존은 없다(voice-ai-설계.md §2.1). `ConversationModule`도 `SpeechModule`을 import한다(중복 무해).
+    SpeechModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })

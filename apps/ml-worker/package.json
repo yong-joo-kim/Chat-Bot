@@ -7,6 +7,8 @@
     "setup": "node ./scripts/setup.mjs",
     "dev": "node ./scripts/run.mjs -m ml_worker.app",
     "start": "node ./scripts/run.mjs -m ml_worker.app",
+    "start:speech": "node ./scripts/start-speech.mjs",
+    "stt:fetch-model": "node ./scripts/run.mjs ./scripts/fetch_stt_model.py",
     "test": "node ./scripts/run.mjs -m pytest -q",
     "health": "node ./scripts/run.mjs ./scripts/health_check.py",
     "eval:sweep": "node ./scripts/run.mjs ./eval/sweep_thresholds.py"

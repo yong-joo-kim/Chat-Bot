@@ -1,6 +1,8 @@
 /**
  * Shadow DOM 내부 전용 스타일(FR-W-12, ADR-0012 §3) — TS 문자열로 보관해 별도 CSS 요청 0건.
  * 터치 영역 44×44px(FR-W-18), 포커스 아웃라인, 색상 단독 금지(FR-W-24)를 여기서 강제한다.
+ * [신규 No.32] 음성 규칙(`.cb-voice*`·`.cb-mic`·`.cb-listen`·`.cb-ar-*`·`.cb-actions`)은 애니메이션 없이 44px 이상이며, 비활성은
+ * 투명도가 아니라 배경·글자색·점선 테두리로 표시해 대비 4.5:1을 유지한다(코멘트를 CSS 문자열 밖에 둔 것은 번들 크기 때문).
  */
 export const WIDGET_STYLES = `
 :host, .cb-root {
@@ -418,6 +420,27 @@ export const WIDGET_STYLES = `
 @media (prefers-reduced-motion: reduce) {
   .cb-pa-bubble { animation: none; }
 }
+
+.cb-composer--voice { flex-wrap: wrap; }
+.cb-composer--voice .cb-input, .cb-composer--voice .cb-remaining { flex: 1 1 100%; }
+.cb-composer--voice .cb-mic, .cb-composer--voice .cb-send { flex: 1 1 0; }
+.cb-voice { flex: 1 1 100%; }
+.cb-voice-line[hidden], .cb-voice-cancel[hidden], .cb-ar-reason[hidden], .cb-voicebar[hidden] { display: none; }
+.cb-voice-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cb-voice-text { flex: 1 1 auto; }
+.cb-mic, .cb-voice-cancel, .cb-listen, .cb-ar-switch { min-width: 44px; min-height: 44px; padding: 6px 12px; border-radius: 8px; border: 1px solid #4b5563; background: #fff; color: #1f2937; font: inherit; cursor: pointer; }
+.cb-mic { border-color: var(--cb-primary, #4f46e5); font-weight: 700; }
+.cb-mic--rec { border: 3px solid #b91c1c; background: #fee2e2; color: #7f1d1d; }
+.cb-mic:focus-visible, .cb-voice-cancel:focus-visible, .cb-listen:focus-visible, .cb-ar-switch:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.cb-mic[aria-disabled="true"], .cb-listen[aria-disabled="true"], .cb-ar-switch[aria-disabled="true"] { background: #f3f4f6; color: #4b5563; border-style: dashed; cursor: not-allowed; }
+.cb-voicebar { flex: none; padding: 6px 14px 8px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+.cb-ar-switch { display: flex; justify-content: space-between; gap: 8px; width: 100%; }
+.cb-ar-state { font-weight: 700; }
+.cb-ar-switch[aria-checked="true"] { border: 2px solid #047857; background: #ecfdf5; color: #064e3b; }
+.cb-ar-help, .cb-ar-reason { margin: 4px 0 0; color: #4b5563; }
+.cb-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.cb-actions .cb-feedback-bar { margin-top: 0; }
+.cb-listen { border-radius: 999px; }
 
 @media (max-width: 420px) {
   .cb-root[data-mode="mobile"] .cb-pa-bubble {

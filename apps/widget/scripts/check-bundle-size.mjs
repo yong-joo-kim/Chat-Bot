@@ -25,3 +25,15 @@ if (gzipped.length > BUDGET_BYTES) {
 }
 
 console.log(`✔ widget.js gzip 크기: ${gzipKb}KB (raw ${rawKb}KB) — 100KB 예산 이내`);
+
+// [신규 No.32] 음성 AI 증가분 기록(설계서 §9.7 · NFR: gzip 증가 ≤7KB — PM 2026-10-01 상향, 실측 +6.17KB). 음성 도입 직전 기준선은 19,760바이트(19.30KB).
+// 100KB 게이트와 달리 이 줄은 **기록·경고만** 한다(빌드를 실패시키지 않는다 — 초과 시 PM 결정 사안).
+const BASELINE_BEFORE_VOICE_BYTES = 19760;
+const VOICE_BUDGET_BYTES = 7 * 1024;
+const delta = gzipped.length - BASELINE_BEFORE_VOICE_BYTES;
+const deltaKb = (delta / 1024).toFixed(2);
+console.log(
+  delta <= VOICE_BUDGET_BYTES
+    ? `✔ 음성 AI(No.32) gzip 증가분: +${deltaKb}KB — 7KB 예산 이내`
+    : `⚠ 음성 AI(No.32) gzip 증가분: +${deltaKb}KB — 7KB 예산 초과(기록만 · 빌드는 통과)`,
+);

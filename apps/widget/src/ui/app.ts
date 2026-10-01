@@ -1,6 +1,6 @@
 import { toOutputViews, isSafeHttpUrl, resolveButtonAction, type ButtonActionView } from '@chat-bot/shared-types/output-view';
 import { evaluateHeaderContrast } from '@chat-bot/shared-types/contrast';
-import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, ProactiveButton, PublicChatbotConfig } from '@chat-bot/shared-types';
+import type { ButtonAction, HandoffPollMessage, PendingAnswerPollResponse, ProactiveButton, PublicChatbotConfig, PublicVoiceConfig } from '@chat-bot/shared-types';
 import { MESSAGES } from '../constants/messages';
 import { createPublicClient, PublicApiError, type PublicApiErrorKind } from '../api/public-client';
 import { getOrCreateSessionId, loadConversationState, resetSession, saveConversationState } from '../core/session';
@@ -28,6 +28,13 @@ import type { WidgetMount } from './shadow-root';
 import { createLauncher } from './launcher';
 import { createPanel } from './panel';
 import type { FeedbackBarBinding } from './feedback-bar';
+import { createMicButton } from './mic-button';
+import { createVoiceBar, type VoiceBarController } from './autoread-toggle';
+import type { ListenHub, ListenHubState, SpeechBinding, SpeechPayload } from './speech-button';
+import { createSpeechPlayback, defaultPlaybackDeps, type SpeechPlayback } from '../core/speech-playback';
+import { createSpeechCapture, defaultCaptureDeps, type SpeechCapture } from '../core/speech-capture';
+import { loadAutoRead, saveAutoRead } from '../core/speech-autoread-storage';
+import { SPEECH_MESSAGES } from '../constants/speech';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -79,6 +86,14 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   // "변경"이 아니므로 새 대화로 취급하면 안 된다(그러면 매 부팅마다 리셋된다).
   let identityToken: string | undefined = loadIdentityToken(options.slug);
   let identitySub: string | undefined = identityToken ? decodeIdentitySub(identityToken) : undefined;
+  // [신규 No.32] 음성 — 공개 설정에 `voice` 키가 없으면 끝까지 `undefined`/false(DOM·리스너·`getVoices()`·권한 요청 0).
+  let speechOn = false;
+  let playback: SpeechPlayback | undefined;
+  let capture: SpeechCapture | undefined;
+  let voiceBar: VoiceBarController | undefined;
+  let autoRead = false;
+  let voiceReady = false;
+  const listenListeners: Array<() => void> = [];
   // PENDING 폴링 세대 카운터(EX-N2-11) — 도중 새 질문을 보내면 증가시켜 이전 폴링 루프를 폐기한다.
   let pollGeneration = 0;
 
@@ -416,6 +431,110 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     }
   }
 
+  /** 읽기 가능 여부·공유 이유 줄(`#cb-voice-reason`) — 우선순위: 음성 없음 > 확인 중 > 녹음 중(§4.4). */
+  function listenState(): ListenHubState {
+    const avail = playback ? playback.availability() : 'unavailable';
+    const recording = capture?.isRecording() ?? false;
+    const reason =
+      avail === 'unavailable'
+        ? SPEECH_MESSAGES.voiceUnavailable
+        : avail === 'checking'
+          ? SPEECH_MESSAGES.voiceChecking
+          : recording
+            ? SPEECH_MESSAGES.listenWhileRecording
+            : '';
+    return { playingKey: playback?.playingKey() ?? null, disabled: avail !== 'available' || recording, reason };
+  }
+
+  function notifyVoice(): void {
+    if (voiceBar && playback) {
+      voiceBar.setDisabled(playback.availability() !== 'available');
+      voiceBar.setReason(listenState().reason);
+    }
+    listenListeners.forEach((fn) => fn());
+  }
+
+  const listenHub: ListenHub = {
+    state: listenState,
+    toggle(key, speech) {
+      if (!playback) return;
+      if (playback.playingKey() === key) playback.cancel();
+      else playback.speak(key, speech);
+    },
+    subscribe: (fn) => void listenListeners.push(fn),
+  };
+
+  /** `speech` 키가 있는 봇 답변에만 듣기 버튼 바인딩을 만든다 — 응답 종류를 해석하지 않고 키 유무만 본다. */
+  function speechBinding(key: string, speech: SpeechPayload | undefined): SpeechBinding | undefined {
+    return speechOn && speech ? { key, speech, hub: listenHub } : undefined;
+  }
+
+  /**
+   * 자동 읽기 — 토글이 켜져 있고 읽기 가능하며, 창이 열려 있고 탭이 보이고 녹음 중이 아닐 때만 새 `speech` 응답을
+   * 읽는다(읽는 중이면 취소 후 최신 답 · 대기열 없음 — 명세 F-3). `speech` 없는 응답은 아무것도 하지 않는다.
+   */
+  function autoReadAnswer(key: string, speech: SpeechPayload | undefined): void {
+    if (!speech || !autoRead || !playback) return;
+    if (panel.root.hidden || document.hidden || capture?.isRecording()) return;
+    playback.speak(key, speech);
+  }
+
+  /** `config.voice`가 있을 때 1회만 조립한다(NFR-VOP5). */
+  function setupVoice(voice: PublicVoiceConfig): void {
+    if (voiceReady) return;
+    voiceReady = true;
+    if (voice.tts) {
+      speechOn = true;
+      playback = createSpeechPlayback(defaultPlaybackDeps(), voice.rate, {
+        onChange: notifyVoice,
+        onError: () => announceFeedback(SPEECH_MESSAGES.listenError),
+      });
+      autoRead = voice.autoReadToggle && loadAutoRead(options.slug);
+      voiceBar = createVoiceBar({
+        showToggle: voice.autoReadToggle,
+        checked: autoRead,
+        onToggle: (next) => {
+          autoRead = next;
+          saveAutoRead(options.slug, next);
+          if (next) playback?.unlock();
+          else playback?.cancel();
+        },
+      });
+      panel.root.insertBefore(voiceBar.root, panel.root.children[1] ?? null);
+      // 위젯에 destroy 경로가 없고 setupVoice는 voiceReady로 1회만 실행되므로 중복 등록은 없다(해제 불필요 — 페이지 수명과 같음).
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) playback?.cancel();
+      });
+      playback.start();
+      notifyVoice();
+    }
+    const micSupported =
+      voice.input && window.isSecureContext && typeof navigator.mediaDevices?.getUserMedia === 'function' && typeof MediaRecorder === 'function';
+    if (micSupported) {
+      const mic = createMicButton({ onToggle: () => capture?.toggle(), onCancel: () => capture?.cancel() });
+      capture = createSpeechCapture(
+        defaultCaptureDeps((blob, signal) => client.transcribeSpeech(blob, getOrCreateSessionId(options.slug), signal)),
+        {
+          onView: (v) => {
+            mic.render(v);
+            notifyVoice();
+          },
+          onAnnounce: announceFeedback,
+          onTranscript: (text) => panel.composer.insertTranscript(text),
+          onFocus: (target) => (target === 'mic' ? mic.focus() : panel.composer.focus()),
+          onStart: () => playback?.cancel(),
+        },
+      );
+      panel.composer.setMicSlot(mic.strip, mic.button);
+      // 명세 F-1 — 녹음·준비·인식 중 Esc는 음성만 취소하고 패널을 닫지 않는다.
+      panel.setEscapeGuard(() => capture?.cancel() ?? false);
+    }
+    panel.composer.setInputHook(() => {
+      playback?.cancel();
+      capture?.noteUserInput();
+    });
+  }
+
   async function handleOpen(): Promise<void> {
     panel.setOpen(true);
     launcher.setExpanded(true);
@@ -431,6 +550,7 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     try {
       const config = await client.getConfig();
       applySkin(config);
+      if (config.voice && (config.voice.input || config.voice.tts)) setupVoice(config.voice);
       const alreadyGreeted = state.greetingShown;
       dispatch({ type: 'CONFIG_LOADED', config });
       if (!alreadyGreeted) {
@@ -458,6 +578,9 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
   }
 
   function handleClose(): void {
+    // [신규 No.32] 창을 닫으면 읽기·녹음·인식을 조용히 멈춘다(마이크 트랙 즉시 닫힘 — EX-VO-11).
+    playback?.cancel();
+    capture?.cancel(true);
     dispatch({ type: 'CLOSE' });
     panel.setOpen(false);
     launcher.setExpanded(false);
@@ -520,12 +643,30 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
         statusText = MESSAGES.pending.readyAnnounce;
         panel.setStatusText(statusText);
         const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), payload.sources, handleButtonAction, feedback, announceCarouselPosition);
+        await panel.messages.addBotAnswer(
+          pendingId,
+          toOutputViews(payload.outputs ?? []),
+          payload.sources,
+          handleButtonAction,
+          feedback,
+          announceCarouselPosition,
+          speechBinding(pendingId, payload.speech),
+        );
+        autoReadAnswer(pendingId, payload.speech);
       } else if (decision.reason === 'FAILED' && payload) {
         statusText = MESSAGES.pending.timeoutFallback;
         panel.setStatusText(statusText);
         const feedback = feedbackOffered ? makeFeedbackBinding(pendingId) : undefined;
-        await panel.messages.addBotAnswer(pendingId, toOutputViews(payload.outputs ?? []), undefined, handleButtonAction, feedback, announceCarouselPosition);
+        await panel.messages.addBotAnswer(
+          pendingId,
+          toOutputViews(payload.outputs ?? []),
+          undefined,
+          handleButtonAction,
+          feedback,
+          announceCarouselPosition,
+          speechBinding(pendingId, payload.speech),
+        );
+        autoReadAnswer(pendingId, payload.speech);
       } else {
         // EXPIRED(404/TTL 만료) 또는 TIMEOUT(90초 초과, 로컬 판단) — 서버 응답이 없으므로
         // 클라이언트가 정리 문구로 마감한다(S-15, 오류로 표시하지 않는다).
@@ -569,7 +710,7 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
     try {
       const res = await client.sendMessage(
         { sessionId, message: input.message, buttonAction: input.buttonAction, state: savedState },
-        { handoffToken: handoffPollState.token, identityToken },
+        { handoffToken: handoffPollState.token, identityToken, speech: speechOn },
       );
       saveConversationState(options.slug, res.state);
       if (res.stateReset) {
@@ -624,7 +765,9 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
           undefined,
           feedback,
           announceCarouselPosition,
+          speechBinding(res.messageId, res.speech),
         );
+        autoReadAnswer(res.messageId, res.speech);
       }
       dispatch({ type: 'SEND_SUCCEEDED', botMessages: [] });
       panel.setStatusText('');
@@ -635,6 +778,7 @@ export function createWidgetApp(mount: WidgetMount, options: WidgetAppOptions): 
       panel.composer.setDisabled(false);
       if (e instanceof PublicApiError && e.kind === 'DISABLED') {
         disabledPermanently = true;
+        capture?.remove();
         dispatch({ type: 'CONFIG_DISABLED' });
         panel.messages.addSystemText(MESSAGES.errorDisabled);
         panel.composer.setDisabled(true);

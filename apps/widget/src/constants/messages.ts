@@ -6,6 +6,7 @@ export const MESSAGES = {
   send: '전송',
   sending: '응답 생성 중',
   remaining: (n: number) => `${n}자 남음`,
+  over: (n: number) => `${n}자 초과 · 줄여 주세요`,
   retry: '다시 시도',
   errorNetwork: '일시적인 오류가 발생했어요. 다시 시도해 주세요.',
   errorRateLimited: '요청이 많습니다. 잠시 후 다시 시도해 주세요.',

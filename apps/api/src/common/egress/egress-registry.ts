@@ -83,6 +83,15 @@ export const EGRESS_REGISTRY: readonly EgressExitDef[] = [
     masked: 'NOT_APPLICABLE',
     label: '지식베이스 수집(크롤러)',
   },
+  {
+    // [신규 No.32] 8번째 클래스 — 음성 인식 프로세스(ml-worker `ML_WORKER_ROLE=speech`)로 가는 **음성 원본**(ADR-0052 · DD-130).
+    // 데이터 지도 `exits[]` 행은 `SPEECH_ENABLED ∧ SPEECH_PROVIDER=local`일 때만 만든다(기본 설치 지도 바이트 동일 — C-8).
+    exitId: 'SPEECH_LOCAL',
+    files: ['speech/providers/local-speech-recognition.provider.ts'],
+    dataKind: 'AUDIO_RAW',
+    masked: 'NO',
+    label: '음성 인식(ml-worker)',
+  },
 ];
 
 /** Gemini 기본 호스트 — 기동 검사(§6.4)와 provider 기본값이 같은 상수를 쓴다. */

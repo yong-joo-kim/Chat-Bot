@@ -9,12 +9,13 @@ export const PiiMaskModeSchema = z.enum(['PARTIAL', 'FULL']);
 export type PiiMaskMode = z.infer<typeof PiiMaskModeSchema>;
 
 // [신규 No.43] 7번째 클래스 `KB_CRAWL`(지식베이스 크롤러) — ADR-0044 §6.
-export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API', 'WORKFLOW_WEBHOOK', 'KB_CRAWL']);
+// [신규 No.32] 8번째 클래스 `SPEECH_LOCAL`(음성 인식 ml-worker — 음성 원본 `AUDIO_RAW`) — ADR-0052 · DD-130.
+export const EgressExitId = z.enum(['EMBEDDING', 'RAG', 'AUGMENT_GEMINI', 'AUGMENT_LOCAL', 'LEGACY_API', 'WORKFLOW_WEBHOOK', 'KB_CRAWL', 'SPEECH_LOCAL']);
 export type EgressExitId = z.infer<typeof EgressExitId>;
 
 // [신규 No.43] `CRAWL_REQUEST`(크롤러 요청 줄) · `DOCUMENT_BODY`(지식베이스 적재 문서 본문 — 데이터 지도
 // `egress.kbSources` 절에서만 쓰인다. RAG 출구 자체의 exits[] 행은 `QUESTION_MASKED` 그대로다).
-export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT', 'WORKFLOW_PAYLOAD', 'CRAWL_REQUEST', 'DOCUMENT_BODY']);
+export const EgressDataKind = z.enum(['QUERY_RAW', 'QUESTION_MASKED', 'SEED_MASKED', 'SEED_UNMASKED', 'FORM_SLOT', 'WORKFLOW_PAYLOAD', 'CRAWL_REQUEST', 'DOCUMENT_BODY', 'AUDIO_RAW']);
 export type EgressDataKind = z.infer<typeof EgressDataKind>;
 
 export const EgressDecision = z.enum(['ALLOWED', 'BLOCKED', 'NOT_CONFIGURED', 'NOT_ENFORCED']);
@@ -320,5 +321,22 @@ export const GovernanceMapResponseSchema = z.object({
   /** [신규 No.36] 규칙 ≥1 · 이벤트 ≥1 · 가림 설정 행 ≥1 · 승인 정책 켜짐 ≥1일 때만 채워진다(0이면 키 생략 = 바이트 동일,
    * ai-guardrails-설계.md §8.6). */
   guardrails: GovernanceGuardrailsMapSchema.optional(),
+  /** [신규 No.32] `SPEECH_ENABLED=true` 또는 입력∨듣기 켜진 음성 설정 행 ≥1일 때만 채워진다(없으면 키 생략 = 바이트 동일,
+   * voice-ai-설계.md §11.2 — No.35·No.36 선례). 기본 설치 지도는 이 키도, `exits[]`의 `SPEECH_LOCAL` 행도 없다. */
+  speech: z
+    .object({
+      serverEnabled: z.boolean(),
+      provider: z.enum(['mock', 'local']),
+      chatbotsInputEnabled: z.number().int().nonnegative(),
+      chatbotsTtsEnabled: z.number().int().nonnegative(),
+      audioStored: z.literal(false),
+      audioDiskWrite: z.literal(false),
+      transcriptStored: z.literal('ONLY_WHEN_SENT'),
+      ttsLocation: z.literal('USER_DEVICE'),
+      ttsServerEgress: z.literal(false),
+      onlineVoicesExcluded: z.literal(true),
+      counters: z.literal('CHATBOT_DAILY_COUNTS_ONLY'),
+    })
+    .optional(),
 });
 export type GovernanceMapResponse = z.infer<typeof GovernanceMapResponseSchema>;

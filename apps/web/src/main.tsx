@@ -6,6 +6,7 @@ import { ToastProvider } from './components/Toast';
 import { AuthProvider } from './context/AuthContext';
 import './styles/global.css';
 import './styles/guardrails.css';
+import './styles/voice.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

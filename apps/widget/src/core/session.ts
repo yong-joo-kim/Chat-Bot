@@ -18,12 +18,12 @@ function trySessionStorage(): Storage | null {
   }
 }
 
-function getItem(key: string): string | null {
+export function getItem(key: string): string | null {
   const s = trySessionStorage();
   return s ? s.getItem(key) : (memoryStore.get(key) ?? null);
 }
 
-function setItem(key: string, value: string): void {
+export function setItem(key: string, value: string): void {
   const s = trySessionStorage();
   if (s) {
     s.setItem(key, value);

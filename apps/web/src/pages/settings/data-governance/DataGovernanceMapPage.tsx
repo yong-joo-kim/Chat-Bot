@@ -11,6 +11,7 @@ import { MESSAGES } from '../../../constants/messages';
 import { formatDateTime } from '../../../lib/date';
 import { UtteranceAnalysisDataMapSection } from '../../chatbot-detail/utterance-analysis/UtteranceAnalysisDataMapSection';
 import { GuardrailDataMapSection } from '../../chatbot-detail/guardrails/GuardrailDataMapSection';
+import { VoiceGovernanceCard } from '../../chatbot-detail/voice/VoiceGovernanceCard';
 
 /**
  * [신규 No.41 2차] 업무 자동화 웹훅 출구 행의 마스킹 라벨은 대상별 정책(각 발송 대상의
@@ -20,6 +21,19 @@ import { GuardrailDataMapSection } from '../../chatbot-detail/guardrails/Guardra
 function maskedLabelFor(exit: GovernanceMapResponse['egress']['exits'][number], msg: typeof MESSAGES.dataGovernance.map): string {
   if (exit.exitId === 'WORKFLOW_WEBHOOK') return msg.maskedLabel.PER_TARGET;
   return msg.maskedLabel[exit.masked];
+}
+
+/**
+ * [신규 No.32] 송신 데이터 열 — 음성 원본(`AUDIO_RAW`)은 개인정보를 가릴 수 없어(저장하지 않는 것이 유일한 보호 수단) 경고 아이콘 +
+ * 텍스트를 병기한다(임베딩 "질의 원문" 표기와 같은 방식, UIUX §1).
+ */
+function DataKindCell({ kind, msg }: { kind: GovernanceMapResponse['egress']['exits'][number]['dataKind']; msg: typeof MESSAGES.dataGovernance.map }): JSX.Element {
+  return (
+    <>
+      {kind === 'AUDIO_RAW' && <span aria-hidden="true">⚠ </span>}
+      {msg.dataKindLabel[kind]}
+    </>
+  );
 }
 
 /** G1 — 데이터 지도(`/settings/data-governance/map`, `data-governance-ui-spec.md` §3.1). 읽기 전용 1회 조회. */
@@ -96,7 +110,9 @@ export function DataGovernanceMapPage(): JSX.Element {
                 <tr key={exit.exitId}>
                   <td>{msg.exitLabel[exit.exitId]}</td>
                   <td>{exit.host ?? msg.notConfigured}</td>
-                  <td>{msg.dataKindLabel[exit.dataKind]}</td>
+                  <td>
+                    <DataKindCell kind={exit.dataKind} msg={msg} />
+                  </td>
                   <td>{maskedLabelFor(exit, msg)}</td>
                   <td>
                     <EgressJudgementBadge decision={exit.decision} />
@@ -119,7 +135,9 @@ export function DataGovernanceMapPage(): JSX.Element {
                   </div>
                   <div>
                     <dt>{msg.egressColumnData}</dt>
-                    <dd>{msg.dataKindLabel[exit.dataKind]}</dd>
+                    <dd>
+                      <DataKindCell kind={exit.dataKind} msg={msg} />
+                    </dd>
                   </div>
                   <div>
                     <dt>{msg.egressColumnMasked}</dt>
@@ -308,6 +326,15 @@ export function DataGovernanceMapPage(): JSX.Element {
           </>
         )}
 
+        {/* [신규 No.32] 음성 인식 출구 경고 — 음성 원본이 음성 인식 프로세스로 전송되며 저장하지 않는다(행이 있을 때만). */}
+        {data.egress.exits
+          .filter((e) => e.exitId === 'SPEECH_LOCAL' && e.host)
+          .map((e) => (
+            <p key={e.exitId} className="field-hint field-hint--warning">
+              <span aria-hidden="true">⚠</span> {MESSAGES.voice.governance.exitWarning(e.host as string)}
+            </p>
+          ))}
+
         {data.egress.exits.some((e) => e.rawTextOffHost) &&
           data.egress.exits
             .filter((e) => e.rawTextOffHost && e.host)
@@ -395,6 +422,9 @@ export function DataGovernanceMapPage(): JSX.Element {
 
       {/* [신규 No.36] 위험 응답 규칙·개인정보 가림·2인 승인 절(DM-1) — 선택 키가 없으면(0건) 렌더하지 않는다. */}
       {data.guardrails && <GuardrailDataMapSection map={data.guardrails} />}
+
+      {/* [신규 No.32] 음성 카드(VO-C8) — 서버 음성 인식이 켜졌거나 음성을 켠 챗봇이 있을 때만 선택 키가 있다. 읽기 전용. */}
+      {data.speech && <VoiceGovernanceCard map={data.speech} />}
 
       {/* [신규 No.42] 통합 인박스 카드(§3.12 OI-12) — 고객 0명이면 선택 키 자체가 없어 렌더되지 않는다. */}
       {data.inbox && (

@@ -7,6 +7,7 @@ import { renderSourceList } from './renderers/sources';
 import { renderButtonGroup } from './renderers/button';
 import { createPendingIndicator, removePendingIndicator as removePendingIndicatorDom } from './renderers/pending-indicator';
 import { createFeedbackBar, type FeedbackBarBinding } from './feedback-bar';
+import { createSpeechButton, type SpeechBinding } from './speech-button';
 import { MESSAGES } from '../constants/messages';
 
 function sleep(ms: number): Promise<void> {
@@ -51,6 +52,7 @@ export interface MessageListController {
     buttonGroupOptions?: ButtonGroupOptions,
     feedback?: FeedbackBarBinding,
     onCarouselAnnounce?: (text: string) => void,
+    speech?: SpeechBinding,
   ): Promise<void>;
   /**
    * PENDING 최종 답변(§4.4.2-4) — 아웃풋 + 출처를 같은 말풍선에 렌더한다. `messageId`는 이번
@@ -67,6 +69,7 @@ export interface MessageListController {
     onButtonAction: (action: ButtonActionView) => void,
     feedback?: FeedbackBarBinding,
     onCarouselAnnounce?: (text: string) => void,
+    speech?: SpeechBinding,
   ): Promise<void>;
   /** 진행 인디케이터를 봇 메시지 다음에 추가한다(§4.4.2-2). */
   addPendingIndicator(messageId: string): void;
@@ -116,6 +119,22 @@ export function createMessageList(): MessageListController {
     scrollToEnd();
   }
 
+  /**
+   * [신규 No.32] 응답 마지막 말풍선 아래 행동 줄 — `speech`(듣기)가 있을 때만 줄 래퍼를 만들어 평가 막대 앞에
+   * 함께 둔다(평가 막대의 `role="group"`에 넣지 않는다 — 의미가 다르다). 없으면 지금 구조 그대로(평가 막대만 형제).
+   */
+  function appendActions(el: HTMLElement, feedback?: FeedbackBarBinding, speech?: SpeechBinding): void {
+    if (!speech) {
+      if (feedback) el.appendChild(createFeedbackBar(feedback));
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'cb-actions';
+    row.appendChild(createSpeechButton(speech));
+    if (feedback) row.appendChild(createFeedbackBar(feedback));
+    el.appendChild(row);
+  }
+
   // [신규 No.46] RM-10 — 현재 화면에 남아 있는(숨기지 않은) 바로연결 칩 묶음들. 사용자가 다음
   // 입력을 보내는 순간 전부 `hidden` 처리한다(§3.10 — 새 DOM 노드 0).
   let activeQuickReplyGroups: HTMLElement[] = [];
@@ -148,7 +167,7 @@ export function createMessageList(): MessageListController {
       root.appendChild(el);
       scrollToEnd();
     },
-    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions, feedback, onCarouselAnnounce) {
+    async addBotOutputs(views, onButtonAction, onTyping, buttonGroupOptions, feedback, onCarouselAnnounce, speech) {
       // [신규 No.46] RM-10 — 마지막 바로연결만 칩으로 분리한다(EX-RM-11, 나머지는 말풍선 안 일반 버튼).
       const { views: mainViews, quickReply } = splitQuickReply(views);
       const el = wrapMessage('bot');
@@ -160,15 +179,13 @@ export function createMessageList(): MessageListController {
         el.appendChild(group);
         activeQuickReplyGroups.push(group);
       }
-      if (feedback) {
-        el.appendChild(createFeedbackBar(feedback));
-      }
+      appendActions(el, feedback, speech);
       root.appendChild(el);
       scrollToEnd();
       await renderViewsIntoBubble(b, mainViews, onButtonAction, onTyping, buttonGroupOptions, onCarouselAnnounce);
       scrollToEnd();
     },
-    async addBotAnswer(_messageId, views, sources, onButtonAction, feedback, onCarouselAnnounce) {
+    async addBotAnswer(_messageId, views, sources, onButtonAction, feedback, onCarouselAnnounce, speech) {
       // [신규 No.46, 코드 리뷰 R1 Medium] `addBotOutputs`와 동일 — 마지막 바로연결만 칩으로 분리한다.
       const { views: mainViews, quickReply } = splitQuickReply(views);
       const el = wrapMessage('bot');
@@ -179,9 +196,7 @@ export function createMessageList(): MessageListController {
         el.appendChild(group);
         activeQuickReplyGroups.push(group);
       }
-      if (feedback) {
-        el.appendChild(createFeedbackBar(feedback));
-      }
+      appendActions(el, feedback, speech);
       root.appendChild(el);
       scrollToEnd();
       await renderViewsIntoBubble(b, mainViews, onButtonAction, undefined, undefined, onCarouselAnnounce);

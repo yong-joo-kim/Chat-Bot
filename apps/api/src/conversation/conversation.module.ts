@@ -15,6 +15,7 @@ import { InboxIdentityModule } from '../inbox/identity/inbox-identity.module';
 import { InboxCoreModule } from '../inbox/core/inbox-core.module';
 import { ProactiveModule } from '../proactive/proactive.module';
 import { GuardrailRuntimeModule } from '../guardrails/runtime/guardrail-runtime.module';
+import { SpeechModule } from '../speech/speech.module';
 import { PublicConversationController } from './public-conversation.controller';
 import { PublicConversationService } from './public-conversation.service';
 import { PublicFeedbackService } from './public-feedback.service';
@@ -56,6 +57,8 @@ import { PublicOriginGuard } from './guards/public-origin.guard';
     ProactiveModule,
     // [신규 No.36] 입구 판정·이벤트 적재(`GuardrailRuntimeService` — export 유일, ADR-0048).
     GuardrailRuntimeModule,
+    // [신규 No.32] 설정 `voice` · 응답 `speech` 조립 · 공개 인식(export 2개 — `VoicePublicService` · `SpeechTranscriptionService`, ADR-0052).
+    SpeechModule,
   ],
   controllers: [PublicConversationController],
   providers: [

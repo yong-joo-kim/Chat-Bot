@@ -442,6 +442,10 @@ export class ChatbotsService {
       await tx.guardrailRule.deleteMany({ where: { chatbotId: id } });
       await tx.chatbotGuardrailSetting.deleteMany({ where: { chatbotId: id } });
       await tx.prodSwitchApprovalRequest.deleteMany({ where: { chatbotId: id } });
+      // 음성 AI(No.32) 그룹 추가(voice-ai-설계.md §3.3, ADR-0052) — 음성 설정·인식 일별 숫자는 설정/파생 데이터라 동반 삭제 대상이다(사전검사 409 대상이
+      // 아니다). 서로 FK가 없어 순서 무관. 34 → 36테이블. `chatbot.delete` 직전.
+      await tx.speechDailyStat.deleteMany({ where: { chatbotId: id } });
+      await tx.chatbotVoiceSetting.deleteMany({ where: { chatbotId: id } });
       await tx.chatbot.delete({ where: { id } });
     });
     await this.auditLogService.record({

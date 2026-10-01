@@ -234,11 +234,11 @@ describe('피드백 기반 개선 루프(No.44) 정적 검사 — feedback-loop-
     });
   });
 
-  describe('F-6: @Public() 총 9(No.35 선제 안내 수집 8→9) · submitFeedback 앞에 @Public()·@PublicRateBucket(·kind: \'FEEDBACK\'(FR-0-140)', () => {
-    it('*.controller.ts 전체 @Public( 개수가 9다', () => {
+  describe('F-6: @Public() 총 10(No.32 음성 인식 9→10 · 앞서 No.35 선제 안내 수집 8→9) · submitFeedback 앞에 @Public()·@PublicRateBucket(·kind: \'FEEDBACK\'(FR-0-140)', () => {
+    it('*.controller.ts 전체 @Public( 개수가 10이다', () => {
       const controllerFiles = apiFileContents.filter(({ f }) => f.endsWith('.controller.ts'));
       const total = controllerFiles.reduce((sum, { content }) => sum + nonCommentOccurrences(content, /@Public\(\)/g), 0);
-      expect(total).toBe(9);
+      expect(total).toBe(10);
     });
 
     it('submitFeedback( 핸들러 앞에 @Public()·@PublicRateBucket(·kind: \'FEEDBACK\'가 있다', () => {

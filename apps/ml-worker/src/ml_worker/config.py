@@ -80,6 +80,22 @@ class Settings(BaseSettings):
     # 이름 1개(JSON {"name": ...})면 충분하므로 증강보다 훨씬 작은 토큰 상한을 쓴다.
     cluster_label_max_new_tokens: int = 64
 
+    # ── No.32 음성 인식(ML_WORKER_ROLE=speech 전용, 설계서 voice-ai-설계.md §8·§12.2, ADR-0052) ─────
+    # `speech` 역할에서만 읽힌다. 설정 오류(백엔드 오타·faster-whisper인데 모델 ID 없음·CUDA 적재 실패)는
+    # 음성 인식 프로세스만 기동 실패다(`speech.transcriber.validate_speech_settings`).
+    stt_backend: str = "mock"  # mock | faster-whisper — mock은 시험·시연 전용(운영 API가 사용 불가로 봄)
+    stt_model_id: str = ""  # faster-whisper면 필수(기본 모델 없음) — 캐시 이름 또는 로컬 경로
+    stt_model_dir: str = ""  # 모델 캐시 디렉터리(download_root). 기동 중 내려받기는 항상 0
+    stt_device: str = "cpu"  # cpu | cuda (조용한 CPU 대체 금지)
+    stt_compute_type: str = "int8"  # int8 | int8_float16 | float16 | float32
+    stt_beam_size: int = 5
+    stt_cpu_threads: int = 0  # 0 = 라이브러리 기본
+    stt_max_concurrency: int = 2  # 대기 없는 세마포어 · faster-whisper num_workers
+    stt_max_audio_bytes: int = 1_048_576
+    stt_max_audio_seconds: float = 32.0  # 디코딩 뒤 길이 상한(30초 + 여유 2)
+    stt_deadline_s: float = 8.0  # API SPEECH_STT_TIMEOUT_MS(10초)보다 짧게 — 9초 초과는 기동 경고
+    stt_vad: str = "auto"  # auto | silero | energy | off
+
     @property
     def normalized_generation_backend(self) -> str:
         return self.generation_backend.strip().lower()
@@ -119,6 +135,11 @@ class Settings(BaseSettings):
     @property
     def loads_generation(self) -> bool:
         return self.ml_worker_role in ("augment", "both")
+
+    @property
+    def loads_speech(self) -> bool:
+        """배타 역할 — 임베딩·생성 적재 0(공개 STT 폭주가 대화 임베딩과 자원을 다투지 않도록, §8.1)."""
+        return self.ml_worker_role == "speech"
 
     @property
     def is_generation_mock(self) -> bool:

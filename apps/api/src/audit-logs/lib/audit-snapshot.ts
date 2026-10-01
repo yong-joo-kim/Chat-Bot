@@ -39,6 +39,9 @@ const AUDIT_FIELDS: Record<AuditTargetType, readonly string[]> = {
     'proactive',
     // [신규 No.36] 출구 개인정보 가림 설정(종류·날짜 보호 — 문장 0, ai-guardrails-설계.md §7.4·§14).
     'guardrailPiiExit',
+    // [신규 No.32] 음성 설정 변경 감사 — 스위치 3·배율·말투·미응답 말투·노드 꼬리표 **개수**만(노드 id 목록 원문 0,
+    // voice-ai-설계.md §10.2 · §11.3).
+    'voice',
   ],
   // [신규 No.22] 자산 6종에 'topicId' 추가 — 서비스가 값이 있을 때만 스냅샷 입력에 넣는다(토픽 없는
   // 챗봇의 감사 본문 불변, topic-system-설계.md §15).

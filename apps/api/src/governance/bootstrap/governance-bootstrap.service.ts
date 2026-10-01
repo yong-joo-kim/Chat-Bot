@@ -173,6 +173,9 @@ export class GovernanceBootstrapService implements OnModuleInit {
         augmentationGeminiBaseUrl: this.config.get<string>('AUGMENTATION_GEMINI_BASE_URL'),
         augmentationLocalBaseUrl: this.config.get<string>('AUGMENTATION_LOCAL_BASE_URL'),
         utteranceNameSuggestEnabled: this.config.get<boolean>('UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED') ?? false,
+        speechEnabled: this.config.get<boolean>('SPEECH_ENABLED') ?? false,
+        speechProvider: this.config.get<string>('SPEECH_PROVIDER') ?? 'mock',
+        speechLocalBaseUrl: this.config.get<string>('ML_WORKER_SPEECH_URL'),
       },
       (url) => {
         try {

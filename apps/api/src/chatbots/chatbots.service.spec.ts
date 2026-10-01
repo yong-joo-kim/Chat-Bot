@@ -41,6 +41,8 @@ import { ApiException } from '../common/api.exception';
  * [신규 No.36] AI 거버넌스·가드레일 그룹이 동반 삭제 트랜잭션에 `guardrailEvent.deleteMany`·
  * `guardrailRule.deleteMany`·`chatbotGuardrailSetting.deleteMany`·`prodSwitchApprovalRequest.deleteMany`
  * 4건을 추가했다(30 → 34테이블, ai-guardrails-설계.md §12.4, ADR-0048 · 닫힌 목록 X-3).
+ * [신규 No.32] 음성 AI 그룹이 동반 삭제 트랜잭션에 `speechDailyStat.deleteMany`·`chatbotVoiceSetting.deleteMany` 2건을
+ * 추가했다(34 → 36테이블, voice-ai-설계.md §3.3, ADR-0052 · 닫힌 목록 X-11) — 설정·일별 숫자라 사전검사(409) 대상이 아니다.
  */
 
 const ARCHIVED_CHATBOT = {
@@ -98,6 +100,9 @@ function buildTxMock() {
     guardrailEvent: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     guardrailRule: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbotGuardrailSetting: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // [신규 No.32] 34 → 36테이블.
+    speechDailyStat: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    chatbotVoiceSetting: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     prodSwitchApprovalRequest: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     chatbot: { delete: jest.fn().mockResolvedValue(ARCHIVED_CHATBOT) },
   };
@@ -139,7 +144,7 @@ function buildService(prisma: ReturnType<typeof buildPrismaMock>, auditLogServic
 }
 
 describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-reviewer 2차 Medium)', () => {
-  it('34개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.36 가드레일·승인 요청 4테이블 추가)', async () => {
+  it('36개 테이블 deleteMany와 chatbot.delete가 $transaction 콜백 안에서 tx.* 프리픽스로 1회씩 실행된다(No.36 가드레일·승인 요청 4테이블 · No.32 음성 2테이블 추가)', async () => {
     const tx = buildTxMock();
     const prisma = buildPrismaMock(tx);
     const auditLogService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -182,6 +187,8 @@ describe('ChatbotsService.permanentDelete — 트랜잭션 원자성(code-review
     expect(tx.guardrailRule.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbotGuardrailSetting.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.prodSwitchApprovalRequest.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.speechDailyStat.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
+    expect(tx.chatbotVoiceSetting.deleteMany).toHaveBeenCalledWith({ where: { chatbotId: 'bot-1' } });
     expect(tx.chatbot.delete).toHaveBeenCalledWith({ where: { id: 'bot-1' } });
 
     // 챗봇 로우 삭제도 트랜잭션 컨텍스트(tx)를 통해서만 실행되고, 트랜잭션 밖의 prisma.chatbot.delete는

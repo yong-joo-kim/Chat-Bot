@@ -116,6 +116,9 @@ model Chatbot {
   guardrailRules          GuardrailRule[]
   guardrailSetting        ChatbotGuardrailSetting?
   switchApprovalRequests  ProdSwitchApprovalRequest[]
+  /// [신규 No.32] 음성 설정·인식 일별 숫자(환경 밖 · 스냅샷·복사·토픽 분리·승격 대상 아님 · 영구삭제 동반 삭제). 컬럼 추가 0.
+  voiceSetting            ChatbotVoiceSetting?
+  speechDailyStats        SpeechDailyStat[]
 
   @@index([groupId, status])
   @@index([updatedAt])
@@ -2609,4 +2612,51 @@ model ProdSwitchApprovalRequest {
   @@index([status, expiresAt])
   @@index([deployScheduleId])
   @@map("prod_switch_approval_requests")
+}
+
+/// [신규 No.32] 챗봇별 음성 설정(1:1 · 행 없음 = 전부 꺼짐 — ADR-0052 §5). 환경 밖(저장 즉시 반영 · 캐시 TTL 안 반영).
+/// ★ 쓰기 = speech/admin/voice-settings.service.ts 1파일(+ chatbots.service.ts 동반 삭제) — VO-7.
+model ChatbotVoiceSetting {
+  chatbotId             String   @id
+  chatbot               Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// 음성 입력(마이크) — 서버 스위치 SPEECH_ENABLED와 AND
+  inputEnabled          Boolean  @default(false)
+  /// 답변 듣기(브라우저 기기 음성) — 서버 스위치와 무관
+  ttsEnabled            Boolean  @default(false)
+  /// 위젯 "답변 소리로 듣기" 토글 노출 여부(토글 자체는 사용자가 켬 · 기본 꺼짐 — P-8). R-10 · H-7 PM 수용
+  autoReadToggleVisible Boolean  @default(true)
+  /// 빠르기 배율 0.8~1.2(0.05 단위)
+  rateMultiplier        Float    @default(1.0)
+  /// 'CALM'|'BRIGHT'|'APOLOGETIC'|'INFORMATIVE' — 답한 턴(ANSWERED)의 기본 말투
+  defaultTone           String   @default("CALM")
+  /// JSON { UNANSWERED? } — 키 없음 = 내장 기본값(APOLOGETIC). H-3으로 지정 가능 종류는 UNANSWERED 1개(SAFETY는 고정).
+  toneByKind            String   @default("{}")
+  /// JSON [{ nodeId, tone }] <= 200 — 노드별 말투 꼬리표(DD-128 · FK 없음 · 없는 노드는 런타임에 무시)
+  nodeTones             String   @default("[]")
+  /// 마지막 변경자(FK 없음 — 사실 기록)
+  updatedById           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("chatbot_voice_settings")
+}
+
+/// [신규 No.32] 챗봇 x KST 일 음성 인식 숫자(P-15). ★ 오디오·글자·세션·IP·시각 원본 컬럼 없음(VO-8).
+/// ★ 쓰기 = speech/core/speech-stat.writer.ts 1파일(+ 동반 삭제). 읽기 재생 수는 없다(FR-VO3-9).
+model SpeechDailyStat {
+  id        String   @id @default(uuid())
+  chatbotId String
+  chatbot   Chatbot  @relation(fields: [chatbotId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  /// KST 'YYYY-MM-DD'(toKstDayBucket)
+  dayBucket String
+  ok        Int      @default(0)
+  empty     Int      @default(0)
+  invalid   Int      @default(0)
+  failed    Int      @default(0)
+  busy      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([chatbotId, dayBucket])
+  @@map("speech_daily_stats")
 }

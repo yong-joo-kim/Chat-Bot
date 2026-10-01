@@ -13,6 +13,11 @@ export interface PanelController {
   title: HTMLHeadingElement;
   setOpen(open: boolean): void;
   setStatusText(text: string): void;
+  /**
+   * [신규 No.32 · 명세 F-1] Esc 우선순위 — 가드가 `true`를 돌려주면(녹음·준비·인식 중 음성 취소를 처리함)
+   * 패널을 닫지 않는다. 설정하지 않으면(`config.voice` 없음) Esc는 지금처럼 패널을 닫는다.
+   */
+  setEscapeGuard(guard: (() => boolean) | null): void;
 }
 
 /**
@@ -58,12 +63,14 @@ export function createPanel(onClose: () => void, onSubmit: (text: string) => voi
   status.setAttribute('role', 'status');
 
   const composer = createComposer(onSubmit);
+  let escapeGuard: (() => boolean) | null = null;
 
   root.append(header, messages.root, status, composer.root);
 
   root.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
+      if (escapeGuard?.()) return;
       onClose();
       return;
     }
@@ -94,6 +101,9 @@ export function createPanel(onClose: () => void, onSubmit: (text: string) => voi
     },
     setStatusText(text) {
       status.textContent = text;
+    },
+    setEscapeGuard(guard) {
+      escapeGuard = guard;
     },
   };
 }

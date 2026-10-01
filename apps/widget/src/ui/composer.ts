@@ -8,6 +8,15 @@ export interface ComposerController {
   send: HTMLButtonElement;
   setDisabled(disabled: boolean): void;
   focus(): void;
+  /**
+   * [신규 No.32] 음성 입력 선택 슬롯 — 상태 줄(strip)은 폼 맨 위, 말하기 버튼은 전송 바로 앞(탭 순서: 입력창 →
+   * 말하기 → 전송). 호출하지 않으면 DOM·동작이 지금과 같다(`config.voice` 없음).
+   */
+  setMicSlot(strip: HTMLElement, mic: HTMLElement): void;
+  /** 인식 글자를 기존 글자 **뒤에 공백 1개로 이어 붙이고**(덮어쓰기 없음) 포커스를 입력창 끝으로 옮긴다. */
+  insertTranscript(text: string): void;
+  /** 사용자가 입력창에 글자를 치기 시작할 때 호출될 훅(읽기 멈춤 등). 새 리스너를 만들지 않는다. */
+  setInputHook(hook: (() => void) | null): void;
 }
 
 /**
@@ -44,10 +53,11 @@ export function createComposer(onSubmit: (text: string) => void): ComposerContro
   send.textContent = MESSAGES.send;
 
   let disabled = false;
+  let inputHook: (() => void) | null = null;
 
   function updateRemaining(): void {
     const left = MAX_LENGTH - input.value.length;
-    remaining.textContent = MESSAGES.remaining(Math.max(0, left));
+    remaining.textContent = left < 0 ? MESSAGES.over(-left) : MESSAGES.remaining(left);
     remaining.style.color = left < 0 ? '#b91c1c' : '';
     const overOrDisabled = left < 0 || disabled;
     send.setAttribute('aria-disabled', String(overOrDisabled));
@@ -63,7 +73,10 @@ export function createComposer(onSubmit: (text: string) => void): ComposerContro
     updateRemaining();
   }
 
-  input.addEventListener('input', updateRemaining);
+  input.addEventListener('input', () => {
+    updateRemaining();
+    inputHook?.();
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -90,6 +103,22 @@ export function createComposer(onSubmit: (text: string) => void): ComposerContro
     },
     focus() {
       input.focus();
+    },
+    setMicSlot(strip, mic) {
+      form.classList.add('cb-composer--voice');
+      form.insertBefore(strip, form.firstChild);
+      form.insertBefore(mic, send);
+    },
+    insertTranscript(text) {
+      const piece = text.trim();
+      if (piece.length === 0) return;
+      input.value = input.value.length > 0 ? `${input.value} ${piece}` : piece;
+      updateRemaining();
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    },
+    setInputHook(hook) {
+      inputHook = hook;
     },
   };
 }

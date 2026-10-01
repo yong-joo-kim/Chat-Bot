@@ -17,6 +17,7 @@ import { FeedbackRating } from './feedback';
 import { BundleTargetSchema, ResolvedBundleTargetSchema } from './bundle-target';
 import { WorkflowStepViewSchema } from './workflow';
 import { GuardrailInboundViewSchema, RagPreviewSchema } from './guardrails';
+import { SPEECH_TONES } from './speech-voice';
 
 /** [신규 No.22] 답한 자산의 토픽(§6.5) — 관리자 API(시뮬레이터·비교) 전용. 공개 응답에는 존재하지 않는다. */
 export const SimulatedAnsweredTopicSchema = z.object({
@@ -312,7 +313,18 @@ export const WIDGET_FEATURE_FEEDBACK_V1 = 'feedback-v1';
 /** [신규 No.46] 위젯 기능 선언 3번째 — 없으면 서버가 캐러셀을 CARD 여러 개로 강등한다(ADR-0043 §6). */
 export const WIDGET_FEATURE_RICH_V1 = 'rich-v1';
 
-/** 응답에 싣는 평가 가능 표식 — 키 자체가 없으면(§6.2) 바이트 동일(FR-FB2-2). */
+/** [신규 No.32] 위젯 기능 선언 — 위젯은 공개 설정 `voice.tts === true`일 때만 싣는다(DD-125, 5개 중 4번째). */
+export const WIDGET_FEATURE_SPEECH_V1 = 'speech-v1';
+
+/** [신규 No.32] 읽기 응답 조각 — 메시지 응답·보류 답변 폴링 응답의 **마지막 키**(조건부 전개로만 채운다, DD-124).
+ * `PublicMessageResponseSchema`보다 먼저 선언한다. */
+export const PublicSpeechReplySchema = z.object({
+  text: z.string().min(1).max(2100),
+  tone: z.enum(SPEECH_TONES),
+});
+export type PublicSpeechReply = z.infer<typeof PublicSpeechReplySchema>;
+
+/** 응답에 싣는 평가 가능 표식— 키 자체가 없으면(§6.2) 바이트 동일(FR-FB2-2). */
 export const PublicFeedbackOfferSchema = z.object({ rateable: z.literal(true) });
 export type PublicFeedbackOffer = z.infer<typeof PublicFeedbackOfferSchema>;
 
@@ -341,6 +353,9 @@ export const PublicMessageResponseSchema = z.object({
   /** [신규 No.44] 평가 가능 턴에만 존재한다(ADR-0038 §1). 없으면 바이트 단위로 현행과 동일 —
    * **마지막 키**(조건부 전개로만 채운다, §6.2). */
   feedback: PublicFeedbackOfferSchema.optional(),
+  /** [신규 No.32] 읽기용 글자 + 말투 — 봇 답변 반환 지점(DD-136)에서 `speech-v1` 선언 ∧ 챗봇 듣기 켜짐일 때만. **마지막 키**
+   * (`feedback` 뒤). 없으면 바이트 동일. 저장 0. */
+  speech: PublicSpeechReplySchema.optional(),
 });
 export type PublicMessageResponse = z.infer<typeof PublicMessageResponseSchema>;
 
@@ -360,6 +375,8 @@ export const PendingAnswerPollResponseSchema = z.object({
   status: z.enum(['PENDING', 'READY', 'FAILED', 'EXPIRED']),
   outputs: z.array(DialogOutputSchema).optional(),
   sources: z.array(PendingAnswerSourceSchema).optional(),
+  /** [신규 No.32] `READY`·`FAILED` 최종 답에만 — **마지막 키**(`sources` 뒤). 없으면 바이트 동일. */
+  speech: PublicSpeechReplySchema.optional(),
 });
 export type PendingAnswerPollResponse = z.infer<typeof PendingAnswerPollResponseSchema>;
 

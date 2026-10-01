@@ -197,6 +197,12 @@ export const ApiErrorCode = z.enum([
   'APPROVAL_BASE_CHANGED',
   'APPROVAL_PENDING_EXISTS',
   'APPROVAL_POLICY_UNAVAILABLE',
+  // 음성 AI(No.32) 그룹 추가(voice-ai-설계.md §5.5, ADR-0052) — 5종. 관리 API는 기존 코드를 재사용한다.
+  'SPEECH_UNAVAILABLE',
+  'SPEECH_BUSY',
+  'SPEECH_AUDIO_INVALID',
+  'SPEECH_AUDIO_TOO_LARGE',
+  'SPEECH_FAILED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

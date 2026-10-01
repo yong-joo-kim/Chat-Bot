@@ -1,0 +1,17 @@
+# ml-worker 음성 인식(No.32, ML_WORKER_ROLE=speech) 선택 의존성 검증 조합 (2026-10-01, Python 3.10.11, Windows)
+# 기본 잠금(requirements-lock.txt)은 그대로 두고 [speech] 묶음이 추가로 끌어오는 패키지만 고정한다
+# (D-1 선례 — 임베딩 설치를 부풀리지 않는다). 두 잠금을 함께 constraints로 쓴다:
+#   pip install -c requirements-lock.txt -c requirements-speech-lock.txt -e ".[dev,speech]"
+# 검증: pip check 무결 · 모델 가중치는 이 파일/설치 대상이 아니다(scripts/fetch_stt_model.py로 별도 반입).
+# 주의: CPU 실행 기준이다. GPU(L40S·3050) 실행의 CUDA·cuDNN 요구 조건은 ctranslate2 빌드별로 다르므로
+#       동작 확인 기록(eval/report)에 실제 CUDA·cuDNN 버전을 남길 것(수동 게이트).
+# 이 파일은 constraints(상한 고정) 용도이며 pyproject.toml 선언 범위가 우선 기준이다.
+av==17.1.0
+coloredlogs==15.0.1
+ctranslate2==4.8.2
+faster-whisper==1.2.1
+flatbuffers==25.12.19
+humanfriendly==10.0
+onnxruntime==1.23.2
+protobuf==7.36.2
+pyreadline3==3.5.6; sys_platform == "win32"

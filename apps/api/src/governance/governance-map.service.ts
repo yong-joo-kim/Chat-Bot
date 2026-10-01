@@ -51,6 +51,7 @@ export class GovernanceMapService {
     const proactive = await this.buildProactive();
     const utteranceAnalysis = await this.buildUtteranceAnalysis();
     const guardrails = await this.buildGuardrails();
+    const speech = await this.buildSpeech();
 
     return {
       mode: runtime.mode,
@@ -66,6 +67,33 @@ export class GovernanceMapService {
       ...(proactive ? { proactive } : {}),
       ...(utteranceAnalysis ? { utteranceAnalysis } : {}),
       ...(guardrails ? { guardrails } : {}),
+      ...(speech ? { speech } : {}),
+    };
+  }
+
+  /**
+   * [신규 No.32] `SPEECH_ENABLED=true` 또는 입력∨듣기가 켜진 음성 설정 행 ≥1일 때만 채운다(없으면 키 생략 = 바이트 동일 — voice-ai-설계.md §11.2,
+   * No.21·No.35·No.36 선례). 새 쿼리 2(count) — 기본 설치에서도 실행되나 결과 0이면 키가 없다.
+   */
+  private async buildSpeech(): Promise<GovernanceMapResponse['speech']> {
+    const serverEnabled = this.config.get<boolean>('SPEECH_ENABLED') ?? false;
+    const [chatbotsInputEnabled, chatbotsTtsEnabled] = await Promise.all([
+      this.prisma.chatbotVoiceSetting.count({ where: { inputEnabled: true } }),
+      this.prisma.chatbotVoiceSetting.count({ where: { ttsEnabled: true } }),
+    ]);
+    if (!serverEnabled && chatbotsInputEnabled === 0 && chatbotsTtsEnabled === 0) return undefined;
+    return {
+      serverEnabled,
+      provider: this.config.get<string>('SPEECH_PROVIDER') === 'local' ? 'local' : 'mock',
+      chatbotsInputEnabled,
+      chatbotsTtsEnabled,
+      audioStored: false,
+      audioDiskWrite: false,
+      transcriptStored: 'ONLY_WHEN_SENT',
+      ttsLocation: 'USER_DEVICE',
+      ttsServerEgress: false,
+      onlineVoicesExcluded: true,
+      counters: 'CHATBOT_DAILY_COUNTS_ONLY',
     };
   }
 
@@ -249,11 +277,14 @@ export class GovernanceMapService {
       RAG: this.config.get<string>('RAG_BASE_URL'),
       AUGMENT_GEMINI: this.config.get<string>('AUGMENTATION_PROVIDER') === 'gemini' ? this.config.get<string>('AUGMENTATION_GEMINI_BASE_URL') : undefined,
       AUGMENT_LOCAL: this.config.get<string>('AUGMENTATION_PROVIDER') === 'local' ? this.config.get<string>('AUGMENTATION_LOCAL_BASE_URL') : undefined,
+      SPEECH_LOCAL: this.config.get<string>('ML_WORKER_SPEECH_URL'),
     };
+    // [신규 No.32] `SPEECH_LOCAL` 행은 서버 음성 인식이 켜졌고 공급자가 `local`일 때만 만든다 — 그 밖에는 행 자체를 빼서 기본 설치 지도 바이트 동일(C-8).
+    const speechExitOn = (this.config.get<boolean>('SPEECH_ENABLED') ?? false) && this.config.get<string>('SPEECH_PROVIDER') === 'local';
 
     // [신규 No.41] `WORKFLOW_WEBHOOK`도 레거시와 같이 DB 결정 출구라 exits[]에서 제외한다(§9.6).
     // [신규 No.43] `KB_CRAWL`도 같은 이유로 제외한다(소스 단위 정보는 `egress.kbSources` 절 — KB-21).
-    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API' && e.exitId !== 'WORKFLOW_WEBHOOK' && e.exitId !== 'KB_CRAWL').map((def) => {
+    const exits = EGRESS_REGISTRY.filter((e) => e.exitId !== 'LEGACY_API' && e.exitId !== 'WORKFLOW_WEBHOOK' && e.exitId !== 'KB_CRAWL' && (e.exitId !== 'SPEECH_LOCAL' || speechExitOn)).map((def) => {
       const url = urlByExit[def.exitId];
       const configured = !!url;
       const host = url ? this.safeHost(url) || null : null;

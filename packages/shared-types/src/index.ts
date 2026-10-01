@@ -42,3 +42,5 @@ export * from './proactive-eval';
 export * from './utterance-analysis';
 export * from './guardrails';
 export * from './prod-switch-approval';
+export * from './speech-voice';
+export * from './speech';

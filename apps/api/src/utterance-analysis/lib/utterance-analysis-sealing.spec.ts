@@ -377,8 +377,8 @@ describe('발화 묶음 분석(No.21) 정적 검사 — deep-clustering-설계.m
       expect(content).toMatch(/assertNoRedirectResponse\(/);
     });
 
-    it('새 출구 클래스가 없다(EgressExitId 7종 그대로) · 모듈 안 fetch( 호출 파일은 그 출구 파일 1개뿐이다', () => {
-      expect(EGRESS_REGISTRY).toHaveLength(7);
+    it('새 출구 클래스가 없다(EGRESS_REGISTRY 8종 — 8번째 SPEECH_LOCAL은 No.32 음성 인식) · 모듈 안 fetch( 호출 파일은 그 출구 파일 1개뿐이다', () => {
+      expect(EGRESS_REGISTRY).toHaveLength(8);
       const fetchers = MODULE.filter(({ content }) => occurrences(content, /\bfetch\(/) > 0).map(({ f }) => f);
       expect(fetchers).toEqual(['apps/api/src/utterance-analysis/naming/cluster-name-http.client.ts']);
     });

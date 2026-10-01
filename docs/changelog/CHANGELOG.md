@@ -642,3 +642,12 @@ ADR-0050. 마이그레이션 0, shared-types 변경 0, 응답 변경 0. 기존 �
 ### 검증
 
 api jest 430 suites(6,111 tests, 1 skip) 통과, pii-mask 17 suites / 325 tests, web tsc 오류 0 · vitest 237 files / 1,461 tests, widget 34 files / 253 tests, ml-worker pytest 127 · `pip check` 무결. 관련 84개 스위트 3회 반복 994/994 통과(T-3·T-4 보정 후 병렬 부하에서도 안정).
+
+## No.32 음성 AI 리뷰 반영 (ml-worker) — 2026-10-01
+
+- **L-8**: `ML_WORKER_ROLE`이 `embed|augment|both|speech` 외 값이면 조용히 무적재 상태로 뜨던 것을 기동 실패로 바꿈(`_validate_role()`, 의도된 변경 — 기존 3값 동작 불변). 같은 변경에서 음성 디코더(M-5)에 컨테이너·프로토콜 허용 목록을 적용.
+
+## No.32 음성 AI — 2026-10-01
+
+- 규모 A: 위젯 눌러서 말하기(≤30초)→서버 STT→입력창 확인 후 전송, 듣기·자동 읽기는 브라우저 내장 음성(`localService`·`ko`만). 서버 TTS·감정 판정 모델 0, 음성 원본 저장 0, 읽기 대상은 봇 답변만(`speech:{text,tone}`). 공개 인식 `POST /public/chatbots/:slug/speech/transcriptions`(`@Public()` 10), 거버넌스 출구 `SPEECH_LOCAL`(8종)·`AUDIO_RAW`, 운영 mock 기동 실패, `SPEECH_FAILURE_THRESHOLD`(연속 3회). ADR-0052.
+- 시험: api jest 447 suites(6,371) · ml-worker pytest 207 · widget 371 · web 1,561 통과, 위젯 gzip +6.2KB(예산 7KB). 수동 게이트: 브라우저·기기별·스크린리더·말투 청취·3050 STT 동작 확인·L40S 실측·법무 확인.
