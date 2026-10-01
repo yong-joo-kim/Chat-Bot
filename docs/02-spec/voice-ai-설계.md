@@ -671,6 +671,8 @@ POST /speech/transcribe  (async def — 본문만 비동기로 읽고, 처리 �
 - **기동 중 외부 내려받기 0**: `local_files_only=True` 고정(설정으로 끌 수 없다). 반입은 `scripts/fetch_stt_model.py`(수동 · 인터넷 되는 장비) → 폐쇄망 복사(FR-VO7-2).
 - 전사 옵션 기본: `language='ko'`(자동 감지 0) · `task='transcribe'` · `condition_on_previous_text=False`(반복 고리 억제) · `without_timestamps=True` · `beam_size=STT_BEAM_SIZE` · 그 밖 임계값은 ml-engineer가 3050 결과로 제안(**미실측**).
 - 장비 등급별 권장(초안 — 전부 미실측 · `자동배포.md` §5.8 음성 열): 등급 0 = `small` int8 CPU · 등급 1(3050) = `small`~`large-v3-turbo` int8 GPU(**이번 "동작 확인" 대상**) · 등급 2 = `large-v3-turbo`/`large-v3` · 등급 3(L40S) = `large-v3` float16 + 동시 처리(운영 실측 대기).
+- **3050 동작 확인 결과(2026-10-02, `apps/ml-worker/eval/report/stt-3050-dongjak-hwakin.md`, 합격 판정 아님)**: `small` int8·`large-v3-turbo` int8 모두 RTX 3050 4GB에서 CUDA 적재·전사, 임베딩(KURE-v1)과 동시 적재 가능(turbo 합계 약 3.3GB·잔여 약 0.8GB — 생성 모델 동시 적재는 불가로 봄). **PM 결정(2026-10-02)**: 시연 기본 모델 = `large-v3-turbo` int8 · K-7 환각 상투 문장 목록은 **빈 목록 유지**(관찰 후보 2건 '시청해주셔서 감사합니다.'·'다음 영상에서 만나요.'는 L40S 실소음 재관찰 뒤 확정) · **`STT_VAD=off`(VAD 끄기)는 사실상 금지 구성**(VAD 끄면 turbo가 상투 문장을 지어냄 — VAD가 1차 방어선) · 3050 Windows의 GPU 사용은 코드 변경 없이 **절차만 문서화**(ml-worker가 pip의 `nvidia-*` DLL 경로를 자동 탐색하지 않으므로 `.venv\Lib\site-packages
+vidia\{cublas,cudnn,cuda_nvrtc}in`을 기동 환경 `PATH` 앞에 추가 — `nvidia-cublas-cu12` 12.9.2.10·`nvidia-cudnn-cu12` 9.27.0.42·`nvidia-cuda-nvrtc-cu12` 12.9.86 확인 버전, 운영 L40S·Linux 해당 없음).
 - `GET /speech/health` → `{ status:'ok'｜'loading', backend, modelId, device, computeType, vad, maxConcurrency, maxAudioSeconds, warmedUp }` — 실제 적재값(No.37 FR-ED6-1 교훈 · **`device`·`computeType`은 전사기가 실제 적재한 값을 보고**하고 적재 전에는 설정값 — `mock`은 `cpu`·`none` · I-14). API는 `status`를 읽고, **운영이면 `backend`도 읽는다**(DD-135 ③).
 
 ### 8.6 동시성 · 시간 제한 (DD-122 · No.37 P-9 원칙)

@@ -71,3 +71,8 @@ scripts/        pnpm 스크립트가 venv를 감싸기 위한 헬퍼(setup/run/h
 `apps/api/src/embedding/embedding-provider.port.ts`의 `EmbeddingProvider` 인터페이스만
 지키면 이 서비스를 통째로 외부 임베딩 API로 바꿀 수 있다(DI 바인딩 1곳 — 세부 배선은
 backend-implementer의 `EmbeddingProviderFactory`가 담당).
+
+## 음성 인식(STT) 3050 Windows 시연 (No.32)
+
+`ML_WORKER_ROLE=speech`를 RTX 3050 Windows에서 GPU로 쓰려면 `.venv`에 `nvidia-cublas-cu12`·`nvidia-cudnn-cu12`·`nvidia-cuda-nvrtc-cu12`를 설치하고 `.venv\Lib\site-packages
+vidia\{cublas,cudnn,cuda_nvrtc}in`을 기동 환경 `PATH` 앞에 추가한다(서비스가 자동 탐색하지 않는다 — 시연 전용 절차, 운영 L40S·Linux 해당 없음). 시연 기본 모델은 `large-v3-turbo` int8이고 `STT_VAD=off`는 쓰지 않는다. 상세·관찰값: `eval/report/stt-3050-dongjak-hwakin.md`(동작 확인, 합격 판정 아님).
