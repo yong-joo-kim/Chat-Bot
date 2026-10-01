@@ -187,6 +187,8 @@ type AugmentationCapability = {
 
 `GET /chatbots/:chatbotId/augmentations/capability`(`dialogue:read`)로 노출한다. **조용한 저하를 만들지 않는 것**이 목적이다 — 화면이 "왜 품질이 낮은가 / 왜 버튼이 막혔는가"를 먼저 말한다(UIUX §7).
 
+> ⚠ **2026-10-01 갱신(ADR-0049 §1 · `pm-decisions-2026-10-01-설계.md` §2)**: capability는 **설정·헬스 기준의 사전 판정**이고, **호출 시점 실패**의 저하는 Job 결과 요약이 보고한다 — 러너가 G2/G3의 사용 가능한 후보 0건을 감지하면 G1으로 1회 다시 생성하고 `AugmentationRunResult`에 `degraded:true` + 선택 `fallbackFrom`(`gemini`｜`local`)·`fallbackCause`(10종)를 싣는다(폴백 없으면 키 없음). 포트에 선택 메서드 `generateWithOutcome?()`(계약 C-6 — 원인은 표시 전용)·팩토리에 `getFallbackProvider()`가 추가된다. 위 코드 블록의 `degradeReason` 값(`CIRCUIT_OPEN` 포함)은 capability 전용이며 폴백 원인과 섞지 않는다.
+
 ---
 
 ## 5. `apps/ml-worker` 역할 확대 (ADR-0024 갱신)

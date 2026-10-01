@@ -93,7 +93,7 @@
 | **AG-4** | 쓰기 유일 파일 — `guardrailRule` = `core/guardrail-rule.store.ts` · `chatbotGuardrailSetting` = `core/guardrail-setting.store.ts` · `guardrailEvent`(create류) = `runtime/guardrail-event.writer.ts` · `prodSwitchApprovalRequest` = `environment/approval/switch-approval.store.ts` · 네 모델의 `delete*`는 위 파일 + `chatbots/chatbots.service.ts`(영구삭제)만 | GR-2 |
 | **AG-5** | **자산 변경 0** — `guardrails/**`·`environment/approval/**`에 `intent`·`keyword`·`faqEntry`·`dialogNode`·`topic`·`homonymDictionary`·`contextVariable`·`chatbotAnswerSetting`·`bannedWord` 쓰기 호출 0 · 자산 서비스 심볼(`IntentsService`·`FaqsService`·`DialogNodesService`·`LearningApplyService`·`VersionRestoreService`) 0 | GR-3 |
 | **AG-6** | `GuardrailEvent`·`ProdSwitchApprovalRequest` 모델에 `userMessage`·`botResponse`·`text`·`answer`·`question`·`body` 컬럼 0(요청 `reason`·`decisionNote`는 마스킹 메모 ≤200 — 예외 명시) | GR-4(schema 스캔) |
-| **AG-7** | `maskPii()` **기존 본문 불변** — 선택 인자 없는 호출 결과가 도입 전 골든과 바이트 동일(PARTIAL·FULL) · `kinds:`/`preserveDates:` 인자를 넘기는 운영 코드 파일 = `guardrails/lib/exit-pii.ts` 1개 · 기존 `pii-mask` 시험 무수정 | GR-5 + 골든 시험 |
+| **AG-7** | `maskPii()` **기존 본문 불변** — 선택 인자 없는 호출 결과가 도입 전 골든과 바이트 동일(PARTIAL·FULL) · `kinds:`/`preserveDates:` 인자를 넘기는 운영 코드 파일 = `guardrails/lib/exit-pii.ts` 1개 · 기존 `pii-mask` 시험 무수정 — ⚠ **2026-10-01 개정(ADR-0049 §4)**: 바이트 불변은 **독립 날짜 구간을 제외하고**(생년월일 문맥 날짜는 v1과 동일하게 가림) 유지(규칙 v2 · `preserveDates` 생략 = true · v1 동결 골든 + 차분 시험 — `pm-decisions-2026-10-01-설계.md` §5) | GR-5 + 골든 시험 |
 | **AG-8** | (`guardrails/**` 밖의) 입구 판정 호출 `guardrails?.evaluateInbound(` = `public-conversation.service.ts` 정확히 1회 + `simulation.service.ts` 1회 · 출구 판정 `evaluateOutbound(` = `rag-answer.service.ts` 1회 + `simulation.service.ts` 1회 · `recordEvents(` 호출 파일 = {`public-conversation.service.ts`, `rag-answer.service.ts`}(시뮬레이터 0) | GR-6 |
 | **AG-9** | 외부 RAG 봉인 불변 — `rag-allowlist.spec.ts` 무수정 · `guardrails/**`에 `prompt`·`/api/rag/settings`·`rag_paragraph_detail` 문자열 0 | 기존 + GR-7 |
 | **AG-10** | `packages/dialogue-engine/src`·`apps/widget/src`·`apps/ml-worker`에 `guardrail`·`approval` 토큰 0(대소문자 무시) | GR-8 |
@@ -340,6 +340,8 @@ interface OutboundVerdict {
 
 ## 7. RAG 답 개인정보 형식 가림 — `pii-mask` 출구 전용 선택 인자
 
+> ⚠ **2026-10-01 갱신(ADR-0049 §4 · `pm-decisions-2026-10-01-설계.md` §5)**: PM 결정 L-5로 **저장·송신 경로(인자 없는 기본 호출)도 독립 날짜 `YYYY-MM-DD`를 계좌 후보에서 제외**한다. 이 절의 "기존 본문 한 글자도 바꾸지 않는다"(§7.2-1)·"저장 결과 바이트 불변"(§7.3)은 **날짜 구간을 제외하고** 유효하다 — 기본 경로 변경은 계좌 치환 콜백 1곳 + `preserveDates` 기본값 해석 1줄로 한정. `preserveDates` 생략 = **true**(구 동작은 `false`). 선택 경로 진입 조건은 `kinds` 유무만. 출구 동작(명시 boolean을 넘기는 `exit-pii.ts`)은 **생년월일 문맥 예외 외에는** 변화 0 — 계좌번호 켬 + 날짜 보호 켬 챗봇에서 같은 줄의 `생년`·`생일`·`출생`·`탄생일`·`birth`·`dob`·두 낱말 `birth date`(닫힌 목록)으로 시작하는 낱말 바로 뒤(구분 문자 6개 이하·`(양력)`류 주석 1개 허용 — 2차 확장) 날짜는 v1과 같이 `[계좌번호]`로 가린다(U-1 확정 · ADR-0049 §4 · `pm-decisions-2026-10-01-설계.md` §5.2-B·§5.4).
+
 ### 7.1 공개 서명(`packages/pii-mask/src/index.ts`)
 
 ```ts
@@ -386,12 +388,12 @@ export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult; 
 | 저장 | `ChatbotGuardrailSetting`(1:1 · 행 없음 = 기본값) — `piiExitKinds`(JSON · `GuardrailPiiKind[]`) · `piiPreserveDates` |
 | 기본값 | 종류 **`['RRN','CARD']`** · 날짜 보호 **켬**(계좌를 켰을 때만 의미 — FR-AG3-5 권고 채택) |
 | 끄기 | 종류를 빈 배열로 저장 = 출구 가림 꺼짐(`AC-AG4-6` — 현행과 동일) |
-| 계좌 선택 시 경고 | 화면: "날짜(예: 2026-09-30)·일부 번호가 계좌번호로 오인되어 가려질 수 있습니다" + 날짜 보호 체크박스(켬이면 "연-월-일 형식 날짜는 가리지 않습니다") |
+| 계좌 선택 시 경고 | 화면: "날짜(예: 2026-09-30)·일부 번호가 계좌번호로 오인되어 가려질 수 있습니다" + 날짜 보호 체크박스(켬이면 "연-월-일 형식 날짜는 가리지 않습니다" — 2026-10-01: 켬이어도 생년월일·생일 등 바로 뒤 날짜는 가린다 · 레이블 문자열은 불변(ADR-0049 §4)) |
 | 비정형 한계 | 화면 상시 안내: "형식이 정해진 번호만 가립니다. 이름·주소 등은 가리지 못합니다(적재 문서 정리를 대신하지 않습니다)" — NFR-AGS6 |
 | 강도 | `PII_MASK_MODE`를 따른다(FULL 서버 = 전화·이메일도 전량 토큰) — 종류는 챗봇별, 강도는 서버별(EX-AG-20 해석 · R-11) |
 | 거버넌스 하한 | 거버넌스 모드 ON이면 `RRN`·`CARD`를 끌 수 없다(저장 `400 VALIDATION_FAILED` 코드 `GOVERNANCE_FLOOR` · 런타임도 합집합으로 강제 — 모드를 나중에 켠 챗봇 방어) — No.45 "마스킹 약화는 환경변수만"(R-10) |
 | 감사 | `UPDATE Chatbot` · `AUDIT_FIELDS.Chatbot`에 `guardrailPiiExit`(종류·날짜 보호 — 문장 0) |
-| 적용 대상 | 외부 RAG 답 출구 1곳 + 시험하기·시뮬레이터 표시. **저장 마스킹(`record()`)·송신 마스킹(RAG 질의·증강·레거시·웹훅·인박스·KB 적재)은 무관**(인자 없는 기존 호출 그대로) |
+| 적용 대상 | 외부 RAG 답 출구 1곳 + 시험하기·시뮬레이터 표시. **저장 마스킹(`record()`)·송신 마스킹(RAG 질의·증강·레거시·웹훅·인박스·KB 적재)은 무관**(인자 없는 기존 호출 그대로 — ⚠ 2026-10-01부터 기본 호출도 독립 날짜 제외(생년월일 문맥 예외) · ADR-0049 §4) |
 
 ---
 
@@ -952,7 +954,7 @@ export const ApprovalPolicyStatusSchema = z.object({ policy: UpdateApprovalPolic
   - `Chatbot` += `guardrailPiiExit`(종류·날짜 보호) · `ChatbotEnvironment` += `approvalRequired`·`approvalTtlHours`.
 - **열람 감사**: `GuardrailsController#listEvents` → `ConversationLog`(12 → 13 · X-2).
 - **거버넌스(No.45)**: 새 출구 0 · 새 보존 종류 0 · 새 필드 암호화 대상 0(요청 사유는 마스킹 메모 — 환경 전환 사유 `EnvironmentSwitchLog.reason`과 같은 취급) · 지도 키 · 개인정보 가림 하한(§7.4) · 파기 잡 무관(이벤트에 문장 0).
-- **끄기 잠금**: `ENV_APPROVAL_OFF_LOCKED`는 거버넌스 모드와 무관하게 적용한다(R-9) — 요구사항(FR-AG9-2)은 "거버넌스 모드에서"였으나, 서버 운영자가 명시적으로 켜는 잠금이라 모드에 묶을 이유가 없다. 데이터 지도·승인 현황 응답(`offLocked`)에 표시.
+- **끄기 잠금**: ~~`ENV_APPROVAL_OFF_LOCKED`는 거버넌스 모드와 무관하게 적용한다(R-9)~~ → **2026-10-01 PM 결정(ADR-0049 §2)**: 3상태 — 명시 `true`/`false`는 모드와 무관하게 **우선**, **미설정이면 거버넌스 모드 ON일 때 잠금**(OFF면 현행). 거버넌스 ON + 명시 `false`는 기동 경고 1줄. 판정은 순수 함수 `environment/approval/lib/approval-off-lock.ts` 1곳. 승인 현황 응답 `offLocked`(실효 잠금) + 잠금일 때만 `offLockedBy`(`SERVER_SETTING`｜`GOVERNANCE_MODE`)에 표시. (정정: 데이터 지도에는 잠금 표시가 구현되지 않았고 이번에도 추가하지 않는다.)
 
 ---
 
@@ -964,7 +966,7 @@ export const ApprovalPolicyStatusSchema = z.object({ policy: UpdateApprovalPolic
 | `GUARDRAIL_CACHE_TTL_MS` | `60000` | 1000~600000 | 전역 색인·규칙 프로필·출구 설정 캐시 TTL(다중 인스턴스 반영 지연 상한) |
 | `GUARDRAIL_MAX_RULES_PER_CHATBOT` | `50` | 1~200 | 챗봇당 규칙 수 상한 |
 | `GUARDRAIL_MAX_EXPRESSIONS_PER_CHATBOT` | `2000` | 100~10000 | 챗봇당 표현 총합 상한(성능 목표의 기준값 — 올리면 §16 재측정) |
-| `ENV_APPROVAL_OFF_LOCKED` | `false` | boolean(`envBoolean()`) | `true`면 2인 승인 정책 **끄기**를 거부(켜기·TTL 변경은 허용) |
+| `ENV_APPROVAL_OFF_LOCKED` | (미설정) — 실효값 = 거버넌스 모드 ON이면 `true`, OFF면 `false` | boolean(`envBooleanOptional()` — 미설정·빈 값 허용) | `true`면 2인 승인 정책 **끄기**를 거부(켜기·TTL 변경은 허용). **명시값이 거버넌스 연동보다 우선**(2026-10-01 · ADR-0049 §2) |
 
 - 승인 만료 시간은 환경변수가 아니라 **챗봇별 정책**(1~168시간 · 기본 24)이다.
 - 하나도 설정하지 않으면: 규칙 0개 → 입구 변화 0 · 출구는 **주민번호·카드 가림 기본 켜짐** · 2인 승인 꺼짐.
@@ -1178,7 +1180,7 @@ GR-1(AG-3 모델·외부 심볼 0) · GR-2(AG-4 쓰기 유일 파일) · GR-3(AG
 | K-9 | 예약 재개(`resume`)로 기준이 바뀌면 기존 승인이 무효 — 새 요청 필요 | 화면 안내 |
 | K-10 | 이벤트 자동 삭제 없음 | 문장 0 · 행 수 문제 시 재검토 |
 | K-11 | 입력에 사설 영역 문자(U+E000~U+E1FF)가 있으면 선택 가림이 5종 전부 가림으로 떨어진다 | 실데이터에 거의 없음 · 과탐 쪽 |
-| K-12 | 승인 정책 끄기는 1인 동작(감사) — 악의적 관리자 방어가 아니다 | `ENV_APPROVAL_OFF_LOCKED` · 감사 · 현황 표시 |
+| K-12 | 승인 정책 끄기는 1인 동작(감사) — 악의적 관리자 방어가 아니다 | `ENV_APPROVAL_OFF_LOCKED` · 감사 · 현황 표시 · **2026-10-01: 거버넌스 모드 ON 기본 잠금(ADR-0049 §2)** |
 | K-13 | 원본 PDF(ROCHA)에 가드레일·승인 관련 화면이 있는지 미확인(요구사항 조사 한계 ①) | 확인되면 표시 문구만 보완(저장 구조 무관) |
 | K-14 | 생성형 AI 고지(FR-AG8) 없음 | 법무 확인 후 결정(P-11) |
 
@@ -1196,7 +1198,7 @@ GR-1(AG-3 모델·외부 심볼 0) · GR-2(AG-4 쓰기 유일 파일) · GR-3(AG
 | **R-6** | FR-AG5-5 "예약 생성이 요청이 된다" | 예약 생성은 그대로 + **콘솔이 이어서 승인 요청** · 실행 시 강제(없으면 `APPROVAL_MISSING`) · 요청자 = 예약 작성자 | 순환 의존·예약 쓰기 봉인(C-11) · fail-closed라 안전성 동일 |
 | **R-7** | (요구사항에 없음) | 정책이 켜진 동안 **환경 모드 끄기 거부** | 끄는 순간 초안이 라이브(C-10) — 승인 관문의 옆문 · **U-2** |
 | **R-8** | FR-AG5-6 "직전 운영 버전 롤백은 예외" | 예외 = `pickRollbackTarget()` 결과와 같은 대상만 · 그 밖의 이력 버전 롤백은 요청 필요 | 기존 롤백 API가 임의 이력 버전을 받고 게이트 BLOCK을 면제한다(C-9) · **U-3** |
-| **R-9** | FR-AG9-2 "거버넌스 모드에서 끄기를 환경변수로 막을 수 있게" | `ENV_APPROVAL_OFF_LOCKED`는 **모드와 무관** | 운영자가 명시적으로 켜는 잠금 — 모드에 묶을 이유 없음 · **U-7** |
+| **R-9** | FR-AG9-2 "거버넌스 모드에서 끄기를 환경변수로 막을 수 있게" | `ENV_APPROVAL_OFF_LOCKED`는 **모드와 무관** | 운영자가 명시적으로 켜는 잠금 — 모드에 묶을 이유 없음 · **U-7** · ⚠ **2026-10-01 부분 번복**: 미설정일 때의 기본값은 거버넌스 모드에 연동(ON = 잠금) · 명시값 우선(ADR-0049 §2) — FR-AG9-2 원문에 더 가까워짐 |
 | **R-10** | (요구사항에 없음) | 거버넌스 모드 ON이면 **주민번호·카드 출구 가림을 끌 수 없음** | No.45 P-4 "마스킹 약화는 환경변수만" · **U-6** |
 | R-11 | EX-AG-20 "저장 강도와 출구 가림은 독립" | **종류는 챗봇별 · 강도는 `PII_MASK_MODE`** | FULL 서버의 의도(더 강하게)를 출구에서 약화하지 않는다 |
 | R-12 | EX-AG-1 "2글자 미만 거부 권고" | 채택 + **EXACT 다단어 표현 거부** | `detect()` 토큰 비교 성질(C-1) — 영원히 맞지 않는 규칙 방지 |
@@ -1234,7 +1236,7 @@ GR-1(AG-3 모델·외부 심볼 0) · GR-2(AG-4 쓰기 유일 파일) · GR-3(AG
 | **U-4** | TC 실행의 가드레일 판정 표시를 이월(시뮬레이터만) | 이월 | 이번에 포함(검증 실행기·결과 테이블 변경 · 개발량 +소) |
 | **U-5** | 입구 대체 턴에 상담 관찰 창 힌트 제공 | 제공 | 금지어처럼 힌트 없음 |
 | **U-6** | 거버넌스 모드에서 주민번호·카드 출구 가림 끄기 금지 | 금지 | 허용 |
-| **U-7** | `ENV_APPROVAL_OFF_LOCKED`를 거버넌스 모드와 무관하게 적용 | 무관 | 거버넌스 모드일 때만 |
+| **U-7** | `ENV_APPROVAL_OFF_LOCKED`를 거버넌스 모드와 무관하게 적용 | 무관 → **2026-10-01 PM: 명시값은 무관 · 미설정 기본값은 거버넌스 모드 ON이면 잠금**(ADR-0049 §2) | 거버넌스 모드일 때만 |
 | **U-8** | D-1·D-3(정책 꺼진 챗봇의 롤백 범위·끄기 게이트 우회)을 No.40 후속으로 고칠지 | 인계만(이번 변경 0) | 이번에 롤백 대상 제한·끄기 게이트 평가 추가 |
 
 ---
@@ -1286,7 +1288,18 @@ GR-1(AG-3 모델·외부 심볼 0) · GR-2(AG-4 쓰기 유일 파일) · GR-3(AG
 
 ### 26.3 미해결 · 후속 (I-18 ~ I-21 — ADR-0048 '알려진 한계'와 동일)
 
-- **I-18 (M-1)** 정책 끄기가 1인 동작이라 `chatbot:deploy` 보유자가 끄고 → 직접 전환 → 켜기로 우회 가능(절차 통제이며 악의적 관리자 방어 아님, 감사·현황 표시는 남음). 후속: 거버넌스 모드 ON에서 `ENV_APPROVAL_OFF_LOCKED` 기본 잠금 또는 끄기 감사 알림 강화.
+- **I-18 (M-1)** 정책 끄기가 1인 동작이라 `chatbot:deploy` 보유자가 끄고 → 직접 전환 → 켜기로 우회 가능(절차 통제이며 악의적 관리자 방어 아님, 감사·현황 표시는 남음). 후속: 거버넌스 모드 ON에서 `ENV_APPROVAL_OFF_LOCKED` 기본 잠금 또는 끄기 감사 알림 강화. → **2026-10-01 해소(PM 결정 · ADR-0049 §2 · `pm-decisions-2026-10-01-설계.md` §3)** — 거버넌스 ON 기본 잠금 · 명시값 우선.
 - **I-19 (M-2)** 우회 표현 방어가 약함: `normalizeText`는 NFKC·소문자·공백 축약만이라 제로폭 문자(U+200B~200D, U+FEFF)·삽입 문자로 CONTAINS 매칭 회피 가능(띄어쓰기 삽입은 설계 K-1·EX-AG-2 한계). 금지어와 정규화를 공유하는 원칙이라 금지어 정규화 개선과 함께 후속.
-- **I-20 (L-1~L-5)** L-1 GET 조회(`summary`·`getStatus`·`listGlobal`)가 만료 sweep으로 쓰기를 일으키고 `ApprovalNavLink`가 60초마다 전역 목록을 읽음(챗봇 수가 크게 늘면 부하). L-2 직전 버전 단독 롤백은 A↔B 반복 토글 가능(`SOLO_ROLLBACK` 감사·경고는 남음, 설계 U-3 수용). L-3 시뮬레이터 미리보기의 2,000자 절단이 `rag-answer.service`의 비공개 `truncateAnswer`와 중복. L-4 `Modal` 두 번째 이펙트가 `initialFocusSelector`가 있는 대화상자에서 포커스가 밖(중첩 포털)으로 나간 상태로 재렌더되면 되돌림. L-5 챗봇 영구삭제 시 가드레일 캐시가 TTL(60초)까지 남음(영향 없음). 또한 이벤트·대화 기록이 독립적 fire-and-forget이라 한쪽만 실패하면 이벤트 목록의 `conversation`이 null(화면은 null 처리).
+- **I-20 (L-1~L-5)** L-1 GET 조회(`summary`·`getStatus`·`listGlobal`)가 만료 sweep으로 쓰기를 일으키고 `ApprovalNavLink`가 60초마다 전역 목록을 읽음(챗봇 수가 크게 늘면 부하). L-2 직전 버전 단독 롤백은 A↔B 반복 토글 가능(`SOLO_ROLLBACK` 감사·경고는 남음, 설계 U-3 수용 · **2026-10-01 PM 수용 — 코드 변경 없음**, ADR-0049 §3). L-3 시뮬레이터 미리보기의 2,000자 절단이 `rag-answer.service`의 비공개 `truncateAnswer`와 중복. L-4 `Modal` 두 번째 이펙트가 `initialFocusSelector`가 있는 대화상자에서 포커스가 밖(중첩 포털)으로 나간 상태로 재렌더되면 되돌림. L-5 챗봇 영구삭제 시 가드레일 캐시가 TTL(60초)까지 남음(영향 없음). 또한 이벤트·대화 기록이 독립적 fire-and-forget이라 한쪽만 실패하면 이벤트 목록의 `conversation`이 null(화면은 null 처리).
 - **I-21** H9(지식베이스 첫 적재) 바로가기는 기능 꺼짐 여부를 확인하지 않고 `security:read`만으로 링크(§7.5 미구현). TC 실행·회귀 화면의 가드레일 표시는 규모 B로 이월.
+
+## 27. 갱신 (2026-10-01 — PM 결정 · ADR-0049)
+
+세부: `docs/02-spec/pm-decisions-2026-10-01-설계.md` §3(N36-1) · §4(L-2) · §5(L-5).
+
+| # | 항목 | 변경 |
+|---|---|---|
+| X-1 | 끄기 잠금(§14 · §15 · R-9 · U-7 · K-12 · I-18) | 3상태 · 명시값 우선 · 미설정 + 거버넌스 ON = 잠금 · `offLockedBy?` · 기존 시험 기대값 변경 1건(`env.validation.guardrails.spec.ts` 기본값) |
+| X-2 | `pii-mask` 바이트 불변(AG-7 · §7) | 날짜 구간 제외(생년월일 문맥 예외 — U-1 확정 2026-10-01) · `preserveDates` 생략 = true · 기존 시험 기대값 변경 4건(문맥 예외 반영 후 재산정 — 증감 없음)(골든 JSON 날짜 케이스 · `index.selective.spec.ts` 1줄 · `ai-guardrails-parity.golden.ts` 1값 · 골든 시험 주석) |
+| X-3 | L-2(I-20) | PM 수용 · 변경 0 |
+| X-4 | §18.5 닫힌 목록 | 이 갱신의 변경은 §18.5에 더하지 않고 `pm-decisions-2026-10-01-설계.md` §3.8 · §5.11을 기준으로 한다 |
