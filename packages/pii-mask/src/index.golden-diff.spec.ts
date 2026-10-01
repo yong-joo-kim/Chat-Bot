@@ -1,5 +1,6 @@
 import v1 from './__golden__/storage-corpus.v1.json';
-import v2 from './__golden__/storage-corpus.json';
+// [T-5] 비교 대상은 v3 갱신 전 동결본(`storage-corpus.v2.json`)이다 — v1→v2 차분(23건)은 그대로 유지된다.
+import v2 from './__golden__/storage-corpus.v2.json';
 
 /**
  * [L-5] 차분 증명 — 동결 v1과 갱신본의 차이는 "독립 날짜가 든 케이스"뿐이고, 그 차이는 날짜 구간의 `[계좌번호]` → 원문 복원뿐이다.

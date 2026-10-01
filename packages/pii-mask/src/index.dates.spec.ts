@@ -65,8 +65,8 @@ describe('maskPii 날짜 제외 표(L-5)', () => {
     expect(r.counts.rrn).toBe(1);
   });
 
-  it('PII_MASK_RULES_VERSION은 2다', async () => {
+  it('PII_MASK_RULES_VERSION은 3이다(T-5)', async () => {
     const mod = await import('./index');
-    expect(mod.PII_MASK_RULES_VERSION).toBe(2);
+    expect(mod.PII_MASK_RULES_VERSION).toBe(3);
   });
 });

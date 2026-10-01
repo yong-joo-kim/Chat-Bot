@@ -6,7 +6,7 @@
  * `@chat-bot/pii-mask`를 직접 import한다.
  *
 
- * **실제 구현은 정규식 휴리스틱 기반 1패스**다(종류별 정규식을 순서대로 적용해 치환 — v3: v2 다섯 단계 + 맨 뒤 ⑥ 카드 보강 — 주민번호·카드 표기에 맞붙은 잔여 숫자 · 14자리 이상 숫자 연속 · AMEX 공백형을 [카드번호]로). ADR-0013 §3이
+ * **실제 구현은 정규식 휴리스틱 기반 1패스**다(종류별 정규식을 순서대로 적용해 치환). ADR-0013 §3이
  * 언급한 형제 프로젝트 `Auto QA`의 2단계 구조(① 구분자로 형태가 특정되는 패턴 ② 구분자 없는 연속
  * 숫자열을 길이/문맥/Luhn·주민번호 체크섬으로 분류)는 **이식하지 않았다** — 2단계(체크섬 기반 분류)는
  * 미구현이며, 카드/계좌 정규식만으로는 구분자가 동일한 형태(예: "XXX-XXXX-XXXX")를 완벽히 분리하지
@@ -17,8 +17,6 @@
  * 종류별 차등 정책: 주민등록번호/카드번호/계좌번호=전량 마스킹, 전화번호/이메일=부분 마스킹(§8.4).
  * 한계 기록: ADR-0013 §6(구현 확인) 참조.
  */
-
-import { replaceEmails } from './email-scan';
 
 export interface PiiMaskCounts {
   rrn: number;
@@ -61,12 +59,11 @@ export interface PiiMaskOptions {
 }
 
 /**
- * [L-5·T-5] 규칙 버전. 1 = 날짜 오인 포함 구 규칙, 2 = 저장 마스킹도 날짜 제외 + 생년월일 문맥 예외(2026-10-01 PM 결정 — 구분 문자·키워드를
- * 넓힌 2차 확장 포함이 최종 정의), 3 = v2 다섯 단계(정규식·순서·콜백 불변) + 맨 뒤 ⑥ 카드 보강(원문 숫자만 추가로 가림 — v2가 가린 숫자는 모두 가린다,
- * 2026-10-01 T-5 — v2가 커밋된 뒤 저장 결과가 바뀌므로 번호를 올렸다).
+ * [L-5] 규칙 버전. 1 = 날짜 오인 포함 구 규칙, 2 = 저장 마스킹도 날짜 제외 + 생년월일 문맥 예외(2026-10-01 PM 결정 — 구분 문자·키워드를
+ * 넓힌 2차 확장 포함이 최종 정의. 2차 확장 전 v2가 어디에도 배포된 적이 없어 번호를 올리지 않았다).
  * 기동 로그가 이 값을 찍는다(폐쇄망 반입 시 구 `dist`가 조용히 v1로 동작하는 것을 드러낸다).
  */
-export const PII_MASK_RULES_VERSION = 3;
+export const PII_MASK_RULES_VERSION = 2;
 
 /** 거버넌스 부트스트랩 1곳만 호출한다(설치 없음 = PARTIAL). 재설치는 시험 전용. */
 let installedMode: PiiMaskMode = 'PARTIAL';
@@ -81,7 +78,6 @@ export function resetPiiMaskModeForTest(): void {
 }
 
 // ① 주민등록번호 — YYMMDD-[1-8]XXXXXX(구분자 선택). 성별코드 1~4(~1999년생 이하 legacy) / 5~8(2000년~/외국인).
-// [T-5] ①~⑤는 v2와 문자 단위로 같다(정규식·순서·콜백) — 긴 숫자열·AMEX는 맨 뒤 ⑥ 카드 보강 단계가 가린다.
 const RRN_REGEX = /\d{6}-?[1-8]\d{6}/g;
 
 // ② 카드번호 — 4자리씩 4묶음(구분자 선택, 마지막 묶음은 2~4자리까지 허용해 일부 브랜드 대응).
@@ -95,55 +91,7 @@ const PHONE_REGEX = /01[016789]-?\d{3,4}-?\d{4}|0\d{1,2}-\d{3,4}-\d{4}/g;
 // 특정할 수 없다 — "구분자 있음 + 전화번호로 이미 분류되지 않음"을 계좌로 간주하는 보수적 휴리스틱).
 const ACCOUNT_REGEX = /\d{2,6}-\d{2,6}-\d{2,6}(?:-\d{1,6})?/g;
 
-// ⑤ 이메일 — 구 정규식 `/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g`와 결과가 같은 선형 스캔(`replaceEmails`, L-6).
-
-// ── [T-5, 규칙 v3] ⑥ 카드 보강 ─────────────────────────────────────────────────────────────────
-// ①②가 만든 표기는 처리 중 단일 사설 영역 문자 표지로 둔다 — 표지는 `]`와 같은 판정 성질(숫자·하이픈·글자·이메일 로컬 문자·생년월일
-// 구분 문자 어느 것도 아님)이라 ③~⑤(날짜 제외·생년월일 문맥 판정 포함)의 결과가 v2와 같다. ⑥ 뒤에 표기 문자열로 바꾼다.
-// 입력에 표지 범위 문자(U+E200~U+E2FF)가 있으면 표지를 쓰지 않고 ⑥도 건너뛴다(출력 = v2).
-const MARK_RRN = '\uE210';
-const MARK_CARD = '\uE211';
-const MARK_RANGE_INPUT = /[\uE200-\uE2FF]/;
-const TEXT_RRN = '[주민등록번호]';
-const TEXT_CARD = '[카드번호]';
-// ⑥-a 덩어리 흡수 — 주민번호·카드 표기(이번 호출 표지 또는 입력에 원래 있던 표기 문자열)와 숫자가 다른 글자 없이 맞붙은 덩어리. 숫자가 1개 이상일 때만 바꾼다.
-const REINFORCE_CHUNK = /(?<!\d)\d*(?:(?:[\uE210\uE211]|\[주민등록번호\]|\[카드번호\])\d*)+/g;
-// ⑥-b 원문으로 남은 14자리 이상 숫자 연속 · ⑥-c 원문으로 남은 AMEX 공백형.
-const REINFORCE_LONG = /(?<!\d)\d{14,}(?!\d)/g;
-const REINFORCE_AMEX = /(?<!\d)\d{4} \d{6} \d{5}(?!\d)/g;
-
-/**
- * ⑥ 카드 보강 — ⑤까지의 결과에서 **원문 숫자만 추가로** `[카드번호]` 표지로 바꾼다(이미 가려진 것은 풀거나 옮기지 않는다 → v2가 가린 숫자는 모두 가린다).
- * 카운트는 이번 호출이 만든 표지만 차감한다(입력에 원래 있던 표기 문자열은 차감하지 않고, 그 자리의 숫자를 새로 가린 것으로 센다).
- */
-function reinforceCard(masked: string, counts: PiiMaskCounts): string {
-  let out = masked.replace(REINFORCE_CHUNK, (chunk) => {
-    if (!/\d/.test(chunk)) return chunk;
-    let rrnMarks = 0;
-    let cardMarks = 0;
-    for (const ch of chunk) {
-      if (ch === MARK_RRN) rrnMarks += 1;
-      else if (ch === MARK_CARD) cardMarks += 1;
-    }
-    counts.rrn -= rrnMarks;
-    counts.card += 1 - cardMarks;
-    return MARK_CARD;
-  });
-  out = out.replace(REINFORCE_LONG, () => {
-    counts.card += 1;
-    return MARK_CARD;
-  });
-  out = out.replace(REINFORCE_AMEX, () => {
-    counts.card += 1;
-    return MARK_CARD;
-  });
-  return out;
-}
-
-/** 처리 중 표지를 표기 문자열로 바꾼다. */
-function resolveMarks(masked: string): string {
-  return masked.replace(/[\uE210\uE211]/g, (ch) => (ch === MARK_RRN ? TEXT_RRN : TEXT_CARD));
-}
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
 function maskPhone(value: string): string {
   const digits = value.replace(/[^0-9]/g, '');
@@ -177,16 +125,14 @@ export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
   const counts: PiiMaskCounts = { rrn: 0, card: 0, account: 0, phone: 0, email: 0 };
   if (!text) return { maskedText: text, counts };
 
-  // [T-5] 표지 범위 문자가 입력에 있으면 표지·⑥을 쓰지 않는다(출력 = v2).
-  const useMarks = !MARK_RANGE_INPUT.test(text);
   let masked = text;
   masked = masked.replace(RRN_REGEX, () => {
     counts.rrn += 1;
-    return useMarks ? MARK_RRN : TEXT_RRN;
+    return '[주민등록번호]';
   });
   masked = masked.replace(CARD_REGEX, () => {
     counts.card += 1;
-    return useMarks ? MARK_CARD : TEXT_CARD;
+    return '[카드번호]';
   });
   masked = masked.replace(PHONE_REGEX, (m) => {
     counts.phone += 1;
@@ -198,12 +144,11 @@ export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
     counts.account += 1;
     return '[계좌번호]';
   });
-  masked = replaceEmails(masked, (m) => {
+  masked = masked.replace(EMAIL_REGEX, (m) => {
     counts.email += 1;
     return mode === 'FULL' ? '[이메일]' : maskEmail(m);
   });
 
-  if (useMarks) masked = resolveMarks(reinforceCard(masked, counts));
   return { maskedText: masked, counts };
 }
 
@@ -216,8 +161,7 @@ const ALL_KINDS: readonly PiiKind[] = ['rrn', 'card', 'phone', 'account', 'email
 const PLACEHOLDER_OPEN = '\uE000';
 const PLACEHOLDER_CLOSE = '\uE001';
 const PLACEHOLDER_DIGIT_BASE = 0xe100;
-// [T-5] 표지(U+E210·E211)·표지 범위(U+E200~E2FF)까지 포함해 검사한다 — 있으면 기존 5종 전부 경로(K-11)로 폴백한다.
-const PRIVATE_USE_INPUT = /[\uE000-\uE2FF]/;
+const PRIVATE_USE_INPUT = /[\uE000-\uE1FF]/;
 const PLACEHOLDER_REGEX = /\uE000([\uE100-\uE1FF]+)\uE001/g;
 
 
@@ -355,17 +299,16 @@ function maskPiiSelective(
     return `${PLACEHOLDER_OPEN}${encodeIndex(stash.length - 1)}${PLACEHOLDER_CLOSE}`;
   };
 
-  const applyMatch = (kind: PiiKind, replacer: (m: string) => string, m: string): string => {
-    if (!selected.has(kind)) return hold(m);
-    counts[kind] += 1;
-    return replacer(m);
-  };
   const apply = (kind: PiiKind, regex: RegExp, replacer: (m: string) => string, input: string): string =>
-    input.replace(regex, (m) => applyMatch(kind, replacer, m));
+    input.replace(regex, (m) => {
+      if (!selected.has(kind)) return hold(m);
+      counts[kind] += 1;
+      return replacer(m);
+    });
 
   let masked = text;
-  masked = apply('rrn', RRN_REGEX, () => MARK_RRN, masked);
-  masked = apply('card', CARD_REGEX, () => MARK_CARD, masked);
+  masked = apply('rrn', RRN_REGEX, () => '[주민등록번호]', masked);
+  masked = apply('card', CARD_REGEX, () => '[카드번호]', masked);
   masked = apply('phone', PHONE_REGEX, (m) => (mode === 'FULL' ? '[전화번호]' : maskPhone(m)), masked);
   // [L-5] 기본 경로와 **같은 판정**(독립 날짜 + 생년월일 문맥 아님 → 날짜는 원문 그대로)을 계좌 단계 콜백에서 적용한다. 날짜를
   // 자리표시로 미리 바꾸던 이전 방식은 뒤 단계(이메일) 정규식이 날짜 주변을 다르게 보게 해 기본 경로와 어긋났다(퍼징으로 확인).
@@ -375,11 +318,8 @@ function maskPiiSelective(
     counts.account += 1;
     return '[계좌번호]';
   });
-  masked = replaceEmails(masked, (m) => applyMatch('email', (v) => (mode === 'FULL' ? '[이메일]' : maskEmail(v)), m));
+  masked = apply('email', EMAIL_REGEX, (m) => (mode === 'FULL' ? '[이메일]' : maskEmail(m)), masked);
 
-  // [T-5] ⑥ 카드 보강 — `card`를 고른 경우만, 자리표시(선택하지 않은 종류) 복원 전에 돈다(자리표시는 숫자도 표기도 아니라 덩어리를 끊는다).
-  if (selected.has('card')) masked = reinforceCard(masked, counts);
-  masked = resolveMarks(masked);
   masked = masked.replace(PLACEHOLDER_REGEX, (_m, encoded: string) => stash[decodeIndex(encoded)] ?? '');
   return { maskedText: masked, counts };
 }

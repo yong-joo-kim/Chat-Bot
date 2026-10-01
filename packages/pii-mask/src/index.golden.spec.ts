@@ -3,7 +3,7 @@ import corpus from './__golden__/storage-corpus.json';
 
 /**
  * [No.36] 저장 마스킹 바이트 불변 증명(ai-guardrails-설계.md §7.3 · AG-7).
- * 골든은 v2 규칙(2026-10-01 저장 마스킹 날짜 제외 · 생년월일 문맥 예외) 기준이다 — 전체 재생성 금지, 부분 갱신 절차는
+ * 골든은 v3 규칙(v2 = 2026-10-01 저장 마스킹 날짜 제외 · 생년월일 문맥 예외 + T-5 긴 숫자열 카드 우선 15건 갱신) 기준이다 — 전체 재생성 금지, 부분 갱신 절차는
  * docs/02-spec/pm-decisions-2026-10-01-설계.md §5.6. 구 규칙(v1) 원본은 `storage-corpus.v1.json`에 동결돼 있다.
  */
 interface GoldenCase {

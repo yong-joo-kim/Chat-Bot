@@ -1,5 +1,5 @@
 {
- "note": "[No.36] 저장 마스킹 골든 — 선택 인자 도입 전 현행 maskPii()로 생성한 기대값. 재생성 금지(바이트 불변 증명용). [2026-10-01 T-5 — 규칙 v3: 14자리 이상 숫자 연속을 가진 15건의 [주민등록번호]<잔여숫자>를 [카드번호]로 갱신(rrn→card 카운트 이동). 나머지 291건 불변. 갱신 전 동결본 = storage-corpus.v2.json]",
+ "note": "[No.36] 저장 마스킹 골든 — 선택 인자 도입 전 현행 maskPii()로 생성한 기대값. 재생성 금지(바이트 불변 증명용).",
  "cases": [
   {
    "text": "901231-1234567",
@@ -418,20 +418,20 @@
   {
    "text": "1234567890123456",
    "PARTIAL": {
-    "maskedText": "[카드번호]",
+    "maskedText": "[주민등록번호]456",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호]",
+    "maskedText": "[주민등록번호]456",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -441,20 +441,20 @@
   {
    "text": "[1234567890123456]",
    "PARTIAL": {
-    "maskedText": "[[카드번호]]",
+    "maskedText": "[[주민등록번호]456]",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[[카드번호]]",
+    "maskedText": "[[주민등록번호]456]",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -510,20 +510,20 @@
   {
    "text": "12345678901234",
    "PARTIAL": {
-    "maskedText": "[카드번호]",
+    "maskedText": "[주민등록번호]4",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호]",
+    "maskedText": "[주민등록번호]4",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -533,20 +533,20 @@
   {
    "text": "12345678901234, 그리고 12345678901234",
    "PARTIAL": {
-    "maskedText": "[카드번호], 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]4, 그리고 [주민등록번호]4",
     "counts": {
-     "rrn": 0,
-     "card": 2,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호], 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]4, 그리고 [주민등록번호]4",
     "counts": {
-     "rrn": 0,
-     "card": 2,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -1890,20 +1890,20 @@
   {
    "text": "주문번호 20260930123456",
    "PARTIAL": {
-    "maskedText": "주문번호 [카드번호]",
+    "maskedText": "주문번호 [주민등록번호]6",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "주문번호 [카드번호]",
+    "maskedText": "주문번호 [주민등록번호]6",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -2189,20 +2189,20 @@
   {
    "text": "1234567890123456 / 1234 5678 9012 3456 그리고 011-234-5678",
    "PARTIAL": {
-    "maskedText": "[카드번호] / [카드번호] 그리고 011-****-5678",
+    "maskedText": "[주민등록번호]456 / [카드번호] 그리고 011-****-5678",
     "counts": {
-     "rrn": 0,
-     "card": 2,
+     "rrn": 1,
+     "card": 1,
      "account": 0,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [카드번호] 그리고 [전화번호]",
+    "maskedText": "[주민등록번호]456 / [카드번호] 그리고 [전화번호]",
     "counts": {
-     "rrn": 0,
-     "card": 2,
+     "rrn": 1,
+     "card": 1,
      "account": 0,
      "phone": 1,
      "email": 0
@@ -2327,20 +2327,20 @@
   {
    "text": "12345678901234 / 011-234-5678 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "[카드번호] / 011-****-5678 그리고 [주민등록번호]",
+    "maskedText": "[주민등록번호]4 / 011-****-5678 그리고 [주민등록번호]",
     "counts": {
-     "rrn": 1,
-     "card": 1,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [전화번호] 그리고 [주민등록번호]",
+    "maskedText": "[주민등록번호]4 / [전화번호] 그리고 [주민등록번호]",
     "counts": {
-     "rrn": 1,
-     "card": 1,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
@@ -2488,20 +2488,20 @@
   {
    "text": "12345678901234 / 011-234-5678 그리고 1002-123-456789",
    "PARTIAL": {
-    "maskedText": "[카드번호] / 011-****-5678 그리고 1002-****-456789",
+    "maskedText": "[주민등록번호]4 / 011-****-5678 그리고 1002-****-456789",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 2,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [전화번호] 그리고 1[전화번호]89",
+    "maskedText": "[주민등록번호]4 / [전화번호] 그리고 1[전화번호]89",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 2,
      "email": 0
@@ -3615,20 +3615,20 @@
   {
    "text": "1234567890123456 / x@y.z 그리고 x@y.z",
    "PARTIAL": {
-    "maskedText": "[카드번호] / x@y.z 그리고 x@y.z",
+    "maskedText": "[주민등록번호]456 / x@y.z 그리고 x@y.z",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / x@y.z 그리고 x@y.z",
+    "maskedText": "[주민등록번호]456 / x@y.z 그리고 x@y.z",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -4558,20 +4558,20 @@
   {
    "text": "1234567890123456 / 1002-123-456789 그리고 1002-123-456789",
    "PARTIAL": {
-    "maskedText": "[카드번호] / 1002-****-456789 그리고 1002-****-456789",
+    "maskedText": "[주민등록번호]456 / 1002-****-456789 그리고 1002-****-456789",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 2,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / 1[전화번호]89 그리고 1[전화번호]89",
+    "maskedText": "[주민등록번호]456 / 1[전화번호]89 그리고 1[전화번호]89",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 2,
      "email": 0
@@ -4650,20 +4650,20 @@
   {
    "text": "12345678901234 / 901231-1234567 그리고 x@y.z",
    "PARTIAL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 x@y.z",
     "counts": {
-     "rrn": 1,
-     "card": 1,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 x@y.z",
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 x@y.z",
     "counts": {
-     "rrn": 1,
-     "card": 1,
+     "rrn": 2,
+     "card": 0,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -4765,20 +4765,20 @@
   {
    "text": "12345678901234 / x@y.z 그리고 011-234-5678",
    "PARTIAL": {
-    "maskedText": "[카드번호] / x@y.z 그리고 011-****-5678",
+    "maskedText": "[주민등록번호]4 / x@y.z 그리고 011-****-5678",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / x@y.z 그리고 [전화번호]",
+    "maskedText": "[주민등록번호]4 / x@y.z 그리고 [전화번호]",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
@@ -6651,20 +6651,20 @@
   {
    "text": "1234567890123456 / 901231-1234567 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]456 / [주민등록번호] 그리고 [카드번호]",
     "counts": {
-     "rrn": 1,
-     "card": 2,
+     "rrn": 2,
+     "card": 1,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]456 / [주민등록번호] 그리고 [카드번호]",
     "counts": {
-     "rrn": 1,
-     "card": 2,
+     "rrn": 2,
+     "card": 1,
      "account": 0,
      "phone": 0,
      "email": 0
@@ -6789,20 +6789,20 @@
   {
    "text": "1234567890123456 / 011-234-5678 그리고 x@y.z",
    "PARTIAL": {
-    "maskedText": "[카드번호] / 011-****-5678 그리고 x@y.z",
+    "maskedText": "[주민등록번호]456 / 011-****-5678 그리고 x@y.z",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [전화번호] 그리고 x@y.z",
+    "maskedText": "[주민등록번호]456 / [전화번호] 그리고 x@y.z",
     "counts": {
-     "rrn": 0,
-     "card": 1,
+     "rrn": 1,
+     "card": 0,
      "account": 0,
      "phone": 1,
      "email": 0
@@ -6904,20 +6904,20 @@
   {
    "text": "12345678901234 / 901231-1234567 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 [카드번호]",
     "counts": {
-     "rrn": 1,
-     "card": 2,
+     "rrn": 2,
+     "card": 1,
      "account": 0,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[카드번호] / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[주민등록번호]4 / [주민등록번호] 그리고 [카드번호]",
     "counts": {
-     "rrn": 1,
-     "card": 2,
+     "rrn": 2,
+     "card": 1,
      "account": 0,
      "phone": 0,
      "email": 0
