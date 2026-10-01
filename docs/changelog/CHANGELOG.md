@@ -598,3 +598,25 @@ api jest 408 suites(5,913 tests, 1 skip) 통과, pii-mask 3 suites / 33 tests, w
 ### 검증
 
 api jest 416 suites(5,997 tests, 1 skip) 통과, web tsc 오류 0 · vitest 236 files / 1,454 tests, widget 34 files / 253 tests, pii-mask 33 tests, ml-worker pytest 127 · `pip check` 이상 없음. 관련 75개 스위트 3회 반복에서 부하 시 `utterance-analysis.integration.spec` 1건이 1회 실패(단독 재실행 100/100 통과, 원인 미확정).
+
+## PM 결정 3건 (K-1b·N36-1·L-5) — 2026-10-01
+
+ADR-0049. 마이그레이션 0, 응답 변경은 선택 필드뿐(키가 없으면 기존 응답과 바이트 동일). 기존 시험 기대값 변경은 설계 닫힌 목록 5건(`env.validation.guardrails.spec` 기본값 · `storage-corpus.json` 날짜 23건 · `index.selective.spec` 63-66행 · `ai-guardrails-parity.golden.ts:55` · `index.golden.spec` 주석)뿐.
+
+### 변경 요약
+
+- **K-1b G1 폴백**: 로컬·Gemini 생성이 후보 0건이면 원인과 무관하게 러너가 같은 Job 안에서 규칙 기반(G1)을 1회 호출(1건이라도 나오면 보충·재시도 없음). 제안은 기존 검증·저장·승인 경로를 그대로 거친다. 표시: `providerId='rule'`, 결과 요약 `degraded:true`, 선택 필드 `fallbackFrom`·`fallbackCause`(원인 코드는 화면에 노출하지 않음), 증강 화면에 안내 1줄. 폴백이 없으면 결과 요약은 바이트 동일.
+- **N36-1 끄기 잠금**: `ENV_APPROVAL_OFF_LOCKED` 3상태 — 명시값 우선, 미설정이면 `DATA_GOVERNANCE_MODE==='ON'`일 때 잠금(서버 설정을 바꿔 재기동해야 끌 수 있음). 거버넌스 ON + 명시 false는 기동 경고. 이미 꺼진 정책은 모드 전환으로 자동으로 켜지지 않음. 응답 `offLockedBy`(잠겼을 때만), 웹 안내 문구와 켜기 확인 대화상자 안내.
+- **L-5 저장 마스킹 날짜 제외**: `packages/pii-mask` 기본 경로가 독립된 `YYYY-MM-DD` 날짜를 `[계좌번호]`로 바꾸지 않음(`preserveDates` 기본 true, false = v1 동작). **생년월일 문맥 예외**: 날짜 바로 앞 낱말이 키워드 7개(`생년`·`생일`·`출생`·`탄생일`·`birth`·`dob`·`birth date`)이고 사이에 구분 문자(공백·`: = , ( [ " '`·`- / ~`·하이픈 변형·곡선 따옴표·낫표, 0~6개)와 괄호 주석(`(양력)`·`(음력)`) 1개까지만 있으면 옛 규칙과 바이트 동일한 `[계좌번호]`. 32글자 고정 창 선형 스캔(ReDoS 없음), 보이지 않는 문자는 판정 창에서만 제거(금지어 정규화 집합과 동일). 규칙 버전 `PII_MASK_RULES_VERSION=2`(기동 로그 출력), 패키지 0.2.0. 골든: 기존 말뭉치는 `storage-corpus.v1.json`으로 동결하고 날짜 23건만 갱신, 손 작성 `birth-context-corpus.json` 106건. 과거 저장분은 재마스킹하지 않음.
+- **L-2**: PM 현행 수용(코드 변경 없음).
+- 선택 경로의 날짜 자리표시를 없애 기본 경로와 동치로 만듦 — 날짜에 붙은 이메일 모양이 이제 더 가려짐(예 `1990-05-12x@y.co`).
+
+### 알려진 한계
+
+- U-14: 날짜가 뒤에 오는 문맥(`1990-05-12 (생년월일)`)은 보호하지 않음(설계 수용, PM 확인 대기). U-12: 봇이 묻고 날짜만 답한 생년월일은 보호되지 않음(PM 수용).
+- 거버넌스 ON 설치에서 활성 ADMIN이 1명으로 줄면 정책을 끌 수 없음(자동배포.md §5.11 해소 절차). 날짜만 든 원본 파일은 더는 `PII_IN_RAW_FILE`로 막히지 않음(PM 수용 U-4).
+- 신규 결함 후보: K-1c, K-1d, L-6(`EMAIL_REGEX` 긴 영숫자 2차 시간), T-5(공백·하이픈 없는 16자리 카드번호가 주민번호 규칙에 걸려 끝 3자리 노출 — 기존 한계), 플래키 T-3·T-4.
+
+### 검증
+
+api jest 425 suites(6,054 tests, 1 skip) 통과, pii-mask 11 suites / 101 tests(적대적 시험 37건 포함), web tsc 오류 0 · vitest 237 files(전체 병렬 부하 중 No.35 모달 시험 1건이 타임아웃 — 단독 5/5 통과), widget 34 files / 253 tests, ml-worker pytest 127 · `pip check` 무결. 관련 69 suites 3회 반복 722/722 통과.
