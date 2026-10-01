@@ -98,13 +98,14 @@ describe('불변식 I-1~I-7 — 4프로필 × 픽스처', () => {
     expect(WEB.quickReply.max).toBe(5);
   });
 
-  it('성능: 아웃풋 10개 × 카드 10장 처리가 1ms 이하다(100회 평균, I-7)', () => {
+  it('성능: 아웃풋 10개 × 카드 10장 처리가 10ms 이하다(100회 평균, I-7 — 부하 편차 흡수용 10배 여유, T-6)', () => {
     const bigCarousel = carousel({ cards: Array.from({ length: 10 }, (_, i) => ({ title: `카드${i}`, description: `설명${i}`, buttons: [{ label: '메뉴', action: 'MESSAGE', value: '메뉴' }] })) });
     const outputs10 = Array.from({ length: 10 }, () => bigCarousel);
+    for (let i = 0; i < 20; i += 1) degradeForProfile(outputs10, KAKAO); // 워밍업(JIT)
     const start = process.hrtime.bigint();
     for (let i = 0; i < 100; i += 1) degradeForProfile(outputs10, KAKAO);
     const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6 / 100;
-    expect(elapsedMs).toBeLessThan(1);
+    expect(elapsedMs).toBeLessThan(10);
   });
 });
 

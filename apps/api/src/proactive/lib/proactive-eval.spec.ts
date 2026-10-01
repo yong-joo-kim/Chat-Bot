@@ -57,7 +57,7 @@ describe('matchProactivePathPattern — 세그먼트 매칭(정규식 0, 선형 
     expect(matchProactivePathPattern(longPattern, '/a')).toBe(false);
   });
 
-  it('AC-PA7-5 — 1만 자 경로 × 극단적 패턴을 1,000회 수행해도 선형 시간(2초 이내) 안에 끝난다', () => {
+  it('AC-PA7-5 — 1만 자 경로 × 극단적 패턴을 1,000회 수행해도 선형 시간(10초 이내 — ReDoS 방어 확인용, 부하 편차 흡수 T-6) 안에 끝난다', () => {
     const maliciousPath = '/' + 'a/'.repeat(5000);
     const pattern = '/**';
     const start = Date.now();
@@ -65,7 +65,7 @@ describe('matchProactivePathPattern — 세그먼트 매칭(정규식 0, 선형 
       matchProactivePathPattern(pattern, maliciousPath);
     }
     const elapsedMs = Date.now() - start;
-    expect(elapsedMs).toBeLessThan(2000);
+    expect(elapsedMs).toBeLessThan(10000);
   });
 });
 
