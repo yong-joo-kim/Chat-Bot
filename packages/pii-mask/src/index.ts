@@ -49,9 +49,21 @@ export interface PiiMaskOptions {
    * 바이트 불변). 저장·송신 마스킹 호출은 이 인자를 쓰지 않는다(ai-guardrails-설계.md §7).
    */
   kinds?: readonly PiiKind[];
-  /** [신규 No.36 — 출구 전용] true면 `YYYY-MM-DD` 날짜를 계좌번호 후보에서 제외한다. 생략/false = 기존. */
+  /**
+   * [L-5, 2026-10-01 PM] 독립된 `YYYY-MM-DD` 날짜를 계좌번호 후보에서 제외한다. **생략 = true**(규칙 v2) —
+   * 단 바로 앞 낱말이 생년월일 문맥 키워드(`생년`·`생일`·`출생`·`탄생일`·`birth`·`birth date`·`dob` — 사이 기호 0~6개·`(양력)` 등 주석
+   * 1개 허용)면 예전처럼 가린다(`isBirthDateContext`). 날짜 뒤의 문맥은 보지 않는다.
+   * `false` = 규칙 v1(날짜 오인 포함, 예외 판정 자체를 하지 않음 — 바이트 동일).
+   */
   preserveDates?: boolean;
 }
+
+/**
+ * [L-5] 규칙 버전. 1 = 날짜 오인 포함 구 규칙, 2 = 저장 마스킹도 날짜 제외 + 생년월일 문맥 예외(2026-10-01 PM 결정 — 구분 문자·키워드를
+ * 넓힌 2차 확장 포함이 최종 정의. 2차 확장 전 v2가 어디에도 배포된 적이 없어 번호를 올리지 않았다).
+ * 기동 로그가 이 값을 찍는다(폐쇄망 반입 시 구 `dist`가 조용히 v1로 동작하는 것을 드러낸다).
+ */
+export const PII_MASK_RULES_VERSION = 2;
 
 /** 거버넌스 부트스트랩 1곳만 호출한다(설치 없음 = PARTIAL). 재설치는 시험 전용. */
 let installedMode: PiiMaskMode = 'PARTIAL';
@@ -102,9 +114,11 @@ function maskEmail(value: string): string {
  * `PARTIAL` 결과는 이 옵션 도입 전과 **바이트 동일**이다(No.45 FR-0-161).
  */
 export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
-  // [신규 No.36] 선택 인자가 있을 때만 별도 경로. 아래 기존 본문은 한 글자도 바꾸지 않는다(AG-7).
-  if (options?.kinds !== undefined || options?.preserveDates) {
-    const selective = maskPiiSelective(text, options.mode ?? installedMode, options.kinds, options.preserveDates === true);
+  // [L-5] 날짜 보호는 기본 경로가 처리한다 — 생략 = true, false = 구 동작(v1).
+  const preserveDates = options?.preserveDates !== false;
+  // [신규 No.36] `kinds`가 있을 때만 별도 경로(출구 전용 선택 가림). 사설 영역 문자 입력이면 null → 아래 기본 본문(K-11).
+  if (options?.kinds !== undefined) {
+    const selective = maskPiiSelective(text, options.mode ?? installedMode, options.kinds, preserveDates);
     if (selective) return selective;
   }
   const mode = options?.mode ?? installedMode;
@@ -124,7 +138,9 @@ export function maskPii(text: string, options?: PiiMaskOptions): PiiMaskResult {
     counts.phone += 1;
     return mode === 'FULL' ? '[전화번호]' : maskPhone(m);
   });
-  masked = masked.replace(ACCOUNT_REGEX, () => {
+  masked = masked.replace(ACCOUNT_REGEX, (m, offset: number, whole: string) => {
+    // [L-5] 독립 날짜는 계좌번호가 아니다 — 단 생년월일 문맥이면 예전처럼 가린다.
+    if (preserveDates && isStandaloneDate(m, offset, whole) && !isBirthDateContext(whole, offset)) return m;
     counts.account += 1;
     return '[계좌번호]';
   });
@@ -148,8 +164,106 @@ const PLACEHOLDER_DIGIT_BASE = 0xe100;
 const PRIVATE_USE_INPUT = /[\uE000-\uE1FF]/;
 const PLACEHOLDER_REGEX = /\uE000([\uE100-\uE1FF]+)\uE001/g;
 
-// 날짜(YYYY-MM-DD) — 계좌 정규식만 날짜를 오인한다(주민번호·카드·전화 정규식은 겹치지 않음).
-const DATE_REGEX = /(?<![\d-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d-])/g;
+
+// ── [L-5] 날짜 제외 + 생년월일 문맥 예외 ──────────────────────────────────────────────────────────
+// 날짜(YYYY-MM-DD) — 계좌 정규식만 날짜를 오인한다(주민번호·카드·전화 정규식은 겹치지 않음). 저장 경로(기본)와
+// 출구(선택 경로)가 **같은 정의 1곳**에서 파생한 규칙을 쓴다: 연도 19xx·20xx, 월 01~12, 일 01~31(월별 일수·윤년은 보지 않는다),
+// 앞뒤 글자가 숫자도 하이픈도 아니어야 한다(독립 날짜).
+const DATE_CORE = String.raw`(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])`;
+const DATE_FULL_REGEX = new RegExp(`^${DATE_CORE}$`);
+const DATE_BOUNDARY_CHAR = /[\d-]/;
+
+/** 계좌 정규식 일치(`m`, 위치 `offset`)가 독립 날짜인가 — 날짜 규칙(전체 일치 + 앞뒤 경계 `[\d-]` 아님). */
+function isStandaloneDate(m: string, offset: number, whole: string): boolean {
+  if (!DATE_FULL_REGEX.test(m)) return false;
+  const prev = offset > 0 ? whole[offset - 1] : '';
+  const next = whole[offset + m.length] ?? '';
+  return !(prev !== '' && DATE_BOUNDARY_CHAR.test(prev)) && !(next !== '' && DATE_BOUNDARY_CHAR.test(next));
+}
+
+/**
+ * 생년월일 문맥 키워드 — 한 낱말 6개(`birth date` 두 낱말은 `isBirthDateContext`가 따로 본다 = 닫힌 목록 7개). 목록 변경 = 규칙 변경이며
+ * 골든 갱신 절차가 필요하다. 비교는 창 정규화(NFKC + 소문자) 이후다.
+ */
+const BIRTH_KEYWORDS: ReadonlyArray<{ readonly keyword: string; readonly maxSuffix: number }> = [
+  { keyword: '생년', maxSuffix: 4 },
+  { keyword: '생일', maxSuffix: 2 },
+  { keyword: '출생', maxSuffix: 4 },
+  { keyword: '탄생일', maxSuffix: 2 },
+  { keyword: 'birth', maxSuffix: 4 },
+  { keyword: 'dob', maxSuffix: 0 },
+];
+/** 두 낱말 키워드 `birth date` — 두 낱말 모두 접미 0, 사이 공백 1~2개. */
+const BIRTH_TWO_WORD = { first: 'birth', second: 'date', minSpaces: 1, maxSpaces: 2 } as const;
+const BIRTH_WINDOW = 32;
+const BIRTH_MAX_DELIMITERS = 6;
+/** 구분 문자로 셈하는 닫힌 주석(정규화 후 문자열 그대로 일치 · 최대 1회 · 구분 문자 1개로 계산). */
+const BIRTH_ANNOTATIONS: readonly string[] = ['(양력)', '(음력)', '[양력]', '[음력]'];
+// 보이지 않는 문자(판정 창에서만 제거) — apps/api N36-2 금지어 정규화(`banned-word-filter.ts`)와 같은 집합이다.
+// `pii-mask`는 api를 import할 수 없어 정의를 따로 두고, 두 집합이 같음을 api 쪽 정적 시험이 고정한다. 리터럴 서식을 같게 유지할 것.
+const INVISIBLE_CLASS = '[\\p{Cf}\\u034F\\uFE00-\\uFE0F\\u115F\\u1160\\u3164\\uFFA0]';
+const INVISIBLE_ALL = new RegExp(INVISIBLE_CLASS, 'gu');
+// 구분 문자(NFKC 이후 단일 문자 검사 — 수량자 없음): 공백류(줄바꿈은 이미 잘림) `:` `=` `,` `(` `[` `"` `'` `-` `/` `~`,
+// 하이픈 변형 U+2010~2015 · 빼기 U+2212 · 물결 U+301C · 곡선 따옴표 U+2018/2019/201C/201D · 낫표 U+300C~300F. 닫는 괄호는 아니다.
+const LINE_BREAKS = ['\n', '\r', '\u2028', '\u2029'];
+const BIRTH_DELIMITER = /^[\s:=,(["'\-/~‐-―−〜‘’“”「-』]$/;
+const LETTER = /^\p{L}$/u;
+const DIGIT = /^\d$/;
+const SPACE = /^\s$/;
+
+
+/**
+ * 날짜가 `text[dateStart]`에서 시작할 때, 바로 앞 낱말이 생년월일 문맥 키워드인가(U-1, 2차 확장 2026-10-01). 날짜 시작 위치에서
+ * 왼쪽으로 **고정 창 32글자 선형 역방향 스캔**한다 — 정규식 역추적·가변 수량자가 없어 입력과 무관하게 날짜당 상수 시간이다.
+ * 순서: 같은 줄만(줄바꿈 뒤) → 보이지 않는 문자 제거 → NFKC → 소문자(창에만 — 판정 전용, 결과 문자열은 바꾸지 않는다).
+ * 구분 문자(공백·`:`·`=`·`,`·`(`·`[`·`"`·`'`·`-`·`/`·`~`·하이픈 변형·빼기·물결·곡선 따옴표·낫표) 0~6개를 건너뛰되, 닫힌 주석
+ * `(양력)`·`(음력)`·`[양력]`·`[음력]`은 최대 1개를 구분 문자 1개로 센다. 그 앞의 글자 연속(낱말)이 한 낱말 키워드로 시작하고 뒤에 붙는
+ * 글자 수가 허용치 이하이거나, 정확히 `date`이고 사이 공백 1~2개 앞이 정확히 `birth`이면(`birth date`) true. 낱말 바로 앞이 숫자면
+ * false(`2생일` 방지). 날짜 **뒤**의 문맥(`1990-05-12 (생년월일)`)은 보지 않는다(U-14).
+ */
+function isBirthDateContext(text: string, dateStart: number): boolean {
+  let win = text.slice(Math.max(0, dateStart - BIRTH_WINDOW), dateStart);
+  for (const br of LINE_BREAKS) {
+    const at = win.lastIndexOf(br);
+    if (at >= 0) win = win.slice(at + 1);
+  }
+  win = win.replace(INVISIBLE_ALL, '');
+  if (win === '') return false;
+  const w = win.normalize('NFKC').toLowerCase();
+
+  let end = w.length;
+  let skipped = 0;
+  let annotationUsed = false;
+  while (end > 0 && skipped < BIRTH_MAX_DELIMITERS) {
+    if (BIRTH_DELIMITER.test(w[end - 1])) {
+      end -= 1;
+    } else if (!annotationUsed && end >= 4 && BIRTH_ANNOTATIONS.includes(w.slice(end - 4, end))) {
+      end -= 4;
+      annotationUsed = true;
+    } else {
+      break;
+    }
+    skipped += 1;
+  }
+  let start = end;
+  while (start > 0 && LETTER.test(w[start - 1])) start -= 1;
+  if (start === end) return false;
+  if (start > 0 && DIGIT.test(w[start - 1])) return false;
+
+  const word = w.slice(start, end);
+  if (BIRTH_KEYWORDS.some(({ keyword, maxSuffix }) => word.startsWith(keyword) && word.length - keyword.length <= maxSuffix)) return true;
+
+  // `birth date` — 낱말이 정확히 `date`, 앞이 공백 1~2개, 그 앞 글자 연속이 정확히 `birth`(앞이 숫자가 아님).
+  if (word !== BIRTH_TWO_WORD.second) return false;
+  let spaceStart = start;
+  while (spaceStart > 0 && SPACE.test(w[spaceStart - 1])) spaceStart -= 1;
+  const spaces = start - spaceStart;
+  if (spaces < BIRTH_TWO_WORD.minSpaces || spaces > BIRTH_TWO_WORD.maxSpaces) return false;
+  let firstStart = spaceStart;
+  while (firstStart > 0 && LETTER.test(w[firstStart - 1])) firstStart -= 1;
+  if (w.slice(firstStart, spaceStart) !== BIRTH_TWO_WORD.first) return false;
+  return !(firstStart > 0 && DIGIT.test(w[firstStart - 1]));
+}
 
 function encodeIndex(index: number): string {
   let value = index;
@@ -196,8 +310,14 @@ function maskPiiSelective(
   masked = apply('rrn', RRN_REGEX, () => '[주민등록번호]', masked);
   masked = apply('card', CARD_REGEX, () => '[카드번호]', masked);
   masked = apply('phone', PHONE_REGEX, (m) => (mode === 'FULL' ? '[전화번호]' : maskPhone(m)), masked);
-  if (preserveDates) masked = masked.replace(DATE_REGEX, (m) => hold(m));
-  masked = apply('account', ACCOUNT_REGEX, () => '[계좌번호]', masked);
+  // [L-5] 기본 경로와 **같은 판정**(독립 날짜 + 생년월일 문맥 아님 → 날짜는 원문 그대로)을 계좌 단계 콜백에서 적용한다. 날짜를
+  // 자리표시로 미리 바꾸던 이전 방식은 뒤 단계(이메일) 정규식이 날짜 주변을 다르게 보게 해 기본 경로와 어긋났다(퍼징으로 확인).
+  masked = masked.replace(ACCOUNT_REGEX, (m, offset: number, whole: string) => {
+    if (preserveDates && isStandaloneDate(m, offset, whole) && !isBirthDateContext(whole, offset)) return m;
+    if (!selected.has('account')) return hold(m);
+    counts.account += 1;
+    return '[계좌번호]';
+  });
   masked = apply('email', EMAIL_REGEX, (m) => (mode === 'FULL' ? '[이메일]' : maskEmail(m)), masked);
 
   masked = masked.replace(PLACEHOLDER_REGEX, (_m, encoded: string) => stash[decodeIndex(encoded)] ?? '');

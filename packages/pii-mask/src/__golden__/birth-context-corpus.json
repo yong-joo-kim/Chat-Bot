@@ -1,0 +1,2443 @@
+{
+ "note": "[L-5] 생년월일 문맥 예외 골든 — 사람이 규칙 표(pm-decisions-2026-10-01-설계 §5.2-B)를 보고 손으로 작성한 기대값. 구현 출력을 기대값으로 쓰지 않는다. 재생성 금지(키워드 표를 바꿀 때만 같은 절차로 부분 갱신). 2026-10-01 2차 확장 — 기존 2건 변경 · 40건 추가.",
+ "cases": [
+  {
+   "text": "생년월일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일은 1990-05-12입니다",
+   "PARTIAL": {
+    "maskedText": "생년월일은 [계좌번호]입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일은 [계좌번호]입니다",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일(1990-05-12)",
+   "PARTIAL": {
+    "maskedText": "생년월일([계좌번호])",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일([계좌번호])",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "제 생일은 2000-01-01",
+   "PARTIAL": {
+    "maskedText": "제 생일은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "제 생일은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "출생일 1985-12-31",
+   "PARTIAL": {
+    "maskedText": "출생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "출생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "탄생일 2001-02-03",
+   "PARTIAL": {
+    "maskedText": "탄생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "탄생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "DOB 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "DOB [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "DOB [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "ＤＯＢ：1990-05-12",
+   "PARTIAL": {
+    "maskedText": "ＤＯＢ：[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "ＤＯＢ：[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "Birthday 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "Birthday [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "Birthday [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "date of birth 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "date of birth [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "date of birth [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일　1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일　[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일　[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 배송",
+   "PARTIAL": {
+    "maskedText": "2026-09-30 배송",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-09-30 배송",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "입금일 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "입금일 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "입금일 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "발생일 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "발생일 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "발생일 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "가입일 2020-01-01",
+   "PARTIAL": {
+    "maskedText": "가입일 2020-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "가입일 2020-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 선물 2026-09-30 도착",
+   "PARTIAL": {
+    "maskedText": "생일 선물 2026-09-30 도착",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 선물 2026-09-30 도착",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 입력: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 입력: 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 입력: 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일\n1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일\n1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일\n1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-01-01 2020-01-01",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호] 2020-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호] 2020-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1990-05-12 생일",
+   "PARTIAL": {
+    "maskedText": "1990-05-12 생일",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1990-05-12 생일",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1990-05-12",
+   "PARTIAL": {
+    "maskedText": "1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일자는 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일자는 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일자는 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일자는요 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일자는요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일자는요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일날은 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일날은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일날은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일날은요 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일날은요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일날은요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "출생 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "출생 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "출생 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "출생년월일은 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "출생년월일은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "출생년월일은 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "출생년월일은요 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "출생년월일은요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "출생년월일은요 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "탄생일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "탄생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "탄생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "탄생일이다 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "탄생일이다 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "탄생일이다 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "탄생일입니다 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "탄생일입니다 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "탄생일입니다 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birth [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "BIRTH 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "BIRTH [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "BIRTH [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birthdate 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birthdate [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birthdate [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birthplace 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birthplace 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birthplace 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "dob 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "dob [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "dob [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "dobs 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "dobs 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "dobs 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "dobby 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "dobby 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "dobby 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일:: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일:: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일:: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일::: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일::: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일::: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일=\"1990-05-12\"",
+   "PARTIAL": {
+    "maskedText": "생일=\"[계좌번호]\"",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일=\"[계좌번호]\"",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 = \"1990-05-12\"",
+   "PARTIAL": {
+    "maskedText": "생일 = \"[계좌번호]\"",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 = \"[계좌번호]\"",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일, 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일, [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일, [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일\r\n1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일\r\n1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일\r\n1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "이름 홍길동\n생일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "이름 홍길동\n생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "이름 홍길동\n생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2생일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "2생일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "2생일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "고객생년월일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "고객생년월일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "고객생년월일 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일축하합니다 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일축하합니다 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일축하합니다 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "나의 출생 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "나의 출생 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "나의 출생 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "ＢＩＲＴＨ 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "ＢＩＲＴＨ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "ＢＩＲＴＨ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 2026-13-01",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-13-01",
+   "PARTIAL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 12026-09-30",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 26-09-30",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12-12",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 1990-05-12, 입금일 2026-09-30, 계좌 110-234-567890",
+   "PARTIAL": {
+    "maskedText": "생년월일 [계좌번호], 입금일 2026-09-30, 계좌 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 [계좌번호], 입금일 2026-09-30, 계좌 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12 전화 010-1234-5678",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호] 전화 010-****-5678",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호] 전화 [전화번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 1,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "2026-09-30 생일 1990-05-12 메일 abcd@example.com",
+   "PARTIAL": {
+    "maskedText": "2026-09-30 생일 [계좌번호] 메일 a***@example.com",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "2026-09-30 생일 [계좌번호] 메일 [이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12 주민 901231-1234567",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호] 주민 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호] 주민 [주민등록번호]",
+    "counts": {
+     "rrn": 1,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth: 1990-05-12 / 2000-01-01",
+   "PARTIAL": {
+    "maskedText": "birth: [계좌번호] / 2000-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth: [계좌번호] / 2000-01-01",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "DOB: 1990-05-12 (생일 1990-05-12)",
+   "PARTIAL": {
+    "maskedText": "DOB: [계좌번호] (생일 [계좌번호])",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "DOB: [계좌번호] (생일 [계좌번호])",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 2,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 - 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 - [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 - [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 / 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 / [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 / [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 ~ 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 ~ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 ~ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 – 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 – [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 – [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일—1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일—[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일—[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일‐1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일‐[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일‐[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일−1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일−[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일−[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일〜1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일〜[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일〜[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 “1990-05-12”",
+   "PARTIAL": {
+    "maskedText": "생년월일 “[계좌번호]”",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 “[계좌번호]”",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 「1990-05-12」",
+   "PARTIAL": {
+    "maskedText": "생년월일 「[계좌번호]」",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 「[계좌번호]」",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 『1990-05-12』",
+   "PARTIAL": {
+    "maskedText": "생년월일 『[계좌번호]』",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 『[계좌번호]』",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 (양력) 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 (양력) [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 (양력) [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일(음력): 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일(음력): [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일(음력): [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 （양력） 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 （양력） [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 （양력） [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 [양력] 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 [양력] [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [양력] [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 [음력] 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 [음력] [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [음력] [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 (양력) (음력) 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 (양력) (음력) 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 (양력) (음력) 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 (선물) 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "생일 (선물) 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 (선물) 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 (solar) 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 (solar) 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 (solar) 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "Birth date: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "Birth date: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "Birth date: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "Birth Date 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "Birth Date [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "Birth Date [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth  date 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birth  date [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth  date [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth   date 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birth   date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth   date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth-date 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birth-date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth-date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "birth dates 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "birth dates 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "birth dates 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "xbirth date 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "xbirth date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "xbirth date 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생​일 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생​일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생​일 [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일​ 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일​ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일​ [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 ​1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 ​[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 ​[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생년월일 :  1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생년월일 :  [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생년월일 :  [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 :::: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 :::: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 :::: [계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 ::::: 1990-05-12",
+   "PARTIAL": {
+    "maskedText": "생일 ::::: 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 ::::: 1990-05-12",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일-2026-09-30",
+   "PARTIAL": {
+    "maskedText": "생일-[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일-[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "배송-2026-09-30",
+   "PARTIAL": {
+    "maskedText": "배송-[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "배송-[계좌번호]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "배송 ~ 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "배송 ~ 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "배송 ~ 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "기간 2026-09-01 ~ 2026-09-30",
+   "PARTIAL": {
+    "maskedText": "기간 2026-09-01 ~ 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "기간 2026-09-01 ~ 2026-09-30",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "1990-05-12 (생년월일)",
+   "PARTIAL": {
+    "maskedText": "1990-05-12 (생년월일)",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "1990-05-12 (생년월일)",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 - 2026-10-01 이벤트",
+   "PARTIAL": {
+    "maskedText": "생일 - [계좌번호] 이벤트",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 - [계좌번호] 이벤트",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 0
+    }
+   }
+  },
+  {
+   "text": "생일 1990-05-12x@y.co",
+   "PARTIAL": {
+    "maskedText": "생일 [계좌번호]x***@y.co",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "생일 [계좌번호][이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 1,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  },
+  {
+   "text": "1990-05-12x@y.co",
+   "PARTIAL": {
+    "maskedText": "1***@y.co",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   },
+   "FULL": {
+    "maskedText": "[이메일]",
+    "counts": {
+     "rrn": 0,
+     "card": 0,
+     "account": 0,
+     "phone": 0,
+     "email": 1
+    }
+   }
+  }
+ ]
+}

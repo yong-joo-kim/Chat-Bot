@@ -61,7 +61,7 @@ describe('maskPii 선택 인자', () => {
     });
 
     it('날짜 비보호이면 기존 오인을 재현한다(EX-AG-19)', () => {
-      const r = maskPii('일자 2026-09-30 입니다', { kinds: ['account'] });
+      const r = maskPii('일자 2026-09-30 입니다', { kinds: ['account'], preserveDates: false });
       expect(r.maskedText).toBe('일자 [계좌번호] 입니다');
     });
 

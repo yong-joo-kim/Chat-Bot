@@ -1568,21 +1568,21 @@
   {
    "text": "2026-09-30",
    "PARTIAL": {
-    "maskedText": "2026-09-30",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -1591,21 +1591,21 @@
   {
    "text": "고객 정보는 2026-09-30 입니다.",
    "PARTIAL": {
-    "maskedText": "고객 정보는 2026-09-30 입니다.",
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "고객 정보는 2026-09-30 입니다.",
+    "maskedText": "고객 정보는 [계좌번호] 입니다.",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -1614,21 +1614,21 @@
   {
    "text": "1999-12-31",
    "PARTIAL": {
-    "maskedText": "1999-12-31",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -1637,21 +1637,21 @@
   {
    "text": "문의: 1999-12-31 로 연락 주세요",
    "PARTIAL": {
-    "maskedText": "문의: 1999-12-31 로 연락 주세요",
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "문의: 1999-12-31 로 연락 주세요",
+    "maskedText": "문의: [계좌번호] 로 연락 주세요",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -1660,21 +1660,21 @@
   {
    "text": "2000-01-01",
    "PARTIAL": {
-    "maskedText": "2000-01-01",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01",
+    "maskedText": "[계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -1683,21 +1683,21 @@
   {
    "text": "[2000-01-01]",
    "PARTIAL": {
-    "maskedText": "[2000-01-01]",
+    "maskedText": "[[계좌번호]]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "[2000-01-01]",
+    "maskedText": "[[계좌번호]]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -3109,21 +3109,21 @@
   {
    "text": "2000-01-01 / 1234 5678 9012 3456 그리고 x@y.z",
    "PARTIAL": {
-    "maskedText": "2000-01-01 / [카드번호] 그리고 x@y.z",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 x@y.z",
     "counts": {
      "rrn": 0,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01 / [카드번호] 그리고 x@y.z",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 x@y.z",
     "counts": {
      "rrn": 0,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -3155,21 +3155,21 @@
   {
    "text": "2026-09-30 / 901231-1234567 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "2026-09-30 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -3224,21 +3224,21 @@
   {
    "text": "1999-12-31 / 1002-123-456789 그리고 1002-123-456789",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / 1002-****-456789 그리고 1002-****-456789",
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / 1[전화번호]89 그리고 1[전화번호]89",
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
@@ -3293,21 +3293,21 @@
   {
    "text": "2000-01-01 / 901231-1234567 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "2000-01-01 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -4167,21 +4167,21 @@
   {
    "text": "2026-09-30 / 011-234-5678 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "2026-09-30 / 011-****-5678 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30 / [전화번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 1,
      "email": 0
     }
@@ -4236,21 +4236,21 @@
   {
    "text": "1999-12-31 / 1234 5678 9012 3456 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / [카드번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / [카드번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -4305,21 +4305,21 @@
   {
    "text": "2000-01-01 / 1234 5678 9012 3456 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "2000-01-01 / [카드번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01 / [카드번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -4351,21 +4351,21 @@
   {
    "text": "2026-09-30 / 011-234-5678 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "2026-09-30 / 011-****-5678 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30 / [전화번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 1,
      "email": 0
     }
@@ -4420,21 +4420,21 @@
   {
    "text": "1999-12-31 / 901231-1234567 그리고 901231-1234567",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / [주민등록번호] 그리고 [주민등록번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [주민등록번호]",
     "counts": {
      "rrn": 2,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -5271,21 +5271,21 @@
   {
    "text": "2000-01-01 / 1002-123-456789 그리고 1002-123-456789",
    "PARTIAL": {
-    "maskedText": "2000-01-01 / 1002-****-456789 그리고 1002-****-456789",
+    "maskedText": "[계좌번호] / 1002-****-456789 그리고 1002-****-456789",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01 / 1[전화번호]89 그리고 1[전화번호]89",
+    "maskedText": "[계좌번호] / 1[전화번호]89 그리고 1[전화번호]89",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
@@ -5363,21 +5363,21 @@
   {
    "text": "1999-12-31 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / [카드번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 2,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / [카드번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 2,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -5409,21 +5409,21 @@
   {
    "text": "2000-01-01 / 901231-1234567 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "2000-01-01 / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2000-01-01 / [주민등록번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -6352,21 +6352,21 @@
   {
    "text": "2026-09-30 / 1234 5678 9012 3456 그리고 1234 5678 9012 3456",
    "PARTIAL": {
-    "maskedText": "2026-09-30 / [카드번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 2,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30 / [카드번호] 그리고 [카드번호]",
+    "maskedText": "[계좌번호] / [카드번호] 그리고 [카드번호]",
     "counts": {
      "rrn": 0,
      "card": 2,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -6398,21 +6398,21 @@
   {
    "text": "1999-12-31 / 901231-1234567 그리고 x@y.z",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / [주민등록번호] 그리고 x@y.z",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
     "counts": {
      "rrn": 1,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / [주민등록번호] 그리고 x@y.z",
+    "maskedText": "[계좌번호] / [주민등록번호] 그리고 x@y.z",
     "counts": {
      "rrn": 1,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 0,
      "email": 0
     }
@@ -6490,21 +6490,21 @@
   {
    "text": "1999-12-31 / 011-234-5678 그리고 011-234-5678",
    "PARTIAL": {
-    "maskedText": "1999-12-31 / 011-****-5678 그리고 011-****-5678",
+    "maskedText": "[계좌번호] / 011-****-5678 그리고 011-****-5678",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "1999-12-31 / [전화번호] 그리고 [전화번호]",
+    "maskedText": "[계좌번호] / [전화번호] 그리고 [전화번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 0,
+     "account": 1,
      "phone": 2,
      "email": 0
     }
@@ -6973,21 +6973,21 @@
   {
    "text": "주민 901231-1234567 카드 1234-5678-9012-3456 전화 010-1234-5678 계좌 110-234-567890 메일 abcd@example.com 날짜 2026-09-30",
    "PARTIAL": {
-    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 010-****-5678 계좌 [계좌번호] 메일 a***@example.com 날짜 2026-09-30",
+    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 010-****-5678 계좌 [계좌번호] 메일 a***@example.com 날짜 [계좌번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 1,
+     "account": 2,
      "phone": 1,
      "email": 1
     }
    },
    "FULL": {
-    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 [전화번호] 계좌 [계좌번호] 메일 [이메일] 날짜 2026-09-30",
+    "maskedText": "주민 [주민등록번호] 카드 [카드번호] 전화 [전화번호] 계좌 [계좌번호] 메일 [이메일] 날짜 [계좌번호]",
     "counts": {
      "rrn": 1,
      "card": 1,
-     "account": 1,
+     "account": 2,
      "phone": 1,
      "email": 1
     }
@@ -6996,21 +6996,21 @@
   {
    "text": "2026-09-30에 010-1234-5678 로 전화, 계좌 110-234-567890-12",
    "PARTIAL": {
-    "maskedText": "2026-09-30에 010-****-5678 로 전화, 계좌 [계좌번호]",
+    "maskedText": "[계좌번호]에 010-****-5678 로 전화, 계좌 [계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 1,
+     "account": 2,
      "phone": 1,
      "email": 0
     }
    },
    "FULL": {
-    "maskedText": "2026-09-30에 [전화번호] 로 전화, 계좌 [계좌번호]",
+    "maskedText": "[계좌번호]에 [전화번호] 로 전화, 계좌 [계좌번호]",
     "counts": {
      "rrn": 0,
      "card": 0,
-     "account": 1,
+     "account": 2,
      "phone": 1,
      "email": 0
     }
