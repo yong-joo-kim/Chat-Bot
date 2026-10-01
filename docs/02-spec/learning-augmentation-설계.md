@@ -57,7 +57,7 @@
 | **DD-96** | 봉인은 **모듈 그래프(DI)에서 끊고 정적 검사로 단언**한다 — Job 실행 모듈은 `IntentsModule`/`KeywordsModule`을 import하지 않는다 | §13, AC-L4-3 |
 | **DD-97** | `AugmentationProvider` **포트 1 + 구현 3**(`rule`/`gemini`/`local`) + Mock. 교체 지점은 팩토리 1곳 | ADR-0026 §1 |
 | **DD-98** | Provider 선택은 **인스턴스 설정**(환경변수)이며 챗봇별 설정이 아니다 | ADR-0026 §1 |
-| **DD-99** | 네트워크 Provider는 **PII 마스킹 → 금지어 → 타임아웃 → 회로차단 → zod 파싱** 5단계를 강제 통과한다. PII 함수는 **여전히 1벌**(적용 지점 2 → 3) | ADR-0026 §3, ADR-0013 갱신 |
+| **DD-99** | 네트워크 Provider는 **PII 마스킹 → 금지어 → 타임아웃 → 회로차단 → zod 파싱** 5단계를 강제 통과한다. PII 함수는 **여전히 1벌**(적용 지점 2 → 3). ⚠ 2026-10-01 후속: 회로차단 상태는 팩토리가 공급자별로 소유(프로세스 단위)하고 Gemini는 시드 마스킹·금지어 검사를 회로 확인보다 먼저 한다(이 5단계 순서 그대로) · local에도 회로 적용(ADR-0050 §2) | ADR-0026 §3, ADR-0013 갱신, ADR-0050 |
 | **DD-100** | **Gemini는 공식 SDK를 쓰지 않고 `fetch` + zod로 직접 호출**한다(통제 일관성) | ADR-0026 §4 |
 | **DD-101** | ml-worker에 **실행 프로파일**(`ML_WORKER_ROLE=embed｜augment｜both`, 기본 `embed`) 도입. 운영 기본은 **프로세스 분리** | ADR-0026 §5, ADR-0024 갱신 §1 |
 | **DD-102** | `packages/llm-provider`는 **계속 미생성**. 포트는 `apps/api/src/augmentation/providers/`에 둔다(소비자 1곳). 승격 트리거 = 소비자 2곳 | ADR-0026 §6, ADR-0024 §7 |
