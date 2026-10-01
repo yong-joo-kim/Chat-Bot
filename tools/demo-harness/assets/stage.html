@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko" data-motion="{{MOTION}}">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시연 무대</title>
+<link rel="stylesheet" href="/stage.css">
+</head>
+<body data-demo-harness="stage" data-phase="ready">
+<div id="canvas">
+  <header id="topbar" data-demo-harness="topbar">
+    <span id="seg-chip">대기</span>
+    <h1 id="seg-title" style="margin:0">시연 준비가 끝났습니다</h1>
+    <span id="state-chip" data-state="none"><i class="shape" aria-hidden="true"></i><span id="state-text"></span></span>
+    <div id="timer" role="timer" aria-live="off" data-demo-harness="timer"><span class="lbl">남은 시간</span><span class="val" id="timer-val">10:00</span></div>
+    <div id="progress" aria-hidden="true"></div>
+  </header>
+
+  <main id="main" data-layout="split">
+    <div id="panes" data-layout="split">
+      <section class="pane" id="pane-site" data-demo-harness="pane-site" aria-label="고객 화면">
+        <div class="label" id="label-site">고객 화면 · 가온마켓 홈페이지(시연용 가상)</div>
+        <div class="frame-box"><iframe id="site" title="고객 화면(고객사 모형)" src="about:blank"></iframe></div>
+      </section>
+      <section class="pane" id="pane-console" data-demo-harness="pane-console" aria-label="관리자 화면">
+        <div class="label" id="label-console">관리자 화면</div>
+        <div class="frame-box"><iframe id="console" title="관리자 화면(관리 콘솔)" src="about:blank"></iframe></div>
+      </section>
+    </div>
+    <section id="card" aria-label="안내 카드"><iframe id="card-frame" title="안내 카드" src="about:blank"></iframe></section>
+    <div id="overlay" data-on="1" data-demo-harness="notice"><div class="big" id="overlay-big">시연 준비가 끝났습니다</div><div class="sub" id="overlay-sub">진행자가 시작하면 시연이 시작됩니다</div></div>
+  </main>
+
+  <footer id="caption" data-demo-harness="caption" aria-hidden="true">
+    <div class="cap-badges" id="cap-badges"></div>
+    <div class="cap-body" id="cap-body"></div>
+    <div class="cap-notice" id="cap-notice"></div>
+  </footer>
+</div>
+<script>window.__STAGE_CONFIG = { consoleUrl: "{{CONSOLE_URL}}", siteUrl: "{{STAGE_URL}}/site", cardBase: "{{STAGE_URL}}" };</script>
+<script src="/stage.js"></script>
+</body>
+</html>

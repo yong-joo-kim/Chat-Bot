@@ -1,0 +1,24 @@
+{
+  "name": "@chat-bot/demo-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "원클릭 시연 하네스(DT-1) — 카탈로그 밖 개발·영업 도구. docs/02-spec/demo-harness-설계.md · ADR-0051. 스크립트 이름은 harness:*로 지어 루트 pnpm -r build/test·pnpm dev에 끌려 들어가지 않는다.",
+  "scripts": {
+    "demo": "pnpm run harness:build && node dist/src/cli.js",
+    "harness:build": "tsc -p tsconfig.json",
+    "harness:typecheck": "tsc -p tsconfig.json --noEmit",
+    "harness:test": "pnpm run harness:build && node scripts/run-tests.mjs"
+  },
+  "dependencies": {
+    "@chat-bot/shared-types": "workspace:*",
+    "gifenc": "1.0.3",
+    "playwright-core": "1.63.0",
+    "pngjs": "7.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pngjs": "6.0.5",
+    "typescript": "^5.6.3"
+  }
+}

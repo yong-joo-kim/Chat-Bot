@@ -10,7 +10,9 @@
     "dev": "pnpm --parallel -r --filter=./apps/* dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "demo": "pnpm -C tools/demo-harness run demo --",
+    "demo:check": "pnpm -C tools/demo-harness run demo -- --mode headless-check"
   },
   "packageManager": "pnpm@12.3.4",
   "devDependencies": {

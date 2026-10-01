@@ -1,0 +1,580 @@
+// 실행 오케스트레이션(설계 §5) — P0 사전 점검 -> P1 실행 폴더·격리 DB -> P2 빌드 -> P3 기동 -> (P4·P5·공연은 다음 단계) -> 정리.
+// 1단계 범위: P0~P3와 정리까지. 데모 데이터·보정·시나리오 실행기·캡처·보고서는 후속 단계에서 이 흐름에 끼워 넣는다.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import type { CliOptions } from '../cli/args';
+import { portsFor, TIMEOUTS, PORT_LABELS, type Ports, type RepoPaths } from '../config';
+import { assertIsolatedDbUrl, DbGuardError, toSqliteUrl } from '../env/db-guard';
+import { buildApiEnv, buildMlEnv, type OverrideRow } from '../env/api-env';
+import { Terminal } from '../log/terminal';
+import { checkPresetDefinition, checkSkipIds } from '../scenario/definition-check';
+import type { PresetDef } from '../scenario/types';
+import { Redactor } from '../util/redact';
+import { formatMmSs, isoWithOffset } from '../util/time';
+import { sleepMs, WaitAbortedError } from '../util/wait-for';
+import { runPreflight, readRefsMain, hfHubDir, fileFingerprint, type PreflightReport } from '../preflight';
+import type { PcItem } from '../preflight/checks';
+import { evalDistOutputs } from '../preflight/checks';
+import { cleanupResidual, isHarnessAlive } from '../proc/residual';
+import { killTreeSync } from '../proc/tree-kill';
+import { Supervisor, type TeardownReport } from '../proc/supervisor';
+import { migrateDeploy } from '../proc/prisma';
+import { waitHealthy, ProcessDiedError } from '../proc/health';
+import { startHarnessServers, type HarnessServers, type ServerHooks } from '../servers';
+import { defaultFacts, type StageFacts } from '../stage/facts';
+import type { StageBotInfo } from '../servers/stage-server';
+import { runShow, type ShowOutcome } from './show-phase';
+import { registerStageBots, runCalibration, runDataPhase, waitHistorySchedule, type DataPhaseInput, type DataPhaseResult } from './data-phase';
+import { httpJson } from '../util/json-request';
+import { measureEmbedLatency, decideEmbeddingTimeout, type LatencyMeasurement, type TimeoutDecision } from '../measure/latency';
+import { computeFingerprint, needsBuild, readBuildStamp, writeBuildStamp, DIST_PATHS } from '../build/fingerprint';
+import { buildProducts } from '../build/builder';
+import {
+  createRunDir,
+  listRunIds,
+  PidRegistry,
+  pruneRunDirs,
+  readPidsFile,
+  runPathsFor,
+  writeStateFile,
+  type RunPaths,
+  type RunStateFile,
+} from '../run/run-dir';
+
+export const EXIT = { OK: 0, FAILED: 1, PREPARE_FAILED: 2, ABORTED: 130 } as const;
+
+export class AbortedError extends Error {
+  constructor() {
+    super('중단됨');
+    this.name = 'AbortedError';
+  }
+}
+
+export class PrepareError extends Error {
+  constructor(
+    message: string,
+    public readonly why: string,
+    public readonly how: string,
+  ) {
+    super(message);
+    this.name = 'PrepareError';
+  }
+}
+
+export interface RunContext {
+  opts: CliOptions;
+  preset: PresetDef;
+  paths: RepoPaths;
+  runsDir: string;
+  makeTerminal: (logFile: string | undefined, redact: (s: string) => string) => Terminal;
+  signal: AbortSignal;
+  env?: NodeJS.ProcessEnv;
+}
+
+const TOTAL_PHASES = 6;
+const STOP_REQUEST = 'stop.request';
+
+function checkAbort(signal: AbortSignal): void {
+  if (signal.aborted) throw new AbortedError();
+}
+
+function printPreflight(term: Terminal, items: PcItem[]): void {
+  for (const it of items) {
+    if (it.status === 'pass') term.line('pass', `${it.title}: ${it.message}`);
+    else if (it.status === 'warn') term.line('warn', `${it.title}: ${it.message}`, { why: it.why, how: it.how });
+    else if (it.status === 'block') term.line('error', `${it.title}: ${it.message}`, { why: it.why, how: it.how });
+    else term.detail(`[${it.id}] ${it.title}: ${it.message}`);
+  }
+}
+
+interface BootResult {
+  supervisor: Supervisor;
+  servers: HarnessServers;
+  latency: LatencyMeasurement | null;
+  decision: TimeoutDecision | null;
+  embeddingTimeoutMs: number;
+  governance: 'ON' | 'OFF';
+  governanceFallback: boolean;
+  overrides: OverrideRow[];
+  governanceLogLine: string | null;
+}
+
+export async function executeRun(ctx: RunContext): Promise<number> {
+  const { opts, preset, paths, runsDir, signal } = ctx;
+  const parentEnv = ctx.env ?? process.env;
+  const ports = portsFor(opts.portOffset);
+  const redactor = new Redactor();
+  const t0 = Date.now();
+
+  // ── 정의 검사 ──
+  const defIssues = checkPresetDefinition(preset);
+  const skipErrors = checkSkipIds(preset, opts.skip);
+  const bootTerm = ctx.makeTerminal(undefined, (s) => s);
+  if (defIssues.length > 0 || skipErrors.length > 0) {
+    for (const i of defIssues) bootTerm.line('error', `프리셋 정의 오류 (${i.where}): ${i.message}`, { why: '시나리오 정의 검사를 통과하지 못했습니다', how: '프리셋 정의를 수정하세요' });
+    for (const e of skipErrors) bootTerm.line('error', e, { why: '핵심 단계는 시간이 부족해도 생략하지 않습니다', how: '생략 가능 단계 ID만 --skip에 지정하세요' });
+    return EXIT.PREPARE_FAILED;
+  }
+  if (opts.resume !== null) {
+    bootTerm.line('error', '--resume(구간 단위 재개)은 아직 구현되지 않았습니다', { why: '1단계는 기동·정리 기반만 구현했고 시나리오·상태 재개는 후속 단계입니다', how: '새 실행으로 pnpm demo 를 다시 실행하세요' });
+    return EXIT.PREPARE_FAILED;
+  }
+
+  // ── 실행 폴더(로그 파일이 필요하므로 점검 전에 만든다) ──
+  const run = createRunDir(runsDir);
+  const term = ctx.makeTerminal(join(run.logs, 'harness.log'), (s) => redactor.redact(s));
+  const registry = new PidRegistry(run.pidsFile, run.runId);
+  const markers = [`cbdemo_run=${run.runId}`, `cbdemo-api-${run.runId}`];
+  const supervisor = new Supervisor(registry, markers);
+  const stateBase: RunStateFile = {
+    schemaVersion: 1,
+    runId: run.runId,
+    createdAt: isoWithOffset(new Date()),
+    updatedAt: isoWithOffset(new Date()),
+    mode: opts.mode,
+    preset: preset.id,
+    ports,
+    phase: 'created',
+    completedSegments: [],
+    state: {},
+    serversKept: false,
+  };
+  const saveState = (patch: Partial<RunStateFile>) => {
+    Object.assign(stateBase, patch);
+    writeStateFile(run.stateFile, stateBase, (t) => redactor.redact(t));
+  };
+  saveState({});
+
+  term.banner(`원클릭 시연 하네스 (DT-1) - 프리셋 ${preset.id} - ${opts.mode === 'visible' ? '보이는 시연' : '무인 점검'}`);
+  term.text(`실행 ID ${run.runId}   폴더 ${run.dir}`);
+  term.blank();
+
+  // 비정상 종료 대비 동기 정리(비동기 불가)
+  const onExit = () => supervisor.teardownSync();
+  process.on('exit', onExit);
+
+  let exitCode: number = EXIT.OK;
+  let boot: BootResult | null = null;
+  let preflight: PreflightReport | null = null;
+  let dataResult: DataPhaseResult | null = null;
+  let showOutcome: ShowOutcome | null = null;
+  let showCounts: { pass: number; fail: number; skip: number; fallback: number; showSec: number } | null = null;
+  const stageBots: Record<string, StageBotInfo> = {};
+  const stageFacts: StageFacts = defaultFacts();
+  try {
+    // ═══ [1/6] 사전 점검 ═══
+    let phaseStart = Date.now();
+    const residual = cleanupResidual(runsDir, { exclude: run.runId });
+    for (const r of residual) {
+      if (r.liveOwnerPid !== undefined) {
+        term.line('warn', `이전 실행 ${r.runId}은(는) 아직 실행 중인 하네스(PID ${r.liveOwnerPid})가 소유하고 있어 건드리지 않았습니다`, { why: '서버 유지 모드(--prepare-only·--no-teardown)이거나 다른 터미널에서 시연 중일 수 있습니다', how: `끝내려면  pnpm demo -- --stop ${r.runId}` });
+        continue;
+      }
+      if (r.killed.length > 0) term.line('info', `이전 실행 ${r.runId}의 남은 프로세스 ${r.killed.length}개를 정리했습니다`);
+      if (r.skippedNoMarker.length > 0) term.line('warn', `이전 실행 ${r.runId}의 PID ${r.skippedNoMarker.join(', ')}는 표식이 달라 건드리지 않았습니다`, { why: 'PID가 다른 프로세스로 재사용됐을 수 있습니다', how: '필요하면 작업 관리자에서 직접 확인하세요' });
+    }
+    checkAbort(signal);
+    preflight = await runPreflight({ paths, options: opts, ports, runsDir, env: parentEnv });
+    printPreflight(term, preflight.items);
+    term.stepLine(1, TOTAL_PHASES, '사전 점검', preflight.blocked ? '실패' : '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    if (preflight.blocked) throw new PrepareError('사전 점검 차단 항목이 있습니다', '위 [오류] 항목을 해결해야 시연을 준비할 수 있습니다', '안내된 조치를 한 뒤 pnpm demo 를 다시 실행하세요');
+    saveState({ phase: 'preflight' });
+    checkAbort(signal);
+
+    // ═══ [2/6] 실행 폴더 · 격리 DB ═══
+    phaseStart = Date.now();
+    let dbPath: string;
+    try {
+      const requested = opts.dbUrlForTest ?? toSqliteUrl(run.dbFile);
+      dbPath = assertIsolatedDbUrl(requested, run.dir, paths.devDb);
+    } catch (e) {
+      if (e instanceof DbGuardError) throw new PrepareError(e.message, e.why, e.how);
+      throw e;
+    }
+    const mig = await migrateDeploy({ apiDir: paths.apiDir, databaseUrl: toSqliteUrl(dbPath), logFile: join(run.logs, 'migrate.log'), parentEnv });
+    if (!mig.ok) {
+      throw new PrepareError(`격리 DB 마이그레이션(prisma migrate deploy) 실패 - 종료 코드 ${mig.code}`, mig.tail.slice(-3).join(' / ') || '출력 없음', `로그 ${join(run.logs, 'migrate.log')} 를 확인하세요`);
+    }
+    const pruned = pruneRunDirs(runsDir, opts.keepRuns, run.runId);
+    if (pruned.removed.length > 0) term.detail(`오래된 실행 폴더 ${pruned.removed.length}개 삭제: ${pruned.removed.join(', ')}`);
+    if (pruned.failed.length > 0) term.line('warn', `실행 폴더 ${pruned.failed.length}개를 지우지 못했습니다`, { why: 'SQLite 파일 핸들이 아직 열려 있을 수 있습니다', how: '다음 실행이 다시 시도합니다' });
+    term.stepLine(2, TOTAL_PHASES, '실행 폴더 · 격리 DB', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    saveState({ phase: 'prepared' });
+    checkAbort(signal);
+
+    // ═══ [3/6] 빌드 ═══
+    phaseStart = Date.now();
+    const stampFile = join(runsDir, '.build-stamp.json');
+    const fp = computeFingerprint(paths.repo);
+    const mustBuild = !opts.noBuild && needsBuild(fp, readBuildStamp(stampFile), opts.rebuild);
+    if (mustBuild) {
+      term.text('제품 빌드 중입니다(첫 실행은 3~5분 걸릴 수 있습니다)...');
+      const outcome = await buildProducts(paths.repo, run.logs, (pkg, i, n) => term.detail(`빌드 ${i}/${n}: ${pkg}`));
+      if (!outcome.ok) {
+        throw new PrepareError(`빌드 실패: ${outcome.failedPackage}`, (outcome.tail ?? []).slice(-3).join(' / ') || '출력 없음', `로그 ${join(run.logs, 'build-*.log')} 를 확인하세요`);
+      }
+      writeBuildStamp(stampFile, { fingerprint: computeFingerprint(paths.repo), builtAt: isoWithOffset(new Date()) });
+    }
+    const missing = DIST_PATHS.filter((p) => !existsSync(join(paths.repo, p)));
+    const distItem = evalDistOutputs([...missing], true);
+    if (distItem.status === 'block') throw new PrepareError(distItem.message, '빌드 산출물이 없어 서버를 띄울 수 없습니다', '--no-build 없이 실행하거나 pnpm build 를 먼저 실행하세요');
+    term.stepLine(3, TOTAL_PHASES, '빌드', mustBuild ? '완료' : '생략', formatMmSs((Date.now() - phaseStart) / 1000));
+    checkAbort(signal);
+
+    // ═══ [4/6] 서버 기동 ═══
+    phaseStart = Date.now();
+    boot = await bootServers({ ctx, run, ports, supervisor, redactor, term, dbPath, parentEnv, hooks: { bots: () => stageBots, facts: () => stageFacts, motion: opts.mode === 'headless-check' ? 'off' : 'on' } });
+    stageFacts.latencyP95 = boot.latency ? Math.round(boot.latency.p95Ms) : null;
+    stageFacts.governance = boot.governance;
+    stageFacts.network = preflight.offline ? 'closed' : 'open';
+    stageFacts.gpuPresent = preflight.items.some((i) => i.id === 'PC-12' && Array.isArray(i.data?.gpu) && (i.data?.gpu as unknown[]).length > 0);
+    term.stepLine(4, TOTAL_PHASES, '서버 기동', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    saveState({ phase: 'booted' });
+
+    // ═══ [5/6]·[6/6] 데모 데이터 · 보정 — 다음 단계 ═══
+    // ═══ [5/6] 데모 데이터 ═══
+    phaseStart = Date.now();
+    const dataInput: DataPhaseInput = { paths, run, ports, dbPath, redactor, term, signal, skipHistorySchedule: opts.noHistorySchedule };
+    dataResult = await runDataPhase(dataInput);
+    await registerStageBots(dataResult, stageBots);
+    const secrets = dataResult.data.credentials;
+    for (const k of Object.keys(secrets) as Array<keyof typeof secrets>) redactor.register(secrets[k].password);
+    saveState({ phase: 'data', state: { dataset: dataResult.data.ids } });
+    term.stepLine(5, TOTAL_PHASES, '데모 데이터', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+
+    // ═══ [6/6] 보정 · 예열 ═══
+    phaseStart = Date.now();
+    await runCalibration(dataInput, dataResult);
+    for (const g of dataResult.calibration.gates) term.line(g.ok ? 'pass' : 'error', `보정 ${g.id}(${g.scene}): ${g.detail}`, g.ok ? {} : { why: '데모 데이터 문구가 공연 기대와 맞지 않습니다', how: 'src/data/dataset.ts의 예문·질문 문구를 조정하세요(데이터 보정 필요)' });
+    if (!dataResult.calibration.ok) throw new PrepareError('데이터 보정 게이트가 실패했습니다(데이터 보정 필요)', '의미 매칭 점수가 장면에 필요한 구간(확정/폴백)에 들지 않았습니다', '보정 게이트 실패 줄의 문장과 점수를 보고 예문을 조정하세요');
+    term.stepLine(6, TOTAL_PHASES, '보정 · 예열 · 선택자 점검', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    if (dataResult.data.ids.C.historySchedule) {
+      await waitHistorySchedule(dataInput, dataResult);
+    }
+    saveState({ phase: 'data', state: { dataset: dataResult.data.ids } });
+
+    // ═══ 공연(시나리오 실행) — 서버 유지 모드(--prepare-only)에서는 건너뛴다 ═══
+    if (!opts.prepareOnly) {
+      saveState({ phase: 'show' });
+      const sessions = dataResult.data.sessions;
+      showOutcome = await runShow({ opts, preset, run, ports, ids: dataResult.data.ids, api: sessions, term, signal, state: stateBase.state });
+      const res = showOutcome.scenario;
+      if (res) {
+        const c = { pass: 0, fail: 0, skip: 0, fallback: 0 };
+        for (const r of res.steps) c[r.status === 'PASS' ? 'pass' : r.status === 'FAIL' ? 'fail' : r.status === 'SKIPPED' ? 'skip' : 'fallback']++;
+        showCounts = { ...c, showSec: res.showSec };
+        if (c.fail > 0) exitCode = EXIT.FAILED;
+        const blocked = showOutcome.session?.blockedSummary() ?? [];
+        if (blocked.length > 0) term.line('warn', `브라우저가 외부 주소로 보내려던 요청을 ${blocked.reduce((n, b) => n + b.count, 0)}건 막았습니다: ${blocked.map((b) => `${b.host} x${b.count}`).join(', ')}`, { why: '관리 콘솔이 외부 글꼴 등을 요청합니다(결함 후보 DHX-1)', how: '서버가 외부로 보낸 것은 아니며 보고서 외부 송신 점검표 "브라우저" 칸에 기록됩니다' });
+      }
+      saveState({ phase: 'show', completedSegments: showOutcome.executedSegments.map((s) => s.key) });
+    }
+    term.stepLine(5, TOTAL_PHASES, '데모 데이터', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+
+    printBootSummary(term, ports, boot, preflight);
+
+    // 서버 유지 모드: 정지 요청이나 Ctrl+C까지 대기
+    if (opts.prepareOnly || opts.noTeardown) {
+      saveState({ serversKept: true, note: '서버 유지 중' });
+      term.line('info', `서버를 유지합니다. 정리: Ctrl+C 또는 다른 터미널에서  pnpm demo -- --stop ${run.runId}`);
+      await waitForStop(run, signal);
+      saveState({ serversKept: false });
+    }
+  } catch (e) {
+    if (e instanceof AbortedError || e instanceof WaitAbortedError || signal.aborted) {
+      exitCode = EXIT.ABORTED;
+      term.line('warn', '중단 요청을 받았습니다. 정리를 시작합니다');
+    } else if (e instanceof PrepareError) {
+      exitCode = EXIT.PREPARE_FAILED;
+      term.line('error', e.message, { why: e.why, how: e.how });
+    } else if (e instanceof ProcessDiedError) {
+      exitCode = EXIT.PREPARE_FAILED;
+      term.line('error', e.message, { why: '자식 프로세스가 기동 중에 종료했습니다', how: `로그 ${run.logs} 의 api.log·ml-worker.log 를 확인하세요` });
+    } else {
+      exitCode = EXIT.PREPARE_FAILED;
+      term.line('error', `예상하지 못한 오류: ${(e as Error).message}`, { why: '준비 단계에서 처리되지 않은 예외가 났습니다', how: `로그 ${join(run.logs, 'harness.log')} 를 확인하고 다시 실행하세요` });
+      term.detail((e as Error).stack ?? '');
+    }
+  }
+
+  // ═══ 정리 ═══
+  await showOutcome?.session?.close();
+  await dataResult?.db.close();
+  const teardown = await supervisor.teardown(ports).catch((e): TeardownReport => {
+    term.line('warn', `정리 중 오류: ${(e as Error).message}`);
+    return { processesLeft: -1, portsFreed: false, busyPorts: [], killedChildren: [] };
+  });
+  process.off('exit', onExit);
+  const devDbAfter = fileFingerprint(paths.devDb);
+  const devDbBefore = preflight?.devDbBefore;
+  const devDbUnchanged = !devDbBefore || (devDbBefore.exists === devDbAfter.exists && devDbBefore.size === devDbAfter.size && devDbBefore.mtimeMs === devDbAfter.mtimeMs);
+  if (teardown.processesLeft !== 0 || !teardown.portsFreed) {
+    term.line('warn', `정리가 끝나지 않았습니다(남은 프로세스 ${teardown.processesLeft}개, 점유 포트 ${teardown.busyPorts.join(' ') || '없음'})`, { why: '프로세스 종료가 지연됐거나 표식이 남았습니다', how: '다음 실행이 표식을 확인해 정리합니다. 급하면 pnpm demo -- --stop latest' });
+  }
+  saveState({
+    phase: exitCode === EXIT.OK ? 'done' : exitCode === EXIT.ABORTED ? 'aborted' : 'failed',
+    note: `정리: 남은 프로세스 ${teardown.processesLeft}개 / 포트 해제 ${teardown.portsFreed} / 개발 DB 변경 ${devDbUnchanged ? '없음' : '있음!'}`,
+  });
+  term.blank();
+  term.rule('=');
+  const title = exitCode === EXIT.OK ? (showCounts ? '모두 통과' : '기동·정리 확인 완료') : exitCode === EXIT.ABORTED ? '중단됨' : exitCode === EXIT.FAILED ? '일부 실패' : '준비 실패';
+  term.text(`시연 결과  ${title}   총 소요 ${formatMmSs((Date.now() - t0) / 1000)}`);
+  if (showCounts) term.text(`통과 ${showCounts.pass}   실패 ${showCounts.fail}   건너뜀 ${showCounts.skip}   대체 ${showCounts.fallback}   공연 ${formatMmSs(showCounts.showSec)}`);
+  term.text(`정리: 남은 프로세스 ${teardown.processesLeft}개 / 포트 ${teardown.portsFreed ? '해제' : '점유 중'} / 개발 DB ${devDbUnchanged ? '변경 없음' : '변경됨(확인 필요)'}`);
+  term.text(`실행 폴더 "${run.dir}"`);
+  term.text(`종료 코드 ${exitCode}`);
+  term.rule('=');
+  if (!devDbUnchanged) exitCode = Math.max(exitCode, EXIT.PREPARE_FAILED);
+  return exitCode;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// P3 기동
+// ════════════════════════════════════════════════════════════════════════════
+interface BootArgs {
+  ctx: RunContext;
+  run: RunPaths;
+  ports: Ports;
+  supervisor: Supervisor;
+  redactor: Redactor;
+  term: Terminal;
+  dbPath: string;
+  parentEnv: NodeJS.ProcessEnv;
+  hooks: ServerHooks;
+}
+
+async function bootServers(a: BootArgs): Promise<BootResult> {
+  const { ctx, run, ports, supervisor, redactor, term, dbPath, parentEnv } = a;
+  const { opts, paths, signal } = ctx;
+  const redact = (s: string) => redactor.redact(s);
+  const encryptionKeys = opts.fieldEncryption ? `demo1:${randomBytes(32).toString('base64')}` : undefined;
+  if (encryptionKeys) redactor.register(encryptionKeys);
+
+  // ml-worker
+  const startMl = async (revision?: string) => {
+    const ml = buildMlEnv({ parentEnv, ports, modelRevision: revision });
+    await supervisor.startChild({
+      name: 'ml-worker',
+      command: paths.venvPython,
+      args: ['-X', `cbdemo_run=${run.runId}`, '-m', 'ml_worker.app'],
+      cwd: run.mlWorkerCwd,
+      env: ml.env,
+      logFile: join(run.logs, 'ml-worker.log'),
+      marker: `cbdemo_run=${run.runId}`,
+      redact,
+    });
+    return ml.overrides;
+  };
+  const startApi = async (timeoutMs: number, governance: 'ON' | 'OFF') => {
+    const api = buildApiEnv({ parentEnv, runDir: run.dir, dbPath, ports, embeddingTimeoutMs: timeoutMs, encryptionKeys, governanceMode: governance, apiPackageJson: paths.apiPackageJson, nodePath: join(paths.repo, 'node_modules', '.pnpm', 'node_modules') });
+    await supervisor.startChild({
+      name: 'api',
+      command: process.execPath,
+      args: [`--title=cbdemo-api-${run.runId}`, '-r', paths.isolateScript, paths.apiMain],
+      cwd: paths.apiDir,
+      env: api.env,
+      logFile: join(run.logs, 'api.log'),
+      marker: `cbdemo-api-${run.runId}`,
+      redact,
+    });
+    return api.overrides;
+  };
+
+  term.text('문장 분석 서버(ml-worker)와 API를 기동합니다...');
+  const mlOverrides = await startMl();
+  let timeoutMs = opts.embeddingTimeoutMs ?? 300;
+  let governance: 'ON' | 'OFF' = 'ON';
+  let governanceFallback = false;
+  let apiOverrides = await startApi(timeoutMs, governance);
+
+  const servers = await startHarnessServers(paths, ports, a.hooks);
+  supervisor.attachServers(servers);
+
+  const apiHealth = async () => {
+    const api = supervisor.find('api')!;
+    await waitHealthy({ url: `http://127.0.0.1:${ports.api}/api/health`, label: 'API', timeoutMs: TIMEOUTS.apiHealthMs, hasExited: () => api.exited, signal });
+  };
+  try {
+    await apiHealth();
+  } catch (e) {
+    if (e instanceof WaitAbortedError || signal.aborted) throw e;
+    // EX-DH-12: 거버넌스 ON 기동 실패 -> OFF로 1회 재기동(보고서·시작 자막에 표기). 거버넌스와 무관한 기동 실패(모듈 누락 등)는 재시도하지 않는다.
+    const apiProc = supervisor.find('api');
+    const tailLines = apiProc?.tail(200) ?? [];
+    if (!looksLikeGovernanceFailure(tailLines)) {
+      throw new PrepareError(`API 기동 실패: ${summarizeFailure(tailLines) || (e as Error).message}`, 'API 자식 프로세스가 헬스 확인 전에 종료했거나 시간 안에 응답하지 않았습니다', `로그 ${join(run.logs, 'api.log')} 를 확인하세요`);
+    }
+    term.line('warn', '거버넌스 모드 ON으로 API가 기동하지 못했습니다. OFF로 한 번 다시 기동합니다', { why: summarizeFailure(tailLines), how: '이번 시연은 거버넌스 모드를 끈 상태로 진행되며 보고서에 표기됩니다' });
+    await supervisor.stopChild('api');
+    governance = 'OFF';
+    governanceFallback = true;
+    apiOverrides = await startApi(timeoutMs, governance);
+    await apiHealth();
+  }
+
+  // 정적 서버 응답 확인(+ 콘솔 역프록시 경유 API 헬스)
+  const staticChecks: Array<[string, string]> = [
+    ['콘솔', `http://127.0.0.1:${ports.console}/`],
+    ['콘솔 역프록시(/api/health)', `http://127.0.0.1:${ports.console}/api/health`],
+    ['위젯(/widget.js)', `http://127.0.0.1:${ports.widget}/widget.js`],
+    ['무대(/stage)', `http://127.0.0.1:${ports.stage}/stage`],
+  ];
+  for (const [label, url] of staticChecks) {
+    await waitHealthy({ url, label, timeoutMs: TIMEOUTS.staticHealthMs, signal });
+  }
+
+  // ml-worker 예열 대기
+  const ml = supervisor.find('ml-worker')!;
+  term.text('문장 분석 모델 적재를 기다립니다(오프라인 모드)...');
+  try {
+    await waitHealthy({
+      url: `http://127.0.0.1:${ports.mlWorker}/health`,
+      label: 'ml-worker',
+      timeoutMs: TIMEOUTS.mlWorkerWarmupMs,
+      hasExited: () => ml.exited,
+      accept: (r) => r.ok && (r.body as { warmedUp?: boolean } | null)?.warmedUp === true,
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof WaitAbortedError || signal.aborted) throw e;
+    // 설계 §21.2-1 폴백: refs/main 커밋 해시를 리비전으로 지정해 1회 재시도
+    const hash = readRefsMain(hfHubDir(parentEnv));
+    if (hash) {
+      term.line('warn', '모델 오프라인 로드에 실패했습니다. refs/main 커밋 해시를 리비전으로 지정해 다시 시도합니다', { why: ml.tail(4).join(' / ') || (e as Error).message, how: '공개표에 "오프라인 폴백: 리비전 지정"으로 기록됩니다' });
+      await supervisor.stopChild('ml-worker');
+      await startMl(hash);
+      await waitHealthy({
+        url: `http://127.0.0.1:${ports.mlWorker}/health`,
+        label: 'ml-worker(리비전 지정)',
+        timeoutMs: TIMEOUTS.mlWorkerWarmupMs,
+        hasExited: () => supervisor.find('ml-worker')!.exited,
+        accept: (r) => r.ok && (r.body as { warmedUp?: boolean } | null)?.warmedUp === true,
+        signal,
+      });
+    } else throw e;
+  }
+  const mlHealth = await httpJson<{ modelId?: string; device?: string; dimension?: number }>(`http://127.0.0.1:${ports.mlWorker}/health`);
+  term.line('pass', `문장 분석 서버 준비 - 모델 ${mlHealth.body?.modelId ?? '?'} / 장치 ${mlHealth.body?.device ?? '?'} / ${mlHealth.body?.dimension ?? '?'}차원`);
+
+  // 단건 지연 실측과 결정(설계 §14)
+  term.text('단건 질의 지연을 실측합니다(20건, 앞 3건 제외)...');
+  const latency = await measureEmbedLatency({ baseUrl: `http://127.0.0.1:${ports.mlWorker}` });
+  const decision = decideEmbeddingTimeout(latency.p95Ms);
+  const manual = opts.embeddingTimeoutMs !== null;
+  term.line(
+    decision.action === 'confirm' ? 'warn' : 'pass',
+    `단건 지연 P50 ${latency.p50Ms.toFixed(0)}ms / P95 ${latency.p95Ms.toFixed(0)}ms (측정 ${latency.rounds.length}회)` +
+      (manual ? ` - 수동 지정 ${timeoutMs}ms 사용` : ` - 대기 시간 ${decision.timeoutMs}ms ${decision.action === 'keep' ? '유지' : '로 조정'}`),
+    decision.action === 'confirm' && !manual ? { why: 'P95가 1000ms를 넘어 의미 매칭 장면이 규칙 매칭으로 조용히 저하될 수 있습니다', how: '다른 프로그램을 닫고 다시 실행하거나 PC 사양을 확인하세요(대기 시간은 2000ms로 늘림)' } : {},
+  );
+  if (!manual && decision.timeoutMs !== timeoutMs) {
+    term.text(`API를 새 대기 시간(${decision.timeoutMs}ms)으로 다시 기동합니다...`);
+    await supervisor.stopChild('api');
+    timeoutMs = decision.timeoutMs;
+    apiOverrides = await startApi(timeoutMs, governance);
+    await apiHealth();
+  }
+
+  // 거버넌스 기동 로그 줄(외부 송신 점검표 근거)
+  let governanceLogLine: string | null = null;
+  try {
+    const m = /^.*데이터 거버넌스 모드=.*$/m.exec(readFileSync(join(run.logs, 'api.log'), 'utf8'));
+    governanceLogLine = m ? m[0].trim() : null;
+  } catch {
+    /* 로그 없음 */
+  }
+  if (governanceLogLine) term.detail(governanceLogLine);
+
+  return {
+    supervisor,
+    servers,
+    latency,
+    decision: manual ? { timeoutMs, action: 'keep' } : decision,
+    embeddingTimeoutMs: timeoutMs,
+    governance,
+    governanceFallback,
+    overrides: [...apiOverrides, ...mlOverrides],
+    governanceLogLine,
+  };
+}
+
+/** 기동 실패 로그가 거버넌스 모드 검사(저장 위치·출구·키) 때문인지 판정(EX-DH-12). */
+export function looksLikeGovernanceFailure(lines: readonly string[]): boolean {
+  return lines.some((l) => /거버넌스|DATA_(RESIDENCY|EGRESS|GOVERNANCE|ENCRYPTION)|저장 위치|출구/.test(l));
+}
+
+/** 로그 꼬리에서 사람이 읽을 한 줄 — 첫 오류 줄(없으면 마지막 비어 있지 않은 줄). */
+export function summarizeFailure(lines: readonly string[]): string {
+  const err = lines.find((l) => /\b\w*Error\b|오류|실패/.test(l) && l.trim().length > 0);
+  const pick = err ?? [...lines].reverse().find((l) => l.trim().length > 0) ?? '';
+  return pick.trim().slice(0, 160);
+}
+
+function printBootSummary(term: Terminal, ports: Ports, boot: BootResult, pre: PreflightReport): void {
+  term.blank();
+  term.text('기동 요약');
+  for (const p of boot.supervisor.processes) term.text(`${p.spec.name.padEnd(10)} PID ${p.pid} ${p.isAlive() ? '실행 중' : '종료됨'}`, '  ');
+  for (const k of Object.keys(ports) as Array<keyof Ports>) term.text(`${String(ports[k]).padEnd(6)} ${PORT_LABELS[k]}`, '  ');
+  term.text(`거버넌스 모드 ${boot.governance}${boot.governanceFallback ? '(ON 기동 실패로 OFF 재기동)' : ''} / 증강 규칙 기반 / 외부망 ${pre.offline ? '차단됨' : '열림'}`, '  ');
+  if (boot.latency) term.text(`단건 지연 P95 ${boot.latency.p95Ms.toFixed(0)}ms -> 대기 시간 ${boot.embeddingTimeoutMs}ms`, '  ');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 서버 유지 대기 · --stop
+// ════════════════════════════════════════════════════════════════════════════
+async function waitForStop(run: RunPaths, signal: AbortSignal): Promise<void> {
+  const requestFile = join(run.dir, STOP_REQUEST);
+  while (!signal.aborted) {
+    if (existsSync(requestFile)) return;
+    await sleepMs(1000, signal);
+  }
+}
+
+/** `--stop <runId|latest>` — 유지 중인 실행을 정리한다. 하네스가 살아 있으면 정지 요청 파일로 스스로 정리하게 하고, 없으면 표식 확인 후 직접 정리한다. */
+export async function stopRun(opts: { runsDir: string; target: string; term: Terminal }): Promise<number> {
+  const { runsDir, term } = opts;
+  const ids = listRunIds(runsDir);
+  const runId = opts.target === 'latest' ? ids[ids.length - 1] : ids.find((i) => i === opts.target);
+  if (!runId) {
+    term.line('error', `정리할 실행을 찾지 못했습니다: ${opts.target}`, { why: `${runsDir} 아래에 해당 실행 폴더가 없습니다`, how: '실행 폴더 이름(실행 ID)을 확인하세요' });
+    return EXIT.PREPARE_FAILED;
+  }
+  const paths = runPathsFor(runsDir, runId);
+  const requestFile = join(paths.dir, STOP_REQUEST);
+  const pids = readPidsFile(paths.pidsFile);
+  if (!pids) {
+    term.line('warn', `${runId}에는 pids.json이 없어 정리할 프로세스 기록이 없습니다`);
+    return EXIT.OK;
+  }
+  const ownerAlive = pids.harnessPid !== undefined && isHarnessAlive(pids.harnessPid);
+  if (!ownerAlive) {
+    if (pids.cleanedUp) {
+      term.line('info', `${runId}은(는) 이미 정리됐습니다`);
+      return EXIT.OK;
+    }
+    // 하네스가 이미 없다 — 표식 확인 후 직접 정리
+    const reports = cleanupResidual(runsDir, { only: runId });
+    const mine = reports.find((r) => r.runId === runId);
+    term.line('pass', `${runId} 정리 완료(하네스 없음 - 표식 확인 후 직접 종료: ${mine?.killed.length ?? 0}개)`);
+    if (mine && mine.skippedNoMarker.length > 0) term.line('warn', `PID ${mine.skippedNoMarker.join(', ')}는 표식이 달라 건드리지 않았습니다`, { why: 'PID가 다른 프로세스로 재사용됐을 수 있습니다', how: '필요하면 작업 관리자에서 직접 확인하세요' });
+    return EXIT.OK;
+  }
+  // 살아 있는 하네스에게 정지 요청 — 하네스가 스스로 정리하고 끝나면 PID가 사라진다
+  writeFileSync(requestFile, isoWithOffset(new Date()), 'utf8');
+  term.line('info', `${runId}의 하네스(PID ${pids.harnessPid})에 정지를 요청했습니다(최대 15초 대기)`);
+  for (let i = 0; i < 15; i++) {
+    await sleepMs(1000);
+    if (!isHarnessAlive(pids.harnessPid!)) {
+      term.line('pass', `${runId} 정리 완료`);
+      return EXIT.OK;
+    }
+  }
+  // 응답 없는 하네스는 종료하고 자식은 표식 확인 후 정리
+  term.line('warn', '하네스가 15초 안에 응답하지 않아 강제로 종료합니다', { why: '하네스가 정지 요청 파일을 읽지 못하고 있습니다', how: '다음 실행 전에  pnpm demo -- --stop latest  로 정리 결과를 확인하세요' });
+  killTreeSync(pids.harnessPid!);
+  const reports = cleanupResidual(runsDir, { only: runId, ignoreLiveOwner: true });
+  term.line('pass', `${runId} 정리 완료(강제 종료 - 자식 ${reports[0]?.killed.length ?? 0}개 종료)`);
+  return EXIT.OK;
+}
+

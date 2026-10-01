@@ -18,6 +18,9 @@ Thumbs.db
 .turbo/
 .pnpm-store/
 
+# 시연 하네스(DT-1) 실행 폴더 — 격리 DB·로그·캡처·영상·보고서(docs/02-spec/demo-harness-설계.md §18)
+/.demo-runs/
+
 # 원본 참고 문서(대용량 PDF/xlsx, 사내 자료) — docs/README.md 안내에 따라 로컬에만 보관
 /docs/00-source/*.pdf
 /docs/00-source/*.xlsx

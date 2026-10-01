@@ -1,0 +1,42 @@
+/* 시작/마무리 카드와 로드맵 슬라이드 — ui-spec §6·§7. 크기 단위 --u = 카드 폭 / 1896(무대 본문 폭 기준). 외부 자원 0. */
+:root { --u: calc(100vw / 1896); --text: #1f2937; --muted: #4b5563; --border: #d1d5db; --primary: #4f46e5; font-family: 'Malgun Gothic', 'Noto Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; color: var(--text); background: #fff; overflow: hidden; }
+main { height: 100%; padding: calc(20 * var(--u)) calc(36 * var(--u)); display: flex; flex-direction: column; gap: calc(14 * var(--u)); }
+h1 { margin: 0; font-size: calc(40 * var(--u)); line-height: 1.2; }
+h2 { margin: 0; font-size: calc(36 * var(--u)); }
+.cols3 { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(20 * var(--u)); }
+.card { border: calc(2 * var(--u)) solid var(--border); border-radius: calc(8 * var(--u)); padding: calc(14 * var(--u)) calc(22 * var(--u)); display: flex; flex-direction: column; gap: calc(8 * var(--u)); min-height: 0; background: #fff; }
+.card h2 { font-size: calc(32 * var(--u)); }
+.card dl { margin: 0; display: grid; grid-template-columns: 1fr; gap: calc(2 * var(--u)); }
+.card dt { font-size: calc(22 * var(--u)); color: var(--muted); }
+.card dd { margin: 0 0 calc(4 * var(--u)); font-size: calc(30 * var(--u)); font-weight: 700; overflow-wrap: anywhere; }
+.chip { align-self: flex-start; display: inline-flex; align-items: center; gap: calc(8 * var(--u)); border-radius: 999px; padding: calc(2 * var(--u)) calc(14 * var(--u)); font-size: calc(22 * var(--u)); font-weight: 700; border: calc(2 * var(--u)) solid currentColor; }
+.chip.ok { color: #166534; background: #f0fdf4; }
+.chip.warn { color: #92400e; background: #fffbeb; }
+.chip.unknown { color: #374151; background: #f3f4f6; }
+.chip.later { color: #3730a3; background: #eef2ff; }
+.chip .shape { width: calc(18 * var(--u)); height: calc(18 * var(--u)); border: calc(3 * var(--u)) solid currentColor; border-radius: 50%; }
+.chip.warn .shape { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); background: currentColor; border: 0; }
+.chip.later .shape, .chip.unknown .shape { border-radius: 0; transform: rotate(45deg); }
+.note { margin-top: auto; font-size: calc(22 * var(--u)); color: var(--muted); }
+.row-explain { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(20 * var(--u)); }
+.row-explain .card { border-style: dashed; }
+.row-explain p { margin: 0; font-size: calc(24 * var(--u)); }
+.notice-line { border: calc(2 * var(--u)) dashed #d97706; background: #fffbeb; border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(20 * var(--u)); font-size: calc(28 * var(--u)); display: none; }
+.notice-line.on { display: block; }
+.notice-line .chip { margin-right: calc(12 * var(--u)); color: #92400e; border-width: calc(2 * var(--u)); padding: 0 calc(12 * var(--u)); font-size: calc(24 * var(--u)); }
+.split { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 36fr 64fr; gap: calc(24 * var(--u)); }
+.box { border-radius: calc(8 * var(--u)); padding: calc(16 * var(--u)) calc(24 * var(--u)); display: flex; flex-direction: column; gap: calc(8 * var(--u)); min-height: 0; }
+.box.done { background: #eef2ff; border: calc(2 * var(--u)) solid #3730a3; }
+.box.road { background: #fffbeb; border: calc(3 * var(--u)) dashed #92400e; }
+.box h2 { font-size: calc(30 * var(--u)); }
+.box ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(6 * var(--u)); }
+.box.done li { font-size: calc(28 * var(--u)); }
+.box.done li b { display: inline-block; min-width: calc(34 * var(--u)); color: #3730a3; }
+.box.road li { display: grid; grid-template-columns: 1fr auto; gap: 0 calc(16 * var(--u)); align-items: center; padding-bottom: calc(4 * var(--u)); border-bottom: calc(1 * var(--u)) solid #fcd34d; }
+.box.road .fn { font-size: calc(26 * var(--u)); font-weight: 700; }
+.box.road .fn small { font-size: calc(20 * var(--u)); color: var(--muted); font-weight: 400; margin-left: calc(8 * var(--u)); }
+.box.road .why { grid-column: 1; font-size: calc(21 * var(--u)); color: var(--muted); }
+.box.road .chip { grid-row: 1 / span 2; grid-column: 2; font-size: calc(20 * var(--u)); color: #92400e; background: #fff; }
+.fixed { margin: 0; font-size: calc(22 * var(--u)); color: var(--muted); border-top: calc(2 * var(--u)) solid var(--border); padding-top: calc(10 * var(--u)); }

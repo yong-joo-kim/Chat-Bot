@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구축형 구성 확인</title>
+<link rel="stylesheet" href="/cards.css">
+</head>
+<body>
+<main id="app" aria-live="off">
+  <h1 id="h1">구축형 구성 확인 · 이 노트북 한 대를 사내 서버로 가정했습니다</h1>
+  <div class="cols3" id="cols"></div>
+  <div class="row-explain" id="explain"></div>
+  <div class="notice-line" id="notice"></div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var end = new URLSearchParams(location.search).get('phase') === 'end';
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function chip(kind, text) { var c = el('span', 'chip ' + kind); c.appendChild(el('i', 'shape')); c.lastChild.setAttribute('aria-hidden', 'true'); c.appendChild(document.createTextNode(text)); return c; }
+  function card(title, rows, status, note) {
+    var s = el('section', 'card'); var h = el('h2', null, title); s.appendChild(h);
+    var dl = el('dl'); rows.forEach(function (r) { dl.appendChild(el('dt', null, r[0])); dl.appendChild(el('dd', null, r[1])); }); s.appendChild(dl);
+    if (status) s.appendChild(status);
+    if (note) s.appendChild(el('div', 'note', note));
+    return s;
+  }
+  function ms(v) { return v === null || v === undefined ? '측정하지 못했습니다' : Math.round(v) + 'ms'; }
+  fetch('/__facts', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (f) {
+    var cols = document.getElementById('cols'); var ex = document.getElementById('explain');
+    var net = f.network === 'closed' ? '차단됨' : f.network === 'open' ? '열림' : '확인 못함';
+    var netChip = f.network === 'open' ? chip('warn', '주의') : f.network === 'unknown' ? chip('unknown', '확인 못함') : chip('ok', '확인됨');
+    if (!end) {
+      document.getElementById('h1').textContent = '구축형 구성 확인 · 이 노트북 한 대를 사내 서버로 가정했습니다';
+      cols.appendChild(card('1 사내 설치', [['서버 2개', 'API · 문장 분석'], ['화면 서버 3개', '관리 콘솔 · 위젯 · 시연 화면'], ['위치', '모두 이 PC 안']], chip('ok', '이 PC에서 확인한 값'), f.apiBindNote));
+      cols.appendChild(card('2 CPU로 동작', [['문장 분석 장치', f.device + (f.gpuHidden ? ' (GPU 미노출)' : '')], ['이 PC의 GPU', f.gpuPresent ? '있음, 사용하지 않음' : '없음'], ['응답 지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값'), 'AI 분석에만 해당합니다. 화면 그리기는 GPU를 쓸 수 있습니다'));
+      cols.appendChild(card('3 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['증강 방식', '규칙 기반'], ['네트워크', net]], netChip, f.network === 'open' ? '이번 시연은 인터넷이 연결된 상태입니다. 서버는 외부로 보내지 않도록 설정되어 있습니다' : null));
+      [['4 감사', '운영 전환은 두 번째 관리자가 승인하고 기록이 남습니다 — 장면 5'], ['5 보존', '보존 기간이 지나면 원문이 자동으로 지워집니다 — 장면 6'], ['6 데이터 통제', '데이터가 나가는 출구 목록을 관리합니다' + (f.governance === 'ON' ? ' (지금 켜짐 · 출구 허용 ' + f.egressAllowed + '곳)' : '') + ' — 장면 6']].forEach(function (x) {
+        var c = el('section', 'card'); c.appendChild(el('h2', null, x[0])); c.appendChild(el('p', null, x[1])); c.appendChild(chip('later', '장면에서 보여 드립니다')); ex.appendChild(c);
+      });
+    } else {
+      document.getElementById('h1').textContent = '마무리 · 오늘 확인하신 구축형 구성';
+      var r = f.results || { passed: 0, skipped: 0, fallback: 0, failed: 0 };
+      cols.appendChild(card('사내에서 전부 동작', [['이번 시연', '장면 ' + r.passed + '개 통과'], ['건너뜀', r.skipped + '개'], ['대체', r.fallback + '개'], ['보여 드리지 못한 장면', r.failed + '개']], chip('ok', '이번 시연 결과')));
+      cols.appendChild(card('CPU로 동작', [['분석 장치', f.device], ['지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값')));
+      cols.appendChild(card('서버는 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['네트워크', net]], netChip));
+      var b = f.blockedRequests || 0;
+      var n = document.getElementById('notice');
+      if (b > 0) { n.className = 'notice-line on'; n.appendChild(el('span', 'chip', '브라우저(화면) 쪽 참고')); n.appendChild(document.createTextNode('관리 화면이 외부 주소로 보내려던 요청 ' + b + '건을 시연 도구가 막았습니다. 서버가 외부로 보낸 것은 없습니다.')); }
+      ex.appendChild(el('p', null, '시연 보고서는 시연이 끝난 뒤 전달해 드립니다.'));
+    }
+  }).catch(function () { document.getElementById('cols').appendChild(el('p', null, '확인한 값을 불러오지 못했습니다')); });
+})();
+</script>
+</body>
+</html>

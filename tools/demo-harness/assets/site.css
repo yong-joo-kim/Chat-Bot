@@ -1,0 +1,27 @@
+/* 고객사 모형 '가온마켓'(가상) — ui-spec §5. 외부 자원 0 · 상호작용 요소 없음(위젯만) · 실제 브랜드 모방 금지. */
+:root { --teal: #0f766e; --sand: #fef3c7; --text: #1f2937; --muted: #4b5563; --border: #d1d5db; font-family: 'Malgun Gothic', 'Noto Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; color: var(--text); background: #fff; font-size: 16px; line-height: 1.5; }
+.demo-band { position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: flex-start; padding: 10px 16px; background: #fef3c7; color: #78350f; border-bottom: 2px solid #d97706; }
+.demo-band .chip { flex: none; border: 2px solid #78350f; border-radius: 999px; padding: 0 10px; font-weight: 700; }
+header.shop { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 16px; background: var(--teal); color: #fff; }
+.logo { width: 28px; height: 28px; border-radius: 50%; background: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.logo::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--teal); }
+header.shop h1 { margin: 0; font-size: 22px; }
+header.shop nav { display: flex; flex-wrap: wrap; gap: 14px; margin-left: auto; font-size: 15px; }
+.hero { padding: 28px 16px; background: linear-gradient(135deg, #ccfbf1, #fef3c7); }
+.hero h2 { margin: 0 0 6px; font-size: 24px; }
+.hero p { margin: 0; color: var(--muted); }
+.snippet { margin: 16px; padding: 12px 14px; background: #fffbeb; border: 2px dashed #d97706; border-radius: 8px; }
+.snippet .chip { display: inline-block; border: 2px solid #92400e; color: #92400e; border-radius: 999px; padding: 0 10px; font-weight: 700; margin-right: 8px; }
+.snippet pre { margin: 10px 0 0; padding: 10px; background: #fff; border: 1px solid var(--border); border-radius: 6px; font: 13px/1.5 Consolas, 'Cascadia Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+main h2.sec { margin: 20px 16px 8px; font-size: 20px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 16px; }
+.card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+.card .img { height: 84px; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; color: rgba(31, 41, 55, 0.55); }
+.card .body { padding: 8px 10px; }
+.card .name { font-weight: 700; }
+.card .price { color: var(--teal); font-weight: 700; }
+footer.shop { margin-top: 24px; padding: 16px 16px 120px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+@media (max-width: 719px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 479px) { .grid { grid-template-columns: 1fr; } header.shop nav { margin-left: 0; } }
