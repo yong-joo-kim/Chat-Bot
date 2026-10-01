@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProactiveRuleEditModal } from './ProactiveRuleEditModal';
 
@@ -50,17 +50,18 @@ describe('ProactiveRuleEditModal — PA-C4(용도 확인 강제 · 문구 상한
     renderModal();
     await user.type(screen.getByLabelText(/이름/), '이름');
     await user.type(screen.getAllByLabelText('포함 경로')[0], '/order/**');
-    // maxLength=120이 브라우저 입력 자체를 막으므로, fireEvent로 우회해 121자를 강제로 채운다.
+    // maxLength=120이 브라우저 입력 자체를 막으므로, 제거한 뒤 fireEvent.change 1회로 121자를 채운다.
+    // (user.type은 키 입력 121회 = 렌더 121회라 병렬 부하에서 기본 5초를 넘었다 — T-4.)
     const textarea = screen.getByLabelText(/안내 문구/) as HTMLTextAreaElement;
     textarea.removeAttribute('maxlength');
-    await user.type(textarea, 'a'.repeat(121));
+    fireEvent.change(textarea, { target: { value: 'a'.repeat(121) } });
     await user.click(screen.getByLabelText(/이 안내는 광고·판촉 목적이 아닌 이용 도움 안내입니다/));
 
     await user.click(screen.getByRole('button', { name: '저장' }));
 
     expect(await screen.findByText('120자 이내로 입력하세요.')).toBeInTheDocument();
     expect(mockCreateRule).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('포함 경로가 없으면 저장할 수 없다', async () => {
     const user = userEvent.setup();

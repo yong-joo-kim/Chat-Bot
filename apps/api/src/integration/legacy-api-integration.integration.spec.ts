@@ -112,6 +112,8 @@ interface RecordedLegacyRequest {
   body: string;
 }
 
+/** 회로 개방 시간(시험용) — `LEGACY_API_CIRCUIT_OPEN_MS`와 5번 절 경과 시간 가드가 같은 값을 쓴다(T-3). */
+const CIRCUIT_OPEN_MS_FOR_TEST = 5000;
 const HUGE_ETA = 'x'.repeat(300_000); // > LEGACY_API_MAX_RESPONSE_BYTES(262144)
 
 function startMockLegacyServer(legacyRequests: RecordedLegacyRequest[]): Promise<{ url: string; close: () => Promise<void> }> {
@@ -290,7 +292,12 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
     process.env.LEGACY_API_MAX_TIMEOUT_MS = '1000';
     process.env.LEGACY_API_MAX_RESPONSE_BYTES = '262144';
     process.env.LEGACY_API_CIRCUIT_FAILURE_THRESHOLD = '3'; // 시험 소요시간 단축(기본 5 → 3)
-    process.env.LEGACY_API_CIRCUIT_OPEN_MS = '1000'; // 시험 소요시간 단축(기본 60000 → 1000, 스키마 하한 1000)
+    // 시험 소요시간 단축(기본 60000 → 5000, 스키마 하한 1000). 1000이면 개방 확인 3턴(HTTP+DB)이 부하에서 1초를 넘겨 half-open으로 넘어가
+    // '개방 중 외부 호출 0' 단언이 시간 경합으로 깨졌다 — 5000으로 올려 그 경합을 없앤다(T-3).
+    process.env.LEGACY_API_CIRCUIT_OPEN_MS = String(CIRCUIT_OPEN_MS_FOR_TEST);
+    // [T-3] 개방 시간 5초 동안의 half-open 폴링(1회 = 공개 요청 3건)이 늘어 같은 IP의 분당 공개 요청 한도(기본 120)를 넘기면 뒤 절 요청이 429로 막힌다 —
+    // 이 시험의 관심사가 아닌 한도만 넉넉히 올린다(회로·마스킹 동작과 무관).
+    process.env.PUBLIC_RATE_LIMIT_IP_PER_MIN = '2000';
     process.env.LEGACY_API_SECRET__ERPTEST = SECRET_VALUE;
 
     try {
@@ -561,7 +568,9 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
     opts: { maxWaitMs?: number; intervalMs?: number } = {},
   ): Promise<{ t1: ApiResponse<Record<string, unknown>>; t2: ApiResponse<Record<string, unknown>>; t3: ApiResponse<Record<string, unknown>> }> {
     const maxWaitMs = opts.maxWaitMs ?? 10_000;
-    const intervalMs = opts.intervalMs ?? 150;
+    // [T-3] 개방 시간이 5초로 늘어 폴링 횟수가 많아지므로 간격을 500ms로 넓힌다 — 폴링 1회 = 공개 API 3요청이라 150ms면 IP 분당 한도(120)를 먹어
+    // 뒤 절(SSRF·시크릿 등)의 공개 요청이 429로 막혔다.
+    const intervalMs = opts.intervalMs ?? 500;
     const deadline = Date.now() + maxWaitMs;
     const before = requestCountNow();
     let last: { t1: ApiResponse<Record<string, unknown>>; t2: ApiResponse<Record<string, unknown>>; t3: ApiResponse<Record<string, unknown>> } | undefined;
@@ -944,14 +953,22 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       }
 
       const countAfterThreeFailures = legacyRequests.length;
-      const startedAt = Date.now();
+      const startedAt = Date.now(); // 3번째 실패 응답 직후 — 회로 개방 시각(LegacyApiGateService는 3번째 실패 기록 시점에 고정)과 거의 같다.
       const opened = await runForm(flow.slug, flow.startIntentExample, 'SHIP1', '010-1111-2222');
       const elapsed = Date.now() - startedAt;
+
+      // [T-3] 경과 시간 가드 — 개방 확인 3턴이 개방 시간(5000ms) 이상 걸렸다면 이미 half-open이라 아래 '개방 중 외부 호출 0' 단언을 판정할 수 없다.
+      // 조용히 다른 이유로 실패하지 않고 원인을 명시해 실패한다(실제 결함과 시험 환경 지연을 구분).
+      if (elapsed >= CIRCUIT_OPEN_MS_FOR_TEST) {
+        throw new Error(
+          `시험 환경 지연으로 개방 시간을 넘김 — 판정 불가(T-3): 개방 확인에 ${elapsed}ms가 걸려 개방 시간(${CIRCUIT_OPEN_MS_FOR_TEST}ms) 이상이다. 부하가 낮은 상태에서 다시 실행해 주세요.`,
+        );
+      }
 
       expect(outputTexts(opened.t3.body)).toContain('지금은 주문 정보를 확인할 수 없어요. 잠시 후 다시 시도해 주세요.');
       expect(legacyRequests.length).toBe(countAfterThreeFailures); // 회로 개방 중 — 외부 호출 0(강한 근거)
       // "즉시 실패"의 시간 단언은 여유를 5000ms로 확대(간헐 실패 안정화) — 위 legacyRequests 0건 단언이
-      // "실제로 외부 호출 없이 실패했다"는 본 증거이고, 이 시간 단언은 "개방 시간(1000ms)만큼 블로킹하지
+      // "실제로 외부 호출 없이 실패했다"는 본 증거이고, 이 시간 단언은 "개방 시간(5000ms)만큼 블로킹하지
       // 않는다"는 보조 신호일 뿐이다.
       expect(elapsed).toBeLessThan(5000);
 
@@ -959,10 +976,10 @@ describe('레거시 API 연동(No.26) 통합 시험', () => {
       // 실패했다. 폴링 대기로 교체한다 — 개방 시간이 지나기 전 재시도는 즉시 거부돼 회로를 다시 열지
       // 않으므로(pollUntilCircuitReopens 주석) 회로 개방 60초(운영값) 동안 호출 0·half-open 재개라는
       // 설계 의도는 그대로 유지된다.
-      const reopened = await pollUntilCircuitReopens(flow.slug, flow.startIntentExample, () => legacyRequests.length, { maxWaitMs: 10_000 });
+      const reopened = await pollUntilCircuitReopens(flow.slug, flow.startIntentExample, () => legacyRequests.length, { maxWaitMs: 20_000 });
       expect(outputTexts(reopened.t3.body)).toEqual(['조회해 볼게요.', '주문하신 상품은 배송 중이며 09/26 도착 예정입니다.']);
       expect(legacyRequests.length).toBe(countAfterThreeFailures + 1); // half-open 탐침이 정확히 1건만 통과했다
-    }, 30_000);
+    }, 45_000);
 
     it('4xx(존재하지 않는 경로 → 404)는 회로 실패로 계수되지 않는다(D-19)', async () => {
       const conn = await createConnection();
