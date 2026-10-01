@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { envBoolean } from './lib/env-boolean';
+import { envBoolean, envBooleanOptional } from './lib/env-boolean';
 
 /**
  * 부팅 시 필수 환경변수를 검증한다(NFR-M1, EX-4-3).
@@ -254,7 +254,8 @@ const EnvSchema = z.object({
   GUARDRAIL_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(600000).default(60000),
   GUARDRAIL_MAX_RULES_PER_CHATBOT: z.coerce.number().int().min(1).max(200).default(50),
   GUARDRAIL_MAX_EXPRESSIONS_PER_CHATBOT: z.coerce.number().int().min(100).max(10000).default(2000),
-  ENV_APPROVAL_OFF_LOCKED: envBoolean(false),
+  // 3상태(미설정 / true / false) — 명시값 우선, 미설정이면 DATA_GOVERNANCE_MODE=ON일 때 잠금(N36-1, ADR-0049).
+  ENV_APPROVAL_OFF_LOCKED: envBooleanOptional(),
 });
 
 /** `RAG_TIMEOUT_MS`의 하한(120,000ms)을 강제한다(FR-N2-26) — 미달 시 보정 + 경고 로그(AC-N2-14). */
@@ -330,6 +331,10 @@ export function validate(config: Record<string, unknown>): EnvConfig {
   if (result.data.RETENTION_MIN_DAYS_AUDIT < 365) {
     // eslint-disable-next-line no-console
     console.warn(`RETENTION_MIN_DAYS_AUDIT(${result.data.RETENTION_MIN_DAYS_AUDIT}일)이 권고 하한(365일) 미만입니다(EX-DG-17 — 허용·경고).`);
+  }
+  if (result.data.DATA_GOVERNANCE_MODE === 'ON' && result.data.ENV_APPROVAL_OFF_LOCKED === false) {
+    // eslint-disable-next-line no-console
+    console.warn('데이터 거버넌스 모드인데 ENV_APPROVAL_OFF_LOCKED=false로 2인 승인 끄기 잠금을 명시 해제했습니다.');
   }
   if (result.data.DATA_ENCRYPTION_ENABLED && result.data.DATA_GOVERNANCE_MODE === 'OFF') {
     const issue = '데이터 거버넌스: 필드 암호화(DATA_ENCRYPTION_ENABLED)는 거버넌스 모드(DATA_GOVERNANCE_MODE=ON)가 필요합니다.';

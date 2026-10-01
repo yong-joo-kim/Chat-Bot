@@ -7,6 +7,7 @@ import { EmbeddingProviderFactory } from '../embedding/embedding-provider.factor
 import { VectorCacheService } from '../embedding/vector-cache.service';
 import type { TrainingJobTaskResult } from '../training-jobs/training-job.queue';
 import { AugmentationProviderFactory } from './providers/augmentation-provider.factory';
+import type { AugmentationFailureCause, AugmentationProviderId } from './providers/augmentation-provider.port';
 import type { SynonymDict } from './lib/rule-variants';
 import { resolveAugmentationThresholds } from './lib/augmentation-thresholds';
 import { validateCandidates } from './lib/validate-candidates';
@@ -129,20 +130,41 @@ export class AugmentationJobRunner {
 
     await onProgress(10);
 
-    const provider = this.augmentationFactory.getProvider({
+    const providerDeps = {
       getSynonyms: () => this.buildSynonymDict(chatbotId),
       bannedWords,
-    });
+    };
+    const primary = this.augmentationFactory.getProvider(providerDeps);
 
     const rawTarget = Math.min(MAX_RAW_TARGET, Math.max(1, requestedCount) * 3);
-    const candidates = await provider.generate({ seeds: seedTexts, targetCount: rawTarget, locale: 'ko' });
+    const generateInput = { seeds: seedTexts, targetCount: rawTarget, locale: 'ko' as const };
+    const outcome = primary.generateWithOutcome ? await primary.generateWithOutcome(generateInput) : { candidates: await primary.generate(generateInput), failure: undefined };
+
+    // K-1b(ADR-0049) — G2/G3가 사용 가능한 후보(공백 아닌 문자열)를 1건도 못 냈으면 원인과 무관하게 G1으로 같은 Job 안에서 1회
+    // 다시 생성한다. 1건이라도 냈으면 보충·재시도하지 않는다. 원인 코드(C-6)는 표시·로그용이며 폴백 여부를 바꾸지 않는다.
+    let used = primary;
+    let candidates: readonly string[] = outcome.candidates;
+    let fallbackInfo: { from: 'gemini' | 'local'; cause: AugmentationFailureCause } | null = null;
+    const usable = outcome.candidates.some((c) => c.trim().length > 0);
+    if ((primary.providerId === 'gemini' || primary.providerId === 'local') && !usable) {
+      const cause = outcome.failure ?? 'EMPTY_RESULT';
+      const fallback = this.augmentationFactory.getFallbackProvider(providerDeps);
+      candidates = await fallback.generate(generateInput);
+      used = fallback;
+      fallbackInfo = { from: primary.providerId, cause };
+      // 문장·URL·키는 남기지 않는다(NFR-LS4).
+      this.logger.warn(`증강 G1 폴백: chatbotId=${chatbotId} intentId=${intentId} jobId=${jobId} from=${primary.providerId} cause=${cause}`);
+    }
+    const providerId: AugmentationProviderId = used.providerId;
+    // 폴백이 없으면 지금과 같은 키만 싣는다(바이트 동일) — degraded 키를 새로 쓰지 않는다.
+    const fallbackKeys = fallbackInfo ? { degraded: true, fallbackFrom: fallbackInfo.from, fallbackCause: fallbackInfo.cause } : {};
 
     await onProgress(40);
 
     if (candidates.length === 0) {
       return {
         status: 'PARTIAL',
-        resultSummary: { generated: 0, accepted: 0, rejected: {}, providerId: provider.providerId },
+        resultSummary: { generated: 0, accepted: 0, rejected: {}, providerId, ...fallbackKeys },
       };
     }
 
@@ -188,7 +210,7 @@ export class AugmentationJobRunner {
             similarityToSeed: c.similarityToSeed,
             conflictIntentId: c.conflictIntentId,
             conflictScore: c.conflictScore,
-            providerId: provider.providerId,
+            providerId,
             modelId: embeddingProvider.modelId,
             jobId,
           },
@@ -210,7 +232,8 @@ export class AugmentationJobRunner {
         generated: candidates.length,
         accepted: insertedCount,
         rejected,
-        providerId: provider.providerId,
+        providerId,
+        ...fallbackKeys,
       },
     };
   }

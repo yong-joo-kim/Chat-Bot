@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { existsSync, realpathSync } from 'node:fs';
-import { configurePiiMaskMode } from '@chat-bot/pii-mask';
+import { PII_MASK_RULES_VERSION, configurePiiMaskMode } from '@chat-bot/pii-mask';
 import type { PiiMaskMode } from '@chat-bot/pii-mask';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
@@ -129,7 +129,11 @@ export class GovernanceBootstrapService implements OnModuleInit {
       egress: { allowlist, enforce: mode === 'ON' },
       encryptionEnabled,
     });
-    configurePiiMaskMode((this.config.get<string>('PII_MASK_MODE') === 'FULL' ? 'FULL' : 'PARTIAL') as PiiMaskMode);
+    const piiMaskMode: PiiMaskMode = this.config.get<string>('PII_MASK_MODE') === 'FULL' ? 'FULL' : 'PARTIAL';
+    configurePiiMaskMode(piiMaskMode);
+    // L-5 — 규칙 버전을 기동 로그에 남긴다(모드 OFF 설치에서도 출력). 폐쇄망 반입 시 pii-mask를 다시 빌드하지 않으면 구 dist가 조용히
+    // v1로 동작하므로, 이 줄로 반입 빌드를 확인한다.
+    this.logger.log(`pii-mask 규칙 v${PII_MASK_RULES_VERSION}(저장 마스킹 날짜 제외 · 생년월일 문맥 예외) · 모드 ${piiMaskMode}`);
 
     await this.auditLog.ensureChainHead();
     await this.ensureJobStateRows();

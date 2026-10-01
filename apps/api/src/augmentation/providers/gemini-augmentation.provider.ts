@@ -1,10 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { maskPii } from '@chat-bot/pii-mask';
-import { assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
+import { EgressBlockedError, assertEgressAllowed, assertNoRedirectResponse, egressRedirectMode } from '../../common/egress/egress-guard';
 import { AUGMENT_GEMINI_DEFAULT_BASE_URL } from '../../common/egress/egress-registry';
 import { AUGMENTATION_SYSTEM_INSTRUCTION, buildAugmentationUserContent } from '../lib/gemini-prompt';
-import { AugmentationGenerateInput, AugmentationProvider } from './augmentation-provider.port';
+import { AugmentationFailureCause, AugmentationGenerateInput, AugmentationGenerateOutcome, AugmentationProvider } from './augmentation-provider.port';
 
 /** 기동 검사(§6.4)와 같은 상수를 쓴다(`common/egress/egress-registry.ts`) — export(§6.1 표). */
 const DEFAULT_BASE_URL = AUGMENT_GEMINI_DEFAULT_BASE_URL;
@@ -35,6 +35,13 @@ const GeminiResponseSchema = z.object({
     .optional(),
 });
 
+/** 호출 중 원인을 분류해 던지는 내부 오류 — `generateWithOutcome()`의 catch가 원인 코드로 바꾼다(밖으로 새지 않는다). */
+class GeminiCallError extends Error {
+  constructor(readonly failure: AugmentationFailureCause) {
+    super(`GEMINI_CALL_FAILED cause=${failure}`);
+  }
+}
+
 /**
  * G2 — Google Gemini(PM 확정, ADR-0026 §4). **공식 SDK를 쓰지 않고 `fetch` + zod로 REST를 직접
  * 호출**한다 — 마스킹·타임아웃·회로차단이 모든 외부 출구에서 동일하게 적용되어야 하기 때문이다.
@@ -51,26 +58,37 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
 
   constructor(private readonly config: GeminiAugmentationConfig) {}
 
+  /** `generateWithOutcome()`의 후보만 돌려주는 얇은 위임 — 계약(C-1)·서명 불변. */
   async generate(input: AugmentationGenerateInput): Promise<readonly string[]> {
-    if (!this.config.apiKey) return []; // 방어적 이중 확인(C-1)
-    if (this.isCircuitOpen()) return [];
+    return (await this.generateWithOutcome(input)).candidates;
+  }
+
+  /** 실패 원인 분류(K-1b §2.3) — 예외를 던지지 않는다. `recordFailure()` 규칙은 불변(호출 예외 경로만 카운트). */
+  async generateWithOutcome(input: AugmentationGenerateInput): Promise<AugmentationGenerateOutcome> {
+    if (!this.config.apiKey) return this.fail('NOT_CONFIGURED'); // 방어적 이중 확인(C-1)
+    if (this.isCircuitOpen()) return this.fail('CIRCUIT_OPEN');
 
     try {
       const maskedSeeds = input.seeds.map((s) => maskPii(s).maskedText);
       const banned = this.config.bannedWords ?? [];
       if (maskedSeeds.some((s) => banned.some((w) => w && s.includes(w)))) {
         // 시드 자체에 금지어가 있으면 외부로 내보내지 않는다(FR-L1-6 강제 경로 ②).
-        return [];
+        return this.fail('SEED_BLOCKED');
       }
 
       const candidates = await this.callGemini(maskedSeeds, input.targetCount);
       this.recordSuccess();
-      return candidates;
+      return { candidates };
     } catch (e) {
       this.recordFailure();
-      this.logger.warn(`Gemini 호출 실패 — G1로 폴백합니다: ${e instanceof Error ? e.message : 'unknown'}`);
-      return [];
+      const cause: AugmentationFailureCause = e instanceof GeminiCallError ? e.failure : e instanceof EgressBlockedError ? 'EGRESS_BLOCKED' : 'NETWORK';
+      return this.fail(cause);
     }
+  }
+
+  private fail(failure: AugmentationFailureCause): AugmentationGenerateOutcome {
+    this.logger.warn(`Gemini 호출 실패 — G1 폴백 대상: cause=${failure}`);
+    return { candidates: [], failure };
   }
 
   async healthy(): Promise<boolean> {
@@ -115,7 +133,11 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
     };
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     let res: Response;
     try {
       assertEgressAllowed('AUGMENT_GEMINI', baseUrl);
@@ -130,15 +152,23 @@ export class GeminiAugmentationProvider implements AugmentationProvider {
       // 응답이 비허용 호스트로의 리다이렉트(3xx)면 여기서 별도로 막는다. `generate()`의 catch가
       // recordFailure() + [] (G1 폴백)로 흡수한다.
       assertNoRedirectResponse('AUGMENT_GEMINI', baseUrl, res.status);
+    } catch (e) {
+      if (e instanceof EgressBlockedError) throw e;
+      throw new GeminiCallError(timedOut ? 'TIMEOUT' : 'NETWORK');
     } finally {
       clearTimeout(timer);
     }
 
-    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+    if (!res.ok) throw new GeminiCallError(res.status >= 400 && res.status < 500 ? 'HTTP_4XX' : 'HTTP_5XX');
 
-    const json = await res.json();
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      throw new GeminiCallError('INVALID_RESPONSE');
+    }
     const parsed = GeminiResponseSchema.safeParse(json);
-    if (!parsed.success) throw new Error('Gemini 응답 스키마 불일치');
+    if (!parsed.success) throw new GeminiCallError('INVALID_RESPONSE');
 
     const text = parsed.data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
     return parseCandidateArray(text);

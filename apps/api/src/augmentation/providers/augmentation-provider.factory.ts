@@ -87,6 +87,14 @@ export class AugmentationProviderFactory {
   }
 
   /**
+   * G1 폴백 대상(K-1b, ADR-0049) — 설정과 무관하게 항상 G1(`rule`)이며 예외를 던지지 않는다. 러너가 G2/G3 후보 0건일 때
+   * 같은 Job 안에서 1회 호출한다. 교체 지점을 이 팩토리 1곳으로 유지하기 위해 러너가 직접 `new`하지 않는다.
+   */
+  getFallbackProvider(deps?: AugmentationProviderDeps): AugmentationProvider {
+    return this.buildRule(deps);
+  }
+
+  /**
    * 실제 사용될 Provider와 설정값의 괴리를 보고한다(§4.3, `GET .../augmentations/capability`의
    * 데이터 소스). "조용한 저하"를 만들지 않기 위함이다 — 화면이 원인을 말할 수 있어야 한다.
    */

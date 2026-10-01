@@ -34,6 +34,7 @@ import type { CloseData } from './switch-approval.store';
 import { SwitchApprovalMapper, toApprovalAuditView } from './switch-approval.mapper';
 import { computeExpiresAt, effectiveVerdict } from './lib/approval-state';
 import type { EffectiveVerdict } from './lib/approval-state';
+import { resolveApprovalOffLock } from './lib/approval-off-lock';
 
 const SYSTEM_ACTOR = { id: null, email: 'system', role: null } as const;
 const RECENT_LIMIT = 20;
@@ -73,6 +74,11 @@ export class SwitchApprovalService {
     return this.clock.now();
   }
 
+  /** 끄기 잠금 판정 — 현황 응답과 끄기 거부가 같은 함수를 쓴다(N36-1). */
+  private offLock() {
+    return resolveApprovalOffLock(this.config.get<boolean>('ENV_APPROVAL_OFF_LOCKED'), this.config.get<'ON' | 'OFF'>('DATA_GOVERNANCE_MODE'));
+  }
+
   /* ── 조회 ── */
 
   async getStatus(chatbotId: string, user: SessionUser): Promise<ApprovalPolicyStatus> {
@@ -87,12 +93,15 @@ export class SwitchApprovalService {
 
     const eligible = await this.countApprovers();
     const actorEligible = user.status === 'ACTIVE' && hasPermission(user.role, 'chatbot:deploy');
+    const lock = this.offLock();
     return {
       policy: { required: pointer.approval.required, ttlHours: pointer.approval.ttlHours },
       envModeOn: pointer.prodVersionId !== null,
       eligibleApproverCount: eligible,
       otherApproverCount: Math.max(0, eligible - (actorEligible ? 1 : 0)),
-      offLocked: this.config.get<boolean>('ENV_APPROVAL_OFF_LOCKED') ?? false,
+      offLocked: lock.locked,
+      // 잠겼을 때만 싣는다(잠금 아닌 응답은 키 없음 — 바이트 동일).
+      ...(lock.by ? { offLockedBy: lock.by } : {}),
       pending,
       recent: summaries,
     };
@@ -143,7 +152,7 @@ export class SwitchApprovalService {
         throw new ApiException('APPROVAL_POLICY_UNAVAILABLE', 409, '활성 상태의 관리자가 2명 이상이어야 켤 수 있습니다.', [{ field: 'reason', message: 'NOT_ENOUGH_APPROVERS' }]);
       }
     }
-    if (!dto.required && before.required && (this.config.get<boolean>('ENV_APPROVAL_OFF_LOCKED') ?? false)) {
+    if (!dto.required && before.required && this.offLock().locked) {
       throw new ApiException('APPROVAL_POLICY_UNAVAILABLE', 409, '서버 설정으로 2인 승인 끄기가 잠겨 있습니다. 서버 관리자에게 문의해 주세요.', [{ field: 'reason', message: 'OFF_LOCKED' }]);
     }
 

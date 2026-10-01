@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GovernanceBootstrapService } from './governance-bootstrap.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -157,5 +158,32 @@ describe('GovernanceBootstrapService — checkEgressBootOrThrow × Gemini 증강
   it('AC-DG2-2: Gemini API 키가 없으면(증강 실질 미사용) 허용 목록이 비어 있어도 통과한다', () => {
     const service = makeService({ AUGMENTATION_PROVIDER: 'gemini' });
     expect(() => callCheckEgressBootOrThrow(service, [])).not.toThrow();
+  });
+});
+
+describe('GovernanceBootstrapService — pii-mask 규칙 버전 기동 로그(L-5)', () => {
+  afterEach(() => {
+    resetGovernanceRuntimeForTest();
+    jest.restoreAllMocks();
+  });
+
+  it.each([
+    [undefined, 'PARTIAL'],
+    ['FULL', 'FULL'],
+  ])('모드 OFF · PII_MASK_MODE=%s에서도 "pii-mask 규칙 v2" 1줄을 남긴다', async (piiMode, expectedPiiMode) => {
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const prisma = { governanceJobState: { create: jest.fn().mockResolvedValue({}) } };
+    const auditLog = { ensureChainHead: jest.fn().mockResolvedValue(undefined) };
+    const service = new GovernanceBootstrapService(
+      makeConfig({ DATA_GOVERNANCE_MODE: 'OFF', PII_MASK_MODE: piiMode }),
+      prisma as unknown as PrismaService,
+      auditLog as unknown as AuditLogService,
+    );
+    await service.onModuleInit();
+    const lines = log.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('pii-mask 규칙'));
+    expect(lines).toEqual([`pii-mask 규칙 v2(저장 마스킹 날짜 제외 · 생년월일 문맥 예외) · 모드 ${expectedPiiMode}`]);
+    // 시험이 끝나면 PARTIAL로 되돌린다(프로세스 전역 설치값).
+    const { resetPiiMaskModeForTest } = await import('@chat-bot/pii-mask');
+    resetPiiMaskModeForTest();
   });
 });

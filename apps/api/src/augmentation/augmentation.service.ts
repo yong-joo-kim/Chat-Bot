@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
   AugmentationCapability,
+  AugmentationFallbackCause,
   AugmentationGenerateRequestDto,
   AugmentationGenerateResponse,
   AugmentationListQuery,
@@ -10,6 +11,7 @@ import type {
   AugmentationRejectResponse,
   AugmentationRunResult,
 } from '@chat-bot/shared-types';
+import { AugmentationFallbackCauseSchema } from '@chat-bot/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApiException } from '../common/api.exception';
 import { ChatbotScopeService } from '../chatbots/chatbot-scope.service';
@@ -156,6 +158,10 @@ export class AugmentationService {
           providerId: parsed.providerId ?? 'rule',
           degraded: parsed.degraded ?? false,
           degradeReason: parsed.degradeReason,
+          // K-1b — 폴백 Job만 두 키가 있다. 알 수 없는 값은 버린다(enum 검증).
+          ...(AugmentationFallbackCauseSchema.safeParse(parsed.fallbackCause).success && (parsed.fallbackFrom === 'gemini' || parsed.fallbackFrom === 'local')
+            ? { fallbackFrom: parsed.fallbackFrom as 'gemini' | 'local', fallbackCause: parsed.fallbackCause as AugmentationFallbackCause }
+            : {}),
         };
       } catch {
         runResult = undefined;

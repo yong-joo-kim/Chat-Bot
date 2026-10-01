@@ -45,6 +45,21 @@ describe('exit-pii — 출구 전용 선택 가림', () => {
     expect(maskExit('2026-09-30 안내', ['ACCOUNT'], false).maskedText).toBe('[계좌번호] 안내');
   });
 
+  it('L-5 U-1 — 생년월일 문맥 날짜는 계좌 켬 + 날짜 보호 켬일 때만 가려진다 / 계좌 끔·날짜 일반은 그대로', () => {
+    expect(maskExit('생년월일 1990-05-12', ['ACCOUNT'], true).maskedText).toBe('생년월일 [계좌번호]');
+    expect(maskExit('생년월일 1990-05-12', ['RRN', 'CARD'], true).maskedText).toBe('생년월일 1990-05-12');
+    expect(maskExit('생년월일 1990-05-12, 배송 2026-09-30', ['ACCOUNT'], true).maskedText).toBe('생년월일 [계좌번호], 배송 2026-09-30');
+    // 날짜 보호 끔이면 모든 날짜를 가린다(구 동작 — 변화 없음).
+    expect(maskExit('생년월일 1990-05-12', ['ACCOUNT'], false).maskedText).toBe('생년월일 [계좌번호]');
+  });
+
+  it('L-5 2차 — 출구도 확장 규칙을 쓴다: 낫표·주석·birth date 문맥 날짜는 계좌 켬일 때 가려진다', () => {
+    expect(maskExit('생년월일 「1990-05-12」', ['ACCOUNT'], true).maskedText).toBe('생년월일 「[계좌번호]」');
+    expect(maskExit('생년월일 (양력) 1990-05-12', ['ACCOUNT'], true).maskedText).toBe('생년월일 (양력) [계좌번호]');
+    expect(maskExit('Birth date: 1990-05-12', ['ACCOUNT'], true).maskedText).toBe('Birth date: [계좌번호]');
+    expect(maskExit('생년월일 「1990-05-12」', ['RRN', 'CARD'], true).maskedText).toBe('생년월일 「1990-05-12」');
+  });
+
   it('강도는 서버 PII_MASK_MODE를 따른다(FULL이면 전화 전량 토큰)', () => {
     configurePiiMaskMode('FULL');
     expect(maskExit(`전화 ${PHONE}`, ['PHONE'], true).maskedText).toBe('전화 [전화번호]');

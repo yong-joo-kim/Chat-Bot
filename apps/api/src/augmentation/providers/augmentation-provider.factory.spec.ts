@@ -36,6 +36,11 @@ describe('AugmentationProviderFactory', () => {
     expect(factory.getProvider()).toBeInstanceOf(LocalAugmentationProvider);
   });
 
+  it('getFallbackProvider(): 설정과 무관하게 항상 G1(rule)이다(K-1b)', () => {
+    const envs = [{}, { AUGMENTATION_PROVIDER: 'gemini', AUGMENTATION_GEMINI_API_KEY: 'k' }, { AUGMENTATION_PROVIDER: 'local', AUGMENTATION_LOCAL_BASE_URL: 'http://x' }, { AUGMENTATION_PROVIDER: 'mock' }];
+    for (const env of envs) expect(factoryWith(env).getFallbackProvider()).toBeInstanceOf(RuleBasedAugmentationProvider);
+  });
+
   it('AUGMENTATION_PROVIDER=mock이면 MockAugmentationProvider를 만든다', () => {
     const factory = factoryWith({ AUGMENTATION_PROVIDER: 'mock' });
     expect(factory.getProvider()).toBeInstanceOf(MockAugmentationProvider);

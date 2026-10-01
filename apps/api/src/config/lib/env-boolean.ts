@@ -10,3 +10,11 @@ import { parseBooleanString } from '@chat-bot/shared-types';
 export function envBoolean(defaultValue: boolean) {
   return z.preprocess(parseBooleanString, z.boolean().default(defaultValue));
 }
+
+/**
+ * 미설정을 구분해야 하는 boolean 환경변수용(예: `ENV_APPROVAL_OFF_LOCKED` — 미설정 / true / false 3상태).
+ * 미설정·빈 값은 `undefined`로 남는다. `z.coerce.boolean()` 금지 규약은 같다.
+ */
+export function envBooleanOptional() {
+  return z.preprocess(parseBooleanString, z.boolean().optional());
+}

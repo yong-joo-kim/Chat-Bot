@@ -109,8 +109,10 @@ export const ApprovalPolicyStatusSchema = z.object({
   /** 활성 `chatbot:deploy` 보유자 수(나 포함) · 나 제외. */
   eligibleApproverCount: z.number().int().nonnegative(),
   otherApproverCount: z.number().int().nonnegative(),
-  /** `ENV_APPROVAL_OFF_LOCKED` — 끄기 잠금. */
+  /** 끄기 잠금(실효값 — `ENV_APPROVAL_OFF_LOCKED` 명시값 우선, 미설정이면 거버넌스 모드 연동). */
   offLocked: z.boolean(),
+  /** 잠겼을 때만 실린다: SERVER_SETTING = 서버 설정이 true · GOVERNANCE_MODE = 거버넌스 모드 기본 잠금(N36-1). */
+  offLockedBy: z.enum(['SERVER_SETTING', 'GOVERNANCE_MODE']).optional(),
   pending: ProdSwitchApprovalSummarySchema.nullable(),
   recent: z.array(ProdSwitchApprovalSummarySchema).max(20),
 });

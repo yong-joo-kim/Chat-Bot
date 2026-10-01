@@ -260,6 +260,21 @@ export type AugmentationRejectReason = z.infer<typeof AugmentationRejectReasonSc
 export const AugmentationDegradeReasonSchema = z.enum(['API_KEY_MISSING', 'BASE_URL_MISSING', 'UNHEALTHY']);
 export type AugmentationDegradeReason = z.infer<typeof AugmentationDegradeReasonSchema>;
 
+/** G1 폴백 원인(K-1b, ADR-0049 §2.3) — 표시·로그용이며 폴백 여부를 바꾸지 않는다. */
+export const AugmentationFallbackCauseSchema = z.enum([
+  'TIMEOUT',
+  'NETWORK',
+  'HTTP_4XX',
+  'HTTP_5XX',
+  'INVALID_RESPONSE',
+  'EGRESS_BLOCKED',
+  'CIRCUIT_OPEN',
+  'SEED_BLOCKED',
+  'NOT_CONFIGURED',
+  'EMPTY_RESULT',
+]);
+export type AugmentationFallbackCause = z.infer<typeof AugmentationFallbackCauseSchema>;
+
 /** `GET .../augmentations/capability`(FR-L1 §4.3) — "조용한 저하"를 만들지 않기 위한 공개 판정. */
 export const AugmentationCapabilitySchema = z.object({
   providerId: AugmentationProviderIdSchema,
@@ -299,6 +314,9 @@ export const AugmentationRunResultSchema = z.object({
   providerId: AugmentationProviderIdSchema,
   degraded: z.boolean(),
   degradeReason: AugmentationDegradeReasonSchema.optional(),
+  /** [K-1b] G2/G3 후보 0건으로 G1을 대신 호출했을 때만 실린다(`degraded:true` 와 함께). 폴백 전 provider. */
+  fallbackFrom: z.enum(['gemini', 'local']).optional(),
+  fallbackCause: AugmentationFallbackCauseSchema.optional(),
 });
 export type AugmentationRunResult = z.infer<typeof AugmentationRunResultSchema>;
 
