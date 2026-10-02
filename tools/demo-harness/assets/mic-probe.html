@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<title>가짜 마이크 점검</title>
+</head>
+<body>
+<p>사전 점검 전용 페이지입니다(하네스가 별도 브라우저로 열고 닫습니다).</p>
+<script>
+/* PC-DX-6 · PC-DX-8: 가짜 마이크로 1.5초 녹음해 바이트 수를 확인하고, 같은 페이지에서 기기 안 한국어 읽기 음성 수를 센다(보안 컨텍스트 루프백). */
+(async function () {
+  'use strict';
+  var r = { secure: window.isSecureContext, ok: false, bytes: 0, mime: '', error: '', voices: 0, localKo: 0 };
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    var rec = new MediaRecorder(stream);
+    r.mime = rec.mimeType;
+    var chunks = [];
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    var stopped = new Promise(function (res) { rec.onstop = res; });
+    rec.start();
+    await new Promise(function (res) { setTimeout(res, 1500); });
+    rec.stop();
+    await stopped;
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    var total = 0;
+    for (var i = 0; i < chunks.length; i++) total += chunks[i].size;
+    r.bytes = total;
+    r.ok = total > 0;
+  } catch (e) { r.error = String((e && e.name) || e); }
+  try {
+    var vs = speechSynthesis.getVoices();
+    if (vs.length === 0) {
+      await new Promise(function (res) { speechSynthesis.onvoiceschanged = res; setTimeout(res, 1500); });
+      vs = speechSynthesis.getVoices();
+    }
+    r.voices = vs.length;
+    r.localKo = vs.filter(function (v) { return /^ko/i.test(v.lang) && v.localService; }).length;
+  } catch (e) { /* 음성 목록 조회 불가 */ }
+  window.__probe = r;
+})();
+</script>
+</body>
+</html>

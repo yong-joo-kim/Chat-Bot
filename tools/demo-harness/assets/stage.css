@@ -25,11 +25,13 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 #seg-chip { flex: none; display: inline-flex; align-items: center; height: calc(44 * var(--u)); padding: 0 calc(20 * var(--u)); border-radius: 999px; background: var(--h-badge-bg); border: calc(2 * var(--u)) solid var(--h-accent); font-size: calc(30 * var(--u)); font-weight: 700; white-space: nowrap; }
 #seg-title { flex: 1 1 auto; min-width: 0; font-size: calc(36 * var(--u)); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #state-chip { flex: none; display: none; align-items: center; gap: calc(10 * var(--u)); height: calc(40 * var(--u)); padding: 0 calc(18 * var(--u)); border-radius: 999px; border: calc(2 * var(--u)) solid var(--h-notice); color: var(--h-notice); font-size: calc(28 * var(--u)); font-weight: 700; white-space: nowrap; }
-#state-chip[data-state="paused"], #state-chip[data-state="fallback"], #state-chip[data-state="failed"] { display: inline-flex; }
+#state-chip[data-state="paused"], #state-chip[data-state="fallback"], #state-chip[data-state="failed"], #state-chip[data-state="sound"] { display: inline-flex; }
 #state-chip .shape { display: inline-block; width: calc(22 * var(--u)); height: calc(22 * var(--u)); border: calc(3 * var(--u)) solid currentColor; }
 #state-chip[data-state="paused"] .shape { border-width: 0 calc(8 * var(--u)); width: calc(22 * var(--u)); }
 #state-chip[data-state="fallback"] .shape { border-radius: 50%; border-right-color: transparent; }
 #state-chip[data-state="failed"] .shape { }
+/* [DT-2] 소리 재생 중 — 막대 3개(정지 도형 · 움직이지 않는다) */
+#state-chip[data-state="sound"] .shape { border: 0; width: calc(30 * var(--u)); height: calc(22 * var(--u)); background: linear-gradient(90deg, currentColor 0 24%, transparent 24% 38%, currentColor 38% 62%, transparent 62% 76%, currentColor 76% 100%); }
 #timer { flex: none; display: flex; align-items: baseline; gap: calc(14 * var(--u)); font-variant-numeric: tabular-nums; }
 #timer .lbl { font-size: calc(28 * var(--u)); color: var(--h-chrome-muted); }
 #timer .val { font-size: calc(48 * var(--u)); font-weight: 700; min-width: calc(110 * var(--u)); text-align: right; }
@@ -74,3 +76,9 @@ body[data-phase="finishing"] #overlay .big { font-size: calc(40 * var(--u)); }
 #caption .cap-notice .chip { flex: none; border: calc(2 * var(--u)) solid var(--h-notice); border-radius: 999px; padding: 0 calc(12 * var(--u)); font-size: calc(24 * var(--u)); font-weight: 700; }
 #caption .cap-notice:empty { visibility: hidden; }
 #caption[data-paused="1"] .cap-badges, #caption[data-paused="1"] .cap-notice { visibility: hidden; }
+
+/* [DT-2] 사실 칩 — 강조 배지와 구분(채움 없음 · 점선 · 속 빈 원 + 가운데 점) */
+#caption .badge.fact { background: var(--h-chrome-bg); color: var(--h-notice); border: calc(2 * var(--u)) dashed var(--h-notice); }
+#caption .badge.fact::before { width: calc(18 * var(--u)); height: calc(18 * var(--u)); background: radial-gradient(circle, var(--h-notice) 0 24%, transparent 26%); border: calc(2 * var(--u)) solid var(--h-notice); border-radius: 50%; clip-path: none; }
+/* [DT-2] 하네스 소유 음성 재생 버튼 — 뷰포트 안 고정 위치 1px 투명(화면 밖은 클릭할 수 없다) */
+#voice-play { position: fixed; left: 2px; top: 2px; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0.01; background: transparent; }

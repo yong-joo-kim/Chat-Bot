@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium, type BrowserContext, type Dialog, type FrameLocator, type Page } from 'playwright-core';
 import { planBrowserLaunch } from './launch';
+import { fakeMediaArgs } from './fake-media';
 
 export interface BlockedRequest {
   /** ISO 시각 */
@@ -21,6 +22,12 @@ export interface BrowserSessionOptions {
   /** 영상 저장 폴더 — 인코더가 있을 때만 넘긴다(없으면 기동이 실패한다). */
   recordVideoDir?: string;
   consoleLogFile?: string;
+  /** [DT-2] 풀 투어는 다운로드를 받는다(엑셀 내보내기 · 실행 폴더 `downloads/`). 10분판은 false 그대로. */
+  acceptDownloads?: boolean;
+  /** [DT-2] 가짜 마이크 — 합성 음성 WAV 절대 경로(`%noloop`로 한 번만 재생). 있으면 가짜 미디어 인자를 붙인다. */
+  fakeAudioFile?: string;
+  /** [DT-2] 마이크 권한을 줄 출처(스킴·호스트·포트 정확 일치 — 고객사 모형 출처 1곳). */
+  grantMicrophoneOrigin?: string;
 }
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
@@ -48,10 +55,12 @@ export class BrowserSession {
       deviceScaleFactor: 1,
       locale: 'ko-KR',
       timezoneId: 'Asia/Seoul',
-      acceptDownloads: false,
+      acceptDownloads: opts.acceptDownloads ?? false,
       recordVideo: opts.recordVideoDir ? { dir: opts.recordVideoDir, size: opts.viewport } : undefined,
-      args: opts.headless ? [] : ['--start-maximized'],
+      args: [...(opts.headless ? [] : ['--start-maximized']), ...fakeMediaArgs(opts.fakeAudioFile)],
     });
+    // 마이크 권한은 출처 정확 일치 1곳에만(전역 자동 수락 인자는 쓰지 않는다 — NFR-DXS3 · DX-2)
+    if (opts.grantMicrophoneOrigin) await context.grantPermissions(['microphone'], { origin: opts.grantMicrophoneOrigin });
     const page = context.pages()[0] ?? (await context.newPage());
     const s = new BrowserSession(context, page, opts);
     await s.install();
@@ -172,10 +181,22 @@ export class StageController {
   navigate(which: 'site' | 'console', url: string): Promise<boolean> {
     return this.call('navigate', which, url);
   }
-  showCard(kind: 'system' | 'system-end' | 'roadmap'): Promise<void> {
-    return this.call('showCard', kind);
+  showCard(kind: 'system' | 'system-end' | 'roadmap' | 'gpu', opts?: { preset?: 'full' }): Promise<void> {
+    return opts ? this.call('showCard', kind, opts) : this.call('showCard', kind);
   }
-  showCaption(c: { lines: string[]; notice?: string; badges?: string[] }): Promise<void> {
+  /** [DT-2] 풀 투어 진행 막대(활성 구간 전체) — 공연 시작 전 1회. */
+  setSegments(list: Array<{ key: string; budgetSec: number }>): Promise<void> {
+    return this.call('setSegments', list);
+  }
+  /** [DT-2] 소리가 나는 동안 상태 칩 `소리 재생 중`을 켜고 끈다. */
+  setSound(on: boolean): Promise<void> {
+    return this.call('setSound', on);
+  }
+  /** [DT-2] 관객용 합성 음성 재생 상태(하네스 소유 <audio>). */
+  audioState(): Promise<{ state: 'idle' | 'playing' | 'ended' | 'error'; error: string }> {
+    return this.call('audioState');
+  }
+  showCaption(c: { lines: string[]; notice?: string; badges?: string[]; facts?: string[] }): Promise<void> {
     return this.call('showCaption', c);
   }
   clearCaption(): Promise<void> {
@@ -184,7 +205,7 @@ export class StageController {
   pauseCaption(on: boolean): Promise<void> {
     return this.call('pauseCaption', on);
   }
-  setStateChip(state: 'none' | 'paused' | 'fallback' | 'failed'): Promise<void> {
+  setStateChip(state: 'none' | 'paused' | 'fallback' | 'failed' | 'sound'): Promise<void> {
     return this.call('setStateChip', state);
   }
   setReady(on: boolean): Promise<void> {

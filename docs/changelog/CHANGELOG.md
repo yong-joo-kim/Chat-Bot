@@ -651,3 +651,8 @@ api jest 430 suites(6,111 tests, 1 skip) 통과, pii-mask 17 suites / 325 tests,
 
 - 규모 A: 위젯 눌러서 말하기(≤30초)→서버 STT→입력창 확인 후 전송, 듣기·자동 읽기는 브라우저 내장 음성(`localService`·`ko`만). 서버 TTS·감정 판정 모델 0, 음성 원본 저장 0, 읽기 대상은 봇 답변만(`speech:{text,tone}`). 공개 인식 `POST /public/chatbots/:slug/speech/transcriptions`(`@Public()` 10), 거버넌스 출구 `SPEECH_LOCAL`(8종)·`AUDIO_RAW`, 운영 mock 기동 실패, `SPEECH_FAILURE_THRESHOLD`(연속 3회). ADR-0052.
 - 시험: api jest 447 suites(6,371) · ml-worker pytest 207 · widget 371 · web 1,561 통과, 위젯 gzip +6.2KB(예산 7KB). 수동 게이트: 브라우저·기기별·스크린리더·말투 청취·3050 STT 동작 확인·L40S 실측·법무 확인.
+
+## 시연 하네스 DT-1 3단계 · DT-2 풀 투어 — 2026-10-02
+
+- DT-1: 시작·장면 5~7·마무리·Enter 대기(T0 라이브 예약)·영상/VTT/GIF·보고서·종료 코드·사용법 `docs/05-ops/시연_하네스.md`. DT-2: 프리셋 `customer-onprem-full`, 계획 문맥(`when(plan)`), 신규 장면 음성(⑧)·선제(⑨)·엣지(⑩), Ollama 적재·해제·VRAM 순차 적재, 가짜 마이크 합성 음성, 거버넌스 호스트 허용. ADR-0051·0053.
+- 시험: 하네스 316건 통과, `demo:check` 10분판·풀 투어 기본·전부·CPU STT·모의 인식 5종 종료 코드 0. 코드 리뷰 반영(CPU STT 회수 판정·고객판 로컬 경로 일반화·음성 흔적 검사 `ml-speech` 포함·Ctrl+C 전파·정리 보호).

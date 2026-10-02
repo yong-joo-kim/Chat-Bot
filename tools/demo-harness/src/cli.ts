@@ -53,6 +53,9 @@ async function main(argv: string[]): Promise<number> {
     paths,
     runsDir,
     signal: ctrl.signal,
+    abort: () => {
+      if (!ctrl.signal.aborted) ctrl.abort();
+    },
     makeTerminal: (logFile, redact) =>
       logFile
         ? Terminal.forProcess({ noColor: opts.noColor, verbose: opts.verbose, logFile, redact })

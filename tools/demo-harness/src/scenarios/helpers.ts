@@ -1,4 +1,5 @@
 // 시나리오 공용 동작 — 위젯 대화·확인 대기. 고정 지연 없이 조건 대기만 쓴다(H-S2).
+import { randomUUID } from 'node:crypto';
 import { BOT_A } from '../data/dataset';
 import { widget } from '../selectors/widget';
 import type { StepContext } from '../scenario/types';
@@ -35,4 +36,35 @@ export function norm(s: string): string {
 export function countTurn(ctx: StepContext, botAnswer: string): void {
   ctx.scratch.set('widgetTurns', Number(ctx.scratch.get('widgetTurns') ?? 0) + 1);
   if (norm(botAnswer) === norm(BOT_A.fallback)) ctx.scratch.set('widgetUnanswered', Number(ctx.scratch.get('widgetUnanswered') ?? 0) + 1);
+}
+
+/** 위젯 대화 세션을 새로 시작한다 — 이전 장면의 대화가 섞이지 않게 모형 출처(무대와 같은 출처)의 저장소를 비우고 모형을 다시 연다. */
+export async function freshWidgetSession(ctx: StepContext, slug: string): Promise<void> {
+  await ctx.page.evaluate(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+  });
+  await ctx.openSite(slug);
+}
+
+export interface EnvStatusLite {
+  prod: { versionId: string; versionNo: number };
+  staging: { versionId: string; versionNo: number } | null;
+}
+
+/** 환경 분리 챗봇의 운영·스테이징 포인터(API). */
+export async function envStatus(ctx: StepContext, botId: string): Promise<EnvStatusLite> {
+  return (await ctx.api.admin1.get(`/chatbots/${botId}/environment`)).body as EnvStatusLite;
+}
+
+/** 공개 대화 API로 한 번 묻고 첫 응답 문장을 돌려준다(별도 세션 · 화면에는 나타나지 않는다). */
+export async function publicAnswer(ctx: StepContext, slug: string, message: string): Promise<string> {
+  const res = await fetch(`${ctx.urls.publicApi}/public/chatbots/${slug}/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: ctx.urls.stage },
+    body: JSON.stringify({ sessionId: randomUUID(), message }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as { outputs?: Array<{ payload?: { text?: string } }> };
+  return body.outputs?.[0]?.payload?.text ?? '';
 }

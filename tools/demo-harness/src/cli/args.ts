@@ -1,7 +1,7 @@
 // 명령 인터페이스(설계 §4) — 인자 해석과 옵션 조합 검사(H-T1). 외부 파서 의존 없이 직접 해석한다.
 // 오류는 "무엇이 / 왜 / 어떻게" 3요소(UIUX §7)로 돌려준다.
-import { SEGMENT_KEYS, type SegmentKey } from '../scenario/types';
-import { DEFAULT_PRESET_ID } from '../presets';
+import { ALL_SEGMENT_KEYS, STEP_ID_RE, type SegmentKey } from '../scenario/types';
+import { DEFAULT_PRESET_ID, getPreset } from '../presets';
 import { isRunId } from '../util/time';
 
 export type HarnessMode = 'visible' | 'headless-check';
@@ -44,6 +44,18 @@ export interface CliOptions {
   noColor: boolean;
   /** 시험 전용 숨은 인자(AC-DH2-4) — 같은 DB 가드를 지난다. */
   dbUrlForTest: string | null;
+  /** 시험 전용 숨은 인자 — 보이는 시연 흐름(자막·영상·GIF·엔터 대기 생략·진행자 키 없음)을 창 없이 무인으로 돌린다. */
+  unattendedVisibleForTest: boolean;
+  /** [DT-2] 풀 투어 전용 모델 장면 플래그 5종(설계 §4.1). */
+  withVoiceInput: boolean;
+  sttDevice: 'auto' | 'cuda' | 'cpu';
+  /** `--stt-device`를 사용자가 명시했는지(명시한 장치가 불가면 보이는 시연도 차단 — 설계 A-DX-2). */
+  sttDeviceExplicit: boolean;
+  withLocalLlm: boolean;
+  liveClustering: boolean;
+  voiceMockCheck: boolean;
+  /** 시험 전용 숨은 인자(AC-DH4-2) — `S2-03:20` 처럼 단계 시작 전에 추가 지연(초)을 넣어 시간 관리(자동 생략)를 재현한다. */
+  injectDelay: Record<string, number>;
 }
 
 export interface ArgError {
@@ -85,7 +97,15 @@ export const DEFAULT_OPTIONS: CliOptions = Object.freeze({
   dryRun: false,
   verbose: false,
   noColor: false,
+  withVoiceInput: false,
+  sttDevice: 'auto',
+  sttDeviceExplicit: false,
+  withLocalLlm: false,
+  liveClustering: false,
+  voiceMockCheck: false,
   dbUrlForTest: null,
+  unattendedVisibleForTest: false,
+  injectDelay: {},
 }) as CliOptions;
 
 type Kind = 'bool' | 'value';
@@ -121,7 +141,14 @@ const OPTION_SPEC: Record<string, Kind> = {
   '--dry-run': 'bool',
   '--verbose': 'bool',
   '--no-color': 'bool',
+  '--with-voice-input': 'bool',
+  '--stt-device': 'value',
+  '--with-local-llm': 'bool',
+  '--live-clustering': 'bool',
+  '--voice-mock-check': 'bool',
   '--db-url-for-test': 'value',
+  '--unattended-visible-for-test': 'bool',
+  '--inject-delay': 'value',
 };
 
 const BROWSER_KEYWORDS = ['msedge', 'chrome', 'chromium', 'none'];
@@ -132,8 +159,9 @@ function parseIntStrict(s: string): number | null {
 
 export function parseArgs(argv: readonly string[]): ParseResult {
   const errors: ArgError[] = [];
-  const o: CliOptions = { ...DEFAULT_OPTIONS, viewport: { ...DEFAULT_OPTIONS.viewport }, skip: [] };
+  const o: CliOptions = { ...DEFAULT_OPTIONS, viewport: { ...DEFAULT_OPTIONS.viewport }, skip: [], injectDelay: {} };
   const err = (what: string, why: string, how: string) => errors.push({ what, why, how });
+  let sttDeviceGiven = false;
 
   // `pnpm demo -- --x` 처럼 pnpm이 넘기는 단독 `--`는 무시한다.
   const tokens = argv.filter((t) => t !== '--');
@@ -185,15 +213,15 @@ export function parseArgs(argv: readonly string[]): ParseResult {
           .split(',')
           .map((s) => s.trim().toLowerCase())
           .filter(Boolean);
-        const bad = keys.filter((k) => !(SEGMENT_KEYS as readonly string[]).includes(k));
+        const bad = keys.filter((k) => !(ALL_SEGMENT_KEYS as readonly string[]).includes(k));
         if (bad.length > 0 || keys.length === 0) {
           err(
             `--only 값이 올바르지 않습니다: ${value}`,
             `알 수 없는 구간: ${bad.join(', ') || '(비어 있음)'}`,
-            `${SEGMENT_KEYS.join(', ')} 중에서 쉼표로 고르세요. 예:  --only s1,s5`,
+            `${ALL_SEGMENT_KEYS.join(', ')} 중에서 쉼표로 고르세요. 예:  --only s1,s5`,
           );
         } else {
-          o.only = SEGMENT_KEYS.filter((k) => keys.includes(k)) as SegmentKey[];
+          o.only = ALL_SEGMENT_KEYS.filter((k) => keys.includes(k)) as SegmentKey[];
         }
         break;
       }
@@ -202,7 +230,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
           .split(',')
           .map((s) => s.trim().toUpperCase())
           .filter(Boolean);
-        const bad = ids.filter((id) => !/^S\d-\d{2}$/.test(id));
+        const bad = ids.filter((id) => !STEP_ID_RE.test(id));
         if (bad.length > 0 || ids.length === 0) {
           err(`--skip 값이 올바르지 않습니다: ${value}`, `단계 ID 형식이 아닙니다: ${bad.join(', ') || '(비어 있음)'}`, '예:  --skip S1-06,S4-03');
         } else o.skip = ids;
@@ -300,9 +328,43 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       case '--no-color':
         o.noColor = true;
         break;
+      case '--with-voice-input':
+        o.withVoiceInput = true;
+        break;
+      case '--stt-device':
+        if (value === 'auto' || value === 'cuda' || value === 'cpu') {
+          o.sttDevice = value;
+          o.sttDeviceExplicit = value !== 'auto';
+        } else err(`--stt-device 값이 올바르지 않습니다: ${value}`, 'auto, cuda, cpu만 쓸 수 있습니다', '예:  --stt-device cpu');
+        sttDeviceGiven = true;
+        break;
+      case '--with-local-llm':
+        o.withLocalLlm = true;
+        break;
+      case '--live-clustering':
+        o.liveClustering = true;
+        break;
+      case '--voice-mock-check':
+        o.voiceMockCheck = true;
+        break;
       case '--db-url-for-test':
         o.dbUrlForTest = value!;
         break;
+      case '--unattended-visible-for-test':
+        o.unattendedVisibleForTest = true;
+        break;
+      case '--inject-delay': {
+        const map: Record<string, number> = {};
+        let bad = false;
+        for (const part of value!.split(',')) {
+          const m = /^(S[0-79VPE]-\d{2}):(\d{1,3})$/i.exec(part.trim());
+          if (!m) bad = true;
+          else map[m[1].toUpperCase()] = Number(m[2]);
+        }
+        if (bad) err(`--inject-delay 값이 올바르지 않습니다: ${value}`, '단계ID:초 쌍을 쉼표로 이어야 합니다', '예:  --inject-delay S2-03:20');
+        else o.injectDelay = map;
+        break;
+      }
     }
   }
 
@@ -317,7 +379,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   if (o.from !== null && o.resume === null) {
     err('--from은 --resume과 함께만 쓸 수 있습니다', '새 실행은 처음부터 시작합니다', '예:  pnpm demo -- --resume <runId> --from S3');
   }
-  if (o.from !== null && !/^S\d(-\d{2})?$/.test(o.from)) {
+  if (o.from !== null && !/^S[0-79VPE](-\d{2})?$/.test(o.from)) {
     err(`--from 값이 올바르지 않습니다: ${o.from}`, '구간(S3) 또는 단계(S3-04) 형식이어야 합니다', '예:  --from S3');
   }
   if (o.resume !== null && o.resume !== 'latest' && !isRunId(o.resume)) {
@@ -336,6 +398,7 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       '예:  pnpm demo:check -- --appendix-llm',
     );
   }
+  checkFullTourCombos(o, sttDeviceGiven, err);
   if (o.prepareOnly && o.noTeardown) {
     // 둘 다 서버를 유지한다 — 오류는 아니지만 중복이라 조용히 허용
   }
@@ -343,17 +406,58 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   return errors.length > 0 ? { ok: false, errors } : { ok: true, options: o };
 }
 
+/** [DT-2] 풀 투어 옵션 조합 검사(설계 §4.2 · ui-spec §16.4.2 — 시작 전 오류 7종). 프리셋 해석은 이 파일이 프리셋 레지스트리를 읽어 한다. */
+function checkFullTourCombos(o: CliOptions, sttDeviceGiven: boolean, err: (what: string, why: string, how: string) => void): void {
+  const preset = getPreset(o.preset);
+  const flagsOk = (preset?.flags?.length ?? 0) > 0;
+  const given: Array<[string, boolean]> = [
+    ['--with-voice-input', o.withVoiceInput],
+    ['--stt-device', sttDeviceGiven],
+    ['--with-local-llm', o.withLocalLlm],
+    ['--live-clustering', o.liveClustering],
+    ['--voice-mock-check', o.voiceMockCheck],
+  ];
+  if (preset && !flagsOk) {
+    for (const [name, on] of given) {
+      if (on) err(`${name}은(는) 풀 투어 프리셋에서만 쓸 수 있습니다`, `10분판(${preset.id})은 모델 장면 없이 10분으로 고정되어 있습니다`, `pnpm demo -- --preset customer-onprem-full ${name}`);
+    }
+  }
+  if (preset && flagsOk) {
+    if (sttDeviceGiven && !o.withVoiceInput) {
+      err('--stt-device는 --with-voice-input과 함께 쓸 수 있습니다', '음성 입력을 켜지 않으면 음성 인식 프로세스를 띄우지 않습니다', 'pnpm demo -- --preset customer-onprem-full --with-voice-input --stt-device cpu');
+    }
+    if (o.voiceMockCheck && o.mode === 'visible') {
+      err('--voice-mock-check는 보이는 시연에서 쓸 수 없습니다', '고객 앞에서 가짜 인식 결과를 보이지 않기 위해서입니다', 'pnpm demo:check -- --preset customer-onprem-full --voice-mock-check');
+    }
+    if (o.voiceMockCheck && o.withVoiceInput) {
+      err('--voice-mock-check와 --with-voice-input은 함께 쓸 수 없습니다', '모의 인식과 실제 음성 인식은 한 번에 점검할 수 없습니다', '둘 중 하나를 빼고 다시 실행하세요');
+    }
+    if (o.only && o.only.includes('edge') && !o.withLocalLlm) {
+      err('장면 10(edge)이 이번 구성에 없습니다', '장면 10은 사내 생성 모델을 켰을 때만 생깁니다', '--with-local-llm을 붙이거나 --only를 바꾸세요');
+    }
+    if (o.appendixLlm) {
+      err('--appendix-llm은 풀 투어에서 쓰지 않습니다', '같은 내용을 장면 10이 보여 줍니다', '--with-local-llm을 쓰세요');
+    }
+  }
+  if (preset && !flagsOk && o.only) {
+    for (const k of ['voice', 'proactive', 'edge'] as const) {
+      if (o.only.includes(k)) err(`이 프리셋에는 ${k} 장면이 없습니다`, `${preset.id}은(는) 장면 7개입니다`, '--preset customer-onprem-full');
+    }
+  }
+}
+
 export const HELP_TEXT = `원클릭 시연 하네스(DT-1)
 
 사용법
   pnpm demo                      보이는 시연(사전 점검 -> 준비 -> 엔터 -> 10분 공연 -> 보고서 -> 정리)
+  pnpm demo -- --preset customer-onprem-full   풀 투어(약 14분 · 모델 장면은 옵션으로 켠다)
   pnpm demo:check                무인 점검(창 숨김, 사람 속도 없음, 검증과 스크린샷)
   pnpm demo -- <옵션>            아래 옵션
 
 옵션
   --mode visible|headless-check  실행 방식 (기본 visible)
   --preset <id>                  프리셋 (기본 ${DEFAULT_PRESET_ID})
-  --only s1,s5                   구간 선택 (opening s1..s7 closing)
+  --only s1,s5                   구간 선택 (opening s1..s7 voice proactive edge closing)
   --skip S1-06,S4-03             생략 가능 단계만 지정 가능
   --prepare-only                 준비까지 하고 서버를 유지한 채 대기
   --no-teardown                  끝난 뒤에도 서버를 유지
@@ -372,7 +476,12 @@ export const HELP_TEXT = `원클릭 시연 하네스(DT-1)
   --fail-fast                    무인 점검: 첫 실패에서 중단
   --field-encryption             거버넌스 필드 암호화 켬(실행별 키)
   --embedding-timeout-ms <n>     단건 임베딩 대기 시간 수동 지정
-  --appendix-llm                 무인 점검 전용: 예문 늘리기(LLM) 동작 확인 부록
+  --appendix-llm                 무인 점검 전용: 예문 늘리기(LLM) 동작 확인 부록(풀 투어에서는 쓰지 않음)
+  --with-voice-input             풀 투어: 장면 8에 음성 입력(말하기 -> 글자 -> 전송) 추가 · 음성 인식 프로세스 사용
+  --stt-device auto|cuda|cpu     풀 투어 음성 인식 장치(기본 auto — GPU 조건이 되면 GPU, 아니면 CPU)
+  --with-local-llm               풀 투어: 장면 10(사내 소형 생성 모델) 추가 · Ollama를 켜 둔 상태에서만
+  --live-clustering              풀 투어: 장면 7에서 발화 묶음 분석을 지금 실행하고 완료까지 대기
+  --voice-mock-check             무인 점검 전용(풀 투어): 모의 인식으로 위젯 -> API 구간만 점검(음성 인식 미검증)
   --customer-copy                고객 전달판 보고서 추가 생성
   --dry-run                      프로세스·브라우저 없이 계획만 출력
   --verbose  --no-color          상세 로그 / 색 끄기

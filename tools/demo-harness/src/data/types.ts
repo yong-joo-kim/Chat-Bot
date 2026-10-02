@@ -29,6 +29,13 @@ export interface DatasetIds {
     /** 이력 예약이 실행된 뒤 라이브 예약용으로 승격한 v3(대기 단계 뒤에 채워진다). */
     v3: VersionRef | null;
   };
+  /** [DT-2] 챗봇 D "가온마켓 주문 도우미"(⑨ 선제 안내 전용) — 풀 투어에서만 만든다. */
+  D?: BotIds & {
+    intents: { delivery: { intentId: string; nodeId: string; answer: string }; hours: { intentId: string; nodeId: string; answer: string } };
+    proactiveRuleId: string;
+  };
+  /** [DT-2] 풀 투어 추가 자산(챗봇 A의 음성 설정 · "기록만" 위험 응답 규칙). */
+  extras?: { monitorRuleId: string; voiceInputEnabled: boolean };
   accounts: Record<string, { id: string; email: string; name: string }>;
   counts: { historicalLogs: number; accounts: number; chatbots: number };
   /** 준비 단계 보정(감사 로그 2행 · 임베딩 캐시)을 했는지 — 보고서 공개용. */

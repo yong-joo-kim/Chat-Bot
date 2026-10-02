@@ -115,3 +115,15 @@ test('도움말 문구에 모든 주요 옵션이 있다', () => {
     assert.ok(HELP_TEXT.includes(key), key);
   }
 });
+
+// ── 3단계 숨은 시험 인자 ──
+test('숨은 시험 인자: --unattended-visible-for-test · --inject-delay (도움말에는 나오지 않는다)', () => {
+  const o = ok(['--unattended-visible-for-test', '--inject-delay', 'S2-03:20,S4-01:5']);
+  assert.equal(o.unattendedVisibleForTest, true);
+  assert.deepEqual(o.injectDelay, { 'S2-03': 20, 'S4-01': 5 });
+  assert.equal(ok([]).unattendedVisibleForTest, false);
+  assert.deepEqual(ok([]).injectDelay, {});
+  assert.ok(!HELP_TEXT.includes('unattended-visible-for-test') && !HELP_TEXT.includes('inject-delay'));
+  assert.ok(errs(['--inject-delay', 'S2-03']).length === 1);
+  assert.ok(errs(['--inject-delay', '2-03:20']).length === 1);
+});

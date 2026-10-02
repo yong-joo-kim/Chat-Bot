@@ -85,7 +85,8 @@ const steps: StepDef[] = [
       await consoleUi.nameButton(ctx.console, INTENTS_A[0].name).click();
       const dlg = consoleUi.dialog(ctx.console);
       await dlg.waitFor({ state: 'visible', timeout: 10_000 });
-      await dlg.getByText(/^예문 증강/).first().click();
+      // 접이식 패널의 토글 버튼(이름: "예문 증강 (제안 없음)" — 앞의 ▸ 기호는 접근성 이름에서 빠진다)
+      await dlg.getByRole('button', { name: /^예문 증강/ }).click();
       await dlg.getByRole('button', { name: /(새로|다시) 생성하기/ }).click();
       await dlg.getByText(/생성이 완료되었습니다/).first().waitFor({ state: 'visible', timeout: 45_000 });
       // 허용 목록에 든 후보만 승인한다(최대 2건)

@@ -48,7 +48,7 @@ test('H-S1: 제품 패키지는 @chat-bot/shared-types 진입점만 import(다�
   assert.deepEqual(bad, []);
 });
 
-test('H-S2: setTimeout/sleep 호출은 util/wait-for.ts 와 scenario/pacing.ts 에만(조건 대기 규약)', () => {
+test('H-S2: setTimeout/sleep 호출은 util/wait-for.ts 와 scenario/pacing.ts 에만(조건 대기 규약 — pacing의 holdForMedia 포함)', () => {
   const allowed = new Set(['src/util/wait-for.ts', 'src/scenario/pacing.ts']);
   const bad: string[] = [];
   for (const f of TS_FILES) {
@@ -122,4 +122,22 @@ test('.gitignore: 실행 폴더 무시', () => {
 test('API 선적재 스크립트는 src/runtime 에 있고 dist로 복사되지 않아도 경로가 맞는다', () => {
   assert.ok(existsSync(join(SRC, 'runtime', 'isolate-api-env.cjs')));
   assert.ok(existsSync(join(dirname(SRC), 'assets', 'stage.html')));
+});
+
+test('사용법 문서(NFR-DHM3): 시연 전 확인(Ollama 종료·메모리)·ffmpeg 반입 폴더·--stop·남은 수동 확인(M-1·M-2)·종료 코드를 담는다', () => {
+  const doc = read(join(REPO, 'docs', '05-ops', '시연_하네스.md'));
+  for (const must of ['Ollama', 'ffmpeg-1011', 'winldd-1007', '--stop', 'M-1', 'M-2', 'pnpm demo:check', '종료 코드', 'result.json', '엔터', 'NODE_PATH']) assert.ok(doc.includes(must), must);
+});
+
+test('assets/*.html·css·js 에는 외부 URL이 없다(H-T11 — 폐쇄망 · 모형 페이지의 위젯 스니펫은 실행 중 서버가 채운다)', () => {
+  const dir = join(PKG_ROOT, 'assets');
+  for (const name of readdirSync(dir)) assert.ok(!read(join(dir, name)).includes('://'), name);
+});
+
+test('3단계 새 소스는 apps/*/src·packages/*/src 를 import하지 않고 shell:true 를 쓰지 않는다', () => {
+  for (const f of TS_FILES.filter((x) => /src\/(report|capture|control|orchestrator|scenarios)\//.test(rel(x)))) {
+    const text = read(f);
+    assert.ok(!/(?:from\s+|require\()\s*['"][^'"]*(?:apps|packages)[\/][^'"]*[\/]src/.test(text), rel(f));
+    assert.ok(!/shell\s*:\s*true/.test(text), rel(f));
+  }
 });

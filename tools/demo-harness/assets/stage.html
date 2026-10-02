@@ -21,7 +21,7 @@
     <div id="panes" data-layout="split">
       <section class="pane" id="pane-site" data-demo-harness="pane-site" aria-label="고객 화면">
         <div class="label" id="label-site">고객 화면 · 가온마켓 홈페이지(시연용 가상)</div>
-        <div class="frame-box"><iframe id="site" title="고객 화면(고객사 모형)" src="about:blank"></iframe></div>
+        <div class="frame-box"><iframe id="site" title="고객 화면(고객사 모형)" src="about:blank"{{{SITE_ALLOW_ATTR}}}></iframe></div>
       </section>
       <section class="pane" id="pane-console" data-demo-harness="pane-console" aria-label="관리자 화면">
         <div class="label" id="label-console">관리자 화면</div>
@@ -38,6 +38,7 @@
     <div class="cap-notice" id="cap-notice"></div>
   </footer>
 </div>
+{{{VOICE_AUDIO_BLOCK}}}
 <script>window.__STAGE_CONFIG = { consoleUrl: "{{CONSOLE_URL}}", siteUrl: "{{STAGE_URL}}/site", cardBase: "{{STAGE_URL}}" };</script>
 <script src="/stage.js"></script>
 </body>

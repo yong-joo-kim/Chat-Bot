@@ -11,29 +11,128 @@
 <main id="app" aria-live="off">
   <h1 id="h1">구축형 구성 확인 · 이 노트북 한 대를 사내 서버로 가정했습니다</h1>
   <div class="cols3" id="cols"></div>
+  <div class="plan-band" id="band" hidden></div>
   <div class="row-explain" id="explain"></div>
   <div class="notice-line" id="notice"></div>
 </main>
 <script>
 (function () {
   'use strict';
-  var end = new URLSearchParams(location.search).get('phase') === 'end';
+  var params = new URLSearchParams(location.search);
+  var end = params.get('phase') === 'end';
+  var gpuView = params.get('view') === 'gpu';
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function chip(kind, text) { var c = el('span', 'chip ' + kind); c.appendChild(el('i', 'shape')); c.lastChild.setAttribute('aria-hidden', 'true'); c.appendChild(document.createTextNode(text)); return c; }
-  function card(title, rows, status, note) {
+  function card(title, rows, status, note, extraChips) {
     var s = el('section', 'card'); var h = el('h2', null, title); s.appendChild(h);
     var dl = el('dl'); rows.forEach(function (r) { dl.appendChild(el('dt', null, r[0])); dl.appendChild(el('dd', null, r[1])); }); s.appendChild(dl);
     if (status) s.appendChild(status);
+    (extraChips || []).forEach(function (c) { s.appendChild(c); });
     if (note) s.appendChild(el('div', 'note', note));
     return s;
   }
   function ms(v) { return v === null || v === undefined ? '측정하지 못했습니다' : Math.round(v) + 'ms'; }
+  function mib(v) { return v === null || v === undefined ? '확인 못함' : v.toLocaleString('en-US') + 'MiB'; }
+  function fmtMin(sec) { var m = Math.floor(sec / 60), s = Math.round(sec % 60); return m + '분 ' + (s < 10 ? '0' : '') + s + '초'; }
+
+  /* ── [DT-2] GPU 전환 카드(⑩ 진입) — 1초마다 /__facts를 읽어 글자만 교체한다(전체 재렌더 없음 · 점멸 없음) ── */
+  function renderGpu() {
+    document.getElementById('h1').textContent = 'GPU 전환 · 음성 인식에서 사내 소형 생성 모델로';
+    var app = document.getElementById('app');
+    document.getElementById('cols').remove();
+    document.getElementById('explain').remove();
+    var intro = el('p', 'gpu-intro'); app.insertBefore(intro, document.getElementById('notice'));
+    var grid = el('div', 'gpu-grid'); app.insertBefore(grid, document.getElementById('notice'));
+    var left = el('ol', 'gpu-steps'); var right = el('section', 'gpu-right'); grid.appendChild(left); grid.appendChild(right);
+    var rows = [];
+    ['음성 인식 내리기', '생성 모델 올리기', '확인'].forEach(function (name, i) {
+      var li = el('li', 'gpu-step'); var head = el('div', 'gpu-step-head'); head.appendChild(el('span', 'gpu-no', String(i + 1))); head.appendChild(el('span', 'gpu-name', name));
+      var st = el('span', 'chip unknown'); head.appendChild(st); var det = el('div', 'gpu-detail', '-'); li.appendChild(head); li.appendChild(det); left.appendChild(li);
+      rows.push({ st: st, det: det });
+    });
+    right.appendChild(el('h2', null, 'GPU 메모리 (관찰값)'));
+    var bar = el('div', 'gpu-bar'); var fill = el('i'); bar.appendChild(fill); right.appendChild(bar);
+    var num = el('div', 'gpu-num', '확인 못함'); right.appendChild(num);
+    right.appendChild(el('h2', 'gpu-h2b', '올라간 모델'));
+    var model = el('div', 'gpu-model', '-'); var modelNote = el('div', 'gpu-modelnote', '사내 소형 · 경량 구성 · 동작 확인 수준'); right.appendChild(model); right.appendChild(modelNote);
+    var nt = document.getElementById('notice'); nt.className = 'notice-line on'; nt.appendChild(el('span', 'chip', '시연 안내')); nt.appendChild(document.createTextNode('수치는 이 노트북에서 관찰한 값이며 합격 기준이 아닙니다'));
+    function setStep(i, state, detail) {
+      var r = rows[i]; var kind = state === '완료' ? 'ok' : state === '실패' ? 'warn' : state === '해당 없음' ? 'unknown' : state === '대기' ? 'later' : 'later';
+      r.st.className = 'chip ' + kind; r.st.textContent = ''; r.st.appendChild(el('i', 'shape')); r.st.lastChild.setAttribute('aria-hidden', 'true'); r.st.appendChild(document.createTextNode(state));
+      r.det.textContent = detail;
+    }
+    function render(f) {
+      var g = f.gpu || {};
+      var gb = g.totalMiB ? Math.round(g.totalMiB / 1024) : 4;
+      intro.textContent = g.sttState === 'NONE' ? '사내 소형 생성 모델을 이 노트북 GPU에 올립니다.' : '이 노트북의 GPU 메모리는 ' + gb + 'GB라 두 모델을 한 번에 올릴 수 없습니다. 그래서 한 번에 하나씩 올립니다.';
+      var phase = g.phase || 'idle';
+      // 1 음성 인식 내리기
+      if (g.sttState === 'NONE') setStep(0, '해당 없음', '이번 구성에서는 음성 인식을 GPU에 올리지 않았습니다');
+      else if (g.failedStep === 1) setStep(0, '실패', '음성 인식을 내리지 못했습니다');
+      else if (phase === 'stopping') setStep(0, '내리는 중', '내리기 전 ' + mib(g.beforeStopMiB));
+      else if (phase === 'idle') setStep(0, '대기', '-');
+      else setStep(0, '완료', '내리기 전 ' + mib(g.beforeStopMiB) + ' · 내린 뒤 ' + mib(g.afterStopMiB));
+      // 2 생성 모델 올리기
+      if (g.failedStep === 1 || phase === 'idle' || phase === 'stopping') setStep(1, '대기', '-');
+      else if (g.failedStep === 2) setStep(1, '실패', '생성 모델을 올리지 못했습니다');
+      else if (phase === 'loading') setStep(1, '올리는 중', '올리는 중입니다');
+      else setStep(1, '완료', '올리는 데 걸린 시간 ' + (g.loadSec === null || g.loadSec === undefined ? '확인 못함' : (g.loadSec < 1 ? '1초 미만' : g.loadSec + '초')));
+      // 3 확인
+      if (g.failedStep === 3) setStep(2, '실패', '올라간 모델을 확인하지 못했습니다');
+      else if (phase === 'verifying') setStep(2, '올리는 중', '확인하는 중입니다');
+      else if (phase === 'done') setStep(2, '완료', '올라간 모델을 확인했습니다');
+      else setStep(2, '대기', '-');
+      var used = g.usedMiB, total = g.totalMiB;
+      num.textContent = (used === null || used === undefined || !total) ? '확인 못함' : used.toLocaleString('en-US') + ' / ' + total.toLocaleString('en-US') + 'MiB';
+      fill.style.width = (used !== null && used !== undefined && total) ? Math.min(100, Math.round(100 * used / total)) + '%' : '0%';
+      model.textContent = g.ollamaActive ? (g.model || '확인 못함') : (g.model ? g.model + ' (올라가지 않음)' : '아직 올라가지 않았습니다');
+    }
+    function tick() { fetch('/__facts', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render).catch(function () { /* 다음 주기에 다시 */ }); }
+    tick(); setInterval(tick, 1000);
+  }
+
+  /* ── [DT-2] 풀 투어 시작 카드 변형 ── */
+  function startFull(f, cols, ex) {
+    var p = f.plan; var net = f.network === 'closed' ? '차단됨' : f.network === 'open' ? '열림' : '확인 못함';
+    var netChip = f.network === 'open' ? chip('warn', '주의') : f.network === 'unknown' ? chip('unknown', '확인 못함') : chip('ok', '확인됨');
+    var noGpu = p.gpuUse === 'none';
+    cols.appendChild(card('1 사내 설치', [['서버 ' + p.servers.length + '개', p.servers.join(' · ')], ['화면 서버 3개', '관리 콘솔 · 위젯 · 시연 화면'], ['위치', '모두 이 PC 안']], chip('ok', '이 PC에서 확인한 값'), f.apiBindNote));
+    var rows2 = [['문장 분석 장치', f.device + (f.gpuHidden ? ' (GPU 미노출)' : '')]];
+    if (noGpu) { rows2.push(['이 PC의 GPU', f.gpuPresent ? '있음, 사용하지 않음' : '없음']); rows2.push(['응답 지연 P95', ms(f.latencyP95)]); }
+    else {
+      if (p.voice.state === 'SHOWN') rows2.push(['음성 인식', (p.voice.modelLabel || '확인 못함') + ' · ' + (p.voice.device || '확인 못함')]);
+      rows2.push(['GPU', p.gpuUseText]); rows2.push(['문장 분석 응답 지연 P95', ms(f.latencyP95)]);
+    }
+    var chips2 = []; if (!noGpu) { var fc = el('span', 'chip fact'); fc.appendChild(el('i', 'shape')); fc.lastChild.setAttribute('aria-hidden', 'true'); fc.appendChild(document.createTextNode('GPU 사용')); chips2.push(fc); }
+    if (p.voice.note === 'SELECTED') chips2.push(chip('unknown', '장치 선택')); else if (p.voice.note === 'FALLBACK') chips2.push(chip('warn', '장치 대체'));
+    var note2 = noGpu ? 'AI 분석에만 해당합니다. 화면 그리기는 GPU를 쓸 수 있습니다' : '문장 분석에만 해당합니다. 음성 인식·생성 모델이 GPU를 쓰는 구간은 따로 표시합니다. 화면 그리기는 GPU를 쓸 수 있습니다';
+    if (p.voice.note === 'SELECTED') note2 += ' · GPU 조건이 맞지 않아 음성 인식을 CPU(' + (p.voice.modelLabel || 'small') + ')로 돌립니다. 정확도는 GPU 모델과 다를 수 있습니다';
+    if (p.voice.note === 'FALLBACK') note2 += ' · GPU로 시작하지 못해 CPU(' + (p.voice.modelLabel || 'small') + ')로 다시 시작했습니다. 정확도는 GPU 모델과 다를 수 있습니다';
+    cols.appendChild(card(noGpu ? '2 CPU로 동작' : '2 문장 분석은 CPU', rows2, chip('ok', '이 PC에서 확인한 값'), note2, chips2));
+    cols.appendChild(card('3 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['데이터 출구', p.egressNames.length + '곳(이 PC 안)'], ['증강 방식', p.augmentation === 'local' ? '사내 소형 모델' : '규칙 기반'], ['네트워크', net]], netChip, f.network === 'open' ? '이번 시연은 인터넷이 연결된 상태입니다. 서버는 외부로 보내지 않도록 설정되어 있습니다' : null));
+    // 이번 시연 구성 띠(고객용 쉬운 말 · "이번 시연 계획" 칩 — 아직 보여 드리기 전이라 확인됨을 쓰지 않는다)
+    var band = document.getElementById('band'); band.hidden = false;
+    var bh = el('h2', null, '이번 시연 구성'); band.appendChild(bh);
+    var voiceTxt = p.voice.state === 'SHOWN' ? '보여 드립니다' : p.voice.state === 'UNAVAILABLE' ? '이 PC에서 준비하지 못해 생략합니다' : '이번 구성에서 켜지 않았습니다';
+    var llmTxt = p.llm.state === 'SHOWN' ? '장면 10에서 보여 드립니다' : p.llm.state === 'UNAVAILABLE' ? '이 PC에서 준비하지 못해 생략합니다' : '이번 구성에서 켜지 않았습니다';
+    var liveTxt = p.liveClustering ? '장면 7에서 지금 돌립니다' : '미리 같은 파일로 실행한 결과를 보여 드립니다';
+    var ul = el('ul', 'band-items');
+    [['장면 ' + p.sceneCount + '개 · 약 ' + fmtMin(p.totalSec)], ['음성으로 묻기: ' + voiceTxt], ['사내 소형 생성 모델: ' + llmTxt], ['실시간 분석: ' + liveTxt]].forEach(function (x) { ul.appendChild(el('li', null, x[0])); });
+    band.appendChild(ul); band.appendChild(chip('later', '이번 시연 계획'));
+    [['4 감사', '운영 전환은 두 번째 관리자가 승인하고 기록이 남습니다 — 장면 5'], ['5 보존', '보존 기간이 지나면 원문이 자동으로 지워집니다 — 장면 6'], ['6 데이터 통제', '데이터가 나가는 출구 목록을 관리합니다' + (f.governance === 'ON' ? ' (지금 켜짐 · 출구 허용 ' + f.egressAllowed + '곳)' : '') + ' — 장면 6']].forEach(function (x) {
+      var c = el('section', 'card'); c.appendChild(el('h2', null, x[0])); c.appendChild(el('p', null, x[1])); c.appendChild(chip('later', '장면에서 보여 드립니다')); ex.appendChild(c);
+    });
+  }
+
+  if (gpuView) { renderGpu(); return; }
+
   fetch('/__facts', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (f) {
     var cols = document.getElementById('cols'); var ex = document.getElementById('explain');
     var net = f.network === 'closed' ? '차단됨' : f.network === 'open' ? '열림' : '확인 못함';
     var netChip = f.network === 'open' ? chip('warn', '주의') : f.network === 'unknown' ? chip('unknown', '확인 못함') : chip('ok', '확인됨');
     if (!end) {
       document.getElementById('h1').textContent = '구축형 구성 확인 · 이 노트북 한 대를 사내 서버로 가정했습니다';
+      if (f.plan) { startFull(f, cols, ex); return; }
       cols.appendChild(card('1 사내 설치', [['서버 2개', 'API · 문장 분석'], ['화면 서버 3개', '관리 콘솔 · 위젯 · 시연 화면'], ['위치', '모두 이 PC 안']], chip('ok', '이 PC에서 확인한 값'), f.apiBindNote));
       cols.appendChild(card('2 CPU로 동작', [['문장 분석 장치', f.device + (f.gpuHidden ? ' (GPU 미노출)' : '')], ['이 PC의 GPU', f.gpuPresent ? '있음, 사용하지 않음' : '없음'], ['응답 지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값'), 'AI 분석에만 해당합니다. 화면 그리기는 GPU를 쓸 수 있습니다'));
       cols.appendChild(card('3 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['증강 방식', '규칙 기반'], ['네트워크', net]], netChip, f.network === 'open' ? '이번 시연은 인터넷이 연결된 상태입니다. 서버는 외부로 보내지 않도록 설정되어 있습니다' : null));
@@ -43,13 +142,20 @@
     } else {
       document.getElementById('h1').textContent = '마무리 · 오늘 확인하신 구축형 구성';
       var r = f.results || { passed: 0, skipped: 0, fallback: 0, failed: 0 };
-      cols.appendChild(card('사내에서 전부 동작', [['이번 시연', '장면 ' + r.passed + '개 통과'], ['건너뜀', r.skipped + '개'], ['대체', r.fallback + '개'], ['보여 드리지 못한 장면', r.failed + '개']], chip('ok', '이번 시연 결과')));
-      cols.appendChild(card('CPU로 동작', [['분석 장치', f.device], ['지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값')));
-      cols.appendChild(card('서버는 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['네트워크', net]], netChip));
+      var p = f.plan;
+      var rows1 = [['이번 시연', '장면 ' + r.passed + '개 통과'], ['건너뜀', r.skipped + '개'], ['대체', r.fallback + '개'], ['보여 드리지 못한 장면', r.failed + '개']];
+      if (p && r.optionSkipped > 0) rows1.push(['이 PC 구성으로 생략', r.optionSkipped + '개']);
+      cols.appendChild(card('사내에서 전부 동작', rows1, chip('ok', '이번 시연 결과')));
+      if (p && p.gpuUse !== 'none') {
+        var fc = el('span', 'chip fact'); fc.appendChild(el('i', 'shape')); fc.lastChild.setAttribute('aria-hidden', 'true'); fc.appendChild(document.createTextNode('GPU 사용'));
+        cols.appendChild(card('문장 분석은 CPU', [['문장 분석 장치', f.device], ['음성 인식', p.voice.state === 'SHOWN' ? (p.voice.modelLabel || '') + ' · ' + (p.voice.device || '') : '사용 안 함'], ['사내 생성 모델', p.llm.state === 'SHOWN' ? '이 PC GPU (장면 10)에서 사용했습니다' : '사용 안 함'], ['지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값'), 'GPU는 음성 인식·생성 모델 구간에서 사용했습니다. 문장 분석은 CPU입니다', [fc]));
+      } else cols.appendChild(card('CPU로 동작', [['분석 장치', f.device], ['지연 P95', ms(f.latencyP95)]], chip('ok', '이 PC에서 확인한 값')));
+      if (p) cols.appendChild(card('서버는 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['데이터 출구', p.egressNames.length + '곳(이 PC 안)'], ['네트워크', net]], netChip));
+      else cols.appendChild(card('서버는 외부로 보내지 않음', [['외부 주소 설정', f.externalAddresses + '개'], ['네트워크', net]], netChip));
       var b = f.blockedRequests || 0;
       var n = document.getElementById('notice');
       if (b > 0) { n.className = 'notice-line on'; n.appendChild(el('span', 'chip', '브라우저(화면) 쪽 참고')); n.appendChild(document.createTextNode('관리 화면이 외부 주소로 보내려던 요청 ' + b + '건을 시연 도구가 막았습니다. 서버가 외부로 보낸 것은 없습니다.')); }
-      ex.appendChild(el('p', null, '시연 보고서는 시연이 끝난 뒤 전달해 드립니다.'));
+      ex.appendChild(el('p', null, '시연 보고서는 시연이 끝난 뒤 전달해 드립니다.' + (p && r.optionSkipped > 0 ? ' 생략한 장면은 시연 보고서에 정리해 두었습니다' : '')));
     }
   }).catch(function () { document.getElementById('cols').appendChild(el('p', null, '확인한 값을 불러오지 못했습니다')); });
 })();

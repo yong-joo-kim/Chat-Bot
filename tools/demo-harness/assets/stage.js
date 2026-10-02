@@ -19,11 +19,13 @@
   }
   setInterval(renderTimer, 1000);
 
-  // 진행 막대 — 9구간, 예산에 비례한 폭
-  (function buildProgress() {
+  // 진행 막대 — 기본 9구간(10분판), 예산에 비례한 폭. 풀 투어는 setSegments()로 활성 구간만 다시 그린다.
+  function buildProgress(budgets) {
     var p = $('progress');
-    BUDGETS.forEach(function (b) { var s = document.createElement('div'); s.className = 'seg'; s.style.flex = String(b) + ' 1 0'; s.appendChild(document.createElement('i')); p.appendChild(s); });
-  })();
+    p.textContent = '';
+    budgets.forEach(function (b) { var s = document.createElement('div'); s.className = 'seg'; s.style.flex = String(b) + ' 1 0'; s.appendChild(document.createElement('i')); p.appendChild(s); });
+  }
+  buildProgress(BUDGETS);
 
   // 1280x720처럼 오른쪽 칸이 1024 미만이면 관리자 화면 iframe을 논리 폭 1024로 두고 축소(ui-spec §3.2)
   function layoutFrames() {
@@ -37,6 +39,29 @@
   }
   window.addEventListener('resize', layoutFrames);
 
+  // [DT-2] 상태 칩 — 기본 상태와 소리 재생 중을 우선순위로 합쳐 그린다
+  var chipBase = 'none', soundOn = false;
+  var CHIP_TEXT = { paused: '잠시 멈춤', fallback: '대체 화면', failed: '이번 시연에서 보여 드리지 못한 장면', sound: '소리 재생 중' };
+  function renderChip() {
+    var state = chipBase !== 'none' ? chipBase : (soundOn ? 'sound' : 'none');
+    var chip = $('state-chip'); chip.setAttribute('data-state', state);
+    $('state-text').textContent = CHIP_TEXT[state] || '';
+  }
+  // [DT-2] 관객용 합성 음성 — 하네스 소유 <audio>와 화면 안 1px 투명 고정 버튼(뷰포트 밖 버튼은 Playwright 클릭 불가 — DX-4)
+  var audioInfo = { state: 'idle', error: '' };
+  (function bindAudio() {
+    var a = $('voice-audio'), btn = $('voice-play');
+    if (!a || !btn) return;
+    a.addEventListener('playing', function () { audioInfo.state = 'playing'; soundOn = true; renderChip(); });
+    a.addEventListener('ended', function () { audioInfo.state = 'ended'; soundOn = false; renderChip(); });
+    a.addEventListener('error', function () { audioInfo = { state: 'error', error: 'media error' }; soundOn = false; renderChip(); });
+    btn.addEventListener('click', function () {
+      audioInfo = { state: 'idle', error: '' };
+      var pr = a.play();
+      if (pr && pr.catch) pr.catch(function (e) { audioInfo = { state: 'error', error: String(e && e.name || e) }; soundOn = false; renderChip(); });
+    });
+  })();
+
   var api = {
     version: 1,
     setLayout: function (name) {
@@ -48,7 +73,9 @@
     setSegment: function (chip, title) { $('seg-chip').textContent = chip; $('seg-title').textContent = title; },
     /** {elapsedMs, paused, totalSec?} 스냅샷 — 로컬 1초 갱신이 이어받는다 */
     setTimer: function (s) { timer.baseMs = s.elapsedMs || 0; timer.at = Date.now(); timer.paused = !!s.paused; if (s.totalSec) timer.total = s.totalSec; timer.ended = !!s.ended; renderTimer(); },
-    /** fractions: 9개(0~1) — 구간별 채움 비율 */
+    /** [DT-2] 활성 구간 목록으로 진행 막대를 다시 그린다([{key, budgetSec}]) — 호출이 없으면 DT-1 9칸 기본값. */
+    setSegments: function (list) { buildProgress((list || []).map(function (x) { return Math.max(1, Number(x.budgetSec) || 1); })); },
+    /** fractions: 구간 수만큼(0~1) — 구간별 채움 비율 */
     setProgress: function (fractions) { var segs = $('progress').querySelectorAll('.seg i'); for (var i = 0; i < segs.length; i++) segs[i].style.width = Math.round(100 * Math.min(1, Math.max(0, fractions[i] || 0))) + '%'; },
     setPaneLabel: function (which, text) { $(which === 'site' ? 'label-site' : 'label-console').textContent = text; },
     setFrameSrc: function (which, src) { $(which).src = src; layoutFrames(); },
@@ -66,15 +93,20 @@
       });
     },
     /** 카드(시작·마무리·로드맵): kind = system | system-end | roadmap */
-    showCard: function (kind) {
-      var url = kind === 'roadmap' ? '/roadmap' : kind === 'system-end' ? '/system?phase=end' : '/system';
+    /** kind = system | system-end | roadmap | gpu ([DT-2] — roadmap은 opts.preset 'full'이면 풀 투어 변형). */
+    showCard: function (kind, opts) {
+      var url = kind === 'roadmap' ? (opts && opts.preset === 'full' ? '/roadmap?preset=full' : '/roadmap') : kind === 'system-end' ? '/system?phase=end' : kind === 'gpu' ? '/system?view=gpu' : '/system';
       $('card-frame').src = cfg.cardBase + url;
       api.setLayout('card');
     },
     showCaption: function (c) {
       $('caption').removeAttribute('data-paused');
       var b = $('cap-badges'); b.textContent = '';
-      (c.badges || []).slice(0, 2).forEach(function (t) { var e = document.createElement('span'); e.className = 'badge'; e.textContent = t; b.appendChild(e); });
+      // [DT-2] 사실 칩(점선)을 먼저, 강조 배지를 뒤에. 합계 최대: 사실 칩이 있으면 3(풀 투어), 없으면 2(10분판)
+      var facts = (c.facts || []).slice(0, 3);
+      var maxTotal = facts.length > 0 ? 3 : 2;
+      facts.forEach(function (t) { var e = document.createElement('span'); e.className = 'badge fact'; e.textContent = t; b.appendChild(e); });
+      (c.badges || []).slice(0, Math.max(0, maxTotal - facts.length)).forEach(function (t) { var e = document.createElement('span'); e.className = 'badge'; e.textContent = t; b.appendChild(e); });
       var body = $('cap-body'); body.textContent = '';
       (c.lines || []).slice(0, 2).forEach(function (t) { var d = document.createElement('div'); d.textContent = t; body.appendChild(d); });
       var n = $('cap-notice'); n.textContent = '';
@@ -83,12 +115,12 @@
     },
     clearCaption: function () { $('cap-badges').textContent = ''; $('cap-body').textContent = ''; $('cap-notice').textContent = ''; captionNotice = ''; },
     pauseCaption: function (on) { var c = $('caption'); if (on) { c.setAttribute('data-paused', '1'); $('cap-body').textContent = ''; var d = document.createElement('div'); d.textContent = '잠시 멈춤 — 진행자가 설명하는 중입니다'; $('cap-body').appendChild(d); } else c.removeAttribute('data-paused'); },
-    /** none | paused | fallback | failed */
-    setStateChip: function (state) {
-      var chip = $('state-chip'); chip.setAttribute('data-state', state || 'none');
-      var text = { paused: '잠시 멈춤', fallback: '대체 화면', failed: '이번 시연에서 보여 드리지 못한 장면' }[state] || '';
-      $('state-text').textContent = text;
-    },
+    /** none | paused | fallback | failed | sound ([DT-2] 소리 재생 중 — 우선순위 paused > fallback > failed > sound) */
+    setStateChip: function (state) { chipBase = state || 'none'; renderChip(); },
+    /** [DT-2] 소리가 나는 동안 켠다(합성 음성 재생 · 기기 안 음성 읽기). 다른 상태가 없을 때만 보인다. */
+    setSound: function (on) { soundOn = !!on; renderChip(); },
+    /** [DT-2] 관객용 합성 음성 재생 상태 — playing | ended | error | idle (하네스 소유 <audio>) */
+    audioState: function () { return audioInfo; },
     /** 대기 화면(#ready) 켜고 끄기 */
     setReady: function (on) {
       var o = $('overlay'); o.setAttribute('data-on', on ? '1' : '0');

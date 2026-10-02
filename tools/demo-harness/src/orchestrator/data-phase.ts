@@ -4,6 +4,7 @@ import type { Ports, RepoPaths } from '../config';
 import { runCalibrationGates, type CalibrationResult } from '../data/calibration';
 import { DbDirect } from '../data/db-direct';
 import { generateDataset, scheduleWithApproval, type GeneratedData } from '../data/generator';
+import { withProactiveAttr } from '../data/generator-full';
 import type { DatasetIds } from '../data/types';
 import { ApiSession } from '../data/api-client';
 import type { Terminal } from '../log/terminal';
@@ -69,9 +70,16 @@ export async function waitHistorySchedule(i: DataPhaseInput, r: DataPhaseResult)
   const limitMs = Math.max(60_000, at - Date.now() + 5_000 + 60_000);
   const t0 = Date.now();
   i.term.text(`이력 예약 실행을 기다립니다(예약 ${sched.scheduledAt}, 상한 약 ${Math.ceil(limitMs / 60_000)}분)...`);
+  let lastBeat = 0;
   try {
     await waitFor(
       async () => {
+        // 긴 대기는 15초마다 남은 시간(추정)을 알린다 — 무한 대기처럼 보이지 않게(ui-spec §9.2)
+        if (Date.now() - lastBeat >= 15_000) {
+          lastBeat = Date.now();
+          const left = Math.max(0, at - Date.now());
+          i.term.line('progress', `이력 예약 실행 대기: 남은 시간 약 ${Math.floor(left / 60_000)}분 ${Math.floor((left % 60_000) / 1000)}초 (추정 - 상한 ${Math.ceil(limitMs / 60_000)}분)`);
+        }
         const s = (await admin1.get(`/chatbots/${r.data.ids.C.id}/deploy-schedules/${sched.scheduleId}`)).body as { status?: string };
         if (s.status && !['PENDING', 'RUNNING', 'HELD'].includes(s.status)) return s.status;
         return false;
@@ -106,5 +114,11 @@ export async function registerStageBots(r: DataPhaseResult, registry: Record<str
   for (const b of [r.data.ids.A, r.data.ids.B, r.data.ids.C]) {
     const code = (await admin1.get(`/chatbots/${b.id}/embed-code`)).body as { pc: string };
     registry[b.slug] = { name: b.name, snippet: code.pc };
+  }
+  // [DT-2] 챗봇 D(⑨ 선제 안내 전용): 선제 코드는 삽입 코드에 data-proactive="on"이 있을 때만 초기화된다 — 콘솔이 예시로 보여 주는 것과 같은 변환을 D의 모형 페이지에만 넣는다
+  const D = r.data.ids.D;
+  if (D) {
+    const code = (await admin1.get(`/chatbots/${D.id}/embed-code`)).body as { pc: string };
+    registry[D.slug] = { name: D.name, snippet: withProactiveAttr(code.pc) };
   }
 }

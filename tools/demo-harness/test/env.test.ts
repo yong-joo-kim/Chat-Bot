@@ -196,3 +196,35 @@ test('file: URL 해석: 쿼리 제거 · file:///D:/ 형태 · UNC 거부', () =
   assert.equal(sqlitePathFromUrl('file://server/share/c.db'), null);
   assert.equal(sqlitePathFromUrl('postgresql://x'), null);
 });
+
+// ── [DT-2 FR-DX0-2] 음성 AI(No.32) 출구 키 · 제품 출구 레지스트리 대조 ──
+import { EgressExitId } from '@chat-bot/shared-types';
+import { EGRESS_EXIT_COVERAGE } from '../src/env/api-env';
+
+test('FR-DX0-2: ML_WORKER_SPEECH_URL은 빈 문자열로 명시하고 SPEECH_ENABLED=false를 명시한다(개발자 .env 값이 새지 않는다)', () => {
+  const { env, overrides } = apiEnv();
+  assert.equal(env.ML_WORKER_SPEECH_URL, '');
+  assert.equal(env.SPEECH_ENABLED, 'false');
+  const row = overrides.find((r) => r.key === 'ML_WORKER_SPEECH_URL')!;
+  assert.equal(row.disclosed, true);
+  assert.equal(overrides.find((r) => r.key === 'SPEECH_ENABLED')!.disclosed, true);
+  // 부모(개발자 셸)에 값이 있어도 덮어쓴다
+  const dirty = buildApiEnv({ parentEnv: { ...DIRTY_PARENT, ML_WORKER_SPEECH_URL: 'http://127.0.0.1:8102', SPEECH_ENABLED: 'true' }, runDir: RUN_DIR, dbPath: join(RUN_DIR, 'demo.db'), ports, embeddingTimeoutMs: 300, apiPackageJson: API_PKG });
+  assert.equal(dirty.env.ML_WORKER_SPEECH_URL, '');
+  assert.equal(dirty.env.SPEECH_ENABLED, 'false');
+});
+
+test('제품 출구 레지스트리(EgressExitId) 전부를 하네스가 어떻게 막는지 대조한다 — 새 출구가 생기면 이 시험이 실패해 하네스 목록 갱신을 강제한다', () => {
+  const ids = EgressExitId.options as readonly string[];
+  assert.deepEqual([...ids].sort(), Object.keys(EGRESS_EXIT_COVERAGE).sort());
+  const { env } = apiEnv();
+  for (const id of ids) {
+    const cov = EGRESS_EXIT_COVERAGE[id];
+    for (const key of cov.keys) {
+      assert.ok(key in env, `${id}: ${key} 가 자식 환경에 명시돼야 한다`);
+      if (cov.how === 'BLANK') assert.ok(env[key] === '' || env[key] === 'false', `${id}: ${key} 는 빈 값/꺼짐이어야 한다(${env[key]})`);
+      if (cov.how === 'LOOP_OFF') assert.equal(env[key], 'false', `${id}: ${key}`);
+      if (cov.how === 'LOOPBACK') assert.match(env[key], /^http:\/\/127\.0\.0\.1:\d+$/, `${id}: ${key}`);
+    }
+  }
+});

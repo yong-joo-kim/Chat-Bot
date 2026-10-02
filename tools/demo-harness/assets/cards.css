@@ -40,3 +40,39 @@ h2 { margin: 0; font-size: calc(36 * var(--u)); }
 .box.road .why { grid-column: 1; font-size: calc(21 * var(--u)); color: var(--muted); }
 .box.road .chip { grid-row: 1 / span 2; grid-column: 2; font-size: calc(20 * var(--u)); color: #92400e; background: #fff; }
 .fixed { margin: 0; font-size: calc(22 * var(--u)); color: var(--muted); border-top: calc(2 * var(--u)) solid var(--border); padding-top: calc(10 * var(--u)); }
+
+/* ── [DT-2] 풀 투어 카드 변형 ── */
+.chip.fact { color: #92400e; background: #fff; border-style: dashed; }
+.chip.fact .shape { border-radius: 50%; background: radial-gradient(circle, currentColor 0 22%, transparent 24%); }
+.plan-band { flex: none; border: calc(2 * var(--u)) solid #3730a3; background: #eef2ff; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(22 * var(--u)); display: flex; flex-wrap: wrap; align-items: center; gap: calc(6 * var(--u)) calc(24 * var(--u)); }
+.plan-band[hidden] { display: none; }
+.plan-band h2 { font-size: calc(28 * var(--u)); }
+.band-items { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: calc(4 * var(--u)) calc(28 * var(--u)); flex: 1 1 auto; }
+.band-items li { font-size: calc(24 * var(--u)); font-weight: 700; }
+.cols3 .card { padding: calc(10 * var(--u)) calc(18 * var(--u)); gap: calc(5 * var(--u)); }
+.cols3 .card dd { font-size: calc(26 * var(--u)); margin-bottom: calc(2 * var(--u)); }
+.cols3 .card dt { font-size: calc(20 * var(--u)); }
+.cols3 .card .note { font-size: calc(19 * var(--u)); }
+.row-explain p { font-size: calc(22 * var(--u)); }
+.box.done ul.many { gap: calc(3 * var(--u)); }
+.box.done ul.many li { font-size: calc(24 * var(--u)); }
+main.full h1 { font-size: calc(38 * var(--u)); }
+.omit { flex: none; border: calc(3 * var(--u)) dashed #92400e; background: #fffbeb; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(24 * var(--u)); max-height: calc(170 * var(--u)); overflow: hidden; }
+.omit h2 { font-size: calc(26 * var(--u)); }
+.omit ul { list-style: none; margin: calc(4 * var(--u)) 0 0; padding: 0; display: flex; flex-direction: column; gap: calc(2 * var(--u)); }
+.omit li { font-size: calc(26 * var(--u)); }
+/* GPU 전환 카드 */
+.gpu-intro { margin: 0; font-size: calc(30 * var(--u)); }
+.gpu-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 55fr 45fr; gap: calc(24 * var(--u)); }
+.gpu-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(14 * var(--u)); }
+.gpu-step { border: calc(2 * var(--u)) solid var(--border); border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(20 * var(--u)); }
+.gpu-step-head { display: flex; align-items: center; gap: calc(14 * var(--u)); }
+.gpu-no { font-size: calc(36 * var(--u)); font-weight: 700; }
+.gpu-name { font-size: calc(36 * var(--u)); font-weight: 700; flex: 1 1 auto; }
+.gpu-detail { font-size: calc(30 * var(--u)); color: var(--muted); font-variant-numeric: tabular-nums; margin-top: calc(4 * var(--u)); }
+.gpu-right { border: calc(2 * var(--u)) solid var(--border); border-radius: calc(8 * var(--u)); padding: calc(14 * var(--u)) calc(24 * var(--u)); display: flex; flex-direction: column; gap: calc(10 * var(--u)); }
+.gpu-bar { height: calc(28 * var(--u)); background: #e5e7eb; border: calc(2 * var(--u)) solid #4b5563; border-radius: calc(6 * var(--u)); overflow: hidden; }
+.gpu-bar i { display: block; height: 100%; width: 0; background: #4f46e5; }
+.gpu-num { font-size: calc(36 * var(--u)); font-weight: 700; font-variant-numeric: tabular-nums; }
+.gpu-model { font-size: calc(30 * var(--u)); font-weight: 700; overflow-wrap: anywhere; }
+.gpu-modelnote { font-size: calc(24 * var(--u)); color: var(--muted); }

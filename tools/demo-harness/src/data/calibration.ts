@@ -6,7 +6,7 @@ import type { GeneratedData } from './generator';
 import type { ApiSession } from './api-client';
 
 export interface GateResult {
-  id: 'G-1' | 'G-2' | 'G-3' | 'G-4';
+  id: 'G-1' | 'G-2' | 'G-3' | 'G-4' | 'G-DX-1' | 'G-DX-2' | 'G-DX-3' | 'G-DX-4';
   scene: string;
   ok: boolean;
   detail: string;
@@ -26,7 +26,7 @@ interface CalibrationDeps {
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-async function putSemantic(api: ApiSession, botId: string, enabled: boolean): Promise<void> {
+export async function putSemantic(api: ApiSession, botId: string, enabled: boolean): Promise<void> {
   const cur = (await api.get(`/chatbots/${botId}/answer-settings`)).body as Json;
   await api.put(`/chatbots/${botId}/answer-settings`, {
     semanticEnabled: enabled,
@@ -44,7 +44,7 @@ async function putSemantic(api: ApiSession, botId: string, enabled: boolean): Pr
   });
 }
 
-async function simulate(api: ApiSession, botId: string, message: string): Promise<{ node: string | undefined; stages: string[] }> {
+export async function simulate(api: ApiSession, botId: string, message: string): Promise<{ node: string | undefined; stages: string[] }> {
   const r = (await api.post(`/chatbots/${botId}/simulate`, { message })).body as Json;
   return { node: r.matchedNodeName, stages: (r.trace ?? []).map((t: Json) => `${t.stage}:${t.code ?? ''}`) };
 }

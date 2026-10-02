@@ -2,6 +2,7 @@
 // 하네스 프로세스가 Prisma 클라이언트를 require하며 `.env`를 읽어 들였더라도 자식에 새지 않는다(DHD-10 ①).
 import type { Ports } from '../config';
 import { toSqliteUrl } from './db-guard';
+import type { VoiceInputPlan } from '../scenario/plan';
 
 /** 자식에게 넘길 수 있는 시스템 필수 키 허용 목록(설계 §6.2). 윈도 환경변수 이름은 대소문자를 구분하지 않는다. */
 export const SYSTEM_ENV_KEYS = [
@@ -73,6 +74,12 @@ export interface ApiEnvInput {
    * (2026-10-01 실측). 하네스는 제품 의존성 선언을 바꾸지 않고 같은 경로를 NODE_PATH로 넘긴다.
    */
   nodePath?: string;
+  /**
+   * [DT-2] 풀 투어 계획 — 없으면(10분판) 출력이 DT-1과 바이트 동일하다(H-T21 스냅숏).
+   * 있으면 `SPEECH_*`·`ML_WORKER_SPEECH_URL`·`AUGMENTATION_*`·`DATA_EGRESS_ALLOWED_HOSTS`·`PROACTIVE_ENABLED`를 계획별로 명시한다.
+   * `NODE_ENV`는 어떤 계획에서도 넘기지 않는다(비운영 — 운영 mock 차단은 시연 대상이 아니다).
+   */
+  plan?: { voiceInput: VoiceInputPlan; localLlm: boolean };
 }
 
 export function buildApiEnv(input: ApiEnvInput): BuiltEnv {
@@ -95,15 +102,28 @@ export function buildApiEnv(input: ApiEnvInput): BuiltEnv {
   set('EMBEDDING_BASE_URL', `http://127.0.0.1:${ports.mlWorker}`, '미설정', '의미 매칭·분석(루프백)', true);
   set('EMBEDDING_TIMEOUT_MS', String(input.embeddingTimeoutMs), '300', '단건 질의 예산(설계 §14)', input.embeddingTimeoutMs !== 300);
   set('EMBEDDING_BATCH_TIMEOUT_MS', '30000', '30000', '배치 예산 명시');
-  set('AUGMENTATION_PROVIDER', 'rule', 'rule', '증강 = 규칙 기반(G1)', true);
+  const plan = input.plan;
+  const llm = plan?.localLlm === true;
+  set('AUGMENTATION_PROVIDER', llm ? 'local' : 'rule', 'rule', llm ? '증강 = 사내 소형 생성(G3 · 장면 10)' : '증강 = 규칙 기반(G1)', true);
   // DHD-10 4: 값 없는 선택 출구 키는 빈 문자열로 명시 — 어떤 .env 로더도 덮어쓰지 않는다.
+  const speechReal = plan?.voiceInput === 'real';
   for (const k of [
     'AUGMENTATION_GEMINI_API_KEY',
     'AUGMENTATION_GEMINI_BASE_URL',
     'AUGMENTATION_GEMINI_MODEL',
     'AUGMENTATION_LOCAL_BASE_URL',
     'RAG_BASE_URL',
+    // [DT-2 FR-DX0-2] 음성 AI(No.32)가 추가한 8번째 출구 키 — 개발자 .env에 값이 있어도 시연 API가 음성 인식 서버(8102)로 나가지 않게 빈 값으로 명시한다.
+    'ML_WORKER_SPEECH_URL',
   ]) {
+    if (k === 'AUGMENTATION_LOCAL_BASE_URL' && llm) {
+      set(k, `http://127.0.0.1:${ports.mlAugment ?? 8101}`, '미설정', '사내 소형 생성 서버(루프백 · 장면 10)', true);
+      continue;
+    }
+    if (k === 'ML_WORKER_SPEECH_URL' && speechReal) {
+      set(k, `http://127.0.0.1:${ports.mlSpeech ?? 8102}`, '미설정', '음성 인식 서버(루프백 · 장면 8)', true);
+      continue;
+    }
     set(k, '', '미설정', '외부 출구 키 빈 값 고정(DHD-10 4)', true);
   }
   // 공연과 무관한 루프 차단
@@ -114,8 +134,13 @@ export function buildApiEnv(input: ApiEnvInput): BuiltEnv {
     ['DATA_REENCRYPT_JOB_ENABLED', 'false', 'true'],
     ['CLASSIFIER_ENABLED', 'false', 'false'],
     ['UTTERANCE_ANALYSIS_NAME_SUGGEST_ENABLED', 'false', 'false'],
+    // [DT-2 FR-DX0-2] 음성 AI(No.32) 스위치 — 10분 프리셋에서는 쓰지 않으므로 꺼짐을 명시한다(.env의 SPEECH_ENABLED=true가 새지 않게).
+    ['SPEECH_ENABLED', plan && plan.voiceInput !== 'off' ? 'true' : 'false', 'false'],
   ];
-  for (const [k, v, d] of loopRows) set(k, v, d, '공연 무관 루프 차단', true);
+  for (const [k, v, d] of loopRows) set(k, v, d, k === 'SPEECH_ENABLED' && v === 'true' ? '음성 인식 서버 사용(장면 8)' : '공연 무관 루프 차단', true);
+  if (plan?.voiceInput === 'real') set('SPEECH_PROVIDER', 'local', '미설정', '사내 음성 인식(local)', true);
+  else if (plan?.voiceInput === 'mock') set('SPEECH_PROVIDER', 'mock', '미설정', '모의 인식(무인 점검 전용 · 음성 인식 미검증)', true);
+  if (plan) set('PROACTIVE_ENABLED', 'true', 'true', '선제 안내 서버 스위치 명시(장면 9)', true);
   set('DEPLOY_SCHEDULE_ENABLED', 'true', 'true', '예약 배포 엔진(장면 5)', true);
   set('DEPLOY_SCHEDULE_POLL_INTERVAL_MS', '5000', '30000', '예약 폴링 허용 최소값(장면 5)', true);
   set('HANDOFF_SWEEPER_ENABLED', 'true', 'true', '상담 정리 루프(장면 2)');
@@ -123,7 +148,10 @@ export function buildApiEnv(input: ApiEnvInput): BuiltEnv {
   set('DATA_GOVERNANCE_MODE', governance, 'OFF', '데이터 거버넌스 모드(구축형 강조)', true);
   if (governance === 'ON') {
     set('DATA_RESIDENCY_ALLOWED_DIRS', runDirSlash, '(빈 값)', '저장 위치 허용(실행 폴더)', true);
-    set('DATA_EGRESS_ALLOWED_HOSTS', `127.0.0.1:${ports.mlWorker}`, '(빈 값)', '출구 허용 1개(루프백)', true);
+    const hosts = [`127.0.0.1:${ports.mlWorker}`];
+    if (speechReal) hosts.push(`127.0.0.1:${ports.mlSpeech ?? 8102}`);
+    if (llm) hosts.push(`127.0.0.1:${ports.mlAugment ?? 8101}`);
+    set('DATA_EGRESS_ALLOWED_HOSTS', hosts.join(','), '(빈 값)', hosts.length === 1 ? '출구 허용 1개(루프백)' : `출구 허용 ${hosts.length}개(모두 루프백)`, true);
   }
   // DATA_AT_REST_ENCRYPTION_DECLARED는 설정하지 않는다(정직성 — 설계 §6.2).
   if (input.encryptionKeys) {
@@ -169,3 +197,50 @@ export function buildMlEnv(input: MlEnvInput): BuiltEnv {
   set('PYTHONIOENCODING', 'utf-8', '(미설정)', '로그 한글');
   return { env, overrides: rows };
 }
+
+/**
+ * 제품 출구 레지스트리(`EgressExitId`)의 각 출구를 시연 API가 어떻게 막거나 제한하는지(FR-DX0-2).
+ * 단위 시험이 `@chat-bot/shared-types`의 `EgressExitId` 목록과 이 표를 대조한다 — 제품에 새 출구가 생기면 시험이 실패해
+ * 이 표와 `buildApiEnv`를 함께 갱신하게 만든다(`.env`의 값이 시연 API를 통해 새 출구로 나가는 사고 방지).
+ *  - BLANK: 출구 주소 키를 빈 문자열로 명시 · LOOPBACK: 루프백 1곳만 허용 · LOOP_OFF: 자동 발송·수집 루프를 끔 · DB: 주소를 DB에서 읽어(생성한 데이터에 없음) 설정 키가 없음
+ */
+type Coverage = Readonly<Record<string, { how: 'BLANK' | 'LOOPBACK' | 'LOOP_OFF' | 'DB'; keys: string[] }>>;
+
+/** [DT-2] 계획별 출구 커버리지 — `SPEECH_LOCAL`은 음성 real이면 루프백, `AUGMENT_LOCAL`은 생성 켬이면 루프백(나머지는 10분판 표와 같다). */
+export function egressCoverage(plan?: { voiceInput: VoiceInputPlan; localLlm: boolean }): Coverage {
+  if (!plan) return EGRESS_EXIT_COVERAGE;
+  return {
+    ...EGRESS_EXIT_COVERAGE,
+    SPEECH_LOCAL: { how: plan.voiceInput === 'real' ? 'LOOPBACK' : 'BLANK', keys: ['ML_WORKER_SPEECH_URL', 'SPEECH_ENABLED'] },
+    AUGMENT_LOCAL: { how: plan.localLlm ? 'LOOPBACK' : 'BLANK', keys: ['AUGMENTATION_LOCAL_BASE_URL'] },
+  };
+}
+
+/** 값이 있는 출구 키 중 호스트가 루프백이 아닌 것의 수(`externalAddresses` — "외부 송신 없음" 배지의 증거). 모든 계획에서 0이어야 한다. */
+export function countExternalAddresses(env: Record<string, string>): number {
+  const keys = ['EMBEDDING_BASE_URL', 'RAG_BASE_URL', 'AUGMENTATION_GEMINI_BASE_URL', 'AUGMENTATION_LOCAL_BASE_URL', 'ML_WORKER_SPEECH_URL'];
+  let n = 0;
+  for (const k of keys) {
+    const v = env[k];
+    if (!v) continue;
+    try {
+      const h = new URL(v).hostname;
+      if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(h)) n += 1;
+    } catch {
+      n += 1;
+    }
+  }
+  if (env.AUGMENTATION_GEMINI_API_KEY) n += 1;
+  return n;
+}
+
+export const EGRESS_EXIT_COVERAGE: Coverage = {
+  EMBEDDING: { how: 'LOOPBACK', keys: ['EMBEDDING_BASE_URL'] },
+  RAG: { how: 'BLANK', keys: ['RAG_BASE_URL'] },
+  AUGMENT_GEMINI: { how: 'BLANK', keys: ['AUGMENTATION_GEMINI_BASE_URL', 'AUGMENTATION_GEMINI_API_KEY', 'AUGMENTATION_GEMINI_MODEL'] },
+  AUGMENT_LOCAL: { how: 'BLANK', keys: ['AUGMENTATION_LOCAL_BASE_URL'] },
+  LEGACY_API: { how: 'DB', keys: [] },
+  WORKFLOW_WEBHOOK: { how: 'LOOP_OFF', keys: ['WORKFLOW_DISPATCH_ENABLED'] },
+  KB_CRAWL: { how: 'LOOP_OFF', keys: ['KB_SYNC_ENABLED'] },
+  SPEECH_LOCAL: { how: 'BLANK', keys: ['ML_WORKER_SPEECH_URL', 'SPEECH_ENABLED'] },
+};

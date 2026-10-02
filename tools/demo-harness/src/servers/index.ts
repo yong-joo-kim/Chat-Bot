@@ -3,6 +3,7 @@ import type { Ports } from '../config';
 import type { RepoPaths } from '../config';
 import { startStaticServer, type RunningServer } from './static-server';
 import { startStageServer, type StageBotInfo } from './stage-server';
+import { buildRoadmapRows } from '../stage/roadmap-html';
 
 export interface HarnessServers {
   console: RunningServer;
@@ -16,6 +17,10 @@ export interface ServerHooks {
   bots?: () => Record<string, StageBotInfo>;
   facts?: () => unknown;
   motion?: 'on' | 'off';
+  /** [DT-2] 풀 투어 훅(없으면 DT-1과 같은 서버). */
+  audioFile?: () => string | null;
+  siteAllow?: () => boolean;
+  roadmapFull?: () => { scenes: string[]; omitted: string[]; excludeNos: number[] };
 }
 
 export async function startHarnessServers(paths: RepoPaths, ports: Ports, hooks: ServerHooks = {}): Promise<HarnessServers> {
@@ -47,9 +52,13 @@ export async function startHarnessServers(paths: RepoPaths, ports: Ports, hooks:
         API_BASE: `http://localhost:${ports.api}/api/v1`,
         STAGE_URL: `http://localhost:${ports.stage}`,
         MOTION: hooks.motion ?? 'on',
+        ROAD_ROWS: buildRoadmapRows(),
       }),
       bots: hooks.bots,
       facts: hooks.facts,
+      audioFile: hooks.audioFile,
+      siteAllow: hooks.siteAllow,
+      roadmapFull: hooks.roadmapFull,
     });
     started.push(stage);
     return {

@@ -69,7 +69,7 @@ export interface GeneratedData {
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-function idOf(body: unknown, what: string): string {
+export function idOf(body: unknown, what: string): string {
   const b = body as Json | undefined;
   const id = b?.id ?? b?.intent?.id ?? b?.schedule?.id ?? b?.request?.id ?? b?.item?.id;
   if (typeof id !== 'string') throw new Error(`${what} 응답에서 ID를 찾지 못했습니다: ${JSON.stringify(body).slice(0, 200)}`);
@@ -113,7 +113,7 @@ export async function createAccounts(d: GeneratorDeps): Promise<{ sessions: Sess
 }
 
 // ── 챗봇 공통 ──────────────────────────────────────────────────────────────────────
-async function createBot(api: ApiSession, d: GeneratorDeps, groupId: string, def: { name: string; slug: string; description?: string; skin?: { primaryColor: string; headerTitle: string } }): Promise<BotIds> {
+export async function createBot(api: ApiSession, d: GeneratorDeps, groupId: string, def: { name: string; slug: string; description?: string; skin?: { primaryColor: string; headerTitle: string } }): Promise<BotIds> {
   const created = await api.post('/chatbots', { groupId, name: def.name, slug: def.slug, ...(def.description ? { description: def.description } : {}) });
   const id = idOf(created.body, `챗봇 ${def.slug}`);
   if (def.skin) await api.patch(`/chatbots/${id}/skin`, def.skin);
@@ -123,13 +123,13 @@ async function createBot(api: ApiSession, d: GeneratorDeps, groupId: string, def
   return { id, slug: def.slug, name: def.name };
 }
 
-async function createNode(api: ApiSession, botId: string, body: Json): Promise<string> {
+export async function createNode(api: ApiSession, botId: string, body: Json): Promise<string> {
   assertValid(CreateDialogNodeSchema, body, `노드 ${body.name}`);
   const r = await api.post(`/chatbots/${botId}/dialog-nodes`, body);
   return idOf(r.body, `노드 ${body.name}`);
 }
 
-const text = (t: string) => ({ type: 'TEXT', payload: { text: t } });
+export const text = (t: string) => ({ type: 'TEXT', payload: { text: t } });
 
 // ── 챗봇 A ─────────────────────────────────────────────────────────────────────────
 export async function createBotA(api: ApiSession, d: GeneratorDeps, groupId: string): Promise<DatasetIds['A']> {
@@ -250,22 +250,21 @@ export async function scheduleWithApproval(
     action: 'SWITCH_PROD_VERSION',
     targetVersionId: args.targetVersionId,
     previewedProdVersionId: args.baseVersionId,
+    // 시연 준비 단계의 예약은 "최근 시험 실행 이력 없음" 같은 경고를 확인한 것으로 처리한다(제품 규칙: 경고가 있으면 확인 필수 — 보고서 정직성 표기에 공개)
+    acknowledgeWarnings: true,
     scheduledAt: args.scheduledAt.toISOString(),
     memo: args.memo,
   });
   const scheduleId = idOf(sch.body, '예약');
   const req = await admin1.post(`${base}/environment/approval/requests`, { action: 'SCHEDULED_PROD_SWITCH', deployScheduleId: scheduleId });
   const approvalId = idOf(req.body, '승인 요청');
-  await admin2.post(`${base}/environment/approval/requests/${approvalId}/approve`, {});
+  await admin2.post(`${base}/environment/approval/requests/${approvalId}/approve`, { acknowledgeWarnings: true });
   log(`예약: ${args.memo} · ${args.scheduledAt.toISOString()} · 작성자 요청 + 다른 ADMIN 승인 완료`);
   return { scheduleId, approvalId, scheduledAt: args.scheduledAt };
 }
 
 // ── 전체 흐름 ─────────────────────────────────────────────────────────────────────
-export interface GenerateOptions {
-  /** 이력용 예약 C-1 실행을 기다리는 콜백은 호출자(오케스트레이터)가 맡는다. 여기서는 걸기만 한다. */
-}
-
+// 이력용 예약 C-1 실행 대기는 호출자(오케스트레이터)가 맡는다 — 여기서는 걸기만 한다.
 export async function generateDataset(d: GeneratorDeps): Promise<GeneratedData> {
   const now = d.now ?? (() => new Date());
   const { sessions, credentials, accounts } = await createAccounts(d);

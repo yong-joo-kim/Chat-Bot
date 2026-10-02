@@ -113,6 +113,18 @@ export class Terminal {
     else this.fileOnly(lines);
   }
 
+  /**
+   * 터미널에만 쓰는 줄 — 비밀 제거(redact)와 로그 파일 기록을 모두 건너뛴다.
+   * 계정 비밀번호는 준비 완료 요약에만 1회 출력하고 로그·보고서·캡처에는 남기지 않는다(NFR-DHS3).
+   */
+  secretLine(message: string, indent = ''): void {
+    try {
+      this.out.write(wrapByWidth(message, this.width, indent).join('\n') + '\n');
+    } catch {
+      /* 출력 파이프가 닫혔다 */
+    }
+  }
+
   blank(): void {
     this.emit(['']);
   }

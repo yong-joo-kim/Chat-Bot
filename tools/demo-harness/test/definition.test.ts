@@ -67,7 +67,7 @@ test('생략 순서는 설계 §11.1 표와 같고 핵심 단계 ID를 담지 �
 });
 
 test('프리셋 레지스트리', () => {
-  assert.deepEqual(listPresetIds(), ['customer-onprem-10m']);
+  assert.deepEqual(listPresetIds(), ['customer-onprem-10m', 'customer-onprem-full']);
   assert.ok(getPreset('customer-onprem-10m'));
   assert.equal(getPreset('nope'), undefined);
 });

@@ -55,3 +55,20 @@ export function findProcessesByCommandLineMarker(marker: string): CimProcess[] {
   });
   return parseCimJson(r.stdout ?? '').filter((p) => p.commandLine.includes(marker));
 }
+
+/**
+ * [DT-2] 프로세스 트리(루트 PID + 모든 후손) — 음성 인식 자식은 venv 런처 + 실제 인터프리터 2개이고 `nvidia-smi`는 인터프리터를 보고한다(DX-6).
+ * 종료 **전에** 호출해 GPU 회수 판정의 감시 PID를 얻는다. 조회 실패면 루트만.
+ */
+export function listProcessTree(rootPid: number): number[] {
+  const script =
+    '[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;' +
+    'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress';
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, encoding: 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024 });
+  const all = parseCimJson(r.stdout ?? '');
+  const byParent = new Map<number, number[]>();
+  for (const p of all) byParent.set(p.ppid, [...(byParent.get(p.ppid) ?? []), p.pid]);
+  const out = [rootPid];
+  for (let i = 0; i < out.length; i++) for (const c of byParent.get(out[i]) ?? []) if (!out.includes(c)) out.push(c);
+  return out;
+}

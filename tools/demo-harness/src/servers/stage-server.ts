@@ -3,6 +3,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync as readBinary } from 'node:fs';
+import { SCENE_TITLES } from '../scenario/plan';
+import { buildRoadmapRows } from '../stage/roadmap-html';
 import { startStaticServer, type RunningServer } from './static-server';
 
 export const STAGE_ROUTES: Record<string, string> = {
@@ -59,7 +62,31 @@ export interface StageServerOptions {
   bots?: () => Record<string, StageBotInfo>;
   /** `/__facts` JSON(시작/마무리 카드용). */
   facts?: () => unknown;
+  /** [DT-2] 관객용 합성 음성 WAV 경로(보이는 시연 · 음성 real일 때만 값 — 고정 경로 `/audio/utterance.wav` 1개). */
+  audioFile?: () => string | null;
+  /** [DT-2] 고객사 모형 iframe `allow="microphone"` 속성을 넣을지(음성 입력 켬). */
+  siteAllow?: () => boolean;
+  /** [DT-2] 풀 투어 로드맵(`/roadmap?preset=full`) 입력 — 활성 장면 키 · 생략 줄 · 오늘 시연한 기능 번호. */
+  roadmapFull?: () => { scenes: string[]; omitted: string[]; excludeNos: number[] };
 }
+
+function escLi(s: string): string {
+  return escapeHtml(s);
+}
+
+/** 풀 투어 로드맵 템플릿 값(활성 장면 목록 · 로드맵 행(No.32 제외) · 생략 줄). 모든 값은 이스케이프한다. */
+export function buildRoadmapFullValues(input: { scenes: string[]; omitted: string[]; excludeNos: number[] }): Record<string, string> {
+  const items = input.scenes.map((k, i) => `<li><b>${i + 1}</b>${escLi(SCENE_TITLES[k] ?? k)}</li>`).join('');
+  const omit = input.omitted.length > 0 ? input.omitted.map((l) => `<li>${escLi(l)}</li>`).join('') : '<li>이번 시연에서 생략한 장면은 없습니다</li>';
+  return {
+    DONE_TITLE: `시연 완료 · 오늘 보여 드린 ${input.scenes.length}가지`,
+    DONE_CLASS: input.scenes.length >= 10 ? 'many' : '',
+    DONE_ITEMS: items,
+    ROAD_ROWS: buildRoadmapRows(input.excludeNos),
+    OMIT_LINES: omit,
+  };
+}
+
 
 export function startStageServer(opts: StageServerOptions): Promise<RunningServer> {
   return startStaticServer({
@@ -72,7 +99,21 @@ export function startStageServer(opts: StageServerOptions): Promise<RunningServe
         res.end(JSON.stringify(opts.facts?.() ?? {}));
         return true;
       }
-      const file = STAGE_ROUTES[url.pathname];
+      if (url.pathname === '/audio/utterance.wav' && (req.method === 'GET' || req.method === 'HEAD')) {
+        const f = opts.audioFile?.() ?? null;
+        if (!f) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end('합성 음성이 없습니다');
+          return true;
+        }
+        const buf = readBinary(f);
+        res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': buf.length, 'cache-control': 'no-store' });
+        res.end(req.method === 'HEAD' ? undefined : buf);
+        return true;
+      }
+      let file = STAGE_ROUTES[url.pathname];
+      const fullRoadmap = url.pathname === '/roadmap' && url.searchParams.get('preset') === 'full' && opts.roadmapFull !== undefined;
+      if (fullRoadmap) file = 'roadmap-full.html';
       if (!file || (req.method !== 'GET' && req.method !== 'HEAD')) return false;
       const path = join(opts.assetsDir, file);
       if (!existsSync(path)) {
@@ -88,7 +129,13 @@ export function startStageServer(opts: StageServerOptions): Promise<RunningServe
         res.end('<!doctype html><html lang="ko"><meta charset="utf-8"><title>가온마켓</title><p>연결할 챗봇을 찾지 못했습니다</p></html>');
         return true;
       }
-      const values = { ...opts.values(), BOT_SLUG: slug, ...buildSiteValues(info, url.searchParams.get('snippet') === 'off') };
+      const audioOn = opts.audioFile?.() ? true : false;
+      const extra: Record<string, string> = {
+        SITE_ALLOW_ATTR: opts.siteAllow?.() ? ' allow="microphone"' : '',
+        VOICE_AUDIO_BLOCK: audioOn ? '<audio id="voice-audio" src="/audio/utterance.wav" preload="auto"></audio><button id="voice-play" type="button" aria-hidden="true" tabindex="-1"></button>' : '',
+        ...(fullRoadmap ? buildRoadmapFullValues(opts.roadmapFull!()) : {}),
+      };
+      const values = { ...opts.values(), BOT_SLUG: slug, ...extra, ...buildSiteValues(info, url.searchParams.get('snippet') === 'off') };
       const html = fillTemplate(readFileSync(path, 'utf8'), values);
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       res.end(req.method === 'HEAD' ? undefined : html);

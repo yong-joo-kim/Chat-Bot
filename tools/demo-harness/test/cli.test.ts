@@ -28,12 +28,15 @@ test('잘못된 옵션·조합은 종료 코드 2 + 3요소 오류, 프로세스
   }
 });
 
-test('--dry-run: 종료 코드 0, 시나리오 슬롯 7개와 9구간 예산 600초, 공개표 · 프로세스 0', () => {
+test('--dry-run: 종료 코드 0, 시나리오 장면 7개와 9구간 예산 600초, 공개표 · 프로세스 0', () => {
   const r = cli(['--dry-run']);
   assert.equal(r.code, 0, r.out);
   for (const key of ['opening', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 'closing']) assert.ok(new RegExp(`^${key}\\s`, 'm').test(r.out), key);
   assert.ok(r.out.includes('총 예산 10:00 (600초)'));
-  assert.ok(r.out.includes('시나리오 슬롯 7개:'));
+  assert.ok(r.out.includes('시나리오 장면 7개:'));
+  for (const id of ['S0-01', 'S5-03', 'S6-02', 'S7-04', 'S9-01']) assert.ok(r.out.includes(id), `${id} 단계표`);
+  assert.ok(r.out.includes('ML_WORKER_SPEECH_URL') && r.out.includes('SPEECH_ENABLED'), 'FR-DX0-2 공개표');
+  assert.ok(/선택자 문구 \d+개/.test(r.out), '선택자 목록');
   for (const title of ['챗봇 구축과 위젯 대화', '상담원 인계', '통계와 대시보드', '학습 개선 루프', '버전과 배포 통제', '개인정보와 안전', '발화 묶음 분석']) assert.ok(r.out.includes(title), title);
   assert.ok(r.out.includes('CHATBOT_API_IGNORE_ENV_FILE'));
   assert.ok(r.out.includes('(빈 문자열)'), '출구 키 빈 값 표기');

@@ -6,8 +6,16 @@ export function timezoneLabel(timezone: string): string {
   return f.abbreviation ? `${f.abbreviation}, ${f.offsetLabel}` : f.offsetLabel;
 }
 
-export function formatInZone(instant: Date, timezone: string): string {
-  const f = formatInstantInZone(instant, timezone);
+/**
+ * [DHX-5] API 응답의 시각은 JSON 문자열(ISO)로 오지만 공유 타입은 `Date`로 선언돼 있어(웹 `apiClient`는 날짜를 복원하지 않는다)
+ * 문자열이 그대로 들어오면 `Invalid time value`로 화면이 비었다 — 문자열·`Date` 모두 받아 순간으로 정규화한다.
+ */
+export function toInstant(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+export function formatInZone(instant: Date | string, timezone: string): string {
+  const f = formatInstantInZone(toInstant(instant), timezone);
   return `${f.date} ${f.time}`;
 }
 
@@ -15,7 +23,7 @@ export function formatInZone(instant: Date, timezone: string): string {
  * No.28 M-1 — 예약 화면 전역에서 쓰는 "시각 + 시간대 라벨" 조합 표시(NFR-DA1, UIUX §1 — 화면의
  * 모든 시각에 시간대를 항상 병기). `lib/date.ts#formatDateTime`(하드코딩 Asia/Seoul)을 대신한다.
  */
-export function formatScheduleDateTime(instant: Date, timezone: string): string {
+export function formatScheduleDateTime(instant: Date | string, timezone: string): string {
   return `${formatInZone(instant, timezone)} (${timezoneLabel(timezone)})`;
 }
 

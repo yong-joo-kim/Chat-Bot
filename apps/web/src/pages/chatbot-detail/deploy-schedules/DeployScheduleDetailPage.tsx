@@ -14,7 +14,7 @@ import { DeployScheduleStatusBadge } from '../../../components/DeployScheduleSta
 import { deployScheduleActionText } from '../../../components/DeployScheduleActionLabel';
 import { ScheduledAtField } from '../../../components/ScheduledAtField';
 import { canManageDeploySchedule } from '../../../lib/deploySchedulePermissions';
-import { formatScheduleDateTime, localPartsToInstant, timezoneLabel } from '../../../lib/scheduleTime';
+import { formatScheduleDateTime, localPartsToInstant, timezoneLabel, toInstant } from '../../../lib/scheduleTime';
 import { useDeployScheduleMeta } from '../../../lib/useDeployScheduleMeta';
 import { useApprovalPolicy } from '../../../lib/useApprovalPolicy';
 import { matchScheduleApproval, ScheduleApprovalStatusText } from './ScheduleApprovalStatusText';
@@ -26,8 +26,8 @@ import { ScheduleDeployDialog } from './ScheduleDeployDialog';
 
 const RUNNING_POLL_INTERVAL_MS = 3000;
 
-function toLocalTimeParts(instant: Date, timezone: string): { date: string; hour: string; minute: string } {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(instant);
+function toLocalTimeParts(instant: Date | string, timezone: string): { date: string; hour: string; minute: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(toInstant(instant));
   const map: Record<string, string> = {};
   for (const p of parts) map[p.type] = p.value;
   return { date: `${map.year}-${map.month}-${map.day}`, hour: map.hour === '24' ? '00' : map.hour, minute: map.minute };

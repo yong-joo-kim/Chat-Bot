@@ -11,6 +11,7 @@ import { probeBrowser } from '../browser/launch';
 import { checkPorts } from '../proc/ports';
 import { findPortOwners, netstatRows } from '../proc/system';
 import { git } from '../build/fingerprint';
+import { queryGpuList } from '../gpu/nvidia-smi';
 import { withTimeout } from '../util/wait-for';
 import { DIST_PATHS } from '../build/fingerprint';
 import {
@@ -44,6 +45,8 @@ export interface PreflightReport {
   /** 외부망이 차단돼 있는지(보고서 점검표). */
   offline: boolean;
   devDbBefore: FileFingerprint;
+  /** 사전 점검이 시험 실행한 브라우저 종류·버전(보고서 환경 정보). */
+  browserInfo: { kind: string; version: string | null };
   envKeyNames: { api: string[]; mlWorker: string[] };
 }
 
@@ -160,12 +163,6 @@ function missingDeps(paths: RepoPaths): string[] {
   return missing;
 }
 
-function nvidiaSmi(): string[] | null {
-  const r = spawnSync('nvidia-smi', ['-L'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
-  if (r.error || r.status !== 0) return null;
-  return (r.stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-}
-
 export async function runPreflight(args: {
   paths: RepoPaths;
   options: CliOptions;
@@ -189,11 +186,13 @@ export async function runPreflight(args: {
   items.push(evalDistOutputs([...missingDist], options.noBuild));
 
   // PC-5 브라우저 — 기동까지 해 본다
+  let browserInfo: { kind: string; version: string | null } = { kind: options.browser, version: null };
   if (options.browser === 'none' && options.mode === 'visible') {
     items.push({ id: 'PC-5', title: '브라우저', status: 'block', message: '--browser none은 무인 점검에서만 쓸 수 있습니다', why: '보이는 시연에는 브라우저가 필요합니다', how: '--browser msedge  또는  pnpm demo:check -- --browser none' });
   } else {
     const probe = await probeBrowser(options.browser);
     items.push(evalBrowserProbe(probe.ok, probe.kind, probe.detail, probe.version));
+    browserInfo = { kind: probe.kind, version: probe.version ?? null };
   }
 
   const ff = ffmpegPresent();
@@ -217,10 +216,13 @@ export async function runPreflight(args: {
     const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq ollama.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true });
     ollamaProc = /"ollama\.exe"/i.test(r.stdout ?? '');
   }
-  items.push(evalOllama(ollamaProc, ollamaPort));
+  // [DT-2] 사내 생성 모델을 켠 실행은 Ollama가 "필요 — 사용함"이다(10분판·생성 끔 = DT-1의 "끄세요" 경고 그대로 · PC-DX-12)
+  if (options.withLocalLlm) {
+    items.push({ id: 'PC-10', title: 'Ollama', status: 'info', message: `Ollama가 필요합니다 — 사용함(프로세스 ${ollamaProc ? '있음' : '없음'} · 11434 ${ollamaPort ? '수신' : '미수신'})` });
+  } else items.push(evalOllama(ollamaProc, ollamaPort));
 
   items.push(...evalMemory(totalmem(), freemem()));
-  items.push(evalGpuInfo(nvidiaSmi()));
+  items.push(evalGpuInfo(queryGpuList()));
   const sha = git(paths.repo, ['rev-parse', 'HEAD']);
   const dirty = git(paths.repo, ['status', '--porcelain']);
   items.push(evalGit(sha.ok ? sha.out : null, sha.ok ? dirty.out.length > 0 : null));
@@ -236,6 +238,7 @@ export async function runPreflight(args: {
     videoAvailable: ff.present,
     offline: netItem.data?.offline === true,
     devDbBefore,
+    browserInfo,
     envKeyNames: { api: apiKeys ?? [], mlWorker: mlKeys ?? [] },
   };
 }

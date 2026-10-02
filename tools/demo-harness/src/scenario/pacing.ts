@@ -26,3 +26,11 @@ export function makePacing(mode: 'visible' | 'headless-check'): Pacing {
 export async function dwell(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms > 0) await sleepMs(ms, signal);
 }
+
+/**
+ * [DT-2] 매체가 실제 시간으로 재생되는 동안의 유지(예: 합성 음성 WAV 길이 + 1.0초) — 결과 대기가 아니라 "소리가 나는 시간"이라
+ * 보이는 시연·무인 점검 모두에서 필요하다(NFR-DHR2 허용 예외 3번째 · 설계 §8.3). 취소 신호가 오면 즉시 끝난다.
+ */
+export async function holdForMedia(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms > 0) await sleepMs(ms, signal);
+}

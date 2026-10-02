@@ -30,7 +30,8 @@ export interface PortCheck {
 export async function checkPorts(ports: Ports): Promise<PortCheck[]> {
   const out: PortCheck[] = [];
   for (const name of Object.keys(ports) as PortName[]) {
-    out.push({ name, port: ports[name], free: await isPortFree(ports[name]) });
+    const port = ports[name] as number;
+    out.push({ name, port, free: await isPortFree(port) });
   }
   return out;
 }

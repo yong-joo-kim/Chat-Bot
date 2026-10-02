@@ -6,6 +6,7 @@
 > **정정 근거(2026-10-01 갱신)**: `tools/demo-harness/docs/실기동확인.md`(1단계 실기동 6건 결과 · 정정 목록 13건) · 1단계 구현 `tools/demo-harness/package.json`·`tsconfig.json`·`scripts/run-tests.mjs`·`src/config.ts`·`src/env/api-env.ts`·`src/measure/latency.ts`·`src/preflight/checks.ts`·`src/preflight/index.ts`·`src/build/fingerprint.ts`·`src/cli/args.ts`·`src/proc/residual.ts`·`src/proc/tree-kill.ts`·`src/proc/system.ts`·`src/run/run-dir.ts`·`src/orchestrator/index.ts`·`src/log/terminal.ts` · 루트 `package.json` · `apps/api/package.json`(`multer` 미선언 · `@types/multer`만) · `apps/api/src/{faqs,intents,keywords}/*.controller.ts`·`validation/test-cases.controller.ts`·`utterance-analysis/utterance-analyses.controller.ts`(`import { memoryStorage } from 'multer'`) · `pnpm-lock.yaml`(`multer@2.0.2`)
 > **결정 기록**: `docs/02-spec/decisions/ADR-0051-demo-harness-out-of-catalog-workspace-tool-playwright-edge-and-zero-product-change.md`(신규)
 > **상위 문서 패치**: `docs/02-spec/demo-harness-patches.md`(1차 — 적용됨) · `docs/02-spec/demo-harness-patches-2.md`(1단계 정정 반영 — 적용 대기)
+> **확장(DT-2)**: `docs/02-spec/demo-harness-expansion-설계.md` · ADR-0053 — 풀 투어 프리셋 · 계획 문맥(조건부 단계·활성 예산) · 구간 `voice`/`proactive`/`edge`(단계 접두 `SV`/`SP`/`SE`) · 10분 프리셋 정의 불변
 > **범위 원칙**: 이 문서는 코드를 쓰지 않는다. **제품 코드(`apps/*`·`packages/*`) 변경 0 · `data-testid` 추가 0 · 마이그레이션 0 · 새 환경변수 0 · 새 권한 0 · 제품 의존성 변경 0 · CI·실 배포 0.** 저장소 루트 설정 4개(`pnpm-workspace.yaml`·루트 `package.json`·`pnpm-lock.yaml`·`.gitignore`)만 하네스 편입을 위해 바뀐다(§3.3). 하네스가 자식에게 넘기는 하네스 전용 키(`NODE_PATH`·`NO_COLOR`·`CBDEMO_API_PACKAGE_JSON` — §6.2)는 제품 설정 스키마 밖이라 "새 환경변수"가 아니다.
 > **실행 한계(작성 당시)**: 이 설계 세션은 셸을 실행할 수 없었다. Playwright·Edge 154·Playwright ffmpeg·`HF_HUB_OFFLINE`·Prisma SQLite 공백 경로·Python `-X` 표식의 실제 동작은 **도구 지식과 파일 존재 확인까지**만 했다 — 구현 첫 작업이 §21.2의 "실기동 확인 6건"이다. **→ 2026-10-01 1단계 구현에서 6건 모두 확인 완료(이 PC 실측 — §21.2).** 확인 과정에서 드러난 설계와 실제의 차이 13건은 구현에 이미 반영됐고 이 문서에 §0.1 표로 모아 각 절에 `[정정 #n]`으로 표시했다.
 
@@ -574,7 +575,7 @@ switchAccount(name): context.clearCookies({ name:'cb_session' }) → context.add
 ### 8.6 대화상자·다운로드
 
 - `page.on('dialog')`: `beforeunload`는 수락(단계 이동 우선), 그 밖의 네이티브 `confirm`·`alert`가 뜨면 **단계 실패**(예상 밖 — 제품 콘솔은 자체 `ConfirmDialog`를 쓴다).
-- 다운로드는 받지 않는다(`acceptDownloads:false`) — 엑셀 내보내기 장면 없음.
+- 다운로드는 받지 않는다(`acceptDownloads:false`) — 엑셀 내보내기 장면 없음. — **풀 투어(DT-2)는 `acceptDownloads:true` · 저장 위치 `downloads/`**(확장 설계 §8.1)
 
 ---
 
@@ -615,6 +616,7 @@ interface PresetDef { id: string; audience: 'ONPREM'; totalBudgetSec: number; se
 
 - 정의 검사(하네스 단위 시험): 구간 예산 합 = 프리셋 총 예산 · 단계 예산 합 = 구간 예산 · `core && skippable` 금지 · `skipOrder`는 그 구간의 생략 가능 단계만 · 단계 ID 유일 · 나레이션 줄 ≤ 60자.
 - **재개 단위 = 구간**(A-8). `RunState`(챗봇·의도·버전·예약·분석 ID 등 비밀 아닌 값)는 구간 끝마다 `state.json`에 저장.
+- **[DT-2]** 조건부 프리셋은 `when(plan)`·`inactive`·`expectedTotals`로 확장한다 — 정의 검사는 대표 계획 16개를 해석해 검사하고, `when`이 없는 프리셋(10분판)은 이 절의 규칙 그대로(확장 설계 §3).
 
 ### 9.2 대기 규약(FR-DH4-5 · NFR-DHR2)
 
@@ -751,6 +753,7 @@ interface PresetDef { id: string; audience: 'ONPREM'; totalBudgetSec: number; se
 | S9-02 예약 재확인 | 3 | API | S5-07이 대체였다면 C-2 상태를 1회 조회해 보고서에 "공연 중 실행 확인됨/미실행" 기록(화면 변화 없음) | — | — | — | 생략 가능 |
 
 - 로드맵 문구 원천: `src/data/roadmap.ts`(각 행에 근거 문서·비고 열 인용 필드). No.38 상태 문구는 PM 확인 Q-7(요구사항 FR-DH10-1은 "보류", 현재 작업 지시는 "다음 진행" — 두 근거가 다르다).
+- **[DT-2]** 풀 투어의 끝 장면은 오늘 시연한 기능(No.32)을 로드맵에서 빼고 "이 PC 구성에서 생략한 장면" 줄을 덧붙인다(확장 설계 §9.10). 10분판 로드맵은 그대로.
 
 ### 10.10 핵심 장면 · 캡처 개수(AC-DH4-1)
 
@@ -1204,3 +1207,4 @@ for (const k of Object.keys(process.env)) if (!before.has(k)) delete process.env
 
 - **2026-10-01 작성** — system-architect. 요구사항 `demo-harness.md`(PM P-1~P-8 권고안 전부 채택)를 받아 작성. **코드로 확정한 것**: 버튼 문구·선택자 출처(상수 파일 · `data-testid` 0건이며 불필요) · ⑥ 저장본 화면 = 상담 콘솔 "대화 보기" · 거버넌스 ON 기동 조건(절대 `file:` 경로·출구 `127.0.0.1:8100` 정확 일치·키 미설정 시 검사 생략)을 환경변수만으로 충족 · 위젯은 `dist` 정적 서빙 · 색인은 `semanticEnabled`와 무관 · 상담 콘솔 5초 폴링(숨김 30초) · 예약 최소 5분·분 단위 · **2인 승인 챗봇 예약은 사전 승인 요청·승인이 없으면 실행 실패(신규 발견)** · 비밀번호 변경 강제는 제품 경로(`POST /auth/password`)로 해소 · ml-worker는 작업 폴더 `.env`를 읽음 · `/health.device`는 설정값 메아리 · 관리 콘솔 외부 요청은 Google Fonts뿐. **요구사항과 달라진 점** A-1~A-13(정적 서버 서빙·무대 `iframe`·쿠키 교체·챗봇 C 분리·T0 예약·준비 6분 하한·구간 단위 재개 등). 결함 후보 DHX-1(Medium 제안)·DHX-2·DHX-3(Info). 신규 ADR-0051.
 - **2026-10-01 1단계 실기동 확인 · 설계 정정 13건 반영** — system-architect. 근거 `tools/demo-harness/docs/실기동확인.md`(backend-implementer 1단계) · 1단계 구현 코드. **실기동 6건 모두 확인 완료(이 PC 실측 — §21.2)**: KURE-v1 오프라인 `main` 로드(기동~예열 약 16초 · 안정 단건 P50 108~133ms · P95 111~167ms → 300ms 유지) · Edge `154.0.4258.37`/`playwright-core@1.63.0` · ffmpeg `ffmpeg-1011`+`winldd-1007` 약 3.7MB · 공백·마침표 경로 SQLite·마이그레이션 54개·거버넌스 ON 기동 OK · 표식·tree-kill OK · `iframe` 쿠키 교체 OK. 설계 당시 폴백(해시 리비전·Chrome 사다리·영상 끔·공백 없는 경로·표식 대체·이중 스택 바인드)은 **전부 불필요**. **정정 13건(§0.1 표 · 각 절 `[정정 #n]`)**: ① 루트 스크립트 `pnpm -C`(종료 코드 보존) ② `dist/src/cli.js`·선적재 `src/runtime/` 직접 참조·`scripts/run-tests.mjs` ③ API 자식 `NODE_PATH`·`NO_COLOR`(+`CBDEMO_API_PACKAGE_JSON`) ④ 단건 지연 최대 3라운드·마지막 라운드 결정·전 라운드 공개·PC-11b ⑤ 잠금 파일 하네스분 수동 병합(+53·삭제 0) ⑥ ffmpeg 게이트·`winldd-1007`·`page@<해시>.webm` ⑦ `harnessPid`·`stop.request` ⑧ PC-11 16e9 바이트 ⑨ 빌드 지문 크기·수정 시각 ⑩ 단독 `--` 무시 ⑪ CP949 → 종료 코드·CSV 판정·venv 런처 구조 ⑫ lint 기준 `npx eslint tools` ⑬ EPIPE 삼킴. **PC-10 보강**(이 PC Ollama 실행 중 → 사용법 문서에 시연 전 종료 절차). **신규 코드 확인 C-20 · 결함 후보 DHX-4**(`apps/api` `multer` 미선언 → 직접 기동 실패 · Medium 제안/구축형 방식에 따라 High). 외부 요청 감시 실측은 `fonts.googleapis.com` 1호스트(예상 2호스트 정정). 신규 위험 R-10~R-12. 남은 수동 확인 M-1(콘솔 Ctrl+C 신호 1회)·M-2(폐쇄망 반입). 상위 문서 패치 `demo-harness-patches-2.md`(결함분류 DHX-4 · 자동배포 §5.13 · 자동시험_전략 §22 · 개발명세서 §2). PM 결정 사항 변경 0.
+- **2026-10-02 DT-2 확장 설계 연결** — system-architect. 이 문서 본문(10분판)은 바꾸지 않는다. 확장은 `demo-harness-expansion-설계.md` · ADR-0053. 결과 스키마 `machine.gpuUsedByHarness`만 `boolean`으로 넓힘(10분판 값 `false` 불변).

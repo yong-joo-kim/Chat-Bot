@@ -1,17 +1,31 @@
 // 실행 오케스트레이션(설계 §5) — P0 사전 점검 -> P1 실행 폴더·격리 DB -> P2 빌드 -> P3 기동 -> (P4·P5·공연은 다음 단계) -> 정리.
 // 1단계 범위: P0~P3와 정리까지. 데모 데이터·보정·시나리오 실행기·캡처·보고서는 후속 단계에서 이 흐름에 끼워 넣는다.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { cpus, freemem, release as osRelease, totalmem, type as osType } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { CliOptions } from '../cli/args';
 import { portsFor, TIMEOUTS, PORT_LABELS, type Ports, type RepoPaths } from '../config';
+import { createFullExtras } from '../data/generator-full';
+import { defaultPlan, egressNames } from '../scenario/plan';
+import { checkPlanPreflight, fullServerHooks, printFullOptionLines } from './full-flow';
+import { runModelPrepare } from './full-models';
+import { buildStagePlan, createFullRuntime, fullCleanup, type FullRuntime } from './full-prepare';
+import { buildFullReportInput, scanAudioTraces } from './full-report';
+import { gateDx3 } from './full-prepare';
 import { assertIsolatedDbUrl, DbGuardError, toSqliteUrl } from '../env/db-guard';
 import { buildApiEnv, buildMlEnv, type OverrideRow } from '../env/api-env';
 import { Terminal } from '../log/terminal';
 import { checkPresetDefinition, checkSkipIds } from '../scenario/definition-check';
-import type { PresetDef } from '../scenario/types';
+import type { LiveScheduleState, PresetDef, RunFacts } from '../scenario/types';
+import { PresenterControl, type PresenterInput } from '../control/presenter';
+import { buildResult, type BuildInput } from '../report/build';
+import { scanRunDirForSecrets, writeReport } from '../report/write';
+import { playwrightVersion } from '../report/version';
 import { Redactor } from '../util/redact';
 import { formatMmSs, isoWithOffset } from '../util/time';
+import { guarded } from '../util/guarded';
 import { sleepMs, WaitAbortedError } from '../util/wait-for';
 import { runPreflight, readRefsMain, hfHubDir, fileFingerprint, type PreflightReport } from '../preflight';
 import type { PcItem } from '../preflight/checks';
@@ -21,10 +35,11 @@ import { killTreeSync } from '../proc/tree-kill';
 import { Supervisor, type TeardownReport } from '../proc/supervisor';
 import { migrateDeploy } from '../proc/prisma';
 import { waitHealthy, ProcessDiedError } from '../proc/health';
+import { AbortedError, PrepareError } from './errors';
 import { startHarnessServers, type HarnessServers, type ServerHooks } from '../servers';
 import { defaultFacts, type StageFacts } from '../stage/facts';
 import type { StageBotInfo } from '../servers/stage-server';
-import { runShow, type ShowOutcome } from './show-phase';
+import { finalizeVideo, runShow, type ShowOutcome } from './show-phase';
 import { registerStageBots, runCalibration, runDataPhase, waitHistorySchedule, type DataPhaseInput, type DataPhaseResult } from './data-phase';
 import { httpJson } from '../util/json-request';
 import { measureEmbedLatency, decideEmbeddingTimeout, type LatencyMeasurement, type TimeoutDecision } from '../measure/latency';
@@ -44,23 +59,7 @@ import {
 
 export const EXIT = { OK: 0, FAILED: 1, PREPARE_FAILED: 2, ABORTED: 130 } as const;
 
-export class AbortedError extends Error {
-  constructor() {
-    super('중단됨');
-    this.name = 'AbortedError';
-  }
-}
-
-export class PrepareError extends Error {
-  constructor(
-    message: string,
-    public readonly why: string,
-    public readonly how: string,
-  ) {
-    super(message);
-    this.name = 'PrepareError';
-  }
-}
+export { AbortedError, PrepareError };
 
 export interface RunContext {
   opts: CliOptions;
@@ -69,6 +68,8 @@ export interface RunContext {
   runsDir: string;
   makeTerminal: (logFile: string | undefined, redact: (s: string) => string) => Terminal;
   signal: AbortSignal;
+  /** 진행자 종료(q → y)·원시 모드 Ctrl+C가 같은 정리 경로(종료 코드 130)로 가게 하는 취소 함수. */
+  abort?: () => void;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -98,18 +99,35 @@ interface BootResult {
   governanceFallback: boolean;
   overrides: OverrideRow[];
   governanceLogLine: string | null;
+  /** ml-worker /health가 알려 준 장치(설정값 메아리 — CUDA_VISIBLE_DEVICES=-1과 함께 증거로 쓴다). */
+  mlDevice: string | null;
+  /** [DT-2] 문장 분석 모델 ID(모델 구성표). */
+  mlModelId: string | null;
 }
 
+/** 준비 단계 한 줄(보고서 "준비 시간" 표). */
+interface PrepareRow {
+  id: string;
+  name: string;
+  sec: number;
+  status: 'OK' | 'SKIPPED' | 'FAILED';
+}
+
+/** 반환: 종료 코드(0 통과 · 1 단계 실패 · 2 준비 실패 · 130 중단). */
 export async function executeRun(ctx: RunContext): Promise<number> {
   const { opts, preset, paths, runsDir, signal } = ctx;
   const parentEnv = ctx.env ?? process.env;
-  const ports = portsFor(opts.portOffset);
+  // [DT-2] 풀 투어(모델 장면 플래그를 받는 프리셋)인지 — 10분판은 이 분기를 하나도 타지 않는다(DT-1과 같은 흐름).
+  const isFull = (preset.flags?.length ?? 0) > 0;
+  const fullRt = isFull ? createFullRuntime(opts, preset) : null;
+  const ports = portsFor(opts.portOffset, { augment: isFull && opts.withLocalLlm, speech: isFull && opts.withVoiceInput });
   const redactor = new Redactor();
   const t0 = Date.now();
+  const startedAt = new Date();
 
   // ── 정의 검사 ──
   const defIssues = checkPresetDefinition(preset);
-  const skipErrors = checkSkipIds(preset, opts.skip);
+  const skipErrors = checkSkipIds(preset, opts.skip, fullRt?.plan);
   const bootTerm = ctx.makeTerminal(undefined, (s) => s);
   if (defIssues.length > 0 || skipErrors.length > 0) {
     for (const i of defIssues) bootTerm.line('error', `프리셋 정의 오류 (${i.where}): ${i.message}`, { why: '시나리오 정의 검사를 통과하지 못했습니다', how: '프리셋 정의를 수정하세요' });
@@ -117,9 +135,10 @@ export async function executeRun(ctx: RunContext): Promise<number> {
     return EXIT.PREPARE_FAILED;
   }
   if (opts.resume !== null) {
-    bootTerm.line('error', '--resume(구간 단위 재개)은 아직 구현되지 않았습니다', { why: '1단계는 기동·정리 기반만 구현했고 시나리오·상태 재개는 후속 단계입니다', how: '새 실행으로 pnpm demo 를 다시 실행하세요' });
+    bootTerm.line('error', '--resume(구간 단위 재개)은 아직 구현되지 않았습니다', { why: '이번 단계는 시나리오·보고서까지 구현했고 같은 실행 폴더로의 상태 재개는 후속 단계입니다', how: '새 실행으로 pnpm demo 를 다시 실행하세요(실패한 구간만 보려면 --only s3 처럼 구간을 고르세요)' });
     return EXIT.PREPARE_FAILED;
   }
+  if (opts.appendixLlm) bootTerm.line('warn', '--appendix-llm(LLM 동작 확인 부록)은 아직 구현되지 않아 이번 실행에서는 부록 없이 진행합니다', { why: '설계 §23 H7의 선택 부록입니다', how: '부록 없이도 종료 코드와 보고서는 같습니다' });
 
   // ── 실행 폴더(로그 파일이 필요하므로 점검 전에 만든다) ──
   const run = createRunDir(runsDir);
@@ -146,8 +165,9 @@ export async function executeRun(ctx: RunContext): Promise<number> {
   };
   saveState({});
 
-  term.banner(`원클릭 시연 하네스 (DT-1) - 프리셋 ${preset.id} - ${opts.mode === 'visible' ? '보이는 시연' : '무인 점검'}`);
+  term.banner(`원클릭 시연 하네스 (${isFull ? 'DT-2' : 'DT-1'}) - 프리셋 ${preset.id}${isFull ? ' (풀 투어)' : ''} - ${opts.mode === 'visible' ? '보이는 시연' : '무인 점검'}`);
   term.text(`실행 ID ${run.runId}   폴더 ${run.dir}`);
+  if (fullRt) printFullOptionLines(term, opts);
   term.blank();
 
   // 비정상 종료 대비 동기 정리(비동기 불가)
@@ -162,9 +182,18 @@ export async function executeRun(ctx: RunContext): Promise<number> {
   let showCounts: { pass: number; fail: number; skip: number; fallback: number; showSec: number } | null = null;
   const stageBots: Record<string, StageBotInfo> = {};
   const stageFacts: StageFacts = defaultFacts();
+  const prepare: PrepareRow[] = [];
+  let currentPhase = 'P0 사전 점검';
+  let prepareFailure: { phase: string; message: string; why?: string; how?: string } | undefined;
+  let control: PresenterControl | null = null;
+  let phaseStartMs = Date.now();
+  const phaseSec = (): number => (Date.now() - phaseStartMs) / 1000;
+  const markPhase = (id: string, name: string, status: PrepareRow['status'] = 'OK'): void => {
+    prepare.push({ id, name, sec: phaseSec(), status });
+  };
   try {
     // ═══ [1/6] 사전 점검 ═══
-    let phaseStart = Date.now();
+    phaseStartMs = Date.now();
     const residual = cleanupResidual(runsDir, { exclude: run.runId });
     for (const r of residual) {
       if (r.liveOwnerPid !== undefined) {
@@ -177,13 +206,25 @@ export async function executeRun(ctx: RunContext): Promise<number> {
     checkAbort(signal);
     preflight = await runPreflight({ paths, options: opts, ports, runsDir, env: parentEnv });
     printPreflight(term, preflight.items);
-    term.stepLine(1, TOTAL_PHASES, '사전 점검', preflight.blocked ? '실패' : '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    if (fullRt) {
+      // [DT-2] PC-DX-1~12 · 장치 결정 · 불가 판정(보이는 시연 = 경고 + 장면 생략 · 무인 점검 = 차단)
+      const outcome = await checkPlanPreflight({ rt: fullRt, term, paths, run, opts, env: parentEnv, signal });
+      preflight.items.push(...outcome.items);
+      if (outcome.blocked) {
+        term.stepLine(1, TOTAL_PHASES, '사전 점검', '실패', formatMmSs(phaseSec()));
+        markPhase('P0', '사전 점검', 'FAILED');
+        throw new PrepareError(outcome.blocked.what, outcome.blocked.why, outcome.blocked.how);
+      }
+    }
+    term.stepLine(1, TOTAL_PHASES, '사전 점검', preflight.blocked ? '실패' : '완료', formatMmSs(phaseSec()));
+    markPhase('P0', '사전 점검', preflight.blocked ? 'FAILED' : 'OK');
     if (preflight.blocked) throw new PrepareError('사전 점검 차단 항목이 있습니다', '위 [오류] 항목을 해결해야 시연을 준비할 수 있습니다', '안내된 조치를 한 뒤 pnpm demo 를 다시 실행하세요');
     saveState({ phase: 'preflight' });
     checkAbort(signal);
 
     // ═══ [2/6] 실행 폴더 · 격리 DB ═══
-    phaseStart = Date.now();
+    currentPhase = 'P1 실행 폴더 · 격리 DB';
+    phaseStartMs = Date.now();
     let dbPath: string;
     try {
       const requested = opts.dbUrlForTest ?? toSqliteUrl(run.dbFile);
@@ -199,12 +240,14 @@ export async function executeRun(ctx: RunContext): Promise<number> {
     const pruned = pruneRunDirs(runsDir, opts.keepRuns, run.runId);
     if (pruned.removed.length > 0) term.detail(`오래된 실행 폴더 ${pruned.removed.length}개 삭제: ${pruned.removed.join(', ')}`);
     if (pruned.failed.length > 0) term.line('warn', `실행 폴더 ${pruned.failed.length}개를 지우지 못했습니다`, { why: 'SQLite 파일 핸들이 아직 열려 있을 수 있습니다', how: '다음 실행이 다시 시도합니다' });
-    term.stepLine(2, TOTAL_PHASES, '실행 폴더 · 격리 DB', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    term.stepLine(2, TOTAL_PHASES, '실행 폴더 · 격리 DB', '완료', formatMmSs(phaseSec()));
+    markPhase('P1', '실행 폴더 · 격리 DB');
     saveState({ phase: 'prepared' });
     checkAbort(signal);
 
     // ═══ [3/6] 빌드 ═══
-    phaseStart = Date.now();
+    currentPhase = 'P2 빌드';
+    phaseStartMs = Date.now();
     const stampFile = join(runsDir, '.build-stamp.json');
     const fp = computeFingerprint(paths.repo);
     const mustBuild = !opts.noBuild && needsBuild(fp, readBuildStamp(stampFile), opts.rebuild);
@@ -219,46 +262,138 @@ export async function executeRun(ctx: RunContext): Promise<number> {
     const missing = DIST_PATHS.filter((p) => !existsSync(join(paths.repo, p)));
     const distItem = evalDistOutputs([...missing], true);
     if (distItem.status === 'block') throw new PrepareError(distItem.message, '빌드 산출물이 없어 서버를 띄울 수 없습니다', '--no-build 없이 실행하거나 pnpm build 를 먼저 실행하세요');
-    term.stepLine(3, TOTAL_PHASES, '빌드', mustBuild ? '완료' : '생략', formatMmSs((Date.now() - phaseStart) / 1000));
+    term.stepLine(3, TOTAL_PHASES, '빌드', mustBuild ? '완료' : '생략', formatMmSs(phaseSec()));
+    markPhase('P2', '빌드', mustBuild ? 'OK' : 'SKIPPED');
     checkAbort(signal);
 
     // ═══ [4/6] 서버 기동 ═══
-    phaseStart = Date.now();
-    boot = await bootServers({ ctx, run, ports, supervisor, redactor, term, dbPath, parentEnv, hooks: { bots: () => stageBots, facts: () => stageFacts, motion: opts.mode === 'headless-check' ? 'off' : 'on' } });
+    currentPhase = 'P3 서버 기동';
+    phaseStartMs = Date.now();
+    boot = await bootServers({ ctx, run, ports, supervisor, redactor, term, dbPath, parentEnv, plan: fullRt ? { voiceInput: fullRt.plan.voiceInput, localLlm: fullRt.plan.localLlm } : undefined, hooks: { bots: () => stageBots, facts: () => stageFacts, motion: opts.mode === 'headless-check' ? 'off' : 'on', ...(fullRt ? fullServerHooks(fullRt) : {}) } });
     stageFacts.latencyP95 = boot.latency ? Math.round(boot.latency.p95Ms) : null;
+    stageFacts.device = boot.mlDevice ?? stageFacts.device;
     stageFacts.governance = boot.governance;
+    stageFacts.egressAllowed = boot.governance === 'ON' ? (fullRt ? egressNames(fullRt.plan).length : 1) : 0;
     stageFacts.network = preflight.offline ? 'closed' : 'open';
     stageFacts.gpuPresent = preflight.items.some((i) => i.id === 'PC-12' && Array.isArray(i.data?.gpu) && (i.data?.gpu as unknown[]).length > 0);
-    term.stepLine(4, TOTAL_PHASES, '서버 기동', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    term.stepLine(4, TOTAL_PHASES, '서버 기동', '완료', formatMmSs(phaseSec()));
+    markPhase('P3', '서버 기동');
     saveState({ phase: 'booted' });
 
-    // ═══ [5/6]·[6/6] 데모 데이터 · 보정 — 다음 단계 ═══
     // ═══ [5/6] 데모 데이터 ═══
-    phaseStart = Date.now();
+    currentPhase = 'P4 데모 데이터';
+    phaseStartMs = Date.now();
     const dataInput: DataPhaseInput = { paths, run, ports, dbPath, redactor, term, signal, skipHistorySchedule: opts.noHistorySchedule };
     dataResult = await runDataPhase(dataInput);
+    if (fullRt) {
+      // [DT-2] 풀 투어 추가 데이터: 챗봇 A 음성 설정 · "기록만" 규칙 · 챗봇 D(선제 안내) — 10분판 데이터는 건드리지 않는다
+      await createFullExtras({ apiBase: dataResult.apiBase, siteOrigin: dataResult.siteOrigin, db: dataResult.db, redactor, log: (m) => term.detail(m), signal, skipHistorySchedule: opts.noHistorySchedule, fixtureCsvPath: '' }, dataResult.data, { voiceInput: fullRt.plan.voiceInput !== 'off' });
+    }
     await registerStageBots(dataResult, stageBots);
     const secrets = dataResult.data.credentials;
     for (const k of Object.keys(secrets) as Array<keyof typeof secrets>) redactor.register(secrets[k].password);
     saveState({ phase: 'data', state: { dataset: dataResult.data.ids } });
-    term.stepLine(5, TOTAL_PHASES, '데모 데이터', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    if (fullRt) {
+      // [DT-2] P4-L(생성 자식 · 사전 생성 · 해제) -> P4-V(음성 자식 · 게이트) — 3050 순차 적재 원칙
+      await runModelPrepare({ rt: fullRt, term, paths, run, ports, supervisor, parentEnv, redactor, data: dataResult, signal, opts, embed: { modelId: boot.mlModelId ?? '?', device: boot.mlDevice ?? 'cpu', port: ports.mlWorker } });
+      stageFacts.plan = buildStagePlan(fullRt);
+      stageFacts.gpu = fullRt.gpuFacts;
+      stageFacts.gpuActive = fullRt.gpuActive;
+      stageFacts.egressAllowed = boot.governance === 'ON' ? egressNames(fullRt.plan).length : 0;
+    }
+    term.stepLine(5, TOTAL_PHASES, fullRt ? '데모 데이터 · 모델 준비' : '데모 데이터', '완료', formatMmSs(phaseSec()));
+    markPhase('P4', fullRt ? '데모 데이터 · 모델 준비' : '데모 데이터');
 
     // ═══ [6/6] 보정 · 예열 ═══
-    phaseStart = Date.now();
+    currentPhase = 'P5 보정 · 예열';
+    phaseStartMs = Date.now();
     await runCalibration(dataInput, dataResult);
+    if (fullRt) {
+      // [DT-2] G-DX-3: 챗봇 D 공개 설정에 선제 규칙이 실려 나오는지(기본 투어 장면 — 실패하면 양쪽 모두 종료 2)
+      const g3 = await gateDx3({ apiBase: dataResult.apiBase, slug: dataResult.data.ids.D?.slug ?? '', origin: dataResult.siteOrigin });
+      dataResult.calibration.gates.push({ id: 'G-DX-3', scene: '장면 9', ok: g3.ok, detail: g3.detail });
+      dataResult.calibration.ok = dataResult.calibration.ok && g3.ok;
+      fullRt.proactiveRule = g3.rule;
+    }
     for (const g of dataResult.calibration.gates) term.line(g.ok ? 'pass' : 'error', `보정 ${g.id}(${g.scene}): ${g.detail}`, g.ok ? {} : { why: '데모 데이터 문구가 공연 기대와 맞지 않습니다', how: 'src/data/dataset.ts의 예문·질문 문구를 조정하세요(데이터 보정 필요)' });
     if (!dataResult.calibration.ok) throw new PrepareError('데이터 보정 게이트가 실패했습니다(데이터 보정 필요)', '의미 매칭 점수가 장면에 필요한 구간(확정/폴백)에 들지 않았습니다', '보정 게이트 실패 줄의 문장과 점수를 보고 예문을 조정하세요');
-    term.stepLine(6, TOTAL_PHASES, '보정 · 예열 · 선택자 점검', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
+    term.stepLine(6, TOTAL_PHASES, '보정 · 예열 · 선택자 점검', '완료', formatMmSs(phaseSec()));
+    markPhase('P5', '보정 · 예열');
     if (dataResult.data.ids.C.historySchedule) {
-      await waitHistorySchedule(dataInput, dataResult);
+      currentPhase = '이력 예약 실행 대기';
+      phaseStartMs = Date.now();
+      try {
+        await waitHistorySchedule(dataInput, dataResult);
+        markPhase('PW', '이력 예약 실행 대기');
+      } catch (e) {
+        markPhase('PW', '이력 예약 실행 대기', 'FAILED');
+        if (e instanceof WaitAbortedError || signal.aborted) throw e;
+        // 설계 §5 "대기": C-1 실패는 경고 — 장면 5 대체 화면이 "실패 이력"이 되고 보고서에 표기된다
+        term.line('warn', `이력 예약 실행을 확인하지 못했습니다: ${(e as Error).message}`, { why: '준비 단계의 이력 예약이 시간 안에 실행되지 않았습니다', how: '장면 5의 예약 단계는 대체 화면으로 진행되며 보고서에 표기됩니다' });
+      }
     }
     saveState({ phase: 'data', state: { dataset: dataResult.data.ids } });
+    checkAbort(signal);
 
     // ═══ 공연(시나리오 실행) — 서버 유지 모드(--prepare-only)에서는 건너뛴다 ═══
     if (!opts.prepareOnly) {
       saveState({ phase: 'show' });
       const sessions = dataResult.data.sessions;
-      showOutcome = await runShow({ opts, preset, run, ports, ids: dataResult.data.ids, api: sessions, term, signal, state: stateBase.state });
+      const keyMode: 'keys' | 'lines' = process.stdin.isTTY ? 'keys' : 'lines';
+      if (opts.mode === 'visible' && !opts.unattendedVisibleForTest) {
+        control = new PresenterControl({
+          mode: keyMode,
+          input: process.stdin as unknown as PresenterInput,
+          say: (kind, text) => term.line(kind === 'warn' ? 'warn' : 'info', kind === 'confirm' ? `[확인] ${text}` : text),
+          onQuit: () => ctx.abort?.(),
+          onInterrupt: () => ctx.abort?.(),
+        });
+      }
+      const facts: RunFacts = {
+        device: stageFacts.device,
+        gpuHidden: stageFacts.gpuHidden,
+        governance: boot.governance,
+        externalAddresses: 0,
+        embeddingTimeoutMs: boot.embeddingTimeoutMs,
+        embeddingTimeoutDefault: 300,
+        governanceFallback: boot.governanceFallback,
+        ...(fullRt ? { gpuActive: fullRt.gpuActive } : {}),
+      };
+      showOutcome = await runShow({
+        plan: fullRt?.plan ?? defaultPlan(preset.id, opts.mode),
+        resolved: fullRt?.resolved ?? null,
+        full: fullRt ? { rt: fullRt, supervisor } : undefined,
+        opts,
+        preset,
+        run,
+        ports,
+        ids: dataResult.data.ids,
+        api: sessions,
+        term,
+        signal,
+        state: stateBase.state,
+        facts,
+        stageFacts,
+        credentials: dataResult.data.credentials,
+        fixtureCsv: join(paths.harness, 'fixtures', 'utterances-demo.csv'),
+        recordVideo: preflight.videoAvailable && !opts.noVideo,
+        control,
+        keyMode,
+        summary: {
+          presetId: preset.id,
+          browser: opts.browser,
+          browserVersion: preflight.browserInfo.version,
+          viewport: opts.viewport,
+          device: stageFacts.device,
+          latencyP95: stageFacts.latencyP95,
+          embeddingTimeoutMs: boot.embeddingTimeoutMs,
+          embeddingTimeoutDefault: 300,
+          externalAddresses: 0,
+          network: stageFacts.network,
+          governance: boot.governance,
+          prepareSec: prepare.reduce((n, p) => n + p.sec, 0),
+        },
+      });
       const res = showOutcome.scenario;
       if (res) {
         const c = { pass: 0, fail: 0, skip: 0, fallback: 0 };
@@ -268,9 +403,8 @@ export async function executeRun(ctx: RunContext): Promise<number> {
         const blocked = showOutcome.session?.blockedSummary() ?? [];
         if (blocked.length > 0) term.line('warn', `브라우저가 외부 주소로 보내려던 요청을 ${blocked.reduce((n, b) => n + b.count, 0)}건 막았습니다: ${blocked.map((b) => `${b.host} x${b.count}`).join(', ')}`, { why: '관리 콘솔이 외부 글꼴 등을 요청합니다(결함 후보 DHX-1)', how: '서버가 외부로 보낸 것은 아니며 보고서 외부 송신 점검표 "브라우저" 칸에 기록됩니다' });
       }
-      saveState({ phase: 'show', completedSegments: showOutcome.executedSegments.map((s) => s.key) });
+      saveState({ phase: 'show', completedSegments: showOutcome.executedSegments.map((s) => s.key), state: stateBase.state });
     }
-    term.stepLine(5, TOTAL_PHASES, '데모 데이터', '완료', formatMmSs((Date.now() - phaseStart) / 1000));
 
     printBootSummary(term, ports, boot, preflight);
 
@@ -287,46 +421,225 @@ export async function executeRun(ctx: RunContext): Promise<number> {
       term.line('warn', '중단 요청을 받았습니다. 정리를 시작합니다');
     } else if (e instanceof PrepareError) {
       exitCode = EXIT.PREPARE_FAILED;
+      prepareFailure = { phase: currentPhase, message: e.message, why: e.why, how: e.how };
       term.line('error', e.message, { why: e.why, how: e.how });
     } else if (e instanceof ProcessDiedError) {
       exitCode = EXIT.PREPARE_FAILED;
+      prepareFailure = { phase: currentPhase, message: e.message, why: '자식 프로세스가 기동 중에 종료했습니다', how: `로그 ${run.logs} 의 api.log·ml-worker.log 를 확인하세요` };
       term.line('error', e.message, { why: '자식 프로세스가 기동 중에 종료했습니다', how: `로그 ${run.logs} 의 api.log·ml-worker.log 를 확인하세요` });
     } else {
       exitCode = EXIT.PREPARE_FAILED;
-      term.line('error', `예상하지 못한 오류: ${(e as Error).message}`, { why: '준비 단계에서 처리되지 않은 예외가 났습니다', how: `로그 ${join(run.logs, 'harness.log')} 를 확인하고 다시 실행하세요` });
+      prepareFailure = { phase: currentPhase, message: `예상하지 못한 오류: ${(e as Error).message}`, why: '처리되지 않은 예외가 났습니다', how: `로그 ${join(run.logs, 'harness.log')} 를 확인하고 다시 실행하세요` };
+      term.line('error', `예상하지 못한 오류: ${(e as Error).message}`, { why: '준비 또는 공연 단계에서 처리되지 않은 예외가 났습니다', how: `로그 ${join(run.logs, 'harness.log')} 를 확인하고 다시 실행하세요` });
       term.detail((e as Error).stack ?? '');
     }
   }
 
   // ═══ 정리 ═══
-  await showOutcome?.session?.close();
-  await dataResult?.db.close();
+  // 각 정리 호출은 개별로 감싼다(L-1) — 하나가 던져도 Ollama 해제·자식 정리는 반드시 실행된다
+  const guard = <T>(label: string, fn: () => T | Promise<T>, fallback: T): Promise<T> =>
+    guarded(fn, fallback, (e) =>
+      term.line('warn', `${label} 중 오류: ${e.message}`, { why: '정리 단계의 한 호출이 실패했습니다(나머지 정리는 계속합니다)', how: fullRt?.ollamaLoadedByHarness ? '남은 모델이 있으면 ollama stop <모델 이름> 으로 내리세요' : '로그 harness.log를 확인하세요' }),
+    );
+  await guard('화면 제어 해제', () => control?.detach(), undefined);
+  const blockedSummary = await guard('차단 요약 수집', () => showOutcome?.session?.blockedSummary() ?? [], [] as ReturnType<NonNullable<NonNullable<typeof showOutcome>['session']>['blockedSummary']>);
+  await guard('브라우저 닫기', async () => {
+    await showOutcome?.session?.close(); // 영상 파일은 컨텍스트를 닫아야 확정된다
+  }, undefined);
+  const videoPath = await guard('영상 확정', () => (showOutcome?.videoRecorded ? finalizeVideo(run.video) : null), null);
+  await guard('데이터베이스 닫기', async () => {
+    await dataResult?.db.close();
+  }, undefined);
+  // [DT-2] 하네스가 적재한 Ollama 모델 해제(실패해도 경고만 — Ollama 서비스는 종료하지 않는다) + VRAM 관찰기 종료
+  if (fullRt) await fullCleanup(fullRt, (m) => term.line('warn', m)).catch((e) => term.line('warn', `풀 투어 정리 중 오류: ${(e as Error).message}`));
   const teardown = await supervisor.teardown(ports).catch((e): TeardownReport => {
     term.line('warn', `정리 중 오류: ${(e as Error).message}`);
     return { processesLeft: -1, portsFreed: false, busyPorts: [], killedChildren: [] };
   });
   process.off('exit', onExit);
+  // [DT-2] 음성 원본 저장 0 확인(정리 직전 매직 바이트 검사 — 휴리스틱) · 서버 로그에 기대 문장·전사 글자 0
+  const audioScan = fullRt && fullRt.plan.voiceInput !== 'off' ? scanAudioTraces(run.dir, [fullRt.record.speech?.expected ?? '', fullRt.record.speech?.transcript ?? '', fullRt.record.speech?.gateTranscript ?? '']) : undefined;
+  if (audioScan && (audioScan.hits.length > 0 || audioScan.logHits.length > 0)) term.line('warn', `음성 원본 흔적이 발견됐습니다: ${[...audioScan.hits, ...audioScan.logHits].slice(0, 3).join(' · ')}`, { why: '실행 폴더·서버 로그에 음성 파일 시그니처 또는 인식 글자가 남았습니다(결함 후보)', how: '해당 파일을 확인하고 bug-triage로 등록하세요' });
   const devDbAfter = fileFingerprint(paths.devDb);
   const devDbBefore = preflight?.devDbBefore;
   const devDbUnchanged = !devDbBefore || (devDbBefore.exists === devDbAfter.exists && devDbBefore.size === devDbAfter.size && devDbBefore.mtimeMs === devDbAfter.mtimeMs);
   if (teardown.processesLeft !== 0 || !teardown.portsFreed) {
     term.line('warn', `정리가 끝나지 않았습니다(남은 프로세스 ${teardown.processesLeft}개, 점유 포트 ${teardown.busyPorts.join(' ') || '없음'})`, { why: '프로세스 종료가 지연됐거나 표식이 남았습니다', how: '다음 실행이 표식을 확인해 정리합니다. 급하면 pnpm demo -- --stop latest' });
   }
+  if (!devDbUnchanged) exitCode = Math.max(exitCode, EXIT.PREPARE_FAILED);
   saveState({
     phase: exitCode === EXIT.OK ? 'done' : exitCode === EXIT.ABORTED ? 'aborted' : 'failed',
     note: `정리: 남은 프로세스 ${teardown.processesLeft}개 / 포트 해제 ${teardown.portsFreed} / 개발 DB 변경 ${devDbUnchanged ? '없음' : '있음!'}`,
   });
+
+  // ═══ 보고서(result.json · index.html · summary.md · customer.html) — 실패해도 종료 코드에는 반영하지 않는다(설계 §5) ═══
+  const reportDir = join(run.dir, 'report');
+  let reportOk = false;
+  try {
+    reportOk = writeRunReport({ ctx, run, redactor, preflight, boot, dataResult, showOutcome, blockedSummary, exitCode, startedAt, prepare, prepareFailure, teardown, devDbUnchanged, videoPath, term, liveSchedule: stateBase.state.liveSchedule, opts, fullRt, audioScan });
+  } catch (e) {
+    term.line('warn', `보고서를 만들지 못했습니다: ${(e as Error).message}`, { why: '보고서 작성 단계의 오류입니다(공연 결과와 종료 코드에는 영향이 없습니다)', how: `로그 ${join(run.logs, 'harness.log')} 를 확인하세요` });
+    term.detail((e as Error).stack ?? '');
+  }
+  const leaked = scanRunDirForSecrets(run.dir, redactor);
+  if (leaked.length > 0) term.line('warn', `실행 폴더의 텍스트 파일 ${leaked.length}개에 비밀 값이 남아 있습니다: ${leaked.slice(0, 3).join(', ')}`, { why: '비밀 제거 경로를 지나지 않은 쓰기가 있습니다', how: '해당 파일을 지우고 이 결함을 보고하세요' });
+
   term.blank();
   term.rule('=');
   const title = exitCode === EXIT.OK ? (showCounts ? '모두 통과' : '기동·정리 확인 완료') : exitCode === EXIT.ABORTED ? '중단됨' : exitCode === EXIT.FAILED ? '일부 실패' : '준비 실패';
   term.text(`시연 결과  ${title}   총 소요 ${formatMmSs((Date.now() - t0) / 1000)}`);
-  if (showCounts) term.text(`통과 ${showCounts.pass}   실패 ${showCounts.fail}   건너뜀 ${showCounts.skip}   대체 ${showCounts.fallback}   공연 ${formatMmSs(showCounts.showSec)}`);
+  if (showCounts) {
+    const budget = showOutcome ? showOutcome.executedSegments.reduce((n, s) => n + s.budgetSec, 0) : 0;
+    term.text(`통과 ${showCounts.pass}   실패 ${showCounts.fail}   건너뜀 ${showCounts.skip}   대체 ${showCounts.fallback}   ${opts.mode === 'visible' ? `시연 ${formatMmSs(showCounts.showSec)} (예산 ${formatMmSs(budget)})` : `점검 ${formatMmSs(showCounts.showSec)}`}`);
+  }
+  const steps = showOutcome?.scenario?.steps ?? [];
+  const skippedList = steps.filter((s) => s.status === 'SKIPPED');
+  if (skippedList.length > 0) term.text(`건너뜀: ${skippedList.map((s) => `${s.id} ${skipText(s.skipReason)}`).join(' - ')}`);
+  for (const s of steps.filter((x) => x.status === 'FAIL')) {
+    term.line('fail', `${s.id} ${s.title} (${s.core ? '핵심' : '생략 가능'}) - ${s.failure?.kind}`, { why: s.failure?.message, how: `구간만 다시 보려면  pnpm demo -- --only ${s.segment}` });
+  }
+  for (const s of steps.filter((x) => x.status === 'FALLBACK')) term.line('fallback', `${s.id} ${s.title} - 준비된 결과로 대신 보여 드렸습니다`);
+  if (fullRt) {
+    term.text(`구성  풀 투어 - 장면 ${fullRt.resolved.sceneCount}개 - 켠 옵션 ${fullRt.plan.voiceInput === 'real' ? `음성 입력(${fullRt.plan.sttDevice === 'cuda' ? 'GPU' : 'CPU'})` : fullRt.plan.voiceInput === 'mock' ? '음성 입력(모의)' : '음성 입력 없음'} / ${fullRt.plan.localLlm ? '사내 생성 켬' : '사내 생성 없음'} / ${fullRt.plan.liveClustering ? '실시간 분석 켬' : '실시간 분석 없음'}`);
+    const omitLines = [...fullRt.resolved.inactiveSegments.map((x) => x.reason.internal), ...fullRt.resolved.inactiveRows.filter((x) => !x.reason.hidden && !fullRt.resolved.inactiveSegments.some((sg) => sg.key === x.segment)).map((x) => `${x.stepId} ${x.reason.internal}`)];
+    term.text(`생략한 장면  ${[...new Set(omitLines)].join(' / ') || '없음'}`);
+  }
   term.text(`정리: 남은 프로세스 ${teardown.processesLeft}개 / 포트 ${teardown.portsFreed ? '해제' : '점유 중'} / 개발 DB ${devDbUnchanged ? '변경 없음' : '변경됨(확인 필요)'}`);
+  if (reportOk) term.text(`보고서  "${join(reportDir, 'index.html')}"`);
   term.text(`실행 폴더 "${run.dir}"`);
   term.text(`종료 코드 ${exitCode}`);
   term.rule('=');
-  if (!devDbUnchanged) exitCode = Math.max(exitCode, EXIT.PREPARE_FAILED);
+  // 보이는 시연: 정리 뒤 보고서 폴더를 탐색기로 연다(요구사항 S-1) — 열기 실패는 주의 한 줄(종료 코드 불변)
+  if (reportOk && opts.mode === 'visible' && !opts.unattendedVisibleForTest && term.isInteractive && exitCode !== EXIT.ABORTED) {
+    const r = openFolder(reportDir);
+    if (!r.ok) term.line('warn', `보고서 폴더를 열지 못했습니다: ${r.message}`, { why: '탐색기를 띄우지 못했습니다', how: '위 경로를 직접 여세요' });
+  }
   return exitCode;
+}
+
+const SKIP_LABEL: Record<string, string> = { TIME: '시간 부족', PRESENTER: '진행자 선택', OPTION: '옵션', DEPENDENCY: '선행 실패', NO_BROWSER: '브라우저 없음' };
+function skipText(r: string | undefined): string {
+  return r ? (SKIP_LABEL[r] ?? r) : '';
+}
+
+/** 탐색기로 폴더를 연다(실패는 호출자가 안내만 한다). */
+function openFolder(dir: string): { ok: boolean; message: string } {
+  try {
+    const child = spawn(process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open', [dir], { detached: true, stdio: 'ignore', shell: false });
+    child.on('error', () => undefined);
+    child.unref();
+    return { ok: true, message: '' };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+interface ReportArgs {
+  ctx: RunContext;
+  run: RunPaths;
+  redactor: Redactor;
+  preflight: PreflightReport | null;
+  boot: BootResult | null;
+  dataResult: DataPhaseResult | null;
+  showOutcome: ShowOutcome | null;
+  blockedSummary: Array<{ host: string; count: number; firstStepId: string | null }>;
+  exitCode: number;
+  startedAt: Date;
+  prepare: PrepareRow[];
+  prepareFailure?: { phase: string; message: string; why?: string; how?: string };
+  teardown: TeardownReport;
+  devDbUnchanged: boolean;
+  videoPath: string | null;
+  term: Terminal;
+  liveSchedule?: LiveScheduleState;
+  opts: CliOptions;
+  /** [DT-2] 풀 투어 실행 상태(10분판은 null). */
+  fullRt: FullRuntime | null;
+  audioScan?: { scannedFiles: number; hits: string[]; logHits: string[] };
+}
+
+/** 보고서 입력을 모아 result.json · HTML · 마크다운 · VTT · GIF를 쓴다. 쓴 파일이 있으면 true. */
+function writeRunReport(a: ReportArgs): boolean {
+  const { ctx, run, redactor, preflight, boot, dataResult, showOutcome, opts } = a;
+  const cpuList = cpus();
+  const gpuLines = preflight?.items.find((i) => i.id === 'PC-12')?.data?.gpu as string[] | undefined;
+  const commitItem = preflight?.items.find((i) => i.id === 'PC-13')?.data as { sha?: string; dirty?: boolean } | undefined;
+  const timeline = showOutcome?.timeline ?? null;
+  // VTT(영상이 녹화된 실행만 — 영상 길이 = 공연 시간 ± 10초)
+  let vttPath: string | null = null;
+  if (a.videoPath && timeline && showOutcome?.showEndedAtMs) {
+    writeFileSync(join(run.video, 'show.vtt'), redactor.redact(timeline.build(showOutcome.showEndedAtMs)), 'utf8');
+    vttPath = 'video/show.vtt';
+  }
+  const videoReason =
+    opts.mode !== 'visible' ? '무인 점검(영상은 보이는 시연에서만 만듭니다)' : opts.noVideo ? '--no-video 옵션' : !preflight?.videoAvailable ? '영상 인코더 없음(PC-6)' : !showOutcome?.session ? '공연을 시작하지 못함' : a.videoPath ? null : '영상 파일을 찾지 못함';
+  const removedKeys = (): string[] => {
+    try {
+      const m = /isolate[^\n]*|삭제한 키[^\n]*/i.exec(readFileSync(join(run.logs, 'api.log'), 'utf8'));
+      return m ? [m[0].slice(0, 200)] : [];
+    } catch {
+      return [];
+    }
+  };
+  const lat = boot?.latency;
+  const input: BuildInput = {
+    runId: run.runId,
+    presetId: ctx.preset.id,
+    mode: opts.mode,
+    exitCode: a.exitCode,
+    startedAt: isoWithOffset(a.startedAt),
+    showStartedAt: showOutcome?.showStartedAt ? isoWithOffset(showOutcome.showStartedAt) : null,
+    endedAt: isoWithOffset(new Date()),
+    prepareSec: a.prepare.reduce((n, p) => n + p.sec, 0),
+    machine: {
+      os: `${osType()} ${osRelease()}`,
+      cpu: (cpuList[0]?.model ?? '확인 못함').trim(),
+      cores: cpuList.length,
+      ramGb: Math.round((totalmem() / 2 ** 30) * 10) / 10,
+      freeRamGb: Math.round((freemem() / 2 ** 30) * 10) / 10,
+      gpu: gpuLines && gpuLines.length > 0 ? gpuLines[0].replace(/\s*\(UUID:[^)]*\)/i, '').replace(/^GPU \d+:\s*/i, '') : '없음',
+    },
+    commit: { sha: commitItem?.sha ?? null, dirty: commitItem?.dirty ?? null },
+    browser: { kind: opts.browser, version: preflight?.browserInfo.version ?? null, playwright: playwrightVersion(), video: Boolean(a.videoPath) },
+    viewport: opts.viewport,
+    latency:
+      lat && boot
+        ? { samples: lat.samples, p50Ms: lat.p50Ms, p95Ms: lat.p95Ms, decidedTimeoutMs: boot.embeddingTimeoutMs, source: opts.embeddingTimeoutMs !== null ? 'manual' : 'measured', rounds: lat.rounds.map((r) => ({ p50Ms: r.p50Ms, p95Ms: r.p95Ms })) }
+        : null,
+    overrides: boot?.overrides ?? [],
+    embeddingUrl: `127.0.0.1:${portsFor(opts.portOffset).mlWorker}`,
+    blocked: a.blockedSummary,
+    network: { offline: preflight ? preflight.offline : null, checkedAt: preflight ? isoWithOffset(a.startedAt) : null },
+    scenario: showOutcome?.scenario ?? null,
+    segments: showOutcome?.executedSegments ?? [],
+    skipOptionIds: opts.skip,
+    dataset: dataResult ? dataResult.data.ids.counts : null,
+    calibration: [...(dataResult?.calibration.gates ?? []), ...(a.fullRt?.gates ?? [])],
+    calibrated: Boolean(dataResult?.data.ids.calibrated),
+    teardown: { processesLeft: a.teardown.processesLeft, portsFreed: a.teardown.portsFreed, devDbUnchanged: a.devDbUnchanged },
+    prepare: a.prepare.map((p) => ({ id: p.id, name: p.name, sec: Math.round(p.sec * 10) / 10, status: p.status })),
+    prepareFailure: a.prepareFailure,
+    media: { video: a.videoPath, videoReason, vtt: vttPath, gifs: [] },
+    warnings: showOutcome?.scenario?.warnings ?? [],
+    liveSchedule: a.liveSchedule,
+    governance: boot ? { mode: boot.governance, fallback: boot.governanceFallback, logLine: boot.governanceLogLine } : undefined,
+    envKeyNames: preflight ? { blockedApi: preflight.envKeyNames.api, blockedMlWorker: preflight.envKeyNames.mlWorker, removedByPreload: removedKeys() } : undefined,
+    customerCopy: opts.customerCopy,
+    full: a.fullRt ? buildFullReportInput(a.fullRt, showOutcome?.scenario ?? null, showOutcome ? { segmentStarts: showOutcome.segmentStarts, showEndedAtMs: showOutcome.showEndedAtMs } : null, a.audioScan) : undefined,
+  };
+  const result = buildResult(input);
+  const tails: Record<string, string[]> = {};
+  for (const name of ['api', 'ml-worker', 'harness', 'browser-console']) {
+    try {
+      const lines = readFileSync(join(run.logs, `${name}.log`), 'utf8').split(/\r?\n/).filter(Boolean);
+      tails[name] = lines.slice(-200);
+    } catch {
+      /* 로그 없음 */
+    }
+  }
+  const out = writeReport({ run, result, gifClips: showOutcome?.scenario?.gifClips ?? [], redact: (s) => redactor.redact(s), logTails: tails, customerCopy: opts.customerCopy });
+  for (const e of out.errors) a.term.line('warn', e);
+  return out.files.length > 0;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -342,6 +655,8 @@ interface BootArgs {
   dbPath: string;
   parentEnv: NodeJS.ProcessEnv;
   hooks: ServerHooks;
+  /** [DT-2] 풀 투어 계획(없으면 10분판 — API 환경이 DT-1과 바이트 동일). */
+  plan?: { voiceInput: 'off' | 'real' | 'mock'; localLlm: boolean };
 }
 
 async function bootServers(a: BootArgs): Promise<BootResult> {
@@ -367,7 +682,7 @@ async function bootServers(a: BootArgs): Promise<BootResult> {
     return ml.overrides;
   };
   const startApi = async (timeoutMs: number, governance: 'ON' | 'OFF') => {
-    const api = buildApiEnv({ parentEnv, runDir: run.dir, dbPath, ports, embeddingTimeoutMs: timeoutMs, encryptionKeys, governanceMode: governance, apiPackageJson: paths.apiPackageJson, nodePath: join(paths.repo, 'node_modules', '.pnpm', 'node_modules') });
+    const api = buildApiEnv({ parentEnv, runDir: run.dir, dbPath, ports, embeddingTimeoutMs: timeoutMs, encryptionKeys, governanceMode: governance, apiPackageJson: paths.apiPackageJson, nodePath: join(paths.repo, 'node_modules', '.pnpm', 'node_modules'), plan: a.plan });
     await supervisor.startChild({
       name: 'api',
       command: process.execPath,
@@ -496,6 +811,8 @@ async function bootServers(a: BootArgs): Promise<BootResult> {
     governanceFallback,
     overrides: [...apiOverrides, ...mlOverrides],
     governanceLogLine,
+    mlDevice: mlHealth.body?.device ?? null,
+    mlModelId: mlHealth.body?.modelId ?? null,
   };
 }
 
